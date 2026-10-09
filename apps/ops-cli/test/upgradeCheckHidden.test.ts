@@ -188,22 +188,26 @@ describe('upgrade --check-only on a hidden-only node', () => {
  * "newer".
  */
 describe('who decides a hidden-only upgrade', () => {
-	it('a clearnet node never asks port 8081, even when something there claims hidden-only', async () => {
+	it('a clearnet node is never made hidden-only by what port 8081 says', async () => {
 		configure('clearnet');
+		// An authenticated listener claiming hidden-only (/v1/instance) and
+		// offering a release. 2026-10-08: a CHECK on any node reads the on-chain
+		// release record from the authenticated indexer (/v1/release); it still
+		// never asks the hidden-only questions (/v1/instance) or for peers
+		// (/v1/instances), and nothing is downloaded.
 		const impostor = await stubIndexer(onChain('9.9.9'));
 		try {
-			const rc = await runUpgrade({
+			await runUpgrade({
 				flags: { 'check-only': 'true', json: 'true' },
 				positional: [],
 				localIndexerBases: [impostor.base],
 				verifyLocalIndexer: trustListener
 			});
-			expect(impostor.paths, 'the clearnet node took its release from a local listener').toEqual(
-				[]
+			expect(impostor.paths, 'the clearnet node asked the hidden-only questions').not.toContain(
+				'/v1/instance'
 			);
-			expect(logged.join('\n')).not.toContain('9.9.9');
-			// The clearnet primary is unreachable in a test: a failed check.
-			expect(rc).toBe(5);
+			expect(impostor.paths).not.toContain('/v1/instances');
+			expect(impostor.paths.every((p) => p === '/v1/release')).toBe(true);
 		} finally {
 			await impostor.close();
 		}
@@ -288,6 +292,168 @@ describe('who decides a hidden-only upgrade', () => {
 			expect(logged.join('\n')).not.toContain('\u001b');
 		} finally {
 			await idx.close();
+		}
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * 2026-10-08: the release check on a CLEARNET node (what the release monitor
+ * runs twice a day). It asked only the code host; morphit.io's menu, asking the
+ * same host for 2.5 s, said "couldn't check" while v1.21.2 was out. The check
+ * now reads @morphit's on-chain release record from the node's own
+ * authenticated indexer first, and asks the code host only when that does not
+ * answer.
+ */
+describe('upgrade --check-only on a clearnet node', () => {
+	let asked: string[] = [];
+	beforeEach(() => {
+		asked = [];
+		const real = globalThis.fetch;
+		vi.spyOn(globalThis, 'fetch').mockImplementation((async (
+			input: Parameters<typeof fetch>[0],
+			init?: Parameters<typeof fetch>[1]
+		) => {
+			asked.push(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+			return real(input, init);
+		}) as typeof fetch);
+	});
+	const codeHostAsked = (): boolean => asked.some((u) => u.includes('127.0.0.1:1/'));
+
+	it('a newer release in the on-chain record is reported without asking the code host', async () => {
+		configure('clearnet');
+		const idx = await stubIndexer(onChain('1.18.0'));
+		try {
+			const rc = await runUpgrade({
+				flags: { 'check-only': 'true', json: 'true' },
+				positional: [],
+				localIndexerBases: [idx.base],
+				verifyLocalIndexer: trustListener
+			});
+			expect(rc, 'exit 1 is how the release monitor learns a release exists').toBe(1);
+			expect(payload()).toMatchObject({
+				current: 'v1.17.15',
+				latest: 'v1.18.0',
+				up_to_date: false
+			});
+			expect(codeHostAsked(), 'the code host was asked though the record answered').toBe(false);
+			expect(idx.paths).toEqual(['/v1/release']);
+		} finally {
+			await idx.close();
+		}
+	});
+
+	it('up to date when the record names the installed release', async () => {
+		configure('clearnet');
+		const idx = await stubIndexer(onChain('1.17.15'));
+		try {
+			expect(
+				await runUpgrade({
+					flags: { 'check-only': 'true', json: 'true' },
+					positional: [],
+					localIndexerBases: [idx.base],
+					verifyLocalIndexer: trustListener
+				})
+			).toBe(0);
+			expect(payload()).toMatchObject({ latest: 'v1.17.15', up_to_date: true });
+		} finally {
+			await idx.close();
+		}
+	});
+
+	it('a check stops at the first release source that answers (the mirrors are not asked too)', async () => {
+		// Review 2026-10-08: every source was asked in turn even after the
+		// primary had answered; on a network that drops connections that was
+		// several 30 s waits, past the release monitor's 90 s limit.
+		configure('clearnet');
+		process.env.MORPHIT_RELEASE_HOST = 'primary.example';
+		process.env.MORPHIT_RELEASE_MIRRORS = 'mirror.example/agorise/morphit';
+		vi.mocked(globalThis.fetch).mockImplementation((async (input: Parameters<typeof fetch>[0]) => {
+			const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+			asked.push(u);
+			if (u.includes('primary.example'))
+				return new Response(
+					JSON.stringify({ tag_name: 'v1.18.0', html_url: 'x', body: '', assets: [] }),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				);
+			throw new TypeError('fetch failed');
+		}) as typeof fetch);
+		const idx = await stubIndexer({ status: 404, body: { error: 'not_found' } });
+		try {
+			const rc = await runUpgrade({
+				flags: { 'check-only': 'true', json: 'true' },
+				positional: [],
+				localIndexerBases: [idx.base],
+				verifyLocalIndexer: trustListener
+			});
+			expect(rc).toBe(1);
+			expect(asked.some((u) => u.includes('primary.example'))).toBe(true);
+			expect(asked.filter((u) => u.includes('mirror.example'))).toEqual([]);
+		} finally {
+			await idx.close();
+		}
+	});
+
+	it('a real upgrade that cannot reach the code host says the record names a newer release', async () => {
+		// Review 2026-10-08: the check (menu, release monitor) reads the record,
+		// the real upgrade finds releases on the code host. When the code host
+		// is blocked, the alert said "v1.18.0 is out" and the upgrade said only
+		// "could not reach any release source".
+		configure('clearnet');
+		const idx = await stubIndexer(onChain('1.18.0'));
+		const said: string[] = [];
+		vi.mocked(console.error).mockImplementation((...a: unknown[]) => void said.push(a.join(' ')));
+		vi.mocked(process.stderr.write).mockImplementation(
+			(c: unknown) => (said.push(String(c)), true)
+		);
+		try {
+			const rc = await runUpgrade({
+				flags: { yes: 'true' },
+				positional: [],
+				localIndexerBases: [idx.base],
+				verifyLocalIndexer: trustListener
+			});
+			expect(rc).toBe(5);
+			const out = [...said, ...logged].join('\n');
+			expect(out).toMatch(/could not reach any release source/i);
+			expect(out).toMatch(/on-chain release record names v1\.18\.0/);
+		} finally {
+			await idx.close();
+		}
+	});
+
+	it('no record from the indexer: the code host is asked, as before', async () => {
+		configure('clearnet');
+		const idx = await stubIndexer({ status: 404, body: { error: 'not_found' } });
+		try {
+			const rc = await runUpgrade({
+				flags: { 'check-only': 'true', json: 'true' },
+				positional: [],
+				localIndexerBases: [idx.base],
+				verifyLocalIndexer: trustListener
+			});
+			expect(codeHostAsked()).toBe(true);
+			// The code host is unreachable in a test: a failed check.
+			expect(rc).toBe(5);
+		} finally {
+			await idx.close();
+		}
+	});
+
+	it('a listener that is not morphit-indexer.service is never asked (real /proc check)', async () => {
+		configure('clearnet');
+		const impostor = await stubIndexer(onChain('9.9.9'));
+		try {
+			const rc = await runUpgrade({
+				flags: { 'check-only': 'true', json: 'true' },
+				positional: [],
+				localIndexerBases: [impostor.base]
+			});
+			expect(impostor.paths, 'root asked an unauthenticated listener').toEqual([]);
+			expect(logged.join('\n')).not.toContain('9.9.9');
+			expect(rc).toBe(5);
+		} finally {
+			await impostor.close();
 		}
 	});
 });

@@ -43,6 +43,8 @@ import {
 import { resolveWebRoot } from './upgrade.ts';
 import { syncInstanceOrigin } from '../lib/instanceOrigin.ts';
 import { sanitizeForTerm } from '../render/term.ts';
+import { startDotsSpinner, withSpinner } from '../init/spinner.ts';
+import { runAsync } from '../lib/spinRun.ts';
 
 export interface InstallCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -89,16 +91,12 @@ const PREREQS: readonly Prereq[] = [
  *  child_process import lazily to keep the module's top-level
  *  import surface small. */
 async function probePresent(cmd: string): Promise<boolean> {
-	const { spawnSync } = await import('node:child_process');
 	const parts = cmd.split(' ');
 	const bin = parts[0]!;
 	const args = parts.slice(1);
-	try {
-		const r = spawnSync(bin, args, { stdio: 'ignore' });
-		return r.status === 0;
-	} catch {
-		return false;
-	}
+	// Asynchronous, so the caller's spinner turns while it runs.
+	const r = await runAsync(bin, args, { timeoutMs: 60_000 });
+	return r.status === 0;
 }
 
 export async function runInstall(ctx: InstallCtx): Promise<number> {
@@ -144,7 +142,7 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	console.log('');
 	let allPresent = true;
 	for (const p of PREREQS) {
-		const ok = await probePresent(p.probe);
+		const ok = await withSpinner(`Checking ${p.name}…`, () => probePresent(p.probe));
 		console.log(`  ${ok ? '✓' : '✗'} ${p.name}`);
 		if (!ok) {
 			console.log(`      → ${p.fixHint}`);
@@ -277,7 +275,16 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
  * Best-effort: neither may fail an install.
  */
 function finishInstall(repoRoot: string): void {
-	healNpmUpdateNotice();
+	// Each wait below is synchronous: the spinner's label is on the line for it.
+	const spun = <T>(label: string, fn: () => T): T => {
+		const stop = startDotsSpinner(label);
+		try {
+			return fn();
+		} finally {
+			stop();
+		}
+	};
+	spun('Turning off npm’s update notice…', () => healNpmUpdateNotice());
 	// every install's pages name this instance's own origin (never
 	// a clearnet one on a hidden-only node), branding or not.
 	try {
@@ -286,7 +293,7 @@ function finishInstall(repoRoot: string): void {
 			{
 				info: (m) => console.log(`  ${m}`),
 				warn: (m) => console.log(`  ! ${m}`),
-				spinner: () => () => {}
+				spinner: (l) => startDotsSpinner(l)
 			},
 			{
 				installDir: repoRoot,
@@ -305,11 +312,13 @@ function finishInstall(repoRoot: string): void {
 		const settings = readBrandingSettings(repoRoot);
 		if (!brandingConfigured(settings)) return;
 		const buildDir = buildDirOf(repoRoot);
-		const r = applyBranding({ buildDir, settings });
+		const r = spun('Applying your branding…', () => applyBranding({ buildDir, settings }));
 		if (r.unsupported) return;
 		const webRoot = resolveWebRoot(process.env);
 		if (r.touched.length > 0 && existsSync(webRoot))
-			syncTouchedToWebRoot(buildDir, webRoot, r.touched);
+			spun('Copying the branded files to the web root…', () =>
+				syncTouchedToWebRoot(buildDir, webRoot, r.touched)
+			);
 		if (r.active) console.log('  \u2713 Applied your existing branding (docs/BRANDING.md).');
 		for (const w of r.warnings) console.log(`  ! ${sanitizeForTerm(w)}`);
 	} catch (err) {

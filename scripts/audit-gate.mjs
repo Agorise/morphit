@@ -3,7 +3,7 @@
  * Supply-chain audit gate.
  *
  * Runs `npm audit --json` (lockfile only) and checks it against THE allowlist,
- * .audit-allowlist.json (also read by apps/web/scripts/npm-audit-gate-smoke.ts).
+ * scripts/audit-allowlist.json (also read by apps/web/scripts/npm-audit-gate-smoke.ts).
  * It FAILS when:
  *   1. a moderate, high or critical advisory is not in the allowlist;
  *   2. an allowlisted advisory is no longer reported (remove the entry: a
@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-export const ALLOWLIST_PATH = join(repoRoot, '.audit-allowlist.json');
+export const ALLOWLIST_PATH = join(repoRoot, 'scripts', 'audit-allowlist.json');
 const RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -46,10 +46,11 @@ export function parseAllowlist(text) {
 	try {
 		raw = JSON.parse(text);
 	} catch (e) {
-		return { allow: {}, problems: [`.audit-allowlist.json is not JSON: ${e.message}`] };
+		return { allow: {}, problems: [`scripts/audit-allowlist.json is not JSON: ${e.message}`] };
 	}
 	const allow = raw && typeof raw.allow === 'object' && raw.allow !== null ? raw.allow : null;
-	if (allow === null) return { allow: {}, problems: ['.audit-allowlist.json has no "allow" map'] };
+	if (allow === null)
+		return { allow: {}, problems: ['scripts/audit-allowlist.json has no "allow" map'] };
 	const cats = new Set(Object.keys(raw._categories ?? {}));
 	for (const [id, e] of Object.entries(allow)) {
 		if (!/^GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}$/.test(id))
@@ -122,7 +123,7 @@ export function evaluate(
 		}
 		if (listed) continue;
 		const rank = RANK[a.severity] ?? 0;
-		const msg = `${id} (${a.package}, ${a.severity}) is not in .audit-allowlist.json: ${a.title}`;
+		const msg = `${id} (${a.package}, ${a.severity}) is not in scripts/audit-allowlist.json: ${a.title}`;
 		if (rank >= RANK.critical) failures.push(msg);
 		else if (rank >= RANK.high) (report ? warnings : failures).push(msg);
 		else if (rank >= RANK.moderate) (report ? warnings : failures).push(msg);
@@ -130,7 +131,7 @@ export function evaluate(
 	}
 	for (const id of Object.keys(allow)) {
 		if (!found.has(id)) {
-			const msg = `${id} (${allow[id].package}) is in .audit-allowlist.json but npm no longer reports it — remove the entry`;
+			const msg = `${id} (${allow[id].package}) is in scripts/audit-allowlist.json but npm no longer reports it — remove the entry`;
 			(report ? warnings : failures).push(msg);
 		}
 	}

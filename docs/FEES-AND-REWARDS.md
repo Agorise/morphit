@@ -376,9 +376,15 @@ registration after first config.
   ($1, 'liquid',  10, 'welcome_bonus_liquid',  $2),
   ($1, 'vesting', 10, 'welcome_bonus_vesting', $2)
   ```
-- Trigger: when the new user receives their first feedback row
-  with a non-null `order_permlink`.  Once-per-account
-  (idempotent UPSERT into `accounts.first_trade_complete_at`).
+- Trigger: a review of the user citing the user's OWN fee-paid
+  listing (`fee_status = 'verified'`, not the free first-buy
+  waiver), when that listing carries this instance's operator tag.
+  Once-per-account (idempotent UPSERT into
+  `accounts.first_trade_complete_at`). For blocks dated from the
+  consensus activation time (2026-11-01 00:00 UTC) only such a review
+  sets that flag; before it, the user's first review citing any order
+  set it, so a first trade on someone else's listing used the bonus up
+  unpaid (older blocks keep that rule, so a resync pays the same).
 - Bonus is queued in `relay_pending_transfers`; the relay
   drainer picks it up and broadcasts the actual transfer.
 - The "vesting" half is powered up into vested BLURT — a
@@ -389,8 +395,7 @@ registration after first config.
   used by the 1-BP first-fee reward and the loyalty milestones
   below).  Vested BLURT earns the recipient BP (Blurt Power, the
   chain's voting/social weight token).  Vesting BLURT is still
-  BLURT; it's just staked.  Roughly 10 BLURT vesting ≈ 13 BP at
-  current ratios.
+  BLURT; it's just staked: 10 BLURT powered up is 10 BP.
 - Paid by the **relay** account, drawn from accumulated
   listing-fee revenue accumulated by the operator's relay
   balance.
@@ -423,6 +428,20 @@ registration after first config.
   `(account, milestone_blurt)` constraint on
   `account_loyalty_milestones`.
 - Paid by the **relay** account as a delegate_vesting_shares op.
+
+### The chain's minimum delegation (v1.21.3)
+
+Blurt's `delegate_vesting_shares` evaluator (as in Steem from HF20) accepts a
+NEW delegation only of at least `account_creation_fee / 3` (about 33.4 BP at a
+100 BLURT fee) and a change to an existing one only of at least
+`account_creation_fee / 30` (about 3.4 BP). The 1 BP welcome stake and the 10 BP
+first milestone (11 BP together) are below the first limit, so the chain
+refuses them. The relay drainer reads both limits and the current delegation
+before sending (`BlurtClient.delegationRules`): a target below them is HELD
+(`held: …` in `morphit-ops drain-queue`, looked at again every 6 hours, never
+counted as an error) and is lent once the account's rewards add up to it —
+usually at the 500 BLURT milestone (61 BP in all). A target the chain already
+holds is marked done without a transaction.
 
 ### 5. Witness/chain fees — tiny operational cost on every broadcast
 

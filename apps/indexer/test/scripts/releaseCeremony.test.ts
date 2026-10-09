@@ -157,6 +157,8 @@ function runBlock(
 			const l = line
 				.replace(/(^|\s|=)\/tmp\//g, `$1${tmp}/`)
 				.replace(/(^|\s)~\//g, `$1${home}/`)
+				// Block 3 writes its manifest and payload to /tmp (since v1.21.3),
+				// which the /tmp rewrite above already moved into the run's tmp/.
 				.replace(/apps\/web\/build-manifest\.release\.json/g, join(run, 'manifest.json'))
 				.replace(/(^|\s|>\s?)release\.json\b/g, `$1${join(run, 'release.json')}`);
 			const dl = /^curl -fsSL (\S+) -o (\S+)$/.exec(l);
@@ -174,7 +176,7 @@ function runBlock(
 		encoding: 'utf8',
 		timeout: 120_000
 	});
-	const rel = join(run, 'release.json');
+	const rel = join(tmp, 'morphit-release.json');
 	let payload: {
 		hash_manifest?: Record<string, string>;
 		distribution?: Record<string, unknown>;
@@ -263,19 +265,17 @@ describe('ELI5 Block 3', () => {
 		expect(r.stderr).toMatch(/--ipfs-cid/);
 	});
 
-	it('the recovery the blocks print (payload line + --ipfs-cid) anchors the CID the release box printed', () => {
-		const text = block3Text();
-		const recovery = /`([^`]*release-build-payload\.ts --ipfs-cid <cid>[^`]*)`/.exec(text)?.[1];
-		expect(recovery, 'Block 3 does not say how to supply a missing CID').toBeDefined();
-		// It is Block 3's own payload line with only the flag added.
-		const line = block3().find((l) => /release-build-payload\.ts/.test(l))!;
-		expect(recovery).toBe(
-			line.replace('release-build-payload.ts', 'release-build-payload.ts --ipfs-cid <cid>')
+	it('the recovery the payload builder prints (its line + --ipfs-cid) anchors the CID the release box printed', () => {
+		const stopped = runBlock3({ anchor: noCidAnchor() });
+		// Its instruction: the same payload line, the flag right after the script.
+		expect(stopped.r.stderr).toMatch(
+			/run this payload line again with\s+--ipfs-cid <that CID>\s+added right after release-build-payload\.ts,\s+then the dry-run line again/
 		);
+		const line = block3().find((l) => /release-build-payload\.ts/.test(l))!;
 		const { r, payload } = runBlock3(
 			{ anchor: noCidAnchor() },
 			{},
-			recovery!.replace('<cid>', CID)
+			line.replace('release-build-payload.ts', `release-build-payload.ts --ipfs-cid ${CID}`)
 		);
 		expect(r.status, r.stderr.slice(-600)).toBe(0);
 		expect(payload?.distribution?.ipfs_cid).toBe(CID);
@@ -360,17 +360,12 @@ describe('the payload builder with MORPHIT_BUILD_ANCHOR_FILE', () => {
 // INSTALLED seed script on morphit.io, i.e. the previous release's seed and
 // staging code. A change in how a release directory is staged would then give
 // a CID this release's own upgrades (staging with their own copy) never
-// reproduce, and every one of them would refuse it as a mismatch. Both places
-// that print the fallback now print one command that seeds with the release's
-// own scripts from the published tarball, checked against the anchored hash.
+// reproduce, and every one of them would refuse it as a mismatch. The payload
+// builder (the only place that prints the fallback, and only when it is
+// needed) prints one command that seeds with the release's own scripts from the
+// published tarball, checked against the anchored hash.
 describe('the no-CID fallback (morphit.io, as root)', () => {
 	const STUB_CID = 'bafybeihostedbythenewscriptsaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-
-	function eli5Command(): string {
-		const text = block3Text();
-		const note = text.slice(text.indexOf('this release has no IPFS CID'));
-		return /```\n([^\n]+)\n```/.exec(note)![1]!;
-	}
 
 	function builderCommand(): string {
 		const { r } = runBlock3({ anchor: noCidAnchor() });
@@ -448,12 +443,17 @@ exit 0`
 		return { r, staged, tmp };
 	}
 
-	it('the release blocks and the payload builder print the same command', () => {
-		expect(builderCommand()).toBe(eli5Command());
+	it('Block 3 prints no fallback of its own; it points to the one the payload builder prints', () => {
+		const text = block3Text();
+		expect(text).toMatch(
+			/stops with "this release has no IPFS CID".*prints the one command to run on morphit\.io/s
+		);
+		expect(text, 'Block 3 prints a seed command every time').not.toMatch(/morphit-ipfs-seed\.sh/);
+		expect(builderCommand()).toMatch(/sh "\$D\/ops\/ipfs\/morphit-ipfs-seed\.sh" v9\.9\.9$/);
 	});
 
 	it('seeds with the scripts inside the checked release tarball and prints the CID', () => {
-		const { r, staged, tmp } = runOnMorphitIo(eli5Command());
+		const { r, staged, tmp } = runOnMorphitIo(builderCommand());
 		expect(r.stderr, r.stderr.slice(-800)).toMatch(
 			new RegExp(`morphit-ipfs-seed: hosted v9\\.9\\.9 → ${STUB_CID}`)
 		);
@@ -468,7 +468,7 @@ exit 0`
 	});
 
 	it('a tarball that does not match the anchored SHA-256 is not seeded', () => {
-		const { r, staged } = runOnMorphitIo(eli5Command(), true);
+		const { r, staged } = runOnMorphitIo(builderCommand(), true);
 		expect(r.status).not.toBe(0);
 		expect(staged, 'a tarball that failed its check was added to IPFS').toBeNull();
 		expect(r.stderr).not.toMatch(/seed copy:/);

@@ -34,7 +34,7 @@
 	 * case the orderbook is read-only for them until they register.
 	 */
 
-	import { onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import {
 		canSubmitSignup,
 		pendingRetryAfterError,
@@ -58,6 +58,7 @@
 	// pattern as onboarding/.
 	// import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
+	import RewardsPanel from '$components/RewardsPanel.svelte';
 	import FocusedField from '$components/FocusedField.svelte';
 	import { identiconDataUri, identiconDataUriFromString } from '$crypto/identicon';
 	import { formatPublicKeyBLT } from '$crypto/keygen';
@@ -126,6 +127,18 @@
 
 	let name = $state('');
 	let availability = $state<AvailabilityState>({ kind: 'idle' });
+	/** The auto-redirect after a successful signup (cleared if the user goes
+	 *  on by the button or leaves the page first, so it never pulls them back). */
+	let successRedirect: ReturnType<typeof setTimeout> | null = null;
+	function continueToOrderbook(): void {
+		if (successRedirect !== null) clearTimeout(successRedirect);
+		successRedirect = null;
+		gotoLocale('/orderbook');
+	}
+	onDestroy(() => {
+		if (successRedirect !== null) clearTimeout(successRedirect);
+	});
+
 	let submit = $state<SubmitState>({ kind: 'ready' });
 	/** Wave 4 (A4): the name whose last attempt ended
 	 *  `broadcast_outcome_unknown`. It may now read "taken" because it landed
@@ -348,9 +361,11 @@
 				trxId: result.trxId
 			};
 			// Give the user a moment to see the success state before
-			// we route them on. 3s per UX-STANDARD rule #7 — grandma
-			// needs time to register the win.
-			setTimeout(() => gotoLocale('/orderbook'), 3000);
+			// we route them on (UX-STANDARD rule #7 — grandma needs time to
+			// register the win). v1.21.3: the success card now lists what the
+			// new account gets, so it stays up long enough to read it (20 s),
+			// with a button to go on at once.
+			successRedirect = setTimeout(() => gotoLocale('/orderbook'), 20_000);
 		} catch (err) {
 			const signupErr = err as SignupError;
 			pendingRetryName = pendingRetryAfterError(signupErr.code, normalizedName, pendingRetryName);
@@ -518,10 +533,20 @@
 			<p class="mt-2 text-ink-700 dark:text-ink-200">
 				{$_('onboarding.register_name.success.body', { values: { name: normalizedName } })}
 			</p>
-			<p class="mt-4 text-sm text-ink-500">
+			<button
+				type="button"
+				class="btn-primary btn-shine mt-5 inline-flex"
+				onclick={continueToOrderbook}
+			>
+				{$_('onboarding.register_name.success.continue')}
+			</button>
+			<p class="mt-3 text-sm text-ink-500">
 				{$_('onboarding.register_name.success.redirecting')}
 			</p>
 		</section>
+		<div class="mt-6 text-left">
+			<RewardsPanel />
+		</div>
 	{:else}
 		<SignupProgress current={4} total={4} />
 		<section class="animate-fade-up" aria-labelledby="register-heading">

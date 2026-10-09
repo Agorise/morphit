@@ -611,6 +611,7 @@
 					<ul class="space-y-1.5">
 						<li><a href={lp('/operators')} class={footLink}>{$_('footer.operators')}</a></li>
 						<li><a href={lp('/instances')} class={footLink}>{$_('footer.instances')}</a></li>
+						<li><a href={lp('/run-a-node')} class={footLink}>{$_('footer.run_a_node')}</a></li>
 						<li><a href={lp('/compare')} class={footLink} title={$_('footer.compare_title')}>{$_('footer.compare')}</a></li>
 					</ul>
 				</div>

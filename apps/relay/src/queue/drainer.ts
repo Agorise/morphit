@@ -41,8 +41,20 @@
  *      cycle; otherwise → checked again later, and after queueMaxSettleChecks
  *      checks ESCALATED (error_count set to the cap, last_error 'escalated: …',
  *      logged, counted on /v1/health) — never re-sent blind.
- * Delegations SET an absolute amount, so re-sending one is harmless and
- * they are not settled from history.
+ * DELEGATIONS (2026-10-08). They used to be exempt from settling ("a
+ * delegation SETS an absolute amount, so re-sending one is harmless"). On
+ * morphit.io two delegation rows were then re-signed about once a minute for
+ * five days: each send ended "outcome unknown", nothing looked at the chain, and
+ * error_count never rose, so they never stopped or reached the operator. Now a
+ * delegation attempt is settled from the relay's history exactly like a
+ * transfer (by its txid), and:
+ *   - only the NEWEST delegation row for an account is ever sent; an older one
+ *     is retired as superseded (each row carries the absolute target, and an
+ *     older, smaller one landing after a newer one would undo it);
+ *   - a delegation row is not sent while an older row for the same account has
+ *     an attempt that may still land.
+ * The nodes' answer to an unconfirmed send is kept (`cause=` in last_error,
+ * and in the log), so a refusal the chain repeats reaches the operator.
  */
 
 import type { UnlockedConfig } from '$config';
@@ -95,6 +107,8 @@ const OUTCOME_UNKNOWN = 'outcome_unknown';
 const SETTLE_GRACE_MS = 30_000;
 /** History is searched back to this long before the signed expiration. */
 const HISTORY_LOOKBACK_MS = 15 * 60_000;
+/** A delegation held below the chain's minimum is looked at again after this. */
+const HELD_RECHECK_HOURS = 6;
 /** Default number of undecided settle checks before a row is escalated. */
 const DEFAULT_MAX_SETTLE_CHECKS = 30;
 
@@ -106,14 +120,34 @@ type Attempt =
 			readonly txid: string | null;
 			readonly expirationMs: number;
 			readonly checks: number;
+			/** What the nodes answered to the send, when it was recorded. */
+			readonly cause: string;
 	  };
+
+/** One line, bounded, for last_error (it is parsed by its leading fields).
+ *  Every control character goes, NUL included: Postgres refuses NUL in text,
+ *  and a write of a node's reply that fails must never lose the record of the
+ *  signed transaction (review 2026-10-08). */
+function oneLine(s: string): string {
+	return s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').trim();
+}
+function causeText(s: string): string {
+	return oneLine(s).slice(0, 200);
+}
+
+/** The SQL condition "this row's attempt may be on the network". */
+const ATTEMPT_OPEN_SQL = `(last_error LIKE '${OUTCOME_UNKNOWN}%' OR last_error LIKE '${IN_FLIGHT_SIGNED}%')`;
 
 function parseAttempt(row: PendingTransferRow): Attempt {
 	const e = row.last_error ?? '';
 	if (!(e.startsWith(IN_FLIGHT_SIGNED) || e.startsWith(OUTCOME_UNKNOWN))) return { kind: 'none' };
-	const txid = /trx_id=([0-9a-f]{40})/.exec(e)?.[1] ?? null;
-	const exp = Number(/\bexp=(\d+)/.exec(e)?.[1]);
-	const checks = Number(/\bchecks=(\d+)/.exec(e)?.[1] ?? 0);
+	// The fields are read only from before the nodes' answer, which is free text.
+	const at = e.indexOf(' cause=');
+	const head = at === -1 ? e : e.slice(0, at);
+	const cause = at === -1 ? '' : e.slice(at + ' cause='.length);
+	const txid = /trx_id=([0-9a-f]{40})/.exec(head)?.[1] ?? null;
+	const exp = Number(/\bexp=(\d+)/.exec(head)?.[1]);
+	const checks = Number(/\bchecks=(\d+)/.exec(head)?.[1] ?? 0);
 	// No recorded expiration (a row written before wave 4): assume the latest
 	// it could be — the claim stamp plus a generous signing delay + window.
 	const stampMs =
@@ -122,7 +156,8 @@ function parseAttempt(row: PendingTransferRow): Attempt {
 		kind: 'unsettled',
 		txid,
 		expirationMs: Number.isFinite(exp) && exp > 0 ? exp : stampMs + 15 * 60_000,
-		checks: Number.isFinite(checks) ? checks : 0
+		checks: Number.isFinite(checks) ? checks : 0,
+		cause
 	};
 }
 
@@ -269,9 +304,17 @@ export class RelayQueueDrainer {
 			`SELECT id, recipient, kind, amount_blurt::text,
 			        amount_bp::text AS amount_bp, reason, error_count,
 			        broadcast_attempt_at, broadcast_attempt_at::text AS attempt_token, last_error
-			   FROM relay_pending_transfers
+			   FROM relay_pending_transfers t
 			  WHERE broadcast_at IS NULL
 			    AND error_count < $1
+			    -- A delegation that must wait for an older one to the same account
+			    -- is not taken: it would hold a batch slot every cycle (it is never
+			    -- stamped) and, sorted first, keep the older one from settling.
+			    AND NOT (kind = 'delegation' AND EXISTS (
+			      SELECT 1 FROM relay_pending_transfers o
+			       WHERE o.kind = 'delegation' AND o.recipient = t.recipient AND o.id < t.id
+			         AND o.broadcast_at IS NULL AND o.error_count < $1
+			         AND (o.last_error LIKE '${OUTCOME_UNKNOWN}%' OR o.last_error LIKE '${IN_FLIGHT_SIGNED}%')))
 			    AND (
 			      broadcast_attempt_at IS NULL
 			      OR broadcast_attempt_at < NOW() - (
@@ -297,7 +340,12 @@ export class RelayQueueDrainer {
 	): Promise<'done' | 'failed' | 'wait'> {
 		if (Date.now() < att.expirationMs + SETTLE_GRACE_MS) return 'wait';
 		const asset = `${amount.toFixed(3)} BLURT`;
-		const want = row.kind === 'liquid' ? 'transfer' : 'transfer_to_vesting';
+		const want =
+			row.kind === 'liquid'
+				? 'transfer'
+				: row.kind === 'vesting'
+					? 'transfer_to_vesting'
+					: 'delegate_vesting_shares';
 		const result = await this.blurt
 			.settleTransfer({
 				account: this.config.relayAccount,
@@ -305,6 +353,12 @@ export class RelayQueueDrainer {
 				expirationMs: att.expirationMs,
 				match: (op, body, trxId) => {
 					if (att.txid !== null && trxId !== undefined) return trxId === att.txid;
+					if (want === 'delegate_vesting_shares')
+						return (
+							op === want &&
+							body.delegator === this.config.relayAccount &&
+							body.delegatee === row.recipient
+						);
 					if (op !== want || body.from !== this.config.relayAccount || body.to !== row.recipient)
 						return false;
 					if (body.amount !== asset) return false;
@@ -331,10 +385,16 @@ export class RelayQueueDrainer {
 				  WHERE id = $1 AND broadcast_at IS NULL`,
 				[
 					row.id,
-					`not_landed trx_id=${att.txid ?? '?'} (absent past its expiration per 2+ operators)`
+					`not_landed trx_id=${att.txid ?? '?'} (absent past its expiration per 2+ operators)` +
+						(att.cause !== '' ? ` — the nodes answered: ${att.cause}` : '')
 				]
 			);
-			log.warn('row_attempt_not_landed', { row_id: row.id, trx_id: att.txid });
+			log.warn('row_attempt_not_landed', {
+				row_id: row.id,
+				kind: row.kind,
+				trx_id: att.txid,
+				...(att.cause !== '' ? { cause: att.cause } : {})
+			});
 			return 'failed';
 		}
 		const checks = att.checks + 1;
@@ -346,7 +406,8 @@ export class RelayQueueDrainer {
 				  WHERE id = $1 AND broadcast_at IS NULL`,
 				[
 					row.id,
-					`escalated: outcome of trx_id=${att.txid ?? '?'} still unknown after ${checks} checks — check the relay account's history for it before re-queueing`,
+					`escalated: outcome of trx_id=${att.txid ?? '?'} still unknown after ${checks} checks — check the relay account's history for it before re-queueing` +
+						(att.cause !== '' ? ` — the nodes answered: ${att.cause}` : ''),
 					this.config.queueMaxRetries
 				]
 			);
@@ -363,7 +424,8 @@ export class RelayQueueDrainer {
 			  WHERE id = $1 AND broadcast_at IS NULL`,
 			[
 				row.id,
-				`${OUTCOME_UNKNOWN} trx_id=${att.txid ?? '?'} exp=${att.expirationMs} checks=${checks}`
+				`${OUTCOME_UNKNOWN} trx_id=${att.txid ?? '?'} exp=${att.expirationMs} checks=${checks}` +
+					(att.cause !== '' ? ` cause=${att.cause}` : '')
 			]
 		);
 		log.info('row_unsettled_waiting', { row_id: row.id, trx_id: att.txid, checks });
@@ -428,9 +490,82 @@ export class RelayQueueDrainer {
 		}
 
 		// A previous attempt may already be on chain: settle it FIRST (D1).
-		if (row.kind !== 'delegation') {
-			const att = parseAttempt(row);
-			if (att.kind === 'unsettled') return this.settle(row, att, amount);
+		// Delegations too (2026-10-08, see the header).
+		const att = parseAttempt(row);
+		if (att.kind === 'unsettled') return this.settle(row, att, amount);
+
+		if (row.kind === 'delegation') {
+			// Only the newest target for an account is sent: an older row is retired.
+			const newer = await this.db.query<{ id: string }>(
+				`SELECT id::text FROM relay_pending_transfers
+				  WHERE kind = 'delegation' AND recipient = $1 AND id > $2
+				    AND broadcast_at IS NULL AND error_count < $3
+				  ORDER BY id DESC LIMIT 1`,
+				[row.recipient, row.id, this.config.queueMaxRetries]
+			);
+			const newerId = newer.rows[0]?.id;
+			if (newerId !== undefined) {
+				const retired = await this.db.query(
+					`UPDATE relay_pending_transfers
+					    SET broadcast_at = NOW(),
+					        broadcast_trx_id = $2,
+					        last_error = $3
+					  WHERE id = $1 AND broadcast_at IS NULL
+					    AND broadcast_attempt_at::text IS NOT DISTINCT FROM $4::text`,
+					[
+						row.id,
+						`superseded-by-row-${newerId}`,
+						`superseded: row ${newerId} carries a newer delegation target for ${row.recipient}; this one was never sent again`,
+						row.attempt_token ?? null
+					]
+				);
+				// Another drainer took the row meanwhile: leave it to that one.
+				if ((retired.rowCount ?? 0) !== 1) return 'wait';
+				log.info('row_superseded', { row_id: row.id, by_row_id: newerId });
+				return 'done';
+			}
+			// Never send while an older row's attempt for the account may still land.
+			const olderOpen = await this.db.query<{ id: string }>(
+				`SELECT id::text FROM relay_pending_transfers
+				  WHERE kind = 'delegation' AND recipient = $1 AND id < $2
+				    AND broadcast_at IS NULL AND error_count < $3
+				    AND ${ATTEMPT_OPEN_SQL}
+				  LIMIT 1`,
+				[row.recipient, row.id, this.config.queueMaxRetries]
+			);
+			if (olderOpen.rows.length > 0) return 'wait';
+
+			// The chain's own limits (Blurt's delegate_vesting_shares evaluator,
+			// from Steem HF20): a NEW delegation must be at least
+			// account_creation_fee / 3 (about 33.4 BP at a 100 BLURT fee), a
+			// change at least fee / 30. Below that the chain refuses it every
+			// time: on morphit.io the 1 BP welcome stake and the 11 BP first
+			// milestone to one account were re-sent for five days. Such a target
+			// is HELD (not an error) and looked at again every few hours; a newer
+			// row for the account, once the rewards add up, replaces it.
+			const verdict = await this.delegationVerdict(row.recipient, bp);
+			if (verdict.kind === 'already') {
+				await this.db.query(
+					`UPDATE relay_pending_transfers
+					    SET broadcast_at = NOW(), broadcast_trx_id = 'already-delegated', last_error = NULL
+					  WHERE id = $1 AND broadcast_at IS NULL`,
+					[row.id]
+				);
+				log.info('row_delegation_already_in_place', { row_id: row.id, bp });
+				return 'done';
+			}
+			if (verdict.kind === 'hold') {
+				await this.db.query(
+					`UPDATE relay_pending_transfers
+					    SET last_error = $2, last_error_at = NOW(),
+					        broadcast_attempt_at = NOW() + make_interval(hours => $3)
+					  WHERE id = $1 AND broadcast_at IS NULL
+					    AND broadcast_attempt_at::text IS NOT DISTINCT FROM $4::text`,
+					[row.id, verdict.why, HELD_RECHECK_HOURS, row.attempt_token ?? null]
+				);
+				log.info('row_delegation_held', { row_id: row.id, bp, why: verdict.why });
+				return 'wait';
+			}
 		}
 
 		// Claim + stamp, committed BEFORE anything is signed: an atomic
@@ -496,9 +631,17 @@ export class RelayQueueDrainer {
 					    SET last_error = $2,
 					        last_error_at = NOW()
 					  WHERE id = $1 AND broadcast_at IS NULL`,
-					[row.id, `${OUTCOME_UNKNOWN} trx_id=${err.txid} exp=${err.expirationMs} checks=0`]
+					[
+						row.id,
+						`${OUTCOME_UNKNOWN} trx_id=${err.txid} exp=${err.expirationMs} checks=0 cause=${causeText(err.reason)}`
+					]
 				);
-				log.warn('row_outcome_unknown', { row_id: row.id, trx_id: err.txid });
+				log.warn('row_outcome_unknown', {
+					row_id: row.id,
+					kind: row.kind,
+					trx_id: err.txid,
+					cause: causeText(err.reason)
+				});
 				return 'wait';
 			}
 			// BroadcastNotSentError — nothing left this process (head read,
@@ -527,6 +670,45 @@ export class RelayQueueDrainer {
 		return 'done';
 	}
 
+	/** What the chain allows for this delegation target now. Unknown (the
+	 *  rules could not be read) sends as before: the chain decides. */
+	private async delegationVerdict(
+		recipient: string,
+		bp: number
+	): Promise<{ kind: 'send' } | { kind: 'already' } | { kind: 'hold'; why: string }> {
+		const read = (this.blurt as Partial<BlurtClient>).delegationRules;
+		if (typeof read !== 'function') return { kind: 'send' };
+		let rules: { minNewBp: number; minChangeBp: number; currentBp: number };
+		try {
+			rules = await read.call(this.blurt, this.config.relayAccount, recipient);
+		} catch {
+			return { kind: 'send' };
+		}
+		// 1% margin: the BP-to-VESTS price moves a little before the block.
+		const fmt = (n: number): string => n.toFixed(3).replace(/\.?0+$/, '');
+		if (rules.currentBp <= 0) {
+			if (bp < rules.minNewBp * 1.01)
+				return {
+					kind: 'hold',
+					why:
+						`held: ${fmt(bp)} BP is below the chain's minimum delegation of ${fmt(rules.minNewBp)} BP; ` +
+						`it is lent once this account's rewards add up to it`
+				};
+			return { kind: 'send' };
+		}
+		const change = Math.abs(bp - rules.currentBp);
+		if (change < rules.minChangeBp * 1.01) {
+			if (change < rules.minChangeBp / 100) return { kind: 'already' };
+			return {
+				kind: 'hold',
+				why:
+					`held: a change of ${fmt(change)} BP (now ${fmt(rules.currentBp)} BP) is below the chain's ` +
+					`minimum change of ${fmt(rules.minChangeBp)} BP`
+			};
+		}
+		return { kind: 'send' };
+	}
+
 	private async recordFailure(row: PendingTransferRow, err: unknown): Promise<void> {
 		const message = err instanceof Error ? err.message : String(err);
 		log.error(
@@ -541,15 +723,22 @@ export class RelayQueueDrainer {
 			err
 		);
 		try {
-			// A definite failure (validation, or the chain REJECTED the signed
-			// transaction): nothing landed. Counted toward queueMaxRetries.
+			// A definite failure (validation, or nothing left this process):
+			// counted toward queueMaxRetries. The row's attempt record is kept when it describes a signed
+			// transaction that may be on the network (an exception after the
+			// send — a database write while settling or recording the outcome —
+			// must not erase it, or the next cycle would sign and send again);
+			// it is settled from the history instead. The failure is still
+			// counted, so a row that keeps failing stops and reaches the
+			// operator (second review 2026-10-08).
 			await this.db.query(
 				`UPDATE relay_pending_transfers
-				    SET last_error = $2,
+				    SET last_error = CASE WHEN last_error IS NOT NULL AND ${ATTEMPT_OPEN_SQL}
+				                          THEN last_error ELSE $2 END,
 				        last_error_at = NOW(),
 				        error_count = error_count + 1
 				  WHERE id = $1 AND broadcast_at IS NULL`,
-				[row.id, message.slice(0, 500)] // cap to avoid bloating
+				[row.id, oneLine(message).slice(0, 500)]
 			);
 		} catch (dbErr) {
 			// If even the error-recording UPDATE fails, log loudly

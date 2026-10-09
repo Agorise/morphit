@@ -30,8 +30,9 @@
  *          morphit-indexer.service cgroup (/proc/net/tcp inode → the process
  *          holding it → /proc/<pid>/cgroup);
  *        - unprivileged (the release monitor): the socket must be owned by the
- *          same user as morphit-indexer.service's main process (root on every
- *          installed box), which no unprivileged process can fake.
+ *          same user as morphit-indexer.service's main process (the
+ *          morphit-indexer user, which nothing else on an installed box runs
+ *          as), so another unprivileged process cannot stand in for it.
  *      Anything else fails closed with a calm, specific message. A box that
  *      runs its indexer outside systemd sets MORPHIT_UPGRADE_TRUST_LOCAL_INDEXER=1
  *      (documented in docs/OPERATIONS.md) to skip only the ownership check.

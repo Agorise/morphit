@@ -17,6 +17,7 @@ import { loadConfig, isValidVapidPublicKey, isValidVapidSubject, hiddenRouterPol
 import { loadOperatorConfig } from '@morphit/operator-config';
 import { unlockActiveKey } from './config/unlock.ts';
 import { installDrainGuard, withBootTimeout } from './lib/processGuard.ts';
+import { onUnhandledRejection } from './lib/unhandledRejection.ts';
 import { BlurtClient } from './blurt/client.ts';
 import { startRpcDirectorySync } from './blurt/rpcDirectorySync.ts';
 import { prepareSignupStateDir } from './policy/signupState.ts';
@@ -592,9 +593,15 @@ async function main(): Promise<void> {
 		procLog.error('uncaught_exception', {}, err);
 		process.exit(1);
 	});
+	// An abandoned node request that ends (aborted / connection failed) is
+	// logged, not a reason to stop the relay; anything else still is
+	// (lib/unhandledRejection.ts, 2026-10-08).
 	process.on('unhandledRejection', (reason) => {
-		procLog.error('unhandled_rejection', {}, reason);
-		process.exit(1);
+		onUnhandledRejection(reason, {
+			warn: (e, ctx, err) => procLog.warn(e, ctx, err),
+			error: (e, ctx, err) => procLog.error(e, ctx, err),
+			exit: (code) => process.exit(code)
+		});
 	});
 }
 

@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	AFTER_RESTART_WAIT_MS,
+	AFTER_RESTART_ANSWER_MS,
 	EARLY_HEALS_MAX_MS,
 	UNIT_END_RESERVE_MS,
 	WEB_HEAL_IDLE_MAX_MS,
@@ -122,6 +123,7 @@ describe('the after-restart unit is never killed in the middle of its work', () 
 		);
 		const steps =
 			AFTER_RESTART_WAIT_MS +
+			AFTER_RESTART_ANSWER_MS +
 			EARLY_HEALS_MAX_MS +
 			WEB_HEAL_IDLE_MAX_MS +
 			EGRESS_HEAL_MAX_MS +

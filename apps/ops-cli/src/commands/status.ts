@@ -18,7 +18,7 @@
  *   - --json:   single JSON document for scripting
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { applyThreshold } from '../config.ts';
 import { ageSeconds, utcMidnightToday, formatDuration } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
@@ -128,7 +128,8 @@ interface StatusSnapshot {
 // ─── Run ─────────────────────────────────────────────────────────
 
 export async function runStatus(ctx: CommandCtx): Promise<number> {
-	const snap = await collectSnapshot(ctx);
+	// The DB reads and this node's fee view (up to 4 s) under the spinner.
+	const snap = await whileReading(ctx, () => collectSnapshot(ctx), 'Reading this node’s status…');
 	if (ctx.flags.json === 'true') {
 		emitJson(snap);
 		return 0;

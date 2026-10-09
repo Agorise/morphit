@@ -341,7 +341,7 @@ async function main(): Promise<void> {
 		/args\.subcommand === 'matrix'/.test(mainSrc) && /runMatrix\(/.test(mainSrc)
 	);
 	const upgradeSrc = readFileSync(join(opsCliRoot, 'src', 'commands', 'upgrade.ts'), 'utf8');
-	check('upgrade.ts calls syncMatrixBotService (re-checks on upgrade)', /syncMatrixBotService\(/.test(upgradeSrc));
+	check('upgrade.ts calls syncMatrixBotService (re-checks on upgrade)', /syncMatrixBotService(?:AtTerminal)?\(/.test(upgradeSrc));
 	check('upgrade.ts no longer unconditionally restarts the matrix-bot', !/'morphit-matrix-bot\.service'/.test(upgradeSrc));
 	const matrixItems = MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.subcommand === 'matrix');
 	check('MENU_GROUPS exposes exactly one matrix item', matrixItems.length === 1);

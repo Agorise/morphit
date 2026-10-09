@@ -19,7 +19,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 LIB=/usr/local/lib/morphit
 USER_UNIT_DIR=/etc/systemd/user
-# 6h between checks matches the release-monitor sidecar's cadence.
+# 6h between checks: it asks only this node's own indexer (nothing leaves the box).
 CHECK_INTERVAL="${MORPHIT_UPGRADE_NOTIFY_INTERVAL:-6h}"
 
 echo "== Morphit desktop upgrade-notification setup =="

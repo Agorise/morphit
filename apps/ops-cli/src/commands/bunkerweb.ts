@@ -32,6 +32,8 @@
  */
 
 import { ask, askYesNo, explain } from '../init/prompt.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
+import { runAsync } from '../lib/spinRun.ts';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -435,8 +437,8 @@ async function dockerPresent(): Promise<boolean> {
 }
 
 async function inspectContainer(name: string): Promise<ContainerState> {
-	const { spawnSync } = await import('node:child_process');
-	const r = spawnSync(
+	// Asynchronous, so the caller's spinner keeps turning while docker answers.
+	const r = await runAsync(
 		'docker',
 		[
 			'inspect',
@@ -444,30 +446,24 @@ async function inspectContainer(name: string): Promise<ContainerState> {
 			'{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}',
 			name
 		],
-		{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }
+		{ timeoutMs: 5000 }
 	);
 	if (r.status !== 0) return { name, present: false, status: 'absent', health: 'none' };
-	return parseContainerState(name, typeof r.stdout === 'string' ? r.stdout : '');
+	return parseContainerState(name, r.stdout);
 }
 
 /** Where BunkerWeb is on this server (by image), plus the edge's Compose
  *  project when it was started by Compose. IMPURE, never throws. */
 async function findBunkerWeb(): Promise<{ loc: BunkerWebLocation; ref: ComposeRef | null }> {
-	const { spawnSync } = await import('node:child_process');
-	const ps = spawnSync('docker', ['ps', '-a', '--format', PS_FORMAT], {
-		encoding: 'utf8',
-		stdio: ['ignore', 'pipe', 'ignore'],
-		timeout: 8000
-	});
-	const loc = locateBunkerWeb(ps.status === 0 ? parsePsRows(ps.stdout ?? '') : []);
+	// Asynchronous, so the caller's spinner keeps turning while docker answers.
+	const ps = await runAsync('docker', ['ps', '-a', '--format', PS_FORMAT], { timeoutMs: 8000 });
+	const loc = locateBunkerWeb(ps.status === 0 ? parsePsRows(ps.stdout) : []);
 	if (loc.edge === null) return { loc, ref: null };
-	const insp = spawnSync('docker', ['inspect', loc.edge], {
-		encoding: 'utf8',
-		stdio: ['ignore', 'pipe', 'ignore'],
-		timeout: 8000,
-		maxBuffer: 16 * 1024 * 1024
+	const insp = await runAsync('docker', ['inspect', loc.edge], {
+		timeoutMs: 8000,
+		maxOutputBytes: 16 * 1024 * 1024
 	});
-	const c = insp.status === 0 ? parseDockerInspect(insp.stdout ?? '[]')[0] : undefined;
+	const c = insp.status === 0 ? parseDockerInspect(insp.stdout || '[]')[0] : undefined;
 	return { loc, ref: c ? composeRefOf(c) : null };
 }
 
@@ -598,12 +594,26 @@ export async function runBunkerWeb(ctx: BunkerWebCtx): Promise<number> {
 	const c = color(ctx.colorEnabled);
 	const json = ctx.flags.json === 'true';
 
-	const hasDocker = await dockerPresent();
-	const found = hasDocker ? await findBunkerWeb() : { loc: locateBunkerWeb([]), ref: null };
+	// Asking docker can take seconds on a busy box: under the spinner (to stderr
+	// under --json, so stdout carries only the JSON).
+	const stopLook = startDotsSpinner(
+		'Looking for BunkerWeb’s containers…',
+		json ? process.stderr : process.stdout
+	);
+	let hasDocker: boolean;
+	let found: { loc: BunkerWebLocation; ref: ComposeRef | null };
+	let states: ContainerState[];
+	try {
+		hasDocker = await dockerPresent();
+		found = hasDocker ? await findBunkerWeb() : { loc: locateBunkerWeb([]), ref: null };
+		const names = found.loc.names;
+		states = hasDocker
+			? await Promise.all(names.map((n) => inspectContainer(n)))
+			: names.map((n) => ({ name: n, present: false, status: 'absent', health: 'none' }));
+	} finally {
+		stopLook();
+	}
 	const { loc, ref } = found;
-	const states = hasDocker
-		? await Promise.all(loc.names.map((n) => inspectContainer(n)))
-		: loc.names.map((n) => ({ name: n, present: false, status: 'absent', health: 'none' }));
 	const verdict = bunkerwebVerdict(hasDocker, states);
 	const cmds = bunkerwebCommands();
 	// A BunkerWeb that is NOT the shipped /etc/bunkerweb stack (e.g. morphit.io's
@@ -981,7 +991,10 @@ async function runBunkerwebInstaller(
 	}
 
 	// ── 6. Re-check health ──────────────────────────────────────────
-	const states2 = await Promise.all(BUNKERWEB_CONTAINERS.map((n) => inspectContainer(n)));
+	const stopCheck = startDotsSpinner('Checking the BunkerWeb containers…');
+	const states2 = await Promise.all(BUNKERWEB_CONTAINERS.map((n) => inspectContainer(n))).finally(
+		stopCheck
+	);
 	const verdict2 = bunkerwebVerdict(true, states2);
 	console.log('');
 	console.log('━'.repeat(60));

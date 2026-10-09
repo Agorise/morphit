@@ -98,8 +98,10 @@ export interface OrderbookStreamRow {
 	last_feedback_at: Date | null;
 	is_new_trader: boolean;
 	engagement_24h: number;
-	/** accounts.first_trade_complete_at — earliest completed trade;
-	 *  NULL when none. Drives "N trades since {month}" on order cards. */
+	/** accounts.first_trade_complete_at — earliest completed trade (from
+	 *  2026-11-01 blocks: on the account's own paid listing, see
+	 *  handlers/feedback.ts); NULL when none. Drives "N trades since
+	 *  {month}" on order cards. */
 	first_trade_complete_at: Date | null;
 	/** Primary posting public key for the display-only card identity
 	 *  anchor. NULL when not captured yet. */

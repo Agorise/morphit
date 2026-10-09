@@ -11,7 +11,7 @@
  *
  * What this does, and deliberately does not do:
  *
- *   - A root `.prettierrc` carries the house style, so `--write` is safe
+ *   - The root package.json's "prettier" key carries the house style, so `--write` is safe
  *     everywhere. Checked here against the per-app copies it must agree with.
  *
  *   - It does NOT reformat the tree. That would be the largest, least reviewable
@@ -122,10 +122,14 @@ const baseline = new Set(baselineLines);
 
 // ── the root config ─────────────────────────────────────────────────────────
 {
-	const root = JSON.parse(readFileSync(join(REPO, '.prettierrc'), 'utf8')) as Record<
-		string,
-		unknown
-	>;
+	// The house style lives in package.json's "prettier" key (it was a root
+	// .prettierrc until v1.21.3, moved to keep the top level tidy).
+	const root =
+		(
+			JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as {
+				prettier?: Record<string, unknown>;
+			}
+		).prettier ?? {};
 	const differing: string[] = [];
 	for (const app of ['indexer', 'relay', 'ops-cli', 'web']) {
 		const cfg = JSON.parse(readFileSync(join(REPO, 'apps', app, '.prettierrc'), 'utf8')) as Record<
@@ -137,10 +141,10 @@ const baseline = new Set(baselineLines);
 		}
 	}
 	if (differing.length === 0)
-		ok('the root .prettierrc carries the same house style as every app config');
+		ok('the root house style (package.json "prettier") is the same as every app config');
 	else
 		bad(
-			'the root .prettierrc disagrees with an app config',
+			'the root house style (package.json "prettier") disagrees with an app config',
 			`${differing.join(', ')} — --write would format a package differently from an app`
 		);
 }

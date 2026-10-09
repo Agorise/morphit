@@ -143,10 +143,9 @@ afterEach(async () => {
 describe('hidden-only node (empty clearnet RPC pool)', () => {
 	beforeEach(() => writeIndexerEnv(''));
 
-	it('menu "latest version" comes from the local indexer, not git.agorise.net', async () => {
-		expect(await fetchLatestVersion(2000)).toBe('v1.99.0');
+	it('the code-host check never asks git.agorise.net (the menu reads the authenticated local indexer instead, see menuUpdateCheck.test.ts)', async () => {
+		expect(await fetchLatestVersion(2000)).toBeNull();
 		expect(elsewhere).toEqual([]);
-		expect(stub.seen.map((s) => s.url)).toEqual(['/v1/release']);
 	});
 
 	it('the upgrade seed step gets the on-chain CID from the local indexer (so the seed never asks clearnet)', async () => {

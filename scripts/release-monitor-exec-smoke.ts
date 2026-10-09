@@ -71,6 +71,7 @@ try {
 		tsx,
 		`#!/bin/sh
 printf 'cwd=%s args=%s\\n' "$(pwd)" "$*" >> "${calls}"
+[ -n "\${FAKE_TSX_ERR:-}" ] && printf '%s\\n' "\$FAKE_TSX_ERR" >&2
 cat <<'JSON'
 {
   "current": "v1.17.15",
@@ -143,6 +144,65 @@ exit "\${FAKE_TSX_EXIT:-1}"
 	// ── 2. up to date: silent by default ──
 	const quiet = run({ FAKE_TSX_EXIT: '0' });
 	check('up to date emits nothing by default', !quiet.includes('"event"'), quiet.trim());
+
+	// ── 2b. a check that could not check: its own reason reaches the alert ──
+	// Review 2026-10-08: stderr went to /dev/null and the hint always said
+	// "on a clearnet node check git.agorise.net" — which, run as the unit's
+	// throwaway user, was never asked; the real reason was lost.
+	const why =
+		"\u001b[31m[ERR]\u001b[0m Could not check: this node's indexer is not listening (checked 127.0.0.1:8081)";
+	const failed = run({ FAKE_TSX_EXIT: '5', FAKE_TSX_ERR: why });
+	const fline = failed.split('\n').find((l) => l.includes('"event":"release_check_failed"')) ?? '';
+	let fctx: Record<string, unknown> = {};
+	try {
+		fctx = (JSON.parse(fline) as { context: Record<string, unknown> }).context;
+	} catch {
+		/* reported below */
+	}
+	check(
+		"a failed check's alert carries the program's own reason, as valid JSON",
+		typeof fctx.hint === 'string' &&
+			fctx.hint.includes("this node's indexer is not listening (checked 127.0.0.1:8081)") &&
+			!fctx.hint.includes('\u001b'),
+		fline || failed.trim()
+	);
+	check(
+		'and does not send the operator to git.agorise.net',
+		typeof fctx.hint === 'string' && !fctx.hint.includes('git.agorise.net'),
+		String(fctx.hint)
+	);
+
+	// ── 2c. the reason is the program's own line, whole characters only ──
+	// Second review: `cut -c` cuts bytes in GNU cut, so a long line could end
+	// mid-character (invalid UTF-8 in the alert), and a program that died at
+	// load time ends its error output with node's own "Node.js v22.x" line.
+	const long = `[ERR] Could not check: ${'—'.repeat(200)}`;
+	for (const [err, want, label] of [
+		[
+			long,
+			/^The release check could not check: \[ERR\] Could not check: —+\. To see it/,
+			'a long line with dashes'
+		],
+		[
+			"Error: Cannot find module 'x'\n    at load (node:internal)\n\nNode.js v22.22.0",
+			/Cannot find module/,
+			"node's version line"
+		]
+	] as const) {
+		const out = run({ FAKE_TSX_EXIT: '5', FAKE_TSX_ERR: err });
+		const l = out.split('\n').find((x) => x.includes('"event":"release_check_failed"')) ?? '';
+		let hint = '';
+		try {
+			hint = String((JSON.parse(l) as { context: { hint: string } }).context.hint);
+		} catch {
+			/* reported below */
+		}
+		check(
+			`a failed check's reason is readable (${label})`,
+			want.test(hint) && !hint.includes('\ufffd'),
+			hint || out
+		);
+	}
 
 	// ── 3. no tsx in the install: a clear hint, no registry lookup ──
 	rmSync(tsx);

@@ -84,13 +84,20 @@ export interface RelayHealthRuntime {
 	 *  the body, or null when nothing answered. */
 	get(url: string, headers: Readonly<Record<string, string>>): string | null;
 	sleep(ms: number): Promise<void>;
+	/** The clock the 30 s waits are measured on (default Date.now). */
+	now?(): number;
 }
+
+/** How long the heal waits for the relay to answer, each time: time, not
+ *  tries (a try that fails can itself take 8 s). */
+const RELAY_ANSWER_WAIT_MS = 30_000;
 
 export async function healRelayHealth(
 	ctx: HealCtx,
 	opts: { runtime?: RelayHealthRuntime; root?: string } = {}
 ): Promise<HealResult> {
 	const rt = opts.runtime ?? realRuntime;
+	const now = (): number => (rt.now ? rt.now() : Date.now());
 	const files = relayEnvFiles(opts.root ?? '');
 	const texts = files.map((f) => ({ f, text: rt.readFile(f) }));
 	const present = texts.filter((x): x is { f: string; text: string } => x.text !== null);
@@ -121,9 +128,11 @@ export async function healRelayHealth(
 		};
 
 	const after = present.map(({ f, text }) => rt.readFile(f) ?? text);
-	const host = envValueIn(after, 'MORPHIT_RELAY_LISTEN_HOST') ?? '127.0.0.1';
-	const port = envValueIn(after, 'MORPHIT_RELAY_LISTEN_PORT') ?? '8080';
-	const direct = `http://${host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host}:${port}/v1/health`;
+	// An empty value is the relay's default, as for an unset one.
+	const host = envValueIn(after, 'MORPHIT_RELAY_LISTEN_HOST') || '127.0.0.1';
+	const port = envValueIn(after, 'MORPHIT_RELAY_LISTEN_PORT') || '8080';
+	const h = host === '0.0.0.0' || host === '::' || host === '[::]' ? '127.0.0.1' : host;
+	const direct = `http://${h.includes(':') && !h.startsWith('[') ? `[${h}]` : h}:${port}/v1/health`;
 	const domain = envValueIn(
 		[`${opts.root ?? ''}/etc/morphit/first-online.env`, ...files].map((f) => rt.readFile(f) ?? ''),
 		'MORPHIT_DOMAIN'
@@ -134,7 +143,8 @@ export async function healRelayHealth(
 		const stop = ctx.spinner(label);
 		try {
 			if (!rt.restartRelay()) return false;
-			for (let i = 0; i < 20; i++) {
+			const until = now() + RELAY_ANSWER_WAIT_MS;
+			while (now() < until) {
 				if (rt.get(direct, {}) !== null) return true;
 				await rt.sleep(1_500);
 			}
@@ -152,12 +162,39 @@ export async function healRelayHealth(
 			'The relay did not answer within 30 s of its restart; checking what it serves anyway.'
 		);
 
-	// 3. Observe.
+	// 3. Observe — but only a relay that answers. 2026-10-08 (morphit.io): this
+	// read "no answer" as "answered without the operator block" and reported
+	// that the indexer's signup check sees nothing, about a relay that had not
+	// answered at all. Wait for it first (it listens a few seconds after it
+	// starts), and say plainly if it never does.
+	if (rt.get(direct, {}) === null) {
+		const stop = ctx.spinner('Waiting for the relay to answer on its health address…');
+		try {
+			const until = now() + RELAY_ANSWER_WAIT_MS;
+			while (now() < until && rt.get(direct, {}) === null) await rt.sleep(1_500);
+		} finally {
+			stop();
+		}
+		if (rt.get(direct, {}) === null)
+			return {
+				strategy,
+				verified: false,
+				detail:
+					`Relay health: ${changed.length > 0 ? `${VERBOSE_KEY}=false written in ${changed.join(', ')}; ` : ''}` +
+					`the relay did not answer on ${direct} within 30 s, so what it shows was not checked. ` +
+					'On this server: sudo systemctl status morphit-relay --no-pager'
+			};
+	}
 	const edges = [
 		'http://127.0.0.1:8090/relay/v1/health',
 		...(domain && /^[a-z0-9.-]+$/i.test(domain) ? [`https://${domain}/relay/v1/health`] : [])
 	];
-	const observe = (): { publicBlock: string[]; localBlock: boolean; edgesSeen: number } => {
+	const observe = (): {
+		publicBlock: string[];
+		localBlock: boolean;
+		localAnswered: boolean;
+		edgesSeen: number;
+	} => {
 		const publicBlock: string[] = [];
 		const anon = rt.get(direct, {});
 		if (anon !== null && anon.includes(OPERATOR_MARKER)) publicBlock.push('the relay itself');
@@ -172,6 +209,7 @@ export async function healRelayHealth(
 		return {
 			publicBlock,
 			localBlock: local !== null && local.includes(OPERATOR_MARKER),
+			localAnswered: local !== null,
 			edgesSeen
 		};
 	};
@@ -200,8 +238,10 @@ export async function healRelayHealth(
 				: ')') +
 			(seen.localBlock
 				? "; the indexer's local check still gets the operator block."
-				: "; the local check with X-Morphit-Local-Health got no operator block either, so the indexer's signup check sees nothing — on this server run: curl -s -H 'X-Morphit-Local-Health: 1' " +
-					direct)
+				: !seen.localAnswered
+					? `; the local check with X-Morphit-Local-Health got no answer at all, so it was not checked — on this server run: curl -s -H 'X-Morphit-Local-Health: 1' ${direct}`
+					: "; the local check with X-Morphit-Local-Health got no operator block either, so the indexer's signup check sees nothing — on this server run: curl -s -H 'X-Morphit-Local-Health: 1' " +
+						direct)
 	};
 }
 
@@ -241,10 +281,8 @@ const realRuntime: RelayHealthRuntime = {
 	relayActive: () => sh('systemctl', ['is-active', '--quiet', 'morphit-relay']).ok,
 	restartRelay: () => sh('systemctl', ['restart', 'morphit-relay'], 90_000).ok,
 	get: (url, headers) => {
-		const u = new URL(url);
-		const port = u.port || (u.protocol === 'https:' ? '443' : '80');
 		const args = ['-s', '-k', '-m', '8', '--noproxy', '*', '-o', '-', '-w', '\n%{http_code}'];
-		if (u.hostname !== '127.0.0.1') args.push('--resolve', `${u.hostname}:${port}:127.0.0.1`);
+		args.push(...curlResolveArgs(url));
 		for (const [k, v] of Object.entries(headers)) args.push('-H', `${k}: ${v}`);
 		const r = sh('curl', [...args, url]);
 		const i = r.out.lastIndexOf('\n');
@@ -253,3 +291,17 @@ const realRuntime: RelayHealthRuntime = {
 	},
 	sleep: (ms) => new Promise((r) => setTimeout(r, ms))
 };
+
+/** curl's `--resolve` for a URL whose host is a NAME (the edges: the site's
+ *  own domain, answered on this server). An IP address is asked as it is:
+ *  pointing one at 127.0.0.1 made a relay listening on, say, 172.18.0.1 look
+ *  silent (second review, 2026-10-08). The pin always comes with
+ *  `--noproxy '*'`: with https_proxy in root's environment curl ignores
+ *  --resolve and sends the probe through the proxy. PURE. */
+export function curlResolveArgs(url: string): string[] {
+	const u = new URL(url);
+	const h = u.hostname;
+	if (/^[0-9.]+$/.test(h) || h.startsWith('[') || h.includes(':')) return [];
+	const port = u.port || (u.protocol === 'https:' ? '443' : '80');
+	return ['--noproxy', '*', '--resolve', `${h}:${port}:127.0.0.1`];
+}

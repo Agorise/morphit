@@ -333,7 +333,8 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-7b',
-			re: /runOrThrow\(\s*'npm',\s*\['run',\s*'build'\][\s\S]*?'apps',\s*'web'/,
+			// runOrThrow(…) before v1.21.3; now under the spinner (runStepWithSpinner).
+			re: /(?:runOrThrow|runStepWithSpinner)\([\s\S]{0,120}?'npm',\s*\['run',\s*'build'\][\s\S]*?'apps',\s*'web'/,
 			desc: 'runUpgrade builds apps/web (npm run build, cwd apps/web)'
 		},
 		{
@@ -353,12 +354,12 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-13',
-			re: /planFrontendDeploy\(\{[\s\S]*?frontendContainer:/,
+			re: /planFrontendDeploy\(\{[\s\S]*?frontendContainer[,:]/,
 			desc: 'runUpgrade decides how to publish via planFrontendDeploy({ frontendContainer, ... })'
 		},
 		{
 			id: 'FD-14a',
-			re: /findFrontendContainer\(buildDir\)/,
+			re: /findFrontendContainer(?:Async)?\(buildDir\)/,
 			desc: 'runUpgrade detects the frontend container by the build-dir mount (findFrontendContainer)'
 		},
 		{

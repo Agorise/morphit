@@ -73,3 +73,7 @@ for entry in "${SMOKES[@]}"; do
 done
 echo "──────────────────────────────────────────────────────"
 echo "Chunk [$START..$END]: $total scenarios, $failed runners failed"
+# Exit non-zero when any runner failed, as run-smokes.sh does: a caller that
+# checks the status (a release battery in 50-runner chunks) must not read a
+# failing chunk as passed (v1.21.3; smoke-runner-count-extraction-smoke).
+[ "$failed" -eq 0 ]

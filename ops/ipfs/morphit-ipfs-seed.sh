@@ -29,7 +29,7 @@
 #                    tag-authoritative CID. NOT /v1/release, which serves the
 #                    CURRENTLY broadcast release and would be the WRONG (older)
 #                    CID when seeding a newer release before its broadcast (the
-#                    release ceremony's no-CID fallback after Block 3, which runs
+#                    no-CID fallback the payload builder prints at Block 3, which runs
 #                    this copy from the new release's tarball). If the anchor has
 #                    no CID, the script just adds + prints (no assertion).
 # Env:

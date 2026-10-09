@@ -65,7 +65,7 @@ const JOURNAL = /^RELEASE-NOTES/;
 
 function publicFiles(): string[] {
 	const out: string[] = [];
-	for (const f of ['README.md', 'SECURITY.md', 'THIRD-PARTY-LICENSES.md']) {
+	for (const f of ['README.md', 'docs/SECURITY.md', 'docs/THIRD-PARTY-LICENSES.md']) {
 		if (existsSync(join(ROOT, f))) out.push(f);
 	}
 	const docs: string[] = [];

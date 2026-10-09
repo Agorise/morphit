@@ -1,16 +1,18 @@
 [Unit]
-Description=Morphit release monitor timer — 6h check for new releases
+Description=Morphit release monitor timer — twice-a-day check for new releases
 Documentation=https://git.agorise.net/agorise/morphit
-Requires=morphit-release-monitor.service
+# No Requires= on the service: it would start a check every time the timer
+# starts — at every boot, before the indexer it reads is up, and at every
+# `enable --now` — on top of the timer's own runs (review 2026-10-08).
 
 [Timer]
-# Every 6h, starting 15 minutes after boot.  Smaller cadence
-# would be wasted (releases are infrequent); larger cadence
-# could leave operators days behind a critical fix.
+# Twice a day, starting 15 minutes after boot (release checks run at most
+# about twice a day: bandwidth and privacy). The check reads the on-chain
+# release record from this node's own indexer, so it normally leaves the box
+# not at all. Smaller cadence would be wasted (releases are infrequent).
 OnBootSec=15min
-OnUnitActiveSec=6h
+OnUnitActiveSec=12h
 RandomizedDelaySec=10min
-Persistent=true
 Unit=morphit-release-monitor.service
 
 [Install]

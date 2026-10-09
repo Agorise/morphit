@@ -23,6 +23,7 @@
 
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import YAML from 'yaml';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 const ANSIBLE_ROOT = join(REPO_ROOT, 'ops', 'ansible');
@@ -981,6 +982,50 @@ results.push({
 		name: 'offline bundle PKGS covers every enabled-role apt install (fresh minimal box installs with zero network)',
 		ok: ob.length === 0,
 		detail: ob.length === 0 ? undefined : ob.join(' | ')
+	});
+}
+
+// ─── The release check is installed and turned on by every install ──
+// 2026-10-08: morphit-release-monitor (twice a day: is a newer release out?)
+// shipped in ops/systemd/ but no role installed it, so no operator was told.
+// The always-run morphit role must copy both units and enable + start the
+// timer. Read as parsed tasks, not as text.
+{
+	const rm: string[] = [];
+	type Task = Record<string, unknown> & { loop?: unknown };
+	let tasks: Task[] = [];
+	try {
+		tasks = (YAML.parse(readFileSync(join(ROLES_DIR, 'morphit', 'tasks', 'main.yml'), 'utf8')) ??
+			[]) as Task[];
+	} catch (e) {
+		rm.push(`morphit role tasks do not parse: ${e instanceof Error ? e.message : String(e)}`);
+	}
+	const copied = new Set<string>();
+	for (const t of tasks) {
+		const c = (t['ansible.builtin.copy'] ?? t['copy']) as { dest?: string } | undefined;
+		if (c && Array.isArray(t.loop) && /\/etc\/systemd\/system\//.test(String(c.dest)))
+			for (const u of t.loop) copied.add(String(u));
+	}
+	for (const u of ['morphit-release-monitor.service', 'morphit-release-monitor.timer']) {
+		if (!copied.has(u)) rm.push(`${u} is not copied to /etc/systemd/system`);
+		if (!existsSync(join(REPO_ROOT, 'ops', 'systemd', u))) rm.push(`ops/systemd/${u} missing`);
+	}
+	const enabled = tasks.some((t) => {
+		const sd = (t['ansible.builtin.systemd'] ?? t['systemd']) as
+			| { name?: string; enabled?: unknown; state?: unknown }
+			| undefined;
+		return (
+			sd?.name === 'morphit-release-monitor.timer' &&
+			sd.enabled === true &&
+			sd.state === 'started' &&
+			t.when === undefined
+		);
+	});
+	if (!enabled) rm.push('no unconditional task enables + starts morphit-release-monitor.timer');
+	results.push({
+		name: 'every install puts the release check in place and turns its timer on',
+		ok: rm.length === 0,
+		detail: rm.length === 0 ? undefined : rm.join(' | ')
 	});
 }
 

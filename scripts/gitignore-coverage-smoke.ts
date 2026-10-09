@@ -57,7 +57,7 @@ const MUST_IGNORE: readonly string[] = [
 	'ipfs-cid.txt', // release job
 	'ipns-name.txt', // release job
 	'ipns-sign.json', // release job
-	'release.json', // ELI5 Block 3 (release-build-payload.ts output)
+	'release.json', // ELI5 Block 3 before v1.21.3 (now written to /tmp)
 	'apps/web/static/canary.txt', // scripts/canary/generate.sh default output
 	'apps/web/static/pgp_keys.asc', // an operator's key, staged by older canary setups
 	'.npm-cache/_cacache/index', // ops/ansible clone_and_build.yml
@@ -194,8 +194,8 @@ try {
 	);
 	check(
 		'the committed examples stay tracked',
-		existsSync(join(ROOT, 'morphit.config.env.example')) &&
-			!ignored(['morphit.config.env.example', 'ops/env/indexer.env.example']).size
+		existsSync(join(ROOT, 'ops', 'env', 'morphit.config.env.example')) &&
+			!ignored(['ops/env/morphit.config.env.example', 'ops/env/indexer.env.example']).size
 	);
 } finally {
 	rmSync(scratch, { recursive: true, force: true });

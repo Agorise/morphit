@@ -30,7 +30,7 @@
  */
 
 import type { CommandCtx } from '../lib/ctx.ts';
-import { jsonOutput } from '../lib/ctx.ts';
+import { jsonOutput, whileReading } from '../lib/ctx.ts';
 import { ask } from '../init/prompt.ts';
 import { section, info, blank } from '../render/term.ts';
 import { emitJson } from '../render/json.ts';
@@ -128,8 +128,10 @@ export async function runFastForward(ctx: CommandCtx): Promise<number> {
 	const json = jsonOutput(ctx);
 
 	// Read the current cursor.
-	const res = await ctx.db.query<StateRow>(
-		`SELECT last_applied_block::text, chain_id, last_applied_at FROM indexer_state WHERE id = 1`
+	const res = await whileReading(ctx, () =>
+		ctx.db.query<StateRow>(
+			`SELECT last_applied_block::text, chain_id, last_applied_at FROM indexer_state WHERE id = 1`
+		)
 	);
 	if (res.rowCount === 0) {
 		const msg =
@@ -166,7 +168,11 @@ export async function runFastForward(ctx: CommandCtx): Promise<number> {
 	if (positional !== undefined) {
 		target = parseInt(positional, 10);
 	} else if (json) {
-		emitJson({ ok: false, applied: false, error: 'target block required (pass it as an argument, or run interactively)' });
+		emitJson({
+			ok: false,
+			applied: false,
+			error: 'target block required (pass it as an argument, or run interactively)'
+		});
 		return 1;
 	} else {
 		section('Fast-forward the indexer cursor');
@@ -235,9 +241,14 @@ export async function runFastForward(ctx: CommandCtx): Promise<number> {
 		return 1;
 	}
 
-	await ctx.db.query(
-		`UPDATE indexer_state SET last_applied_block = $1, last_applied_at = NOW() WHERE id = 1`,
-		[plan.target]
+	await whileReading(
+		ctx,
+		() =>
+			ctx.db.query(
+				`UPDATE indexer_state SET last_applied_block = $1, last_applied_at = NOW() WHERE id = 1`,
+				[plan.target]
+			),
+		'Setting the cursor…'
 	);
 
 	blank();

@@ -89,6 +89,9 @@ const nonEn = locales.filter((l) => l !== 'en');
 
 interface AllowEntry { key: string; locale: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
+	// v1.21.3: the /run-a-node subtitle links only the word "instance", which
+	// French spells the same.
+	{ key: 'run_a_node.subtitle_link', locale: 'fr', reason: '(b) same spelling — French "instance" is spelled as in English' },
 	// ─── v1.16.2 contact_protocol labels: messenger/protocol brand names.
 	//     These are proper nouns that stay identical in every language (you
 	//     do not translate "Signal" or "Telegram"), plus "Web" which is the

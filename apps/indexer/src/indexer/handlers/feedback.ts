@@ -438,6 +438,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			citedOperatorTag !== null &&
 			citedOperatorTag === ctx.config.instanceOperatorTag;
 
+		// What uses the one-time flag up. From the consensus activation time
+		// (2026-10-08 finding): only a review citing the subject's OWN paid
+		// order — the trade the bonus is paid for. Before, any reviewed trade
+		// did, so a new user whose first trade answered someone else's listing
+		// was never paid, whatever they traded later. Earlier blocks keep the
+		// old rule, so history replays to the payouts every node already made.
+		const citesOwnPaidOrder = (cited.rowCount ?? 0) > 0;
+		if (consensusV2Active(ctx.blockTime) && !citesOwnPaidOrder) {
+			await client.query(`RELEASE SAVEPOINT ${bonusSavepoint}`);
+			return { ok: true };
+		}
 		const claimed = await client.query(
 			`INSERT INTO accounts (
 				name, creator, created_block_num, created_block_time,

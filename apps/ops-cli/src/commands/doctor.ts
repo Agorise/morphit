@@ -41,6 +41,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
+import { runAsync } from '../lib/spinRun.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 import {
 	probeRpcEndpoints,
 	formatRpcProbeLines,
@@ -73,7 +75,6 @@ async function checkService(
 	configEnvPath: string | null,
 	checkFlag: '--check-config' | '--check-schema' = '--check-config'
 ): Promise<ServiceResult> {
-	const { spawnSync } = await import('node:child_process');
 	const appDir = join(installDir, 'apps', name);
 	if (!existsSync(appDir)) {
 		return {
@@ -90,14 +91,10 @@ async function checkService(
 	if (configEnvPath) childEnv.MORPHIT_OPERATOR_CONFIG_FILE = configEnvPath;
 	const sourcePart = existsSync(envPath) ? `set -a; . ${shq(envPath)}; set +a; ` : '';
 	const script = `${sourcePart}cd ${shq(appDir)} && npm start -- ${checkFlag}`;
-	const r = spawnSync('bash', ['-c', script], {
-		env: childEnv,
-		encoding: 'utf8',
-		timeout: 20_000,
-		stdio: ['ignore', 'pipe', 'pipe']
-	});
-	const combined = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
-	if (r.error && (r.error as NodeJS.ErrnoException).code === 'ENOENT') {
+	// Asynchronous, so the caller's spinner keeps turning for the up-to-20 s run.
+	const r = await runAsync('bash', ['-c', script], { env: childEnv, timeoutMs: 20_000 });
+	const combined = r.output.trim();
+	if (r.error !== null && /ENOENT/.test(r.error)) {
 		return {
 			name,
 			ok: false,
@@ -108,7 +105,7 @@ async function checkService(
 	if (r.status === 0) {
 		return { name, ok: true, detail: combined };
 	}
-	if (r.signal === 'SIGTERM') {
+	if (r.timedOut) {
 		return {
 			name,
 			ok: false,
@@ -160,6 +157,16 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	const c = makeColor(ctx.colorEnabled);
 	const installDir = safeCwd() ?? defaultRepoRoot();
 	const json = ctx.flags.json === 'true';
+	// Every slow check runs under the braille spinner; under --json it goes to
+	// stderr so stdout carries only the JSON document.
+	const spun = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+		const stop = startDotsSpinner(label, json ? process.stderr : process.stdout);
+		try {
+			return await fn();
+		} finally {
+			stop();
+		}
+	};
 
 	if (!json) {
 		console.log('');
@@ -200,8 +207,11 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	const cfgPath = existsSync(configEnvPath) ? configEnvPath : null;
 	const results: ServiceResult[] = [];
 	for (const svc of ['indexer', 'relay'] as const) {
-		if (!json) console.log(`  checking ${svc}…`);
-		results.push(await checkService(svc, installDir, envPath, cfgPath));
+		results.push(
+			await spun(`Checking the ${svc}'s config (up to 20 s)…`, () =>
+				checkService(svc, installDir, envPath, cfgPath)
+			)
+		);
 	}
 
 	const allOk = results.every((r) => r.ok);
@@ -219,8 +229,17 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	// and grouped with --no-rpc because it is the one check in that block which
 	// leaves the machine. See checkFederationBodyCap for why it must go through
 	// the public origin rather than loopback.
-	if (!skipRpc) security.push(await checkFederationBodyCap(envPath, cfgPath));
-	const rpc = skipRpc ? null : await probeConfiguredEndpoints(envPath, cfgPath);
+	if (!skipRpc)
+		security.push(
+			await spun('Checking a peer can send this node a chat batch…', () =>
+				checkFederationBodyCap(envPath, cfgPath)
+			)
+		);
+	const rpc = skipRpc
+		? null
+		: await spun('Checking the Blurt RPC endpoints answer…', () =>
+				probeConfiguredEndpoints(envPath, cfgPath)
+			);
 
 	// Database schema drift (read-only, advisory). Skipped with --no-db.
 	// Delegates to the indexer's own `--check-schema` (so the expectation
@@ -230,7 +249,9 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	const skipDb = ctx.flags['no-db'] === 'true';
 	const schema = skipDb
 		? null
-		: await checkService('indexer', installDir, envPath, cfgPath, '--check-schema');
+		: await spun('Checking the database schema (up to 20 s)…', () =>
+				checkService('indexer', installDir, envPath, cfgPath, '--check-schema')
+			);
 	const schemaLines = (detail: string): string =>
 		detail
 			.split('\n')

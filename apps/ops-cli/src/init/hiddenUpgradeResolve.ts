@@ -212,6 +212,36 @@ export async function readHiddenReleaseTarget(
 }
 
 /**
+ * @morphit's on-chain release tag from THIS node's authenticated indexer, on
+ * any node, or null when it cannot be read (nothing listening, a listener that
+ * is not morphit-indexer.service, no record, not a version number). Only the
+ * first address with a listener is asked, as for the hidden upgrade.
+ *
+ * 2026-10-08: what the release check and the main menu read first. Since
+ * v1.21.0 an unsigned release installs only by this record, and the ceremony
+ * broadcasts it before any box upgrades, so it names every installable release
+ * without the code host. It decides nothing about installing: the upgrade
+ * itself still verifies everything it installs.
+ */
+export async function readOnchainReleaseTag(
+	opts: LocalIndexerOptions,
+	timeoutMs = 4_000
+): Promise<string | null> {
+	try {
+		const rel = await getLocalIndexerJson<ReleaseTargetResponse>(
+			locateLocalIndexer(opts),
+			'/v1/release',
+			timeoutMs
+		);
+		const version = typeof rel.version === 'string' ? rel.version.trim() : '';
+		if (!RELEASE_VERSION_RE.test(version)) return null;
+		return version.startsWith('v') ? version : `v${version}`;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * If this node is hidden-only, fetch + verify the release tarball over Tor/I2P
  * from a federation peer and return its local path + version. Returns null when
  * NOT hidden-only (caller proceeds on its normal clearnet path). Throws

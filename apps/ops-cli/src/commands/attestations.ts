@@ -10,7 +10,7 @@
  * far, sorted by oldest-first (orders waiting longest first).
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { ageSeconds, formatDuration } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt } from '../render/term.ts';
@@ -31,8 +31,9 @@ const HUMAN_LIMIT = 50;
 export async function runAttestations(ctx: CommandCtx): Promise<number> {
 	const limit = ctx.flags.json === 'true' ? HUMAN_LIMIT * 10 : HUMAN_LIMIT;
 
-	const result = await ctx.db.query<PendingOrder>(
-		`SELECT
+	const result = await whileReading(ctx, () =>
+		ctx.db.query<PendingOrder>(
+			`SELECT
 		   o.account,
 		   o.permlink,
 		   o.asset,
@@ -52,7 +53,8 @@ export async function runAttestations(ctx: CommandCtx): Promise<number> {
 		   AND o.status = 'live'
 		 ORDER BY o.created_at ASC
 		 LIMIT $1`,
-		[limit]
+			[limit]
+		)
 	);
 
 	const orders = result.rows;

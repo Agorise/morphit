@@ -93,10 +93,7 @@ export interface EndpointState {
 /** Cooldown ladder in milliseconds.  Same shape the two existing
  *  clients used; promoted here as the single source of truth. */
 export const DEFAULT_COOLDOWN_LADDER_MS: readonly number[] = [
-	2_000,
-	10_000,
-	60_000,
-	300_000
+	2_000, 10_000, 60_000, 300_000
 ] as const;
 
 /** Cooldown ladder for endpoints that returned HTTP 429 (rate
@@ -109,10 +106,7 @@ export const DEFAULT_COOLDOWN_LADDER_MS: readonly number[] = [
  *  (this is why >=3 endpoints matters), and what it removes is the
  *  stream of repeated 429 round-trips that was the actual problem. */
 export const DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS: readonly number[] = [
-	30_000,
-	60_000,
-	120_000,
-	300_000
+	30_000, 60_000, 120_000, 300_000
 ] as const;
 
 /** Jitter fraction applied to every cooldown ladder step.
@@ -593,8 +587,7 @@ export class EndpointPool {
 		}
 		this.alpha = alpha;
 		this.hedgeThresholdMs = options.hedgeThresholdMs ?? DEFAULT_HEDGE_THRESHOLD_MS;
-		this.hedgeStaggerFloorMs =
-			options.hedgeStaggerFloorMs ?? DEFAULT_HEDGE_STAGGER_FLOOR_MS;
+		this.hedgeStaggerFloorMs = options.hedgeStaggerFloorMs ?? DEFAULT_HEDGE_STAGGER_FLOOR_MS;
 		this.operatorOfOption = options.operatorOf;
 	}
 
@@ -731,8 +724,7 @@ export class EndpointPool {
 			return result;
 		};
 		const timeoutMs =
-			options.timeoutMs ??
-			(hedge ? DEFAULT_USER_FACING_TIMEOUT_MS : DEFAULT_BACKGROUND_TIMEOUT_MS);
+			options.timeoutMs ?? (hedge ? DEFAULT_USER_FACING_TIMEOUT_MS : DEFAULT_BACKGROUND_TIMEOUT_MS);
 
 		// First-pass order: healthy endpoints, fastest EWMA first.
 		const eligible = this.eligibleOrder();
@@ -743,7 +735,8 @@ export class EndpointPool {
 		const primaryOrder =
 			eligible.length > 1 && (options.startOffset ?? 0) % eligible.length !== 0
 				? (() => {
-						const off = ((options.startOffset ?? 0) % eligible.length + eligible.length) % eligible.length;
+						const off =
+							(((options.startOffset ?? 0) % eligible.length) + eligible.length) % eligible.length;
 						return [...eligible.slice(off), ...eligible.slice(0, off)];
 					})()
 				: eligible;
@@ -780,9 +773,7 @@ export class EndpointPool {
 		// primary pass, in fastest-known order.  Endpoints we
 		// already tried in this call are excluded — re-trying them
 		// would just hit the same error path twice.
-		const lastDitchOrder = this.allOrderedByLatency().filter(
-			(ep) => !triedUrls.has(ep.url)
-		);
+		const lastDitchOrder = this.allOrderedByLatency().filter((ep) => !triedUrls.has(ep.url));
 		for (let i = 0; i < lastDitchOrder.length; i++) {
 			const ep = lastDitchOrder[i]!;
 			try {
@@ -835,10 +826,7 @@ export class EndpointPool {
 
 		// Hedged path: fire primary, schedule hedge after stagger,
 		// return whichever finishes first.
-		const stagger = Math.max(
-			this.hedgeStaggerFloorMs,
-			primaryEwma ?? this.hedgeStaggerFloorMs
-		);
+		const stagger = Math.max(this.hedgeStaggerFloorMs, primaryEwma ?? this.hedgeStaggerFloorMs);
 
 		const primaryCtl = new AbortController();
 		const hedgeCtl = new AbortController();
@@ -889,32 +877,42 @@ export class EndpointPool {
 		const primaryPromise = wrappedFn(primary, primaryCtl);
 
 		let hedgeStarted = false;
-		const hedgePromise = new Promise<{ ep: EndpointState; result: T }>(
-			(resolve, reject) => {
-				const handle = setTimeout(() => {
-					hedgeStarted = true;
-					onHedgeDispatched(hedgeAgainst.url);
-					wrappedFn(hedgeAgainst, hedgeCtl).then(resolve, reject);
-				}, stagger);
-				// If the timeout signal fires before we even dispatch the
-				// hedge, cancel the dispatch.
-				timeoutCtl.signal.addEventListener(
-					'abort',
-					() => {
-						clearTimeout(handle);
-						if (!hedgeStarted) {
-							reject(new Error('timeout (hedge not dispatched)'));
-						}
-					},
-					{ once: true }
-				);
-			}
-		);
+		let hedgeHandle: ReturnType<typeof setTimeout> | undefined;
+		const hedgePromise = new Promise<{ ep: EndpointState; result: T }>((resolve, reject) => {
+			const handle = setTimeout(() => {
+				// 2026-10-08 (morphit.io relay crash loop): once the race was won
+				// this still fired, handing the hedge an already-aborted signal.
+				// The relay's withSignal then abandoned the RPC it had just
+				// started, and that call's later failure was an unhandled
+				// rejection, which exits the relay. Never dispatch once settled.
+				if (hedgeCtl.signal.aborted) {
+					reject(new Error('hedge not dispatched (the race was already decided)'));
+					return;
+				}
+				hedgeStarted = true;
+				onHedgeDispatched(hedgeAgainst.url);
+				wrappedFn(hedgeAgainst, hedgeCtl).then(resolve, reject);
+			}, stagger);
+			hedgeHandle = handle;
+			// If the timeout signal fires before we even dispatch the
+			// hedge, cancel the dispatch.
+			timeoutCtl.signal.addEventListener(
+				'abort',
+				() => {
+					clearTimeout(handle);
+					if (!hedgeStarted) {
+						reject(new Error('timeout (hedge not dispatched)'));
+					}
+				},
+				{ once: true }
+			);
+		});
 
 		try {
 			const winner = await Promise.any([primaryPromise, hedgePromise]);
-			// Cancel the loser.
+			// Cancel the loser (and a hedge not yet sent: it is never sent now).
 			if (winner.ep.url === primary.url) {
+				clearTimeout(hedgeHandle);
 				hedgeCtl.abort();
 			} else {
 				primaryCtl.abort();
@@ -1237,10 +1235,13 @@ export class EndpointPool {
 				// budget cut every .onion/.i2p answer off mid-tunnel on a cold
 				// hidden-only node, so its quorum never formed.
 				let timedOut = false;
-				const handle = setTimeout(() => {
-					timedOut = true;
-					c.abort();
-				}, effectiveTimeoutMs(ep.url, timeoutMs));
+				const handle = setTimeout(
+					() => {
+						timedOut = true;
+						c.abort();
+					},
+					effectiveTimeoutMs(ep.url, timeoutMs)
+				);
 				const t0 = Date.now();
 				contacted++;
 				try {
@@ -1272,10 +1273,21 @@ export class EndpointPool {
 					running++;
 					void askOperator(eps).then((answer) => {
 						running--;
+						// The caller's key runs on whatever a node sent; one that throws on
+						// a malformed answer must not leave this promise rejected with
+						// nobody listening (and, as the last operator out, the call never
+						// finished). Such an answer counts as no answer.
+						let key: string | undefined;
 						if (agreedKey === undefined && answer !== undefined && answer.value !== null) {
+							try {
+								key = options.equivalenceKey(answer.value);
+							} catch {
+								key = undefined;
+							}
+						}
+						if (key !== undefined && answer !== undefined && answer.value !== null) {
 							const result = answer.value;
 							allResponses.push(result);
-							const key = options.equivalenceKey(result);
 							const n = (buckets.get(key) ?? 0) + 1;
 							buckets.set(key, n);
 							if (n >= minAgree) {
@@ -1292,7 +1304,7 @@ export class EndpointPool {
 						// when every asked operator is in without agreement are more
 						// asked — so an honest, agreeing set costs `maxOperators`
 						// requests at most.
-						const gaveNothing = answer === undefined || answer.value === null;
+						const gaveNothing = key === undefined;
 						if (gaveNothing || running === 0) launch();
 						if (running === 0 && next >= operators.length) resolveDone();
 					});

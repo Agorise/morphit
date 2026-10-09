@@ -9,7 +9,7 @@
  * RELEASE MODE (the ceremony, ELI5 Block 3, before the broadcast):
  *   node apps/web/scripts/verify-json-to-release-manifest.mjs \
  *     --anchor distribution-anchor.env --tarball morphit-vX.Y.Z.tar.gz \
- *     > build-manifest.release.json
+ *     > /tmp/morphit-build-manifest.json
  *
  *   1. The tarball's SHA-256 must equal the `MORPHIT_BUILD_SOURCE_SHA256` the
  *      release job anchored (the anchor file is PARSED, never sourced).

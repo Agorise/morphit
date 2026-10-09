@@ -442,10 +442,16 @@ export async function healNginxVhosts(
 		)
 	];
 	const observe = (): { loaded: ReturnType<typeof vhostLoadedOk> | null; versioned: string[] } => {
-		const dump = rt.dumpConfig();
-		const loaded = dump === null ? null : vhostLoadedOk(dumpSections(dump, files));
-		const versioned = names.filter((n) => /\d/.test(rt.serverHeader(n) ?? ''));
-		return { loaded, versioned };
+		// nginx -T and a request per site name: under the spinner.
+		const stop = ctx.spinner('Checking what nginx has loaded and how it answers…');
+		try {
+			const dump = rt.dumpConfig();
+			const loaded = dump === null ? null : vhostLoadedOk(dumpSections(dump, files));
+			const versioned = names.filter((n) => /\d/.test(rt.serverHeader(n) ?? ''));
+			return { loaded, versioned };
+		} finally {
+			stop();
+		}
 	};
 	let seen = observe();
 	if (strategy === 'reloaded' && seen.versioned.length > 0) {

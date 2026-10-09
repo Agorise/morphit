@@ -1,6 +1,6 @@
 {
 	"name": "morphit",
-	"version": "1.21.2",
+	"version": "1.21.3",
 	"private": true,
 	"description": "Morphit — non-custodial, no-KYC P2P fiat↔BTC/XMR/BLURT marketplace",
 	"license": "AGPL-3.0-or-later",
@@ -28,6 +28,26 @@
 		"typecheck": "npm run typecheck --workspaces --if-present",
 		"lint": "tsx scripts/lint-gate-smoke.ts",
 		"test": "npm run test --workspaces --if-present"
+	},
+	"prettier": {
+		"useTabs": true,
+		"singleQuote": true,
+		"trailingComma": "none",
+		"printWidth": 100,
+		"overrides": [
+			{
+				"files": [
+					"*.json",
+					"*.md",
+					"*.yml",
+					"*.yaml"
+				],
+				"options": {
+					"useTabs": false,
+					"tabWidth": 2
+				}
+			}
+		]
 	},
 	"overrides": {
 		"undici": "^7.29.1",

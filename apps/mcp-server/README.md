@@ -171,7 +171,7 @@ AGPL-3.0-or-later, same as Morphit itself.
 
 [git.agorise.net/agorise/morphit](https://git.agorise.net/agorise/morphit/issues).
 Tag with `mcp-server`. Issues there are public: report a security
-problem only as described in `SECURITY.md` (a private Matrix message to
+problem only as described in `docs/SECURITY.md` (a private Matrix message to
 `@agorise:matrix.org`), never in an issue.
 
 ## Why MCP?

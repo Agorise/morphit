@@ -11,7 +11,7 @@
  *   --since=DUR    Window for the report.  Default 24h.
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt, error, blank } from '../render/term.ts';
@@ -42,8 +42,9 @@ export async function runFailedBroadcasts(ctx: CommandCtx): Promise<number> {
 	const cutoff = new Date(Date.now() - sinceSec * 1000);
 	const limit = ctx.flags.json === 'true' ? HUMAN_LIMIT * 10 : HUMAN_LIMIT;
 
-	const result = await ctx.db.query<FailedBroadcast>(
-		`SELECT
+	const result = await whileReading(ctx, () =>
+		ctx.db.query<FailedBroadcast>(
+			`SELECT
 		   id::text,
 		   recipient,
 		   kind,
@@ -59,7 +60,8 @@ export async function runFailedBroadcasts(ctx: CommandCtx): Promise<number> {
 		   AND last_error_at >= $1
 		 ORDER BY last_error_at DESC
 		 LIMIT $2`,
-		[cutoff, limit]
+			[cutoff, limit]
+		)
 	);
 
 	const entries = result.rows;

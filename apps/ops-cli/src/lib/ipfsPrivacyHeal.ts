@@ -79,7 +79,17 @@ export async function applyAndVerifyIpfsPrivacy(opts: {
 	const tries = opts.tries ?? 20;
 	const waitMs = opts.waitMs ?? 1500;
 	if (!rt.kuboPresent()) return { kind: 'no-kubo' };
-	if (rt.runPrivacy(`check-${mode}`) === 0) return { kind: 'already-private', mode };
+	// Each run of the privacy script (as the ipfs user, up to 60 s) is a wait.
+	const spun = <T>(label: string, fn: () => T): T => {
+		const s = rt.spinner(label);
+		try {
+			return fn();
+		} finally {
+			s();
+		}
+	};
+	if (spun('Checking the IPFS privacy settings…', () => rt.runPrivacy(`check-${mode}`)) === 0)
+		return { kind: 'already-private', mode };
 
 	const backup = rt.readConfig();
 	if (backup === null) {
@@ -89,7 +99,7 @@ export async function applyAndVerifyIpfsPrivacy(opts: {
 		return { kind: 'no-config' };
 	}
 	const wasActive = rt.isActive();
-	if (rt.runPrivacy(`apply-${mode}`) !== 0) {
+	if (spun('Applying the IPFS privacy settings…', () => rt.runPrivacy(`apply-${mode}`)) !== 0) {
 		// Undo any part that did get written; the running daemon never saw it.
 		rt.writeConfig(backup);
 		opts.warn('Could not apply the IPFS privacy settings; IPFS keeps its previous settings.');

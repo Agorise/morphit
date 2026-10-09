@@ -19,7 +19,7 @@
  *   --since=DUR                  Window for the report.  Default 7d.
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt, error, blank } from '../render/term.ts';
@@ -63,10 +63,11 @@ export async function runFlags(ctx: CommandCtx): Promise<number> {
 	const showReciprocity = type === undefined || type === 'reciprocity';
 	const showRelated = type === undefined || type === 'related';
 
-	const [recipResult, relatedResult] = await Promise.all([
-		showReciprocity
-			? ctx.db.query<ReciprocityRow>(
-					`SELECT
+	const [recipResult, relatedResult] = await whileReading(ctx, () =>
+		Promise.all([
+			showReciprocity
+				? ctx.db.query<ReciprocityRow>(
+						`SELECT
 					   account_a,
 					   account_b,
 					   detected_at,
@@ -80,12 +81,12 @@ export async function runFlags(ctx: CommandCtx): Promise<number> {
 					 WHERE detected_at >= $1
 					 ORDER BY detected_at DESC
 					 LIMIT $2`,
-					[cutoff, limit]
-				)
-			: Promise.resolve({ rows: [] as ReciprocityRow[] }),
-		showRelated
-			? ctx.db.query<RelatedRow>(
-					`SELECT
+						[cutoff, limit]
+					)
+				: Promise.resolve({ rows: [] as ReciprocityRow[] }),
+			showRelated
+				? ctx.db.query<RelatedRow>(
+						`SELECT
 					   account_a,
 					   account_b,
 					   detected_at,
@@ -95,10 +96,11 @@ export async function runFlags(ctx: CommandCtx): Promise<number> {
 					 WHERE detected_at >= $1
 					 ORDER BY detected_at DESC
 					 LIMIT $2`,
-					[cutoff, limit]
-				)
-			: Promise.resolve({ rows: [] as RelatedRow[] })
-	]);
+						[cutoff, limit]
+					)
+				: Promise.resolve({ rows: [] as RelatedRow[] })
+		])
+	);
 
 	const reciprocity = recipResult.rows;
 	const related = relatedResult.rows;

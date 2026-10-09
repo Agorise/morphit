@@ -209,9 +209,16 @@ export async function healTrustedBridge(
 			verified: false,
 			detail: `Indexer trusted proxies: ${line} is in ${target}, but the running indexer does not show it yet; on this server run: sudo systemctl restart morphit-indexer`
 		};
-	const asked = rt.requestThroughFrontend();
-	if (asked) await rt.sleep(1_000);
-	const warned = asked && /untrusted_private_proxy/.test(rt.indexerLogSince(t0));
+	stop = ctx.spinner('Sending one request through the frontend to check it…');
+	let asked: boolean;
+	let warned: boolean;
+	try {
+		asked = rt.requestThroughFrontend();
+		if (asked) await rt.sleep(1_000);
+		warned = asked && /untrusted_private_proxy/.test(rt.indexerLogSince(t0));
+	} finally {
+		stop();
+	}
 	return {
 		strategy: 'env-written',
 		verified: !warned,

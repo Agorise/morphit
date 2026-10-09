@@ -193,8 +193,10 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		// Re-run the checks so any fix we just applied clears its error before the
 		// continue-anyway gate below — a successful fix means no needless prompt.
 		if (journal.some((r) => r.outcome === 'fixed')) {
-			console.log('\n  Re-checking after fixes…');
-			checkResult = await runSystemCheck();
+			console.log('');
+			checkResult = await withSpinner('Re-checking your system after the fixes…', () =>
+				runSystemCheck()
+			);
 			renderSystemCheck(checkResult, ctx.colorEnabled);
 		}
 	}

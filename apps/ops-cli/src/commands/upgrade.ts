@@ -105,6 +105,7 @@ import { readNoFollow, writeNoFollow } from '../lib/noFollowFs.ts';
 import {
 	tryResolveHiddenUpgrade,
 	readHiddenReleaseTarget,
+	readOnchainReleaseTag,
 	isHiddenOnly,
 	type HiddenUpgradeResolution,
 	RELEASE_VERSION_RE
@@ -137,7 +138,8 @@ import {
 	carryNativeAddons,
 	withoutProxyEnv
 } from '../lib/depsInstall.ts';
-import { withSpinner, startDotsSpinner } from '../init/spinner.ts';
+import { withSpinner, startDotsSpinner, startPausableSpinner } from '../init/spinner.ts';
+import { runAsync, runSpinning, showOutput, sleepMs, systemctlSpinning } from '../lib/spinRun.ts';
 import { healIpfsPrivacy } from '../lib/ipfsPrivacyHeal.ts';
 import { healIpfsGc } from '../lib/ipfsGcHeal.ts';
 import {
@@ -160,6 +162,8 @@ import { healNodeRuntime } from '../lib/nodeRuntimeHeal.ts';
 import { heal as healNginxVhosts } from '../lib/nginxVhostHeal.ts';
 import { heal as healHiddenRpcEnv } from '../lib/hiddenRpcEnvHeal.ts';
 import { heal as healRelayHealthEnv } from '../lib/relayHealthEnvHeal.ts';
+import { healReleaseMonitor, realReleaseMonitorRuntime } from '../lib/releaseMonitorHeal.ts';
+import { closeQuietly, codeHostAgent } from '../lib/codeHostAgent.ts';
 import { heal as healPgRoles } from '../lib/pgRoleHeal.ts';
 import { heal as healIndexerEnvShadow } from '../lib/indexerEnvShadowHeal.ts';
 import { heal as healTorPow } from '../lib/torPowHeal.ts';
@@ -171,7 +175,6 @@ import { heal as healTorOnlyEgress } from '../lib/torOnlyEgressHeal.ts';
 import { heal as healIndexerMemory } from '../lib/indexerMemoryHeal.ts';
 import { heal as healOsQuiet } from '../lib/osQuietHeal.ts';
 import { heal as healBunkerwebJobs } from '../lib/bunkerwebJobsHeal.ts';
-import { healBackupEncryption, realBackupRuntime } from '../lib/backupEncryptHeal.ts';
 import { healCanaryRefreshRepo, realCanaryRepoRuntime } from '../lib/canaryRepoHeal.ts';
 import { resolveInstanceOrigin, syncInstanceOrigin } from '../lib/instanceOrigin.ts';
 import {
@@ -186,6 +189,7 @@ import {
 	baseFetchBudgetMs,
 	launchAfterRestartHeals,
 	waitForRestarts,
+	waitForAnswers,
 	waitForUnitIdle
 } from '../lib/afterRestartHeal.ts';
 import { removeStaleRegPassFiles } from './register.ts';
@@ -305,7 +309,7 @@ import { healXmrExplorerList } from '../lib/feeExplorerListHeal.ts';
 import { healBtcExplorerList } from '../lib/btcFeeExplorerListHeal.ts';
 import { chooseCanaryDirOwner, parsePasswdRefreshTarget } from '../lib/canaryDirOwner.ts';
 import {
-	detectDbContainer,
+	detectDbContainerAsync,
 	parseBackupDbContainer,
 	assessBackupDockerDrift,
 	dbIdentityFromUrl,
@@ -319,7 +323,7 @@ import {
 	MATRIX_BOT_ENV_PATH,
 	matrixBotReadiness,
 	readMatrixBotEnv,
-	syncMatrixBotService,
+	syncMatrixBotServiceAtTerminal,
 	writeMatrixBotPosture
 } from '../lib/matrixBot.ts';
 
@@ -603,7 +607,26 @@ export function compareTags(a: string, b: string): number {
 	if (pa.pre === null && pb.pre !== null) return 1;
 	if (pa.pre !== null && pb.pre === null) return -1;
 	if (pa.pre === null && pb.pre === null) return 0;
-	return pa.pre! < pb.pre! ? -1 : pa.pre! > pb.pre! ? 1 : 0;
+	// Prerelease identifiers as semver orders them: dot by dot, numbers as
+	// numbers (rc.10 after rc.9), a number before a word, more after fewer.
+	const xa = pa.pre!.split('.');
+	const xb = pb.pre!.split('.');
+	for (let i = 0; i < Math.max(xa.length, xb.length); i++) {
+		const ia = xa[i];
+		const ib = xb[i];
+		if (ia === undefined) return -1;
+		if (ib === undefined) return 1;
+		const na = /^\d+$/.test(ia);
+		const nb = /^\d+$/.test(ib);
+		if (na && nb) {
+			if (Number(ia) !== Number(ib)) return Number(ia) - Number(ib);
+		} else if (na !== nb) {
+			return na ? -1 : 1;
+		} else if (ia !== ib) {
+			return ia < ib ? -1 : 1;
+		}
+	}
+	return 0;
 }
 
 /** Is `latest` a strictly newer release than the installed `current`? When
@@ -622,27 +645,37 @@ export function isNewerRelease(latest: string, current: string): boolean {
  *  as root. It is now curl with an argument list, and a host that is not a
  *  host name is not probed at all. */
 export function probeLiveCanary(origin: string): boolean {
+	const args = liveCanaryCurlArgs(origin);
+	if (args === null) return false;
+	return spawnSync('curl', args, { stdio: 'ignore', timeout: 20_000 }).status === 0;
+}
+
+/** {@link probeLiveCanary} without blocking the event loop (up to 15 s), so the
+ *  upgrade's spinner keeps turning while it is asked. */
+async function probeLiveCanaryAsync(origin: string): Promise<boolean> {
+	const args = liveCanaryCurlArgs(origin);
+	if (args === null) return false;
+	return (await runAsync('curl', args, { timeoutMs: 20_000 })).status === 0;
+}
+
+/** curl's argument list for the live-canary probe; null when `origin` does not
+ *  name a host (never probed). PURE. */
+function liveCanaryCurlArgs(origin: string): string[] | null {
 	const host = origin.replace(/^https?:\/\//, '').replace(/[/:].*$/, '');
-	if (!/^[A-Za-z0-9.-]+$/.test(host)) return false;
-	return (
-		spawnSync(
-			'curl',
-			[
-				'-fsS',
-				'-o',
-				'/dev/null',
-				'--max-time',
-				'15',
-				'-k',
-				'--noproxy',
-				'*',
-				'--resolve',
-				`${host}:443:127.0.0.1`,
-				`https://${host}/canary.txt`
-			],
-			{ stdio: 'ignore', timeout: 20_000 }
-		).status === 0
-	);
+	if (!/^[A-Za-z0-9.-]+$/.test(host)) return null;
+	return [
+		'-fsS',
+		'-o',
+		'/dev/null',
+		'--max-time',
+		'15',
+		'-k',
+		'--noproxy',
+		'*',
+		'--resolve',
+		`${host}:443:127.0.0.1`,
+		`https://${host}/canary.txt`
+	];
 }
 
 /** Do two tags name the same release? A leading "v" is optional. PURE. */
@@ -912,6 +945,9 @@ export function checkDetachedSignature(
 	const allowed = new Set(pinned.map(normalizeFingerprint));
 
 	const gnupgHome = mkdtempSync(join(tmpdir(), 'morphit-gpg-'));
+	// gpg runs synchronously (up to 15 s per key, 20 s to verify): the spinner's
+	// label is on the line for the whole check, and taken off before a warning.
+	const spin = startPausableSpinner('Checking the release signature…');
 	try {
 		// Lock down the throwaway home (gpg insists on 0700).
 		spawnSync('chmod', ['700', gnupgHome], { stdio: 'ignore' });
@@ -926,7 +962,7 @@ export function checkDetachedSignature(
 				}
 			);
 			if (imp.status !== 0) {
-				warn(`Could not import release-signer key ${kf}.`);
+				spin.say(() => warn(`Could not import release-signer key ${kf}.`));
 			} else {
 				imported++;
 			}
@@ -937,11 +973,13 @@ export function checkDetachedSignature(
 			['--homedir', gnupgHome, '--batch', '--status-fd', '1', '--verify', sigPath, tarballPath],
 			{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 }
 		);
+		spin.stop();
 		const status = typeof res.stdout === 'string' ? res.stdout : '';
 		// A trustworthy result = a zero exit AND a VALIDSIG line naming a pinned key.
 		if (res.status !== 0) return 'invalid';
 		return validSigFingerprints(status).some((f) => allowed.has(f)) ? 'valid' : 'invalid';
 	} finally {
+		spin.stop();
 		rmSync(gnupgHome, { recursive: true, force: true });
 	}
 }
@@ -1139,7 +1177,7 @@ function resolveDbIdentity(installDir: string): DbIdentity {
  *  throws: an unreadable/absent backup.env, or a host Postgres, is a silent
  *  no-op. We deliberately do NOT auto-edit the operator's root-owned /etc
  *  config (same warn-don't-mutate posture as the MCP + canary checks). IMPURE. */
-function ensureBackupDockerAware(installDir: string): void {
+async function ensureBackupDockerAware(installDir: string): Promise<void> {
 	try {
 		const path = backupEnvFile();
 		if (!existsSync(path)) return; // backups not configured — nothing to nag
@@ -1155,7 +1193,9 @@ function ensureBackupDockerAware(installDir: string): void {
 		// operator's REAL db name/user (from the deployed connection URL), so a
 		// non-standard box (e.g. morphit_user/morphit_db) matches provably.
 		const { dbName, dbUser } = resolveDbIdentity(installDir);
-		const detected = detectDbContainer(dbUser, dbName);
+		const detected = await withSpinner('Checking the backup reaches the database…', () =>
+			detectDbContainerAsync(dbUser, dbName)
+		);
 		const verdict = assessBackupDockerDrift(true, configured, detected);
 		if (verdict.kind !== 'drift') return;
 		info('');
@@ -1436,6 +1476,28 @@ function findFrontendContainer(buildDir: string): string | null {
 	return null;
 }
 
+/** {@link findFrontendContainer} without blocking the event loop (docker can
+ *  take seconds per call on a busy box), so the spinner keeps turning. */
+async function findFrontendContainerAsync(buildDir: string): Promise<string | null> {
+	if ((await runAsync('docker', ['--version'], { timeoutMs: 5000 })).status !== 0) return null;
+	const ps = await runAsync('docker', ['ps', '--format', '{{.Names}}'], { timeoutMs: 5000 });
+	if (ps.status !== 0) return null;
+	const names = ps.stdout
+		.split('\n')
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+	for (const name of names) {
+		const insp = await runAsync(
+			'docker',
+			['inspect', '--format', '{{range .Mounts}}{{.Source}}\n{{end}}', name],
+			{ timeoutMs: 5000 }
+		);
+		if (insp.status !== 0) continue;
+		if (containerMountsBuildDir(parseMountSources(insp.stdout), buildDir)) return name;
+	}
+	return null;
+}
+
 /** `docker restart <name>` so the container re-binds the freshly-built
  *  apps/web/build on start (a running container keeps serving the
  *  pre-upgrade inode after the install dir was renamed).  BEST-EFFORT — a
@@ -1546,6 +1608,27 @@ export function readNotesFromTarball(
 	} catch {
 		return null;
 	}
+}
+
+/** {@link readNotesFromTarball} without blocking the event loop (tar reads the
+ *  whole tarball, twice), so the spinner keeps turning while it runs. */
+async function readNotesFromTarballAsync(
+	tarballPath: string,
+	tag: string
+): Promise<{ body: string; member: string } | null> {
+	const list = await runAsync('tar', ['-tzf', tarballPath], {
+		timeoutMs: 60_000,
+		maxOutputBytes: 64 * 1024 * 1024
+	});
+	if (list.status !== 0) return null;
+	const member = releaseNotesMember(list.stdout, tag);
+	if (member === null) return null;
+	const r = await runAsync('tar', ['-xzOf', tarballPath, member], {
+		timeoutMs: 60_000,
+		maxOutputBytes: 8 * 1024 * 1024
+	});
+	if (r.status !== 0 || r.stdout.trim() === '') return null;
+	return { body: r.stdout.trim(), member };
 }
 
 /** Print the release notes' summary before the upgrade question, and where
@@ -2084,11 +2167,17 @@ export async function verifyServedFrontend(
 			// almost always runs before the web server is serving again and prints
 			// "Could not auto-verify the served frontend", which looks like a
 			// failure on an upgrade that actually worked. Retry a few times.
-			let servedVersion = await resolveServedVersion(plan, webRoot);
-			for (let attempt = 0; servedVersion === null && attempt < 5; attempt++) {
-				await new Promise((r) => setTimeout(r, 2000));
-				servedVersion = await resolveServedVersion(plan, webRoot);
-			}
+			const servedVersion = await withSpinner(
+				'Checking the site serves the new frontend…',
+				async () => {
+					let v = await resolveServedVersion(plan, webRoot);
+					for (let attempt = 0; v === null && attempt < 5; attempt++) {
+						await new Promise((r) => setTimeout(r, 2000));
+						v = await resolveServedVersion(plan, webRoot);
+					}
+					return v;
+				}
+			);
 			const verdict = classifyFrontendVerify(builtVersion, servedVersion);
 			if (verdict === 'fresh') {
 				frontendVerified = true;
@@ -2115,11 +2204,17 @@ export async function verifyServedFrontend(
 						['restart', plan.restartContainer],
 						60_000
 					);
-					let reServed = await resolveServedVersion(plan, webRoot);
-					for (let attempt = 0; reServed === null && attempt < 5; attempt++) {
-						await new Promise((r) => setTimeout(r, 2000));
-						reServed = await resolveServedVersion(plan, webRoot);
-					}
+					const reServed = await withSpinner(
+						'Checking the site serves the new frontend after the restart…',
+						async () => {
+							let v = await resolveServedVersion(plan, webRoot);
+							for (let attempt = 0; v === null && attempt < 5; attempt++) {
+								await new Promise((r) => setTimeout(r, 2000));
+								v = await resolveServedVersion(plan, webRoot);
+							}
+							return v;
+						}
+					);
 					if (classifyFrontendVerify(builtVersion, reServed) === 'fresh') {
 						healed = true;
 						frontendVerified = true;
@@ -2182,6 +2277,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}));
 	const forceYes = opts.flags['yes'] === 'true' || process.env.MORPHIT_AUTO_UPGRADE === '1';
 	const jsonOutput = opts.flags['json'] === 'true';
+	// Where a spinner goes before the --json document is printed: stderr, so
+	// stdout carries only the JSON.
+	const spinOut = jsonOutput ? process.stderr : process.stdout;
 
 	// npm banner suppression now happens at CLI STARTUP (see main.ts). It was
 	// here, which was too late: npm defers its "New major version available!"
@@ -2280,7 +2378,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	let hiddenCheckTag: string | null = null;
 	if (offline === null) {
 		try {
-			hiddenCheckTag = (await readHiddenReleaseTarget(hiddenOpts))?.tag ?? null;
+			hiddenCheckTag =
+				(
+					await withSpinner(
+						"Reading the on-chain release record from this node's indexer…",
+						() => readHiddenReleaseTarget(hiddenOpts),
+						spinOut
+					)
+				)?.tag ?? null;
 		} catch (err) {
 			printError(
 				`Could not check for a new release privately, so nothing was fetched and this node stays as it is: ` +
@@ -2302,22 +2407,30 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 	if (offline === null && hiddenCheckTag !== null && !checkOnly) {
+		// Over Tor/I2P this takes minutes and reports each step: the spinner
+		// turns between the progress lines (taken off the line for each one).
+		const hiddenSpin = startPausableSpinner(
+			'Fetching the release privately (over Tor/I2P)…',
+			spinOut
+		);
 		try {
 			hiddenResolution = await tryResolveHiddenUpgrade({
 				...hiddenOpts,
-				onProgress: (m) => info(m),
+				onProgress: (m) => hiddenSpin.say(() => info(m)),
 				...(opts.trust?.postingPubkey !== undefined
 					? { postingPubkey: opts.trust.postingPubkey }
 					: {}),
 				...(opts.trust?.chainRead !== undefined ? { chainRead: opts.trust.chainRead } : {})
 			});
 		} catch (err) {
+			hiddenSpin.stop();
 			printError(
 				`Hidden-only upgrade could not be completed privately (staying on the current version): ` +
 					`${err instanceof Error ? err.message : String(err)}`
 			);
 			return 5; // fail-closed — never fall back to a clearnet mirror
 		}
+		hiddenSpin.stop();
 		if (hiddenResolution === null) {
 			// The node was hidden-only a moment ago; never fall back to clearnet.
 			printError(
@@ -2333,11 +2446,32 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		};
 	}
 
+	// 2026-10-08: a CHECK on any node first asks this node's own indexer for
+	// @morphit's on-chain release record (on the box, no network). Since
+	// v1.21.0 that record is what an unsigned release installs by, and the
+	// ceremony broadcasts it before any box upgrades, so it names every
+	// installable release. The release monitor runs this check twice a day: it
+	// no longer needs git.agorise.net at all (privacy, and a slow or blocked
+	// code host no longer means "no alert"). Only when the indexer does not
+	// answer is the code host asked, as before.
+	let onchainCheckTag: string | null = null;
+	if (checkOnly && offline === null && hiddenCheckTag === null) {
+		onchainCheckTag = await withSpinner(
+			"Reading @morphit's on-chain release record from this node's indexer…",
+			() => readOnchainReleaseTag(localIndexer),
+			spinOut
+		).catch(() => null);
+	}
+
 	// The PRIMARY is the trusted hash anchor. We fetch each source's
 	// release listing; `primaryRelease` (if reachable) anchors the
 	// SHA-256, while a mirror release lets us still SEE + (if signed)
 	// install when the primary is down. Discovery order = source order.
 	let primaryRelease: ForgejoRelease | null = null;
+	/** The release the on-chain record names, when it was read (review
+	 *  2026-10-08: the check reads the record, a real clearnet upgrade finds
+	 *  releases on the code host; when they differ, the upgrade says so). */
+	let onchainSeen: string | null = onchainCheckTag;
 	const releasesBySource: Array<{ src: ReleaseSource; rel: ForgejoRelease }> = [];
 	let latest: ForgejoRelease | null;
 	if (hiddenCheckTag !== null) {
@@ -2346,6 +2480,15 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			name: hiddenCheckTag,
 			body: '',
 			html_url: '',
+			published_at: new Date(0).toISOString(),
+			assets: []
+		};
+	} else if (onchainCheckTag !== null) {
+		latest = {
+			tag_name: onchainCheckTag,
+			name: onchainCheckTag,
+			body: `@morphit's on-chain record names ${onchainCheckTag}. Its notes: https://${host}/${repo}/releases/tag/${onchainCheckTag}`,
+			html_url: `https://${host}/${repo}/releases/tag/${onchainCheckTag}`,
 			published_at: new Date(0).toISOString(),
 			assets: []
 		};
@@ -2366,11 +2509,16 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		const fetchErrors: string[] = [];
 		for (const src of sources) {
 			try {
-				const rel = await withSpinner(`Checking ${src.host} for the latest release…`, () =>
-					fetchLatestRelease(src.host, src.repo)
+				const rel = await withSpinner(
+					`Checking ${src.host} for the latest release…`,
+					() => fetchLatestRelease(src.host, src.repo),
+					spinOut
 				);
 				releasesBySource.push({ src, rel });
 				if (src.isPrimary) primaryRelease = rel;
+				// A check needs one answer: asking the mirrors as well cost a 30 s
+				// wait each on a network that drops connections (review 2026-10-08).
+				if (checkOnly) break;
 			} catch (err) {
 				fetchErrors.push(
 					`${src.host}/${src.repo}: ${err instanceof Error ? err.message : String(err)}`
@@ -2378,6 +2526,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}
 		}
 		latest = primaryRelease ?? releasesBySource[0]?.rel ?? null;
+		if (!checkOnly) {
+			onchainSeen = await withSpinner(
+				"Reading @morphit's on-chain release record from this node's indexer…",
+				() => readOnchainReleaseTag(localIndexer),
+				spinOut
+			).catch(() => null);
+			if (onchainSeen !== null && !RELEASE_VERSION_RE.test(onchainSeen)) onchainSeen = null;
+		}
 		if (latest === null) {
 			// All network sources unreachable. Before giving up, fall back to a
 			// signed tarball the operator has dropped in the offline dir — this is
@@ -2393,7 +2549,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					`Could not reach any release source, and no offline release tarball was found in ` +
 						`${offlineReleaseDir(installDir)} (drop a morphit-<ver>-offline.tar.gz there, with its .asc if it has one, ` +
 						`or use --from-file=PATH).\n  ` +
-						fetchErrors.join('\n  ')
+						fetchErrors.join('\n  ') +
+						(onchainSeen !== null &&
+						(localInfo === null || isNewerRelease(onchainSeen, localInfo.tag))
+							? `\n  @morphit's on-chain release record names ${sanitizeForTerm(onchainSeen)}: that release is out. ` +
+								`Run the upgrade again once ${host} answers.`
+							: '')
 				);
 				return 5;
 			}
@@ -2440,6 +2601,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	info(`Current version: ${currentTag}`);
 	info(`Latest version:  ${latestTag}`);
 	info(`Release URL:     ${latest.html_url}`);
+	if (onchainSeen !== null && isNewerRelease(onchainSeen, latestTag)) {
+		info(
+			`@morphit's on-chain release record names ${sanitizeForTerm(onchainSeen)}, which the release ` +
+				`source did not offer yet. Run the upgrade again later to install it.`
+		);
+	}
 
 	if (isUpToDate) {
 		if (latestTag !== currentTag && compareTags(latestTag, currentTag) < 0) {
@@ -2470,7 +2637,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	let notesBody = latest.body.trim();
 	let notesMember: string | null = null;
 	if (notesBody === '' && offline?.tarballPath) {
-		const fromTar = readNotesFromTarball(offline.tarballPath, latestTag);
+		const tarball = offline.tarballPath;
+		const fromTar = await withSpinner('Reading the release notes from the tarball…', () =>
+			readNotesFromTarballAsync(tarball, latestTag)
+		);
 		if (fromTar !== null) {
 			notesBody = fromTar.body;
 			notesMember = fromTar.member;
@@ -2553,7 +2723,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			if (primaryAssets) {
 				const primaryShaPath = join(tmpDir, 'primary.tar.gz.sha256');
 				try {
-					await downloadTo(primaryAssets.sha.browser_download_url, primaryShaPath);
+					await withSpinner('Downloading the SHA-256 from the primary…', () =>
+						downloadTo(primaryAssets.sha.browser_download_url, primaryShaPath)
+					);
 					primaryHash = parseShaFile(primaryShaPath);
 				} catch (err) {
 					warn(
@@ -2579,8 +2751,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				// Pull the detached signature from the SAME source, if present.
 				if (a.sig) {
 					sigPath = join(tmpDir, a.sig.name);
+					const sig = { url: a.sig.browser_download_url, path: sigPath };
 					try {
-						await downloadTo(a.sig.browser_download_url, sigPath);
+						await withSpinner('Downloading the release signature…', () =>
+							downloadTo(sig.url, sig.path)
+						);
 					} catch {
 						sigPath = null; // signature optional; the gate handles absence
 					}
@@ -2753,16 +2928,24 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// `--strip-components=0` is kept for the explicit "we
 		// don't strip" record.  `-p` is INTENTIONALLY NOT used
 		// (it would override --no-same-permissions).
-		runOrThrow('tar', [
-			'-xzf',
-			tarballPath,
-			'-C',
-			installDir,
-			'--strip-components=0',
-			'--no-same-owner',
-			'--no-same-permissions',
-			'--no-overwrite-dir'
-		]);
+		// Unpacking is long and silent: under the turning spinner (tar's own
+		// output is shown only when it fails).
+		const tarCode = await runStepWithSpinner(
+			'Unpacking the new release…',
+			'tar',
+			[
+				'-xzf',
+				tarballPath,
+				'-C',
+				installDir,
+				'--strip-components=0',
+				'--no-same-owner',
+				'--no-same-permissions',
+				'--no-overwrite-dir'
+			],
+			{ quietOnSuccess: true, warningsOnSuccess: false, name: 'tar -xzf' }
+		);
+		if (tarCode !== 0) throw new Error(`tar -xzf ${tarballPath} exited ${tarCode}`);
 	} catch (err) {
 		warn(`Extract failed; rolling back to ${backupDir}.`);
 		return rollback(installDir, backupDir, tmpDir, err);
@@ -2869,7 +3052,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// npm would already have run it as root. Doing it here strips such a key
 	// first. Best-effort; never throws.
 	try {
-		const npmrc = healNpmNoticeGlobal();
+		const stopNpmrc = startDotsSpinner("Checking the box's global npm settings…");
+		let npmrc: ReturnType<typeof healNpmNoticeGlobal>;
+		try {
+			npmrc = healNpmNoticeGlobal();
+		} finally {
+			stopNpmrc();
+		}
 		if (npmrc && npmrc.strippedKeys.length > 0) {
 			warn(
 				`Removed unexpected setting(s) from the box's global npmrc (${npmrc.path}) that had been ` +
@@ -2937,7 +3126,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		} else {
 			await installDepsWithNpmCi(installDir, backupDir);
 		}
-		ensureMatrixBotNatives(installDir, nodeHiddenOnly);
+		await ensureMatrixBotNatives(installDir, nodeHiddenOnly);
 	} catch (err) {
 		warn('Installing dependencies did not complete; rolling back.');
 		return rollback(installDir, backupDir, tmpDir, err);
@@ -3006,10 +3195,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			info('Using the prebuilt web frontend shipped in the release (no rebuild).');
 		} else {
 			info('No prebuilt frontend in this release — building the web frontend (apps/web)...');
-			runOrThrow('npm', ['run', 'build'], {
-				cwd: join(installDir, 'apps', 'web'),
-				env: localBuildEnv
-			});
+			const buildCode = await runStepWithSpinner(
+				'Building the web frontend — this can take a few minutes…',
+				'npm',
+				['run', 'build'],
+				{ cwd: join(installDir, 'apps', 'web'), env: localBuildEnv, quietOnSuccess: true }
+			);
+			if (buildCode !== 0) throw new Error(`npm run build exited ${buildCode}`);
 		}
 	} catch (err) {
 		// Nothing served has been touched yet (the build writes to
@@ -3103,10 +3295,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			if (haveCanaryUnit) {
 				info('');
 				info('Restoring your warrant canary automatically (running its scheduled refresh now)...');
-				const start = spawnSync('systemctl', ['start', 'morphit-canary.service'], {
-					stdio: 'ignore',
-					timeout: 180_000
-				});
+				const start = await runSpinning(
+					'Running the canary refresh (up to 3 minutes)…',
+					'systemctl',
+					['start', 'morphit-canary.service'],
+					{ timeoutMs: 180_000 }
+				);
 				if (start.status === 0) {
 					canaryAutoRefreshed = true;
 					info('\u2713 Warrant canary restored automatically — nothing to do.');
@@ -3119,14 +3313,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				info(
 					`Restoring your warrant canary automatically (running your refresh as ${refreshTarget.user})...`
 				);
-				const refresh = spawnSync(
+				// `sudo -n` never asks for a password, so the spinner is safe here.
+				const refresh = await runSpinning(
+					'Running the canary refresh (up to 90 s)…',
 					'sudo',
 					['-n', '-u', refreshTarget.user, '-H', 'bash', refreshTarget.refreshScript],
-					{
-						stdio: 'ignore',
-						timeout: 90_000,
-						env: { ...process.env, GPG_TTY: '' }
-					}
+					{ timeoutMs: 90_000, env: { ...process.env, GPG_TTY: '' } }
 				);
 				if (refresh.status === 0) {
 					canaryAutoRefreshed = true;
@@ -3190,9 +3382,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// Both may apply (do both); neither is a non-standard setup that earns a
 	// loud warning — the build is fresh on disk either way.
 	const buildDir = join(installDir, 'apps', 'web', 'build');
+	const frontendContainer = await withSpinner('Looking for the frontend container…', () =>
+		findFrontendContainerAsync(buildDir)
+	);
 	const plan = planFrontendDeploy({
 		webRootExists: existsSync(webRoot),
-		frontendContainer: findFrontendContainer(buildDir),
+		frontendContainer,
 		webRoot,
 		buildDir
 	});
@@ -3246,8 +3441,18 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	}
 	try {
 		const brandingSettings = readBrandingSettings(installDir);
-		if (brandingConfigured(brandingSettings)) info('Applying your branding to the new frontend…');
-		const br = applyBranding({ buildDir, settings: brandingSettings });
+		// Synchronous (it draws the icons): the spinner's label is on the line for it.
+		const stopBrand = startDotsSpinner(
+			brandingConfigured(brandingSettings)
+				? 'Applying your branding to the new frontend…'
+				: 'Checking the new frontend’s branding…'
+		);
+		let br: ReturnType<typeof applyBranding>;
+		try {
+			br = applyBranding({ buildDir, settings: brandingSettings });
+		} finally {
+			stopBrand();
+		}
 		if (!br.unsupported && br.active) {
 			info(
 				`\u2713 Applied your branding${br.brandName ? ` ("${sanitizeForTerm(br.brandName)}")` : ''} to the new frontend.`
@@ -3365,7 +3570,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			};
 			const origin = readCfgKey('MORPHIT_INSTANCE_ORIGIN');
 			if (origin !== '') {
-				liveCanary = probeLiveCanary(origin);
+				liveCanary = await withSpinner('Asking this site for its warrant canary…', () =>
+					probeLiveCanaryAsync(origin)
+				);
 			}
 		} catch {
 			/* a failed probe must never cause a prompt on its own */
@@ -3452,7 +3659,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					});
 				}
 			}
-			const reloaded = reloadNeeded ? daemonReload() : true;
+			const reloaded = reloadNeeded
+				? (await systemctlSpinning('Reloading systemd…', ['daemon-reload'])).status === 0
+				: true;
 			info(
 				`Refreshed ${refreshed.length === 1 ? 'the service file' : `${refreshed.length} service files`} from this release: ` +
 					`${refreshed.map((r) => r.unit).join(', ')} (each previous copy kept as <name>.bak)` +
@@ -3597,10 +3806,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}
 			info(`${svc} is enabled but was not running; starting it on the new version.`);
 		}
-		info(`Restarting ${svc}...`);
 		const restartsBefore = readUnitRestarts(svc);
 		try {
-			runOrThrow('systemctl', ['restart', svc]);
+			// Under the turning spinner (systemctl's output shown if it fails).
+			const code = await runStepWithSpinner(`Restarting ${svc}…`, 'systemctl', ['restart', svc], {
+				quietOnSuccess: true,
+				warningsOnSuccess: false
+			});
+			if (code !== 0) throw new Error(`systemctl restart ${svc} exited ${code}`);
 		} catch (err) {
 			// It was down before this upgrade: the upgrade did not break it, so it
 			// does not undo the upgrade — say so and carry on.
@@ -3682,9 +3895,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					`${mcpDest} ${mcpUser}\` then \`sudo systemctl restart morphit-mcp\`.`
 			);
 		} else {
-			const rs = spawnSync('systemctl', ['restart', 'morphit-mcp.service'], {
-				stdio: 'inherit'
-			});
+			const rs = {
+				status: await runStepWithSpinner(
+					'Restarting the MCP server…',
+					'systemctl',
+					['restart', 'morphit-mcp.service'],
+					{ quietOnSuccess: true, warningsOnSuccess: false }
+				)
+			};
 			if (rs.status !== 0) {
 				warn(
 					`morphit-mcp restart failed (exit ${rs.status ?? 'signal'}); the new code is ` +
@@ -3755,7 +3973,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}
 		}
 		// Grace period for a clean shutdown, then force any straggler.
-		spawnSync('sleep', ['3'], { stdio: 'ignore' });
+		await withSpinner('Giving them a few seconds to stop…', () => sleepMs(3_000));
 		for (const pid of pidsWithCwdUnder(backupDir).filter((pid) => !protectedPids.has(pid))) {
 			try {
 				process.kill(pid, 'SIGKILL');
@@ -3777,7 +3995,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// points a host pg_dump at it (DB_CONTAINER empty), the daily backup
 	// silently captures nothing. Detect + warn with the one-line fix. No-op for
 	// a host Postgres or an already-Docker-aware config.
-	ensureBackupDockerAware(installDir);
+	await ensureBackupDockerAware(installDir);
 
 	// ─── 11. Prune old backups (tmp is cleaned AFTER the seed below, so
 	//         the seed can reuse the tarball we already downloaded) ──
@@ -3886,34 +4104,36 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			).trim();
 			// What i2pd actually hosts, from its own console. No root needed.
 			const routerI2p = (
-				spawnSync(
-					'sh',
-					[
-						'-c',
-						// SCOPE THIS TO MORPHIT'S OWN TUNNEL. The first version took the
-						// first .b32.i2p on the page, which is only correct on a router
-						// hosting exactly one destination. A box running several tunnels
-						// got a stranger's address compared against its own and was told
-						// its correct config was "advertised wrong" — while the line right
-						// below confirmed that same address served fine. A check that
-						// cries wolf is worse than no check.
-						//
-						// The console renders one <div> per tunnel containing its NAME and
-						// its b32, so split on tags and keep only the entry whose name
-						// matches. If no tunnel is identifiable as ours, emit NOTHING —
-						// silence is correct when we cannot tell which destination is ours.
-						"curl -s --max-time 8 'http://127.0.0.1:7070/?page=i2p_tunnels' 2>/dev/null " +
-							// Splitting on '<' keeps each tunnel's NAME together with its
-							// href, which carries the b32 — the bare `.b32.i2p` text lands in
-							// the following fragment, so read the href and append the suffix.
-							"| tr '<' '\\n' " +
-							"| grep -i 'morphit' " +
-							"| grep -oE 'b32=[a-z2-7]{52}' | head -1 | cut -d= -f2 " +
-							"| sed 's/$/.b32.i2p/'"
-					],
-					{ encoding: 'utf8', timeout: 15_000 }
-				).stdout ?? ''
-			).trim();
+				await withSpinner("Reading this node's I2P address from its router…", () =>
+					runAsync(
+						'sh',
+						[
+							'-c',
+							// SCOPE THIS TO MORPHIT'S OWN TUNNEL. The first version took the
+							// first .b32.i2p on the page, which is only correct on a router
+							// hosting exactly one destination. A box running several tunnels
+							// got a stranger's address compared against its own and was told
+							// its correct config was "advertised wrong" — while the line right
+							// below confirmed that same address served fine. A check that
+							// cries wolf is worse than no check.
+							//
+							// The console renders one <div> per tunnel containing its NAME and
+							// its b32, so split on tags and keep only the entry whose name
+							// matches. If no tunnel is identifiable as ours, emit NOTHING —
+							// silence is correct when we cannot tell which destination is ours.
+							"curl -s --max-time 8 'http://127.0.0.1:7070/?page=i2p_tunnels' 2>/dev/null " +
+								// Splitting on '<' keeps each tunnel's NAME together with its
+								// href, which carries the b32 — the bare `.b32.i2p` text lands in
+								// the following fragment, so read the href and append the suffix.
+								"| tr '<' '\\n' " +
+								"| grep -i 'morphit' " +
+								"| grep -oE 'b32=[a-z2-7]{52}' | head -1 | cut -d= -f2 " +
+								"| sed 's/$/.b32.i2p/'"
+						],
+						{ timeoutMs: 15_000 }
+					)
+				)
+			).stdout.trim();
 			if (routerOnion) seedAddrArgs.push(`MORPHIT_ROUTER_ONION=${routerOnion}`);
 			if (routerI2p) seedAddrArgs.push(`MORPHIT_ROUTER_I2P=${routerI2p}`);
 			const onion = cfgOnion || routerOnion;
@@ -3937,8 +4157,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// indexer.env: then it never fetches, downloads or announces anything.
 		const seedHiddenOnly = isHiddenOnlyNode();
 		if (seedHiddenOnly) seedAddrArgs.push('MORPHIT_SEED_HIDDEN_ONLY=1');
-		const onchainRelease = await readLocalRelease(
-			opts.localIndexerBases !== undefined ? { bases: opts.localIndexerBases } : {}
+		const onchainRelease = await withSpinner(
+			"Reading the on-chain release record from this node's indexer…",
+			() =>
+				readLocalRelease(
+					opts.localIndexerBases !== undefined ? { bases: opts.localIndexerBases } : {}
+				)
 		);
 		const seedCidArg =
 			onchainRelease !== null && onchainRelease.cid !== null && onchainRelease.tag === latestTag
@@ -4083,21 +4307,27 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					installed++;
 				}
 				if (installed > 0) {
-					spawnSync('systemctl', ['daemon-reload'], { stdio: 'ignore', timeout: 60_000 });
+					await runSpinning('Reloading systemd…', 'systemctl', ['daemon-reload'], {
+						timeoutMs: 60_000
+					});
 				}
-				spawnSync('systemctl', ['enable', '--now', 'morphit-snapshot-mirror.timer'], {
-					stdio: 'ignore',
-					timeout: 60_000
-				});
+				await runSpinning(
+					'Turning on the snapshot mirror timer…',
+					'systemctl',
+					['enable', '--now', 'morphit-snapshot-mirror.timer'],
+					{ timeoutMs: 60_000 }
+				);
 				// Enable publishing ONLY where the operator has opted in by dropping the
 				// env file. Explicit and reversible: exactly one instance in the
 				// federation should publish, and an upgrade must never make a box start
 				// signing snapshots under its own account by surprise.
 				if (existsSync('/etc/morphit/snapshot-publish.env')) {
-					spawnSync('systemctl', ['enable', '--now', 'morphit-snapshot-publish.timer'], {
-						stdio: 'ignore',
-						timeout: 60_000
-					});
+					await runSpinning(
+						'Turning on the snapshot publish timer…',
+						'systemctl',
+						['enable', '--now', 'morphit-snapshot-publish.timer'],
+						{ timeoutMs: 60_000 }
+					);
 					info('  This box is configured as the federation snapshot publisher (timer armed).');
 				}
 			} catch {
@@ -4618,8 +4848,7 @@ async function runQuestions(): Promise<number> {
 	try {
 		await runHealSteps([
 			['the relay log notice', () => healRelayJournalNotice()],
-			['the Matrix bot tor-only heal', () => healMatrixBotTorOnlyNow()],
-			['the backup encryption offer', () => healBackupOfferNow()]
+			['the Matrix bot tor-only heal', () => healMatrixBotTorOnlyNow()]
 		]);
 	} finally {
 		askingQuestions = false;
@@ -4830,10 +5059,12 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// sealed passphrase into a world-readable /run file; one a killed run
 		// left behind is removed here (a reboot clears /run too). No network.
 		['the stale passphrase file clean-up', () => healStaleRegPassFiles()],
-		// (lib/backupEncryptHeal.ts): plain-text database backups
-		// already on the box are encrypted to an age key, or deleted, only on
-		// the operator's answer; without a terminal it only says so.
-		['the backup encryption offer', () => healBackupOfferNow()],
+		// 2026-10-08: no backup question any more. The upgrade used to offer to
+		// encrypt (or delete) the plain-text database backups already on the
+		// box, and named it in every upgrade's last lines until answered. The
+		// database holds nothing sensitive and the chain holds what matters, so
+		// upgrades leave the backups alone and ask nothing. (The install wizard
+		// still offers an age key for an operator who wants encrypted backups.)
 		// (lib/canaryRepoHeal.ts): the weekly canary refresh runs the installed
 		// release's canary code, not the copy it was first set up from. No network.
 		['the canary refresh-source heal', () => healCanaryRefreshRepoNow()],
@@ -4893,24 +5124,23 @@ export async function healFeesAccountRegistrationNow(
  *  on a hidden-only node, only check them (no download over the clearnet). Never
  *  fails the upgrade: without them the bot alone stays down, and this says how to
  *  fix it. */
-function ensureMatrixBotNatives(installDir: string, hiddenOnly: boolean): void {
+async function ensureMatrixBotNatives(installDir: string, hiddenOnly: boolean): Promise<void> {
 	try {
 		if (!matrixBotReadiness(readMatrixBotEnv()).run) return;
 		const script = join(installDir, 'scripts', 'fetch-matrix-bot-natives.mjs');
 		if (!existsSync(script)) return;
-		info(
-			hiddenOnly
-				? "Checking the Matrix bot's native add-ons…"
-				: "Putting the Matrix bot's native add-ons in place (pinned SHA-256)…"
-		);
-		const r = spawnSync(
-			process.execPath,
-			[script, installDir, ...(hiddenOnly ? ['--verify-only'] : [])],
-			{
-				stdio: 'inherit',
-				timeout: 300_000
-			}
-		);
+		// Up to 5 minutes (a download): under the turning spinner, its output
+		// shown after.
+		const r = {
+			status: await runStepWithSpinner(
+				hiddenOnly
+					? "Checking the Matrix bot's native add-ons…"
+					: "Putting the Matrix bot's native add-ons in place (pinned SHA-256)…",
+				process.execPath,
+				[script, installDir, ...(hiddenOnly ? ['--verify-only'] : [])],
+				{ timeoutMs: 300_000, quietOnSuccess: true, name: 'fetch-matrix-bot-natives' }
+			)
+		};
 		if (r.status !== 0) {
 			warn(
 				hiddenOnly
@@ -4935,10 +5165,10 @@ export async function syncMatrixBotOnUpgrade(
 	const readiness = matrixBotReadiness(readMatrixBotEnv(o.envPath));
 	if (!readiness.run) {
 		// No alert username: the bot stays stopped (nothing to say).
-		syncMatrixBotService(false, {});
+		await syncMatrixBotServiceAtTerminal(false, {});
 		return;
 	}
-	const res = syncMatrixBotService(true, { restart: true });
+	const res = await syncMatrixBotServiceAtTerminal(true, { restart: true });
 	let running = false;
 	if (res.ok) {
 		await withSpinner('Checking the Matrix alert bot stays up…', async () => {
@@ -5061,6 +5291,14 @@ export function afterRestartHealSteps(): Array<[string, () => Promise<void>]> {
 		['the log level heal', () => reportHeal(healLogLevel(healCtx()))],
 		// the running indexer shows the fee addresses again.
 		['the fee address check', () => checkFeeAddressHeal()],
+		// 2026-10-08 (lib/releaseMonitorHeal.ts): the twice-a-day release check
+		// is installed, turned on and run once (it reads the restarted indexer's
+		// on-chain release record). Nothing installed it before.
+		[
+			'the release check heal',
+			() =>
+				reportHeal(healReleaseMonitor(healCtx(), realReleaseMonitorRuntime(selfHealInstallDir())))
+		],
 		// last — up to about four minutes of Tor checks, which the
 		// self-heal child (killed at 300 s) cannot always afford after the
 		// tor-only OS heal, and it may restart Docker, so it waits for the
@@ -5179,13 +5417,37 @@ export async function healTorOnlyEgressAfterWebHeal(
 }
 
 /** The background unit's body: wait for the restarts, then run the heals. */
-export async function runAfterRestartHeals(sinceUs: number): Promise<void> {
+export async function runAfterRestartHeals(
+	sinceUs: number,
+	/** Tests: the waits and the steps. */
+	deps: {
+		readonly waitRestarts?: typeof waitForRestarts;
+		readonly waitAnswers?: (services: readonly string[]) => Promise<string[]>;
+		readonly steps?: () => Array<[string, () => Promise<void>]>;
+	} = {}
+): Promise<void> {
 	const services = ['morphit-indexer.service', 'morphit-relay.service'];
 	info(`Waiting for ${services.join(' and ')} to restart on the new version…`);
-	const w = await waitForRestarts(sinceUs, services);
+	const w = await (deps.waitRestarts ?? waitForRestarts)(sinceUs, services);
 	if (w === 'timed-out')
 		warn('They did not restart within 15 minutes; running the checks against what is running now.');
-	for (const [name, step] of afterRestartHealSteps()) {
+	else {
+		// Restarted is not listening yet: the relay answers only after its key,
+		// clock and RPC-directory steps (2026-10-08).
+		const stop = startDotsSpinner('Waiting for them to answer on their health addresses…');
+		let silent: string[];
+		try {
+			silent = await (deps.waitAnswers ?? ((s) => waitForAnswers(s)))(services);
+		} finally {
+			stop();
+		}
+		if (silent.length > 0)
+			warn(
+				`${silent.join(' and ')} did not answer on ${silent.length === 1 ? 'its' : 'their'} health address within 5 minutes of the restart; ` +
+					'running the checks against what is running now.'
+			);
+	}
+	for (const [name, step] of (deps.steps ?? afterRestartHealSteps)()) {
 		try {
 			await step();
 		} catch (e) {
@@ -5302,28 +5564,6 @@ export async function healMatrixBotTorOnlyNow(): Promise<void> {
 			)
 		)
 	);
-}
-
-/** The backup encryption offer (lib/backupEncryptHeal.ts) on this box. */
-export async function healBackupOfferNow(): Promise<void> {
-	// Left for `upgrade --questions`: named once, in the questions line at the
-	// end (with how many backups), not also in a warning of its own.
-	let deferred = false;
-	const res = await healBackupEncryption(
-		healCtx(),
-		realBackupRuntime(
-			askingQuestions
-				? askOnTerminal
-				: async (q) => {
-						deferred = true;
-						return deferQuestion(
-							`what to do with the plain-text database backups (${q.split(' — ')[0]})`
-						);
-					}
-		)
-	);
-	if (deferred && res.strategy === 'left-alone') return;
-	await reportHeal(Promise.resolve(res));
 }
 
 /** What a heal reports when it found nothing to change and nothing for the
@@ -5670,7 +5910,12 @@ export async function healRelayClearnet(): Promise<void> {
 
 /** npm's "New major version" notice, box-wide — see ../lib/npmNotice.ts. */
 export function healNpmUpdateNotice(): void {
-	healNpmNoticeGlobal();
+	const stop = startDotsSpinner("Checking the box's global npm settings…");
+	try {
+		healNpmNoticeGlobal();
+	} finally {
+		stop();
+	}
 }
 
 /** Per-instance branding self-heal (docs/BRANDING.md): re-apply the operator's
@@ -5700,7 +5945,13 @@ export function healBranding(): void {
 		);
 	}
 	if (!existsSync(join(buildDir, BRAND_SLOTS_FILE))) return; // pre-branding build
-	const br = applyBranding({ buildDir, settings: readBrandingSettings(installDir) });
+	const stopBrand = startDotsSpinner('Checking the live frontend’s branding…');
+	let br: ReturnType<typeof applyBranding>;
+	try {
+		br = applyBranding({ buildDir, settings: readBrandingSettings(installDir) });
+	} finally {
+		stopBrand();
+	}
 	for (const w of br.warnings) warn(sanitizeForTerm(w));
 	if (br.touched.length > 0) {
 		if (existsSync(webRoot)) syncTouchedToWebRoot(buildDir, webRoot, br.touched);
@@ -5752,7 +6003,9 @@ export async function healFrontendConfig(): Promise<void> {
 			installDir = m[1];
 		}
 		const buildDir = join(installDir, 'apps', 'web', 'build');
-		const name = findFrontendContainer(buildDir);
+		const name = await withSpinner('Looking for the frontend container…', () =>
+			findFrontendContainerAsync(buildDir)
+		);
 		if (name !== null) {
 			// SKIP when the running container ALREADY has this config.
 			//
@@ -5771,12 +6024,12 @@ export async function healFrontendConfig(): Promise<void> {
 			let alreadyCurrent = false;
 			try {
 				if (existsSync(repoConf)) {
-					const live = spawnSync(
-						'docker',
-						['exec', name, 'cat', '/etc/nginx/conf.d/morphit.conf'],
-						{ encoding: 'utf8', timeout: 20_000 }
+					const live = await withSpinner('Reading the frontend’s running nginx config…', () =>
+						runAsync('docker', ['exec', name, 'cat', '/etc/nginx/conf.d/morphit.conf'], {
+							timeoutMs: 20_000
+						})
 					);
-					if (live.status === 0 && typeof live.stdout === 'string') {
+					if (live.status === 0) {
 						alreadyCurrent = live.stdout === readFileSync(repoConf, 'utf8');
 					}
 				}
@@ -5904,7 +6157,7 @@ export function healIpfsSwarmFirewall(deps: IpfsSwarmFirewallDeps = {}): void {
  *  gateway serves ONLY the release CIDs this node has pinned — never an arbitrary
  *  CID, so it is not an open proxy. Trap-everything + verified against the running
  *  daemon; a box without IPFS hosting no-ops. */
-export function healIpfsGatewayExposure(): void {
+export async function healIpfsGatewayExposure(): Promise<void> {
 	// Locate the Kubo repo (a couple of known layouts) — its presence is what
 	// tells us this box hosts IPFS at all.
 	const repoCandidates = ['/var/lib/ipfs/.ipfs', '/var/lib/ipfs', '/opt/ipfs/.ipfs'];
@@ -5924,31 +6177,37 @@ export function healIpfsGatewayExposure(): void {
 	const USER = 'ipfs';
 
 	// Run an `ipfs` subcommand against the repo, as the ipfs user when we're root.
-	const ipfs = (args: string[]): { ok: boolean; out: string } => {
+	// Asynchronous, so the spinner below keeps turning (each can take 20 s).
+	const ipfs = async (args: string[]): Promise<{ ok: boolean; out: string }> => {
 		const asUser = process.getuid?.() === 0;
 		const cmd = asUser ? 'sudo' : 'env';
 		const pre = asUser
 			? ['-u', USER, 'env', `IPFS_PATH=${repo}`, 'ipfs']
 			: [`IPFS_PATH=${repo}`, 'ipfs'];
-		try {
-			const r = spawnSync(cmd, [...pre, ...args], { encoding: 'utf8', timeout: 20000 });
-			return { ok: r.status === 0, out: `${r.stdout ?? ''}${r.stderr ?? ''}`.trim() };
-		} catch {
-			return { ok: false, out: '' };
-		}
+		const r = await runAsync(cmd, [...pre, ...args], { timeoutMs: 20000 });
+		return { ok: r.status === 0, out: r.output.trim() };
 	};
 
 	// Already exposed + safe? Then skip the restart (steady state).
-	const curGw = ipfs(['config', 'Addresses.Gateway']);
-	const curNoFetch = ipfs(['config', 'Gateway.NoFetch']);
+	const { curGw, curNoFetch } = await withSpinner(
+		'Checking the IPFS gateway settings…',
+		async () => ({
+			curGw: await ipfs(['config', 'Addresses.Gateway']),
+			curNoFetch: await ipfs(['config', 'Gateway.NoFetch'])
+		})
+	);
 	const alreadyExposed = curGw.ok && curGw.out.includes('0.0.0.0');
 	const alreadyNoFetch = curNoFetch.ok && /true/i.test(curNoFetch.out);
 	if (alreadyExposed && alreadyNoFetch) return;
 
 	let changed = false;
 	// NoFetch FIRST (so we never briefly expose an open proxy), then the bind.
-	if (!alreadyNoFetch && ipfs(['config', '--json', 'Gateway.NoFetch', 'true']).ok) changed = true;
-	if (!alreadyExposed && ipfs(['config', 'Addresses.Gateway', EXPOSE_ADDR]).ok) changed = true;
+	await withSpinner('Setting the IPFS gateway to serve only pinned releases…', async () => {
+		if (!alreadyNoFetch && (await ipfs(['config', '--json', 'Gateway.NoFetch', 'true'])).ok)
+			changed = true;
+		if (!alreadyExposed && (await ipfs(['config', 'Addresses.Gateway', EXPOSE_ADDR])).ok)
+			changed = true;
+	});
 	if (!changed) {
 		warn(
 			'IPFS: gateway exposure could not be set (config unavailable) — will apply on the next installer run.'
@@ -5961,12 +6220,18 @@ export function healIpfsGatewayExposure(): void {
 
 	// Restart Kubo so the new bind takes effect, and make sure the IPNS
 	// rebroadcaster (anti-stale) is running — fallback across unit names.
-	const restarted = ['ipfs.service', 'kubo.service', 'ipfs'].some(
-		(u) => spawnSync('systemctl', ['restart', u], { encoding: 'utf8', timeout: 40000 }).status === 0
-	);
-	spawnSync('systemctl', ['enable', '--now', 'morphit-ipns-rebroadcast.service'], {
-		encoding: 'utf8',
-		timeout: 20000
+	const restarted = await withSpinner('Restarting IPFS with the new gateway setting…', async () => {
+		let ok = false;
+		for (const u of ['ipfs.service', 'kubo.service', 'ipfs']) {
+			if ((await runAsync('systemctl', ['restart', u], { timeoutMs: 40000 })).status === 0) {
+				ok = true;
+				break;
+			}
+		}
+		await runAsync('systemctl', ['enable', '--now', 'morphit-ipns-rebroadcast.service'], {
+			timeoutMs: 20000
+		});
+		return ok;
 	});
 	if (!restarted) {
 		info('IPFS: gateway configured; restart the ipfs service to apply (systemctl restart ipfs).');
@@ -5975,13 +6240,24 @@ export function healIpfsGatewayExposure(): void {
 
 	// VERIFY against the running daemon: the gateway must answer on the bridge.
 	try {
-		spawnSync('sleep', ['4'], { timeout: 6000 });
-		const probe = spawnSync(
-			'curl',
-			['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '6', 'http://127.0.0.1:8082/'],
-			{ encoding: 'utf8', timeout: 10000 }
-		);
-		const code = (probe.stdout ?? '').trim();
+		const probe = await withSpinner('Checking the IPFS gateway is listening…', async () => {
+			await sleepMs(4_000);
+			return runAsync(
+				'curl',
+				[
+					'-s',
+					'-o',
+					'/dev/null',
+					'-w',
+					'%{http_code}',
+					'--max-time',
+					'6',
+					'http://127.0.0.1:8082/'
+				],
+				{ timeoutMs: 10000 }
+			);
+		});
+		const code = probe.stdout.trim();
 		// A host-side 127.0.0.1 probe only proves the gateway is LISTENING \u2014 NOT
 		// that a container or a Tor/I2P peer can reach it (the v1.17.1 false-\u2713 was
 		// exactly this: it passed for weeks while UFW dropped the container\u2192host
@@ -6474,15 +6750,22 @@ export function healBunkerWebWaf(
 						ref !== null && composeRun(ref, ['up', '-d', '--no-deps', ...stack.services], 180000)
 				];
 		let started = false;
-		for (const strat of strategies) {
-			try {
-				if (strat()) {
-					started = true;
-					break;
+		// Synchronous docker/compose calls (up to minutes): the spinner's label is
+		// on the line for them.
+		const stopRestart = startDotsSpinner('Restarting BunkerWeb’s services…');
+		try {
+			for (const strat of strategies) {
+				try {
+					if (strat()) {
+						started = true;
+						break;
+					}
+				} catch {
+					/* try the next strategy */
 				}
-			} catch {
-				/* try the next strategy */
 			}
+		} finally {
+			stopRestart();
 		}
 		if (!started) {
 			warn(
@@ -6497,13 +6780,20 @@ export function healBunkerWebWaf(
 				? `WAF: ${why}; BunkerWeb is rebuilding its settings (about ${Math.round(measured / 60_000)} min here, its downloads are slow on this network)…`
 				: `WAF: ${why}; BunkerWeb is rebuilding its settings…`
 		);
-		const c = waitForSchedulerCycle({
-			scheduler: sched,
-			edge: bw,
-			sinceIso: since,
-			budgetMs: reloadBudgetMs,
-			note: (m) => info(`WAF: ${m}`)
-		});
+		// Up to 8 minutes: the spinner is on the line, taken off for each note.
+		const waitSpin = startPausableSpinner('Waiting for BunkerWeb to load its new settings…');
+		let c: ReturnType<typeof waitForSchedulerCycle>;
+		try {
+			c = waitForSchedulerCycle({
+				scheduler: sched,
+				edge: bw,
+				sinceIso: since,
+				budgetMs: reloadBudgetMs,
+				note: (m) => waitSpin.say(() => info(`WAF: ${m}`))
+			});
+		} finally {
+			waitSpin.stop();
+		}
 		if (c.kind === 'loaded')
 			info(
 				`WAF: BunkerWeb built, tested and loaded its new settings (${Math.round(c.waitedMs / 1000)} s).`
@@ -6554,8 +6844,15 @@ export function healBunkerWebWaf(
 		return (r.stdout ?? '').trim();
 	};
 	try {
-		const api = liveProbe('/v1/health');
-		const home = liveProbe('/');
+		const stopProbe = site ? startDotsSpinner('Checking the WAF lets the API through…') : () => {};
+		let api: string;
+		let home: string;
+		try {
+			api = liveProbe('/v1/health');
+			home = liveProbe('/');
+		} finally {
+			stopProbe();
+		}
 		if (api === '403' && home === '403') {
 			if (removed !== null && sched !== null && restoreRuleCopies(sched, removed)) {
 				warn(
@@ -6588,7 +6885,14 @@ export function healBunkerWebWaf(
 		// A hidden-only node never asks the address through public DNS.
 		const candidates = origin ? bodyProbeCandidates(origin, isHiddenOnlyNode()) : null;
 		if (origin && candidates !== null && candidates.length > 0) {
-			const probe = (): string => probeBroadcastBody(candidates);
+			const probe = (): string => {
+				const stop = startDotsSpinner('Checking a real-sized broadcast gets through…');
+				try {
+					return probeBroadcastBody(candidates);
+				} finally {
+					stop();
+				}
+			};
 			let code = probe();
 			if (code === '413' && sched !== null) {
 				info(
@@ -6667,11 +6971,17 @@ export function healBunkerWebWaf(
 	try {
 		if (unq(getVal('USE_REAL_IP')).toLowerCase() !== 'yes') {
 			const liveTrustsXff = (): boolean | null => {
-				const r = spawnSync('docker', ['exec', bw, 'sh', '-c', 'nginx -T 2>/dev/null'], {
-					encoding: 'utf8',
-					timeout: 20000,
-					maxBuffer: 64 * 1024 * 1024
-				});
+				const stop = startDotsSpinner('Reading BunkerWeb’s running nginx config…');
+				let r: { status: number | null; stdout: string | null };
+				try {
+					r = spawnSync('docker', ['exec', bw, 'sh', '-c', 'nginx -T 2>/dev/null'], {
+						encoding: 'utf8',
+						timeout: 20000,
+						maxBuffer: 64 * 1024 * 1024
+					});
+				} finally {
+					stop();
+				}
 				const out = r.stdout ?? '';
 				if (r.status !== 0 || !/\bserver\s*\{/.test(out)) return null; // can't tell
 				return /^\s*set_real_ip_from\s/m.test(out);
@@ -6870,12 +7180,17 @@ async function fetchReleaseJson(
 ): Promise<{ ok: boolean; status: number; text: string }> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), UPGRADE_FETCH_TIMEOUT_MS);
+	// Node's own 10 s connect limit would cut a slow connect short of the 30 s
+	// this waits (lib/codeHostAgent.ts).
+	const agent = codeHostAgent(UPGRADE_FETCH_TIMEOUT_MS);
 	try {
 		const res = await fetch(url, {
 			headers: { Accept: 'application/json' },
 			redirect: 'manual',
-			signal: controller.signal
-		});
+			signal: controller.signal,
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- lib.dom omits undici's dispatcher
+			dispatcher: agent
+		} as any);
 		if (!res.ok) {
 			return { ok: false, status: res.status, text: '' };
 		}
@@ -6901,6 +7216,7 @@ async function fetchReleaseJson(
 		return { ok: true, status: res.status, text };
 	} finally {
 		clearTimeout(timer);
+		closeQuietly(agent);
 	}
 }
 
@@ -6966,8 +7282,14 @@ async function downloadTo(url: string, dest: string): Promise<void> {
 		timer = setTimeout(() => controller.abort(), UPGRADE_STALL_TIMEOUT_MS);
 	};
 	arm();
+	// A connect may take as long as a stall may last (lib/codeHostAgent.ts).
+	const agent = codeHostAgent(UPGRADE_STALL_TIMEOUT_MS);
 	try {
-		const res = await fetch(url, { signal: controller.signal });
+		const res = await fetch(url, {
+			signal: controller.signal,
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- lib.dom omits undici's dispatcher
+			dispatcher: agent
+		} as any);
 		if (!res.ok) {
 			throw new Error(`HTTP ${res.status} from ${url}`);
 		}
@@ -6996,6 +7318,7 @@ async function downloadTo(url: string, dest: string): Promise<void> {
 		}
 	} finally {
 		clearTimeout(timer);
+		closeQuietly(agent);
 	}
 }
 
@@ -7253,7 +7576,13 @@ export async function rollback(
 		// if it is stopped; it is left to finish.)
 		const bg = systemctl(['is-active', '--quiet', AFTER_RESTART_UNIT]);
 		if (bg?.status === 0) {
-			const stopped = systemctl(['stop', AFTER_RESTART_UNIT])?.status === 0;
+			const stopSpin = startDotsSpinner('Stopping the background checks…');
+			let stopped: boolean;
+			try {
+				stopped = systemctl(['stop', AFTER_RESTART_UNIT])?.status === 0;
+			} finally {
+				stopSpin();
+			}
 			info(
 				stopped
 					? `Stopped the background checks (${AFTER_RESTART_UNIT}) that ran this release's code; what they did so far is in ${afterRestartLogPath()}.`
@@ -7337,7 +7666,17 @@ export async function rollback(
 			);
 		}
 	}
-	if (unitsRestored && !daemonReload()) {
+	if (
+		unitsRestored &&
+		!(() => {
+			const stop = startDotsSpinner('Reloading systemd…');
+			try {
+				return daemonReload();
+			} finally {
+				stop();
+			}
+		})()
+	) {
 		warn(
 			'Could not run `systemctl daemon-reload`; run it by hand so the restored units take effect.'
 		);
@@ -7354,7 +7693,21 @@ export async function rollback(
 			systemctl(['is-enabled', '--quiet', svc]).status === 0 ||
 			systemctl(['is-active', '--quiet', svc]).status === 0;
 		if (!installed) continue;
-		systemctl(['restart', svc]);
+		// As the default runner, without blocking: the spinner turns while it
+		// restarts; an injected runner (tests) is called as it is.
+		if (deps.systemctl === undefined)
+			await runSpinning(`Restarting ${svc} on the previous version…`, 'systemctl', [
+				'restart',
+				svc
+			]);
+		else {
+			const stop = startDotsSpinner(`Restarting ${svc} on the previous version…`);
+			try {
+				systemctl(['restart', svc]);
+			} finally {
+				stop();
+			}
+		}
 	}
 	cleanupTmp(tmpDir);
 	info(`Rolled back to previous install at ${installDir}.`);

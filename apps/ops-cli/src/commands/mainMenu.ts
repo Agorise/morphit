@@ -24,6 +24,7 @@
 import { askChoice } from '../init/prompt.ts';
 import { fmt } from '../render/term.ts';
 import type { MenuAnnotations } from '../lib/menuAnnotations.ts';
+import { isNewerRelease } from './upgrade.ts';
 
 export interface MenuSelection {
 	/** The subcommand to dispatch, e.g. 'edit', 'upgrade', 'status'. */
@@ -246,7 +247,7 @@ export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
 			// silently dropped the marker, making a still-outdated node look current).
 			s += '  ' + fmt.dim('(couldn\u2019t check for updates \u2014 network)');
 		}
-		if (cur !== null && latest !== null && cur !== latest) {
+		if (cur !== null && latest !== null && isNewerRelease(latest, cur)) {
 			// beta11 item 3 — bold BRIGHT yellow (\x1b[1;93m) so the
 			// "update available" marker stays vivid on pale terminal
 			// themes where the standard yellow looked near-white.
@@ -289,7 +290,7 @@ export function itemEmphasis(
 	if (ann === undefined) return null;
 	if (subcommand === 'upgrade') {
 		const { currentVersion: cur, latestVersion: latest } = ann;
-		if (cur !== null && latest !== null && cur !== latest) return 'update';
+		if (cur !== null && latest !== null && isNewerRelease(latest, cur)) return 'update';
 	}
 	if (subcommand === 'moderation') {
 		const n = ann.unresolvedFlags;

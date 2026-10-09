@@ -3,7 +3,7 @@
 # fails if any file OUTSIDE this list is unformatted, and fails if a file IN it
 # has become formatted without being removed — so the list can only shrink.
 # Format a file with `npx prettier --write <file>` from the repo root (the root
-# .prettierrc now covers every workspace), then delete its line here.
+# "prettier" key of package.json covers every workspace), then delete its line here.
 apps/indexer/scripts/ansible-env-template-required-vars-smoke.ts
 apps/indexer/scripts/anti-snipe-extension-smoke.ts
 apps/indexer/scripts/api-response-shape-smoke.ts
@@ -263,18 +263,11 @@ apps/ops-cli/scripts/upgrade-mcp-reachability-smoke.ts
 apps/ops-cli/scripts/upgrade-schema-reminder-smoke.ts
 apps/ops-cli/scripts/workspace-deps-pin-check.ts
 apps/ops-cli/src/commands/altAddress.ts
-apps/ops-cli/src/commands/block.ts
 apps/ops-cli/src/commands/exportAltnetKey.ts
-apps/ops-cli/src/commands/fastForward.ts
-apps/ops-cli/src/commands/fastSync.ts
 apps/ops-cli/src/commands/harden.ts
 apps/ops-cli/src/commands/importAltnetKey.ts
-apps/ops-cli/src/commands/mcp.ts
-apps/ops-cli/src/commands/moderation.ts
-apps/ops-cli/src/commands/paymentMethod.ts
 apps/ops-cli/src/commands/showKey.ts
 apps/ops-cli/src/commands/ssl.ts
-apps/ops-cli/src/init/assembleInstall.ts
 apps/ops-cli/src/init/chainCheck.ts
 apps/ops-cli/src/init/explorerHealth.ts
 apps/ops-cli/src/init/hiddenUpgradeFetch.ts
@@ -283,8 +276,6 @@ apps/ops-cli/src/init/i2pGenerate.ts
 apps/ops-cli/src/init/prompt.ts
 apps/ops-cli/src/lib/altAddressValidate.ts
 apps/ops-cli/src/lib/localBlock.ts
-apps/ops-cli/src/lib/menuAnnotations.ts
-apps/ops-cli/src/lib/restartServices.ts
 apps/ops-cli/test/backupHealth.test.ts
 apps/ops-cli/test/federationBodyCap.test.ts
 apps/relay/scripts/account-create-op-smoke.ts
@@ -298,7 +289,6 @@ apps/relay/scripts/vapid-key-validation-smoke.ts
 apps/relay/src/api/create.ts
 apps/relay/src/api/health.ts
 apps/relay/src/api/push.ts
-apps/relay/src/blurt/client.ts
 apps/relay/src/config/index.ts
 apps/relay/src/main.ts
 apps/relay/src/policy/pushSender.ts
@@ -453,7 +443,6 @@ apps/web/scripts/orderbook-live-status-wired-smoke.ts
 apps/web/scripts/orderbook-select-stacking-smoke.ts
 apps/web/scripts/orderbook-terms-highlight-safety-smoke.ts
 apps/web/scripts/pair-target-resolve-smoke.ts
-apps/web/scripts/paired-readonly-affordance-surfaces-smoke.ts
 apps/web/scripts/paired-readonly-lifecycle-smoke.ts
 apps/web/scripts/path-adversarial-smoke.ts
 apps/web/scripts/pay-blurt-modal-errors-smoke.ts
@@ -638,7 +627,6 @@ packages/indexer-client/src/index.ts
 packages/node-health/src/index.ts
 packages/release-schema/src/index.ts
 packages/release-schema/src/releaseValidate.ts
-packages/rpc-pool/src/index.ts
 scripts/ansible-aide-deferred-smoke.ts
 scripts/ansible-offline-apt-gate-smoke.ts
 scripts/ansible-shared-script-dir-smoke.ts

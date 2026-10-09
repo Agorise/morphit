@@ -1001,7 +1001,7 @@
 		"operator_setup_doc_run": "RUN-A-MORPHIT-NODE.md — pełny przewodnik pierwszego wdrożenia",
 		"operator_setup_doc_ops": "OPERATIONS.md — bieżący runbook operatora (kopie zapasowe, doładowania, zarządzanie RPC)",
 		"operator_setup_doc_switching": "SWITCHING-NETWORKS.md — procedura stagingu + lista kontrolna uruchomienia",
-		"operator_setup_doc_security": "SECURITY.md — kanał ujawniania + model zagrożeń",
+		"operator_setup_doc_security": "docs/SECURITY.md — kanał ujawniania + model zagrożeń",
 		"operator_setup_cta": "Przeczytaj RUN-A-MORPHIT-NODE.md",
 		"operator_distros_heading": "Wspierane systemy",
 		"operator_distros_body": "Ubuntu 24.04 LTS to najlepiej przetestowany wybór, a instalator jednopoleceniowy akceptuje też jego pochodne — odczytuje bazę „noble” Ubuntu, więc edycja nie ma znaczenia: Linux Mint 22, Pop!_OS, Zorin OS 17, KDE neon i elementary OS działają. Debian 12+ oraz utwardzone bazy Debiana, takie jak Kicksecure, działają poprzez ręczne kroki instalacji — oba są doskonałymi lekkimi serwerami nastawionymi na bezpieczeństwo. Każdy nowoczesny Linux z Node.js 22+ i Postgres 15+ powinien go uruchomić (Arch, Alpine, NixOS — tam jesteś bardziej zdany na siebie); FreeBSD działa z drobnymi poprawkami. Sprzęt: dowolna dwurdzeniowa maszyna ARM64 lub x86-64 z 4 GB RAM i 80 GB SSD — większość operatorów używa Raspberry Pi 4, mini-PC Intel lub starego laptopa.",
@@ -1321,7 +1321,7 @@
 			},
 			"security_attack_vectors": {
 				"q": "Czy Morphit jest podatny na włamania, kradzież danych lub blokady?",
-				"a": "Najlepszą obroną jest sam projekt. Morphit niczego nie przechowuje: twoje klucze prywatne powstają w przeglądarce i nigdy nie trafiają na żaden serwer, więc nie ma bazy kluczy do kradzieży. Nie ma kont, haseł ani sesji po stronie serwera, więc nie ma logowania Morphit do wyłudzenia, sesji do przejęcia ani konta do przejęcia przez serwer. Nie zbieramy KYC, a adresy IP są trzymane tylko w pamięci na potrzeby limitów, więc nie ma bazy danych osobowych do włamania czy zajęcia. Arkusz zleceń żyje w łańcuchu — każdy może uruchomić własny indekser i własną stronę — więc zamknięcie może ukryć zlecenia na jednym lustrze, ale nie może ich usunąć. Przeciw typowym atakom webowym: treści żądań są walidowane schematem, z ograniczoną długością i rozmiarem; zapytania do bazy są parametryzowane; Content-Security-Policy pozwala ładować skrypty tylko z samej strony (bez skryptów inline, bez eval — tylko kompilacja WebAssembly dla kryptografii); API pozwala innym stronom tylko czytać dane publiczne, nigdy z poświadczeniami, a każdy zapis musi być w JSON; punkty rejestracji relaya sprawdzają, z jakiej strony przyszło żądanie; a relay wysyła powiadomienia push tylko do usług push producentów przeglądarek, nigdy pod adres podany przez użytkownika. Nie ma PHP, WordPressa ani warstwy OAuth. Wolumetryczny DDoS musi wchłonąć dostawca hostingu; nadużycia w warstwie aplikacji natrafiają na limity na klienta, limity rozmiaru i limity zasobów. Jedno ograniczenie warto znać: operator sam serwuje kod strony, więc wrogi operator jest poza tym, co obejmują te zabezpieczenia — wybieraj operatorów, którym ufasz. Pełny model zagrożeń jest w SECURITY.md, docs/SECURITY.md i docs/audit/ w repozytorium."
+				"a": "Najlepszą obroną jest sam projekt. Morphit niczego nie przechowuje: twoje klucze prywatne powstają w przeglądarce i nigdy nie trafiają na żaden serwer, więc nie ma bazy kluczy do kradzieży. Nie ma kont, haseł ani sesji po stronie serwera, więc nie ma logowania Morphit do wyłudzenia, sesji do przejęcia ani konta do przejęcia przez serwer. Nie zbieramy KYC, a adresy IP są trzymane tylko w pamięci na potrzeby limitów, więc nie ma bazy danych osobowych do włamania czy zajęcia. Arkusz zleceń żyje w łańcuchu — każdy może uruchomić własny indekser i własną stronę — więc zamknięcie może ukryć zlecenia na jednym lustrze, ale nie może ich usunąć. Przeciw typowym atakom webowym: treści żądań są walidowane schematem, z ograniczoną długością i rozmiarem; zapytania do bazy są parametryzowane; Content-Security-Policy pozwala ładować skrypty tylko z samej strony (bez skryptów inline, bez eval — tylko kompilacja WebAssembly dla kryptografii); API pozwala innym stronom tylko czytać dane publiczne, nigdy z poświadczeniami, a każdy zapis musi być w JSON; punkty rejestracji relaya sprawdzają, z jakiej strony przyszło żądanie; a relay wysyła powiadomienia push tylko do usług push producentów przeglądarek, nigdy pod adres podany przez użytkownika. Nie ma PHP, WordPressa ani warstwy OAuth. Wolumetryczny DDoS musi wchłonąć dostawca hostingu; nadużycia w warstwie aplikacji natrafiają na limity na klienta, limity rozmiaru i limity zasobów. Jedno ograniczenie warto znać: operator sam serwuje kod strony, więc wrogi operator jest poza tym, co obejmują te zabezpieczenia — wybieraj operatorów, którym ufasz. Pełny model zagrożeń jest w docs/SECURITY.md i docs/audit/ w repozytorium."
 			},
 			"security_engineering_rigor": {
 				"q": "Jak rygorystyczny jest proces przeglądu bezpieczeństwa Morphit?",
@@ -1329,11 +1329,11 @@
 			},
 			"help_make_unstoppable": {
 				"q": "Jak mogę pomóc uczynić Morphit niepowstrzymanym?",
-				"a": "Odporność Morphit rośnie z każdym niezależnym operatorem. Możesz pomóc na kilka sposobów:\n\n• Prowadź własny węzeł. Uruchom indexer + relay + frontend na własnym serwerze i udostępnij Morphit pod swoim URL.\n\n• Hostuj na Tor, Lokinet lub I2P. Mirror .onion, .loki lub .b32.i2p umożliwia użytkownikom dostęp z jurysdykcji, gdzie clearnet jest zablokowany.\n\n• Skieruj na nią nazwę ENS .eth. Zarejestruj nazwę `.eth` w ENS (Ethereum Name Service) i skieruj ją na swoją instancję — zwykle przez contenthash ENS wskazujący na kopię IPFS twojej strony — aby ludzie mogli dotrzeć do ciebie pod czytelną, zdecentralizowaną nazwą taką jak `yourbrand.eth` (przez przeglądarkę lub bramkę obsługujące ENS). Pojawia się jako dodatkowa plakietka w stopce, obok Tor/Lokinet/I2P.\n\n• Hostuj zależności Morphit.\n\n• Finansuj węzeł społeczności. Wkłady Blurt do konta @morphit-relay aktywnego operatora utrzymują jego środki na tworzenie kont.\n\n• Rozpowszechniaj informacje.\n\n• Pisz samouczki i tłumaczenia. Projekt jest AGPL-3.0.\n\nMorphit jest zaprojektowany tak, aby był niemożliwy do zamknięcia, ponieważ nie ma centralnego aktora do naciskania."
+				"a": "Odporność Morphit rośnie z każdym niezależnym operatorem. Możesz pomóc na kilka sposobów:\n\n• Prowadź własny węzeł. Uruchom indexer + relay + frontend na własnym serwerze i udostępnij Morphit pod swoim URL.\n\n• Hostuj na Tor, Lokinet lub I2P. Mirror .onion, .loki lub .b32.i2p umożliwia użytkownikom dostęp z jurysdykcji, gdzie clearnet jest zablokowany.\n\n• Skieruj na nią nazwę ENS .eth. Zarejestruj nazwę `.eth` w ENS (Ethereum Name Service) i skieruj ją na swoją instancję — zwykle przez contenthash ENS wskazujący na kopię IPFS twojej strony — aby ludzie mogli dotrzeć do ciebie pod czytelną, zdecentralizowaną nazwą taką jak `yourbrand.eth` (przez przeglądarkę lub bramkę obsługujące ENS). Pojawia się jako dodatkowa plakietka w stopce, obok Tor/Lokinet/I2P.\n\n• Hostuj zależności Morphit.\n\n• Finansuj węzeł społeczności. Wkłady Blurt na konto relay aktywnego operatora utrzymują jego środki na tworzenie kont. Każde nowe konto kosztuje relay około 102 BLURT, więc 500 rejestracji tygodniowo wymaga około 51 000 BLURT tygodniowo; małe wpłaty się sumują.\n\n• Rozpowszechniaj informacje.\n\n• Pisz samouczki i tłumaczenia. Projekt jest AGPL-3.0.\n\nMorphit jest zaprojektowany tak, aby był niemożliwy do zamknięcia, ponieważ nie ma centralnego aktora do naciskania."
 			},
 			"why_self_trading_fails": {
 				"q": "Dlaczego handel z samym sobą nie zwiększa mojej reputacji?",
-				"a": "Samo-handel w Morphit jest ekonomicznie nieopłacalny z założenia.\n\nMatematyka: każde ogłoszenie kosztuje około 0,25$. Z dwoma własnymi kontami płacisz 0,50$ za okrągłą podróż. Koszt na fałszywą opinię: 0,50$.\n\nWykrywanie: indexer Morphit uruchamia analizę sygnałów, która oznacza podejrzaną wzajemność. Te sygnały są PUBLICZNE.\n\nPoziomy opłat Sybil również działają przeciwko: twoje 4. zlecenie w 24h płaci 1,25×; 10. płaci 4,77×.\n\nUczciwa droga jest tańsza, szybsza i naprawdę działa."
+				"a": "Samo-handel w Morphit jest ekonomicznie nieopłacalny z założenia.\n\nMatematyka: każde ogłoszenie kosztuje około 0,125$ w BLURT lub 0,25$ w BTC/XMR (opłata trafia do operatora strony i skarbca Morphit, a nie do twojego kontrahenta). Z dwoma własnymi kontami płacisz 0,25–0,50$ za okrągłą podróż. Każda „udana transakcja” daje jedną opinię, którą możesz sam sobie podpisać. Nawet operator publikujący przez własną stronę odzyskuje tylko 90% opłat w BLURT, a i tak płaci 10% skarbcowi oraz opłaty łańcucha za każde ogłoszenie.\n\nWykrywanie: indexer Morphit uruchamia analizę sygnałów, która oznacza podejrzaną wzajemność. Te sygnały są PUBLICZNE.\n\nPoziomy opłat Sybil również działają przeciwko: twoje 4. zlecenie w 24h płaci 1,25×; 10. płaci 4,77×.\n\nUczciwa droga jest tańsza, szybsza i naprawdę działa."
 			},
 			"why_multi_accounts_fail": {
 				"q": "Czy mogę zarejestrować wiele kont przez Morphit, aby spamować książkę zleceń?",
@@ -1357,15 +1357,15 @@
 			},
 			"first_order_free": {
 				"q": "Czy moja pierwsza oferta naprawdę jest darmowa?",
-				"a": "Tak — i to naprawdę hojny. Twoje pierwsze zlecenie na {brand} to darmowy zakup o wartości co najmniej 1 $ USD w Blurt. Zlecenie wpisujesz we własnej walucie lokalnej, a {brand} sprawdza je względem równowartości 1 $ USD — nigdy nie musisz myśleć w Blurt. Opłatę za publikację pokrywamy my. Jedno darmowe zlecenie na konto, na całe życie.\n\n**Dlaczego akurat Blurt, a nie BTC czy XMR?** Bo to Blurt w Twoim portfelu czyni Cię aktywnym uczestnikiem wszystkiego innego na {brand}. Mając około 1 $ w Blurt, możesz:\n\n- Płacić opłaty za publikację ~8 przyszłych zleceń po obniżonej stawce Blurt (około 12,5 ¢ za każde — 50 % taniej niż stawka BTC/XMR)\n- Głosować na treści społecznościowe Blurt na blurt.blog, blurt.media itp. i zdobywać nagrody za kurację. Zarabiasz też monety Blurt, gdy ludzie klikają „Lubię to\" pod Twoimi wpisami.\n- Otrzymać delegację 1 BP jako powitalny stake (uruchamia się automatycznie przy Twojej pierwszej opłacie za publikację zapłaconej w Blurt)\n- Po pierwszej zakończonej transakcji otrzymać 10 Blurt płynnych + 10 Blurt Power jako bonus powitalny\n\nBez Blurt w portfelu zaczynałbyś bez możliwości płacenia przyszłych opłat za publikację ze zniżką, bez wagi głosu w Blurt i bez dostępu do progów nagród za kamienie milowe lojalności. Długo się nad tym zastanawialiśmy — danie nowym użytkownikom dolara w Blurt zamiast „jakiejkolwiek pierwszej krypto\" ustawia Cię tak, byś był aktywny, a nie pozostawiony na lodzie.\n\n**Dlaczego minimum 1 $?** To próg, przy którym reszta rachunku się spina: dolar w Blurt pokrywa ~8 przyszłych publikacji po obniżonej stawce. Gdybyśmy zastosowali zwolnienie do maleńkiego zakupu za kilka centów, wyszedłbyś z procesu praktycznie bez salda początkowego, a bonus by Ci nie pomógł. Dolar wartości to minimum, które zamienia zwolnienie w sensowny pakiet startowy. Ponieważ zlecenie wpisujesz we własnej walucie, 1 $ pozostaje 1 $ niezależnie od tego, czy cena Blurt tego dnia rośnie, czy spada.\n\n**Zwolnienie jest oferowane automatycznie**, gdy wejdziesz na /post i zaczniesz tworzyć swoje pierwsze zlecenie. Krok przeglądu pokazuje zielony panel „🌱 Pierwsze zlecenie jest darmowe\" z wstępnie zaznaczonym zwolnieniem. Możesz odmówić, jeśli wolisz zachować zwolnienie na przyszłą transakcję — nigdy nie wygasa.\n\n**Co tutaj znaczy „darmowe\":** Morphit pokrywa opłatę za publikację tego jednego zlecenia. Nie płacisz żadnej opłaty sieciowej. Sama transakcja odbywa się poza platformą między Tobą a Twoim kontrahentem (oni wysyłają Ci Blurt, Ty płacisz im uzgodnionym fiatem lub czymś innym); {brand} w żadnym momencie nie dotyka Twoich środków.\n\n**Po pierwszej transakcji:** zwolnienie zostaje zużyte i obowiązuje normalna struktura opłat — około 25 ¢ w BTC/XMR lub około 12,5 ¢ w Blurt (50-procentowa zniżka na Blurt jest stała). Zobacz „Jakie są opłaty?\", aby poznać pełny cennik."
+				"a": "Tak — i to naprawdę hojna oferta. Twoje pierwsze zlecenie na {brand} to darmowy zakup Blurt o wartości co najmniej 1 $ USD. Zlecenie wpisujesz we własnej walucie lokalnej, a {brand} sprawdza je względem równowartości 1 $ USD — nigdy nie musisz liczyć w Blurt. Opłatę za ogłoszenie pokrywamy my. Działa to tylko jako twoje pierwsze zlecenie w ogóle: jeśli najpierw opublikujesz jakiekolwiek inne zlecenie, darmowy zakup przepada.\n\n**Dlaczego akurat Blurt, a nie BTC czy XMR?** Bo to Blurt w twoim portfelu czyni cię aktywnym uczestnikiem wszystkiego innego na {brand}. Mając około 1 $ w Blurt, możesz:\n\n- Płacić opłaty za ogłoszenie przy ~8 przyszłych zleceniach po obniżonej stawce Blurt (około 12,5 ¢ za każde — 50% taniej niż stawka BTC/XMR)\n- Głosować na treści społecznościowe Blurt na blurt.blog, blurt.media itp. i zdobywać nagrody kuracyjne. Zarabiasz też monety Blurt, gdy ludzie klikają „Lubię to” pod twoimi wpisami.\n- Otrzymać powitalny stake 1 BP przy pierwszej opłacie za ogłoszenie zapłaconej w Blurt (pożyczany razem z nagrodami lojalnościowymi, gdy osiągną minimalną delegację łańcucha, około 34 BP)\n- Po pierwszej zakończonej transakcji na ogłoszeniu, za które zapłaciłeś, otrzymać 10 płynnych Blurt + 10 Blurt Power jako bonus powitalny\n\nBez Blurt w portfelu zaczynałbyś bez możliwości płacenia przyszłych opłat za ogłoszenie ze zniżką, bez wagi głosu w Blurt i bez drogi do progów nagród za kamienie milowe lojalności. Długo się nad tym zastanawialiśmy — danie nowym użytkownikom dolara w Blurt zamiast „jakiejkolwiek pierwszej krypto” sprawia, że możesz być aktywny, zamiast zostać na lodzie.\n\n**Dlaczego minimum 1 $?** To próg, przy którym reszta rachunku się spina: dolar w Blurt pokrywa ~8 przyszłych ogłoszeń po obniżonej stawce. Gdybyśmy pozwolili zastosować zwolnienie do maleńkiego zakupu za kilka centów, wyszedłbyś z procesu praktycznie bez salda startowego, a bonus by ci nie pomógł. Dolar wartości to minimum, które zamienia zwolnienie w sensowny pakiet startowy. Ponieważ zlecenie wpisujesz we własnej walucie, 1 $ pozostaje 1 $ niezależnie od tego, czy cena Blurt danego dnia wzrosła, czy spadła.\n\n**Zwolnienie jest oferowane automatycznie**, gdy wejdziesz na /post i zaczniesz tworzyć swoje pierwsze zlecenie. Krok przeglądu pokazuje zielony panel „🌱 Pierwsze zlecenie jest darmowe” ze wstępnie zaznaczonym zwolnieniem. Możesz z niego zrezygnować, ale jest oferowane tylko przy pierwszym zleceniu: gdy opublikujesz zlecenie bez niego, przepada.\n\n**Co tutaj znaczy „darmowe”:** Morphit pokrywa opłatę za ogłoszenie tego jednego zlecenia. Nie płacisz żadnej opłaty sieciowej. Sama transakcja odbywa się poza platformą między tobą a twoim kontrahentem (on wysyła ci Blurt, ty płacisz mu uzgodnionym fiatem lub czymkolwiek innym); {brand} w żadnym momencie nie dotyka twoich środków.\n\n**Po pierwszej transakcji:** zwolnienie zostaje zużyte i obowiązuje normalna struktura opłat — około 25 ¢ w BTC/XMR lub około 12,5 ¢ w Blurt (50-procentowa zniżka na Blurt jest stała). Pełny cennik znajdziesz w „Jakie są opłaty?”."
 			},
 			"welcome_bonus": {
 				"q": "Czym jest bonus powitalny i jak go zdobyć?",
-				"a": "W rzeczywistości na {brand} są trzy nagrody powitalne, i uruchamiają się w różnych momentach:\n\n**1. Pierwsza opłata za publikację w Blurt → 1 BP delegowane.** W momencie, gdy zapłacisz swoją pierwszą opłatę za publikację w Blurt — nawet zanim jakiekolwiek zlecenie się dopasuje lub zostanie zakończone — Morphit deleguje 1 BP (Blurt Power) na twoje konto. To mały jednorazowy stake \"witaj w sieci\", który zaczyna natychmiast zarabiać APR/nagrody kuracyjne. Uruchamia się niezależnie od tego, czy twoje zlecenie znajdzie kontrahenta. Raz na konto.\n\n**2. Pierwsza zakończona transakcja → 10 Blurt liquid + 10 Blurt Power.** Gdy zakończysz swoją pierwszą prawdziwą transakcję (kontrahent podpisze opinię cytującą zlecenie), Morphit wyśle ci 10 Blurt plus dodatkową delegację 10 BP. \"Zakończona\" oznacza: opublikowałeś zlecenie, kontrahent odpowiedział, transakcja rozliczyła się poza platformą, a kontrahent podpisał pozytywną opinię o tobie cytującą twoje zlecenie. Ta opinia uruchamia bonus — to dowód prawdziwej transakcji z drugim człowiekiem, a nie tylko opublikowane i porzucone zlecenie.\n\n**3. Kamienie milowe lojalności → do 1260 BP.** W miarę jak płacisz więcej opłat w Blurt z czasem, przekraczasz progi 100/500/2000/10000 Blurt i otrzymujesz wzrosty delegacji (10/50/200/1000 BP na każdym poziomie). Zobacz FAQ lojalności po szczegóły.\n\nDlaczego stopniowy design: wydanie pełnego bonusu przy rejestracji byłoby farmowane przez konta Sybil w minutach. Bonus 1 BP przy pierwszej zapłaconej opłacie jest na tyle mały, że farming Sybil jest nieopłacalny (0,125 $ kosztu na atakującego na 1 BP), a większy 10 Blurt liquid + 10 Blurt Power wymaga prawdziwego dowodu transakcji (opinia kontrahenta). Razem sumują się do znaczącej wagi stake'owej dla uczciwych użytkowników.\n\nJeśli handlujesz wyłącznie w aktywach nie-Blurt (BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH lub XRP) i nigdy nie płacisz opłaty w Blurt, otrzymasz 10 Blurt liquid + 10 Blurt Power z pierwszej zakończonej transakcji, ale nie bonus 1 BP z pierwszej opłaty (który jest powiązany z płatnością w Blurt). Bonus Blurt jest nieszkodliwy do otrzymania i ignorowania — może pozostać na koncie w nieskończoność lub pokryć przyszłe opłaty sieciowe.\n\nTe nagrody wypłaca relay instancji, przez którą opublikowałeś zlecenie — relay każdego operatora płaci własnym użytkownikom — i docierają jako operacje `delegate_vesting_shares` i `transfer` z konta tego relaya. Delegacje (powitalny 1 BP i progi) pozostają stakiem relaya, pożyczonym tobie; 10 BLURT + 10 BLURT Power za pierwszą transakcję należą do ciebie."
+				"a": "Na {brand} są w rzeczywistości trzy nagrody powitalne i uruchamiają się w różnych momentach:\n\n**1. Pierwsza opłata za ogłoszenie zapłacona w Blurt → 1 BP w delegacji.** W chwili, gdy zapłacisz swoją pierwszą opłatę za ogłoszenie w Blurt — nawet zanim jakakolwiek transakcja zostanie dopasowana lub zakończona — relay strony, przez którą opublikowałeś zlecenie, deleguje 1 BP (Blurt Power) na twoje konto. To mały, jednorazowy stake na „witaj w sieci”, który zwiększa twoją wagę głosu w Blurt. Blurt pożycza BLURT Power tylko w kwotach co najmniej jednej trzeciej swojej opłaty za utworzenie konta (dziś około 34 BP), więc mniejsze nagrody są wstrzymywane i pożyczane razem, gdy łącznie osiągną tę kwotę — u większości traderów przy kamieniu milowym 500 BLURT (łącznie 61 BP). Uruchamia się niezależnie od tego, czy twoje zlecenie ostatecznie znajdzie kontrahenta. Raz na konto.\n\n**2. Pierwsza zakończona transakcja na ogłoszeniu, za które zapłaciłeś → 10 płynnych Blurt + 10 Blurt Power.** Gdy zakończysz pierwszą transakcję na jednym z własnych płatnych ogłoszeń, relay strony, przez którą je opublikowałeś, wysyła ci 10 płynnych Blurt oraz 10 Blurt zamienionych na power (10 BP, które należą do ciebie). „Zakończona” oznacza: opublikowałeś ogłoszenie i zapłaciłeś za nie opłatę, kontrahent odpowiedział, transakcja rozliczyła się poza platformą, a kontrahent podpisał opinię o tobie (z dowolną liczbą gwiazdek), która cytuje twoje ogłoszenie. To ta opinia uruchamia bonus — jest dowodem prawdziwej transakcji z innym człowiekiem, a nie tylko opublikowanego i porzuconego zlecenia. Darmowy pierwszy zakup nie ma opłaty za ogłoszenie, więc się nie liczy. Od 2026-11-01 odpowiedź najpierw na cudze ogłoszenie nie zużywa już tego bonusu.\n\n**3. Kamienie milowe lojalności → do 1 260 BP.** W miarę jak z czasem płacisz więcej opłat w Blurt, przekraczasz progi 100/500/2 000/10 000 Blurt i otrzymujesz zwiększenia delegacji (10/50/200/1 000 BP na każdym poziomie). Szczegóły znajdziesz w FAQ o lojalności.\n\nDlaczego nagrody są rozłożone w czasie: rozdanie pełnego bonusu przy rejestracji zostałoby w kilka minut wyeksploatowane przez konta Sybil. Powitalny 1 BP przy pierwszej zapłaconej opłacie to na tyle mała kwota, że farmienie przez konta Sybil jest nieopłacalne (0,125 $ kosztu dla atakującego za 1 BP), a większe 10 płynnych Blurt + 10 Blurt Power wymaga dowodu prawdziwej transakcji (opinii kontrahenta). Razem dają uczciwym użytkownikom znaczącą wagę stake'u. Każda nagroda wychodzi z relaya mniej więcej minutę po tym, jak łańcuch zarejestruje to, za co jest przyznawana.\n\nJeśli handlujesz wyłącznie aktywami innymi niż Blurt (BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH lub XRP) i nigdy nie płacisz opłaty za ogłoszenie w Blurt, otrzymasz 10 płynnych Blurt + 10 Blurt Power za pierwszą zakończoną transakcję na ogłoszeniu, za które zapłaciłeś, ale nie powitalny 1 BP za pierwszą opłatę (który wymaga opłaty w Blurt). Otrzymanie bonusu Blurt i zignorowanie go niczym nie szkodzi — może leżeć na twoim koncie bez końca albo pokryć przyszłe opłaty sieciowe.\n\nTe nagrody wypłaca relay instancji, przez którą opublikowano twoje zlecenie — relay każdego operatora płaci własnym użytkownikom — i docierają jako operacje `delegate_vesting_shares` i `transfer` z konta tego relaya. Delegacje (powitalny 1 BP i kamienie milowe) pozostają stakiem relaya, pożyczonym tobie; 10 BLURT + 10 BLURT Power za pierwszą transakcję zatrzymujesz na własność."
 			},
 			"loyalty_milestones": {
 				"q": "Jak działają nagrody lojalnościowe? (Wspomniane kamienie milowe BP)",
-				"a": "Za każdym razem gdy płacisz opłatę za publikację w Blurt, śledzone są twoje skumulowane dożywotnie wydatki na Morphit. Gdy przekroczysz pewne progi, Morphit wysyła ci delegację Blurt Power (BP) jako podziękowanie. Cztery poziomy:\n\n• 100 Blurt skumulowanie zapłacone → 10 BP delegowane\n• 500 Blurt skumulowanie zapłacone → 50 BP delegowane\n• 2 000 Blurt skumulowanie zapłaconych → 200 BP delegowanych\n• 10 000 Blurt skumulowanie zapłaconych → 1 000 BP delegowanych\n\nProgi mierzą skumulowane dożywotnie zapłacone opłaty Blurt — nie resetują się i nie wymagają, by opłaty były ostatnie. Jeśli zapłacisz 100 Blurt w opłatach przez dwa lata handlu, nadal otrzymasz nagrodę 10 BP w momencie przekroczenia progu.\n\nBP (Blurt Power) daje ci wagę głosu na treściach Blurt na blurt.blog, blurt.media i każdym innym froncie Blurt. To stake \"bardziej liczysz się w tej sieci\". Nie wydajesz go głosując; twoja waga głosu uzupełnia się z czasem. A oddane głosy mogą przynieść ci nagrody kuracyjne, gdy głosujesz wcześnie na treści, które później stają się popularne.\n\nWażne mechaniki do zrozumienia:\n• Kamienie milowe liczą tylko opłaty zapłacone w Blurt. Opłaty BTC/XMR i zlecenia first-buy ze zwolnieniem nie liczą się do progów. To celowe — program lojalnościowy istnieje, by nagradzać użytkowników wspierających ekonomię Blurt.\n• Nagroda to DELEGACJA, nie transfer. Morphit deleguje BP na twoje konto i zachowuje możliwość anulowania delegacji, jeśli konto okaże się później zaangażowane w nadużycia (fałszywe transakcje, ataki sybil). Dla uczciwych użytkowników to nigdy nie ma znaczenia.\n• Każdy poziom aktywuje się raz na konto. Jeśli przekroczysz 100 Blurt, a potem 500, otrzymasz 10 BP + 50 BP = 60 BP całkowicie delegowanych. Nie \"większy poziom zastępuje mniejszy\" — sumują się.\n• Widzisz przybycie kamienia milowego jako operację delegate_vesting_shares od @morphit-relay w historii konta. Pojawia się w UI portfeli Blurt jako przychodzące BP.\n\nTe cztery poziomy lojalności nakładają się na dwie wcześniejsze nagrody powitalne: **delegację 1 BP**, którą otrzymujesz przy pierwszej opłacie za publikację zapłaconej w Blurt, i **10 Blurt liquid + 10 Blurt Power**, które otrzymujesz po pierwszej zakończonej transakcji. Razem aktywny trader może zgromadzić do 1 261 BP w całkowitych delegacjach podczas swojego życia na Morphit, wszystko to bezpośrednio przekłada się na wagę głosu w szerszej sieci społecznościowej Blurt. Zobacz FAQ bonusu powitalnego, by zobaczyć pełny system nagród trójpoziomowy."
+				"a": "Za każdym razem, gdy płacisz opłatę za ogłoszenie w Blurt, śledzone są twoje łączne wydatki w Morphit od początku. Gdy przekroczysz określone progi, relay strony, przez którą przeszło twoje zlecenie, pożycza ci Blurt Power (BP) w ramach podziękowania: delegację. Cztery poziomy:\n\n• 100 Blurt zapłaconych łącznie → delegacja 10 BP\n• 500 Blurt zapłaconych łącznie → delegacja 50 BP\n• 2 000 Blurt zapłaconych łącznie → delegacja 200 BP\n• 10 000 Blurt zapłaconych łącznie → delegacja 1 000 BP\n\nProgi mierzą łączne opłaty w Blurt zapłacone od początku — nie resetują się i nie wymagają, by opłaty były niedawne. Jeśli zapłacisz 100 Blurt opłat w ciągu dwóch lat handlu, i tak otrzymasz nagrodę 10 BP w chwili przekroczenia progu.\n\nBP (Blurt Power) daje ci wagę głosu na treściach Blurt w blurt.blog, blurt.media i każdym innym frontendzie Blurt. To stake typu „w tej sieci liczysz się bardziej”. Nie wydajesz go, głosując; twoja waga głosu odnawia się z czasem. A oddane głosy mogą przynieść ci nagrody kuracyjne, gdy głosujesz wcześnie na treści, które później stają się popularne.\n\nWażne zasady działania:\n• Kamienie milowe liczą tylko opłaty zapłacone w Blurt. Opłaty w BTC/XMR i zlecenia z darmowym pierwszym zakupem (ze zwolnieniem) nie liczą się do progów. To celowe — program lojalnościowy istnieje, by nagradzać użytkowników wspierających gospodarkę Blurt.\n• Nagroda to DELEGACJA, nie przelew: BP pożycza ci relay strony, przez którą opublikowano zlecenie przekraczające kamień milowy, i pozostaje ono własnością tego relaya; jego operator może je odebrać.\n• Blurt pożycza BLURT Power tylko w kwotach co najmniej jednej trzeciej swojej opłaty za utworzenie konta (dziś około 34 BP), więc mniejsze nagrody są wstrzymywane i pożyczane razem, gdy łącznie osiągną tę kwotę — u większości traderów przy kamieniu milowym 500 BLURT (łącznie 61 BP).\n• Każdy poziom uruchamia się raz na konto. Jeśli przekroczysz 100 Blurt, a później 500, otrzymasz łącznie 10 BP + 50 BP = 60 BP w delegacjach. Nie jest tak, że „wyższy poziom zastępuje niższy” — sumują się.\n• Kamień milowy widzisz w historii konta jako operację delegate_vesting_shares z konta relaya tej strony (@morphit-relay na morphit.io), mniej więcej minutę po tym, jak łańcuch zarejestruje zlecenie. W interfejsach portfeli Blurt pojawia się jako przychodzące BP.\n\nTe cztery poziomy lojalności dokładają się do dwóch wcześniejszych nagród powitalnych: **delegacji 1 BP**, którą otrzymujesz przy pierwszej opłacie za ogłoszenie zapłaconej w Blurt, oraz **10 płynnych Blurt + 10 Blurt Power**, które otrzymujesz po pierwszej zakończonej transakcji na ogłoszeniu, za które zapłaciłeś. Łącznie aktywny trader może zgromadzić do 1 261 BP w delegacjach przez cały swój czas na Morphit, a wszystko to przekłada się bezpośrednio na wagę głosu w szerszej sieci społecznościowej Blurt. Pełny trzystopniowy system nagród opisuje FAQ o bonusie powitalnym."
 			},
 			"no_escrow_arbitration": {
 				"q": "Dlaczego nie ma usługi escrow ani arbitrażu?",
@@ -1385,7 +1385,7 @@
 			},
 			"how_operators_earn": {
 				"q": "Jak zarabiają operatorzy?",
-				"a": "Każde zlecenie Morphit kosztuje małą opłatę za ogłoszenie — około 0,25 USD przy płatności w BTC lub XMR albo około 0,125 USD w BLURT (celowa 50% zniżka dla BLURT, bo chcemy, by gospodarki wolnorynkowe kwitły). #agorism Gdy ktoś publikuje zlecenie przez twoją instancję, twój znacznik operatora trafia do zlecenia, a opłata w BLURT od razu wypłaca ci twoje 90%.\n\n**Opłaty płacone w BLURT: 90% dla ciebie, 10% do skarbca Morphit.** Opłata to dwa przelewy w transakcji samego użytkownika, zbudowane przez aplikację: 90% prosto na twoje konto opłat i 10% do skarbca. Indeksery przyjmują zlecenie tylko wtedy, gdy część skarbca jest na miejscu, więc nikt nie może zatrzymać twojej części. 10% finansuje sam projekt: rozwój, audyty i infrastrukturę.\n\n**Opłaty płacone w BTC i XMR: 100% do skarbca Morphit, 0% dla operatorów.** Trafiają do portfeli skarbca Morphit w ich własnych łańcuchach. Łańcuch Blurt nie potrafi ich podzielić, a dzielenie ręczne oznaczałoby, że ktoś przechowuje pieniądze operatorów — dokładnie ten rodzaj powiernictwa, którego ten projekt unika. Dlatego podział BLURT mocno sprzyja tobie.\n\n**Za co płacisz ty.** Twój relay płaci łańcuchowi opłatę za utworzenie konta (około 100 BLURT plus 2 BLURT środków startowych) za każde nowe konto, które tworzy, oraz bonus powitalny (10 BLURT plus 10 BLURT w mocy) użytkownikowi, którego pierwsza zakończona transakcja dotyczyła zlecenia opublikowanego przez twoją instancję. Do tego twój serwer. Zestaw to z dochodem z opłat — liczby są w docs/FEES-AND-REWARDS.md.\n\n**Wypłaty są w BLURT.** Gdy BLURT rośnie, rosną twoje zarobki, bez dodatkowej pracy.\n\n**Otwarte źródło, żebyś mógł sprawdzić.** Zasady opłat są w kodzie indeksera i strony (AGPL-3.0); każdy może sprawdzić, że podział jest taki, jak opisano tutaj.\n\n**Żadnego stosunku pracy.** Nie ma umowy ani nikogo, kto musiałby pamiętać, żeby ci zapłacić: płaci ci sama transakcja użytkownika."
+				"a": "Każde zlecenie Morphit kosztuje małą opłatę za ogłoszenie — około 0,25 $ przy płatności w BTC lub XMR albo około 0,125 $ przy płatności w BLURT (celowa 50% zniżka dla BLURT, bo chcemy, by gospodarki wolnorynkowe kwitły). #agorism Gdy użytkownik publikuje zlecenie przez twoją instancję, twój znacznik operatora trafia do zlecenia, a opłata w BLURT od razu wypłaca ci twoje 90%.\n\n**Opłaty za ogłoszenie płacone w BLURT: 90% dla ciebie, 10% do skarbca Morphit.** Opłata to dwa przelewy w transakcji samego użytkownika, zbudowane przez aplikację: 90% prosto na twoje konto opłat i 10% do skarbca. Indeksery przyjmują zlecenie tylko wtedy, gdy część skarbca jest na miejscu, więc nikt nie może zatrzymać twojej części. 10% finansuje sam projekt: rozwój, audyty i infrastrukturę.\n\n**Opłaty za ogłoszenie płacone w BTC i XMR: 100% do skarbca Morphit, 0% dla operatorów.** Trafiają do portfeli skarbca Morphit w ich własnych łańcuchach. Łańcuch Blurt nie potrafi ich podzielić, a dzielenie ręczne oznaczałoby, że ktoś przechowuje pieniądze operatorów — dokładnie ten rodzaj powiernictwa, którego ten projekt unika. Dlatego podział BLURT mocno sprzyja tobie.\n\n**Więcej dochodu na twojej stronie.** Zatrzymujesz też 90% ofert za wyróżnione sloty na twojej stronie (sam ustalasz minimalną stawkę godzinową; domyślnie 50 BLURT/godz.) oraz opłat, które obcy płacą za wysłanie pierwszej wiadomości (od 5 BLURT wzwyż).\n\n**Za co płacisz ty.** Twój relay płaci około 102 BLURT za każde nowe konto, które tworzy (opłata łańcucha za utworzenie konta w wysokości 100 BLURT plus 2 BLURT środków startowych); 10 BLURT plus 10 BLURT zamienionych na power użytkownikowi, którego pierwsza zakończona transakcja na ogłoszeniu, za które zapłacił, została opublikowana przez twoją stronę; oraz doładowania po 1 BLURT dla twoich aktywnych użytkowników, którym kończą się środki. Pożycza też Blurt Power jako nagrody (powitalny stake 1 BP i nagrody lojalnościowe do 1 260 BP na użytkownika), który pozostaje twój; Blurt pożycza jednorazowo co najmniej około 34 BP, więc mniejsze nagrody są pożyczane, gdy suma użytkownika osiągnie tę kwotę. Do tego twój serwer. Przy cenie BLURT 0,002 $ twoja część jednej opłaty za ogłoszenie to około 56 BLURT, więc mniej więcej dwa płatne ogłoszenia pokrywają jedno nowe konto; opłata za konto jest stała w BLURT, więc gdy BLURT jest wart więcej, potrzeba ich więcej. Liczby są w docs/FEES-AND-REWARDS.md.\n\n**Wypłaty są w BLURT.** Gdy BLURT rośnie, rosną twoje zarobki, bez dodatkowej pracy.\n\n**Otwarte źródło, żebyś mógł sprawdzić.** Zasady opłat są w kodzie źródłowym indeksera i aplikacji webowej (AGPL-3.0); każdy może sprawdzić, że podział jest taki, jak opisuje ta strona.\n\n**Żadnego stosunku pracy.** Nie ma umowy ani nikogo, kto musiałby pamiętać, żeby ci zapłacić: płaci ci sama transakcja użytkownika."
 			},
 			"how_to_find_good_operator": {
 				"q": "Jak znaleźć dobrego operatora?",
@@ -1453,7 +1453,7 @@
 			},
 			"node_hosting_costs": {
 				"q": "Ile kosztuje hostowanie węzła Morphit?",
-				"a": "Bardzo mało. Mały VPS (4GB RAM, 80GB dysk) uruchamia Morphit komfortowo i kosztuje około 5-8 USD/miesiąc u dostawców takich jak Hetzner, OVH, Vultr lub DigitalOcean. Miejsce na dysku rośnie powoli — indexer przechowuje zdarzenia on-chain, a cache się nie rozdyma. Pasmo jest minimalne dla małej instancji (kilka GB miesięcznie na stu aktywnych użytkowników). Jeśli już prowadzisz osobisty serwer lub homelab, Morphit dodaje zaniedbywalne obciążenie. Opłaty operatorskie z ofert są dokładnie dobrane, żeby to pokryć i zostawić margines na Twój czas (zobacz FAQ o zarobkach operatorów dla matematyki podziału)."
+				"a": "Bardzo mało. Mały VPS (4GB RAM, 80GB dysk) uruchamia Morphit komfortowo i kosztuje około 5-8 USD/miesiąc u dostawców takich jak Hetzner, OVH, Vultr lub DigitalOcean. Miejsce na dysku rośnie powoli — indexer przechowuje zdarzenia on-chain, a cache się nie rozdyma. Pasmo jest minimalne dla małej instancji (kilka GB miesięcznie na stu aktywnych użytkowników). Jeśli już prowadzisz osobisty serwer lub homelab, Morphit dodaje zaniedbywalne obciążenie. Serwer to ta mała część: twój relay płaci też około 102 BLURT za każde nowe konto utworzone przez twoją stronę i finansuje jej nagrody powitalne i lojalnościowe, a w zamian dostajesz 90% opłat za ogłoszenia w BLURT płaconych na twojej stronie (liczby znajdziesz w FAQ o zarobkach operatorów)."
 			},
 			"switching_instances": {
 				"q": "Jeśli jedna instancja Morphit padnie, czy stracę moje oferty i reputację?",
@@ -1932,6 +1932,7 @@
 		"contact_operator": "Skontaktuj się z operatorem",
 		"alt_network_address": "Adres: {address}",
 		"instances": "Instancje",
+		"run_a_node": "Uruchom węzeł!",
 		"explorer": "Eksplorator bloków",
 		"download": "Pobierz",
 		"api": "API",
@@ -1980,7 +1981,7 @@
 		},
 		"blurt_power": {
 			"title": "BLURT Power (BP)",
-			"body": "BLURT, który „włączyłeś“ (powered up) — zablokowany na koncie tak, że nie da się go od razu wydać, i który daje Ci pasywny dochód ze stakowania twoich BLURT. BP daje Ci wagę przy głosowaniu na treści Blurt (niezależnie od Morphit) i jest podstawą delegacji. Morphit nie wymaga żadnego BP; liczy się głównie, jeśli udostępniasz ogłoszenia transakcji szerszej społeczności Blurt."
+			"body": "BLURT, który „włączyłeś“ (powered up) — zablokowany na koncie tak, że nie da się go od razu wydać, i który daje Ci pasywny dochód ze stakowania twoich BLURT. BP daje Ci wagę przy głosowaniu na treści Blurt (niezależnie od Morphit) i jest podstawą delegacji. Morphit nie wymaga żadnego BP; jego nagrody powitalne i lojalnościowe to BP pożyczone Ci, które zwiększa Twoją wagę głosu."
 		},
 		"broadcast": {
 			"title": "Rozgłoszenie (broadcast)",
@@ -2167,7 +2168,11 @@
 				"body": "Ponad 16 krypto plus bezpośrednie towary, usługi, a nawet barter. Wieloaktywowo, wielosieciowo, wielonośnikowo."
 			},
 			"card_aria_label": "{title} — dowiedz się więcej w FAQ"
-		}
+		},
+		"run_node_heading": "Prowadź własną stronę Morphit",
+		"run_node_body": "Twoja marka, twoi użytkownicy i 90% opłat za ogłoszenia w BLURT płaconych na twojej stronie, prosto na twoje konto w łańcuchu w ciągu kilku sekund. Oferty za wyróżnione sloty i opłaty za pierwszą wiadomość na twojej stronie też dają ci 90%. Jedno polecenie instaluje wszystko na małym serwerze lub starym laptopie.",
+		"run_node_cta": "Uruchom węzeł!",
+		"run_node_instances": "Zobacz działające strony"
 	},
 	"identity": {
 		"copy_full_key_aria": "Skopiuj pełny klucz publiczny",
@@ -2695,7 +2700,8 @@
 			"success": {
 				"title": "Witaj w {brand}",
 				"body": "@{name} — twoje konto jest aktywne i gotowe do handlu!",
-				"redirecting": "Zabieram cię do księgi zleceń…"
+				"redirecting": "Zabieram cię do księgi zleceń…",
+				"continue": "Przejdź do księgi zleceń"
 			},
 			"altcha": {
 				"verifying": "Sprawdzam, czy jesteś człowiekiem…",
@@ -3334,7 +3340,7 @@
 			"waiver_next_heading": "Co dzieje się dalej:",
 			"waiver_step_1": "Ktoś zainteresowany wymianą BLURT za to co oferujesz wyśle ci wiadomość. Zobaczysz powiadomienie na ikonie czatu w nagłówku — bądź czujny.",
 			"waiver_step_2": "Rozmawiaj, aby potwierdzić warunki (cena, czas płatności, lokalizacja). Gdy będziesz gotowy, udostępnij swój adres odbioru BLURT (użyj przycisku udostępniania adresu w czacie); oni wysyłają ci BLURT, ty wysyłasz im to, na co się umówiliście.",
-			"waiver_step_3": "Gdy obie strony potwierdzą odbiór, zostawcie sobie oceny gwiazdkowe. Ta ocena jest trwała i odblokowuje twój bonus powitalny 10 BLURT liquid + 10 BLURT Power od Morphit.",
+			"waiver_step_3": "Gdy obie strony potwierdzą odbiór, zostawcie sobie oceny gwiazdkowe. Ta ocena jest trwała i buduje twoją reputację. Twój bonus powitalny 10 BLURT + 10 BLURT Power przychodzi wraz z twoją pierwszą zakończoną transakcją na ogłoszeniu, za które zapłaciłeś.",
 			"view_my_order_cta": "Zobacz moje zlecenie",
 			"feature_upsell_heading": "Chcesz więcej uwagi dla tego ogłoszenia?",
 			"feature_upsell_body": "Złóż ofertę na wyróżnione miejsce, aby umieścić swoje zamówienie na szczycie księgi zleceń na kilka godzin. Minimalna oferta to 6 godzin; stawka jest ustalana per instancja. Większość operatorów stosuje 50 BLURT/godz. jako domyślną.",
@@ -3358,7 +3364,7 @@
 		},
 		"waiver": {
 			"heading": "Pierwsze zlecenie na nasz koszt!",
-			"body": "Witaj w {brand}! Twoje pierwsze zlecenie to bezpłatny zakup BLURT. Pokrywamy opłatę za wystawienie, a BLURT, który otrzymasz, finansuje twoje przyszłe ogłoszenia w obniżonej stawce BLURT, pozwala głosować na treści społecznościowe Blurt dla nagród za kurację i odblokowuje twoją powitalną stawkę 1 BP."
+			"body": "Witaj w {brand}! Twoje pierwsze zlecenie to bezpłatny zakup BLURT. Pokrywamy opłatę za wystawienie, a BLURT, który otrzymasz, finansuje twoje przyszłe ogłoszenia w obniżonej stawce BLURT, pozwala głosować na treści społecznościowe Blurt dla nagród za kurację i pokrywa twoją pierwszą opłatę za wystawienie w BLURT, co odkłada dla ciebie powitalną stawkę 1 BP."
 		},
 		"fee_method": {
 			"legend": "Jak chcesz zapłacić opłatę?",
@@ -3427,7 +3433,7 @@
 		"waiver_benefits": {
 			"tier_1": "{amount} — pokrywa kilka ogłoszeń + pierwsza opłata za wystawienie gratis",
 			"tier_4": "{amount} — podstawowe saldo startowe + zapas na aktywny handel",
-			"tier_20": "{amount} — blisko twojego pierwszego progu lojalnościowego 10 BP dla dochodu pasywnego",
+			"tier_20": "{amount} — wystarczy na wiele ogłoszeń, w drodze do twojej pierwszej nagrody lojalnościowej (10 BP po 100 BLURT opłat za ogłoszenia)",
 			"tier_100": "{amount} — dla aktywnych traderów, zaawansowanych użytkowników DarkFi i większego dochodu pasywnego"
 		},
 		"terms_md_guide": {
@@ -3813,78 +3819,38 @@
 	},
 	"run_a_node": {
 		"title": "Uruchom węzeł Morphit",
-		"subtitle_pre": "Obsługuj ",
-		"subtitle_link": "własną instancję",
-		"subtitle_post": ". Zarabiaj 90% opłat aukcyjnych płaconych w BLURT. Pomóż uczynić Morphit niepowstrzymanym.",
+		"subtitle_pre": "Prowadź własną ",
+		"subtitle_link": "instancję",
+		"subtitle_post": ". Zarabiaj 90% opłat za ogłoszenia płaconych w BLURT!",
 		"why_heading": "Dlaczego warto uruchomić węzeł?",
 		"why_uncensor_title": "Morphit tam, gdzie to się liczy",
-		"why_uncensor_body": "Każdy dodatkowy węzeł utrudnia cenzurowanie sieci. Jeśli twój kraj blokuje morphit.io, twoja instancja pozostaje osiągalna. Obsługujesz użytkowników, którzy inaczej nie mieliby jak handlować.",
+		"why_uncensor_body": "Każda dodatkowa instancja utrudnia cenzurowanie sieci. Jeśli twój kraj blokuje morphit.io, twoja instancja pozostaje osiągalna. Obsługujesz użytkowników, którzy inaczej nie mieliby jak handlować.",
 		"why_community_title": "Obsługuj swoją społeczność",
 		"why_community_body": "Dostosuj branding twojego interfejsu dla swojego regionu, języka i swoich lokalnych metod płatności. Użytkownicy ufają frontendom, które mówią ich językiem i są im znajome — twój taki będzie.",
 		"why_privacy_title": "Minimalizuj wyciek metadanych",
-		"why_privacy_body": "Użytkownicy handlujący przez twoją instancję dzielą się metadanymi sieciowymi i żądań (adresem IP, tym, co i kiedy ładują) z twoim serwerem — nie z Agorise i nie z innymi operatorami. Sama ich aktywność handlowa (zlecenia, kto z kim pisze, opinie) jest w publicznym łańcuchu, który czyta każdy indekser.",
+		"why_privacy_body": "Użytkownicy handlujący na twojej instancji mogą udostępniać swoje metadane na poziomie żądań twojemu serwerowi i nikomu innemu. Ich publiczna aktywność handlowa (zlecenia, szyfrowane czaty, opinie) jest w łańcuchu, aby każdy mógł ją zweryfikować.",
 		"why_privacy_body_2": "Zachęcaj użytkowników do korzystania z VPN oraz twoich (dołączonych) adresów Tor i/lub I2P. Twoje alternatywne, ukryte adresy pozwalają użytkownikom dotrzeć do twojej instancji z jurysdykcji, w których dostęp do clearnetu jest zablokowany. Nie są też potrzebne certyfikaty SSL/https, a wpływ jest ogromny dla użytkowników w ocenzurowanych sieciach i krajach.",
 		"why_earn_title": "Płatne bezpośrednio z każdą opłatą",
-		"why_earn_body": "Każda opłata za ogłoszenie płacona w BLURT, którą przyciąga twoja instancja, daje ci 90% — tylko 10% trafia do skarbca Morphit na rozwój i utrzymanie oprogramowania. Opłaty w BTC i XMR trafiają w 100% do skarbca (nie da się ich podzielić w łańcuchu Blurt, więc podział BLURT jest w zamian hojny: 90/10 na twoją korzyść).\n\nŻaden pośrednik nie trzyma pieniędzy: każda opłata to dwa przelewy w transakcji samego użytkownika — 90% prosto na twoje konto opłat, 10% do skarbca — a indeksery przyjmują zlecenie tylko wtedy, gdy jest w nim część skarbca. Nikt nie może później zatrzymać twojej części.\n\nWypłaty są w BLURT, więc jeśli BLURT zyska na wartości, zyskają też twoje zarobki — bez dodatkowej pracy z twojej strony.",
+		"why_earn_body": "Każda opłata za ogłoszenie płacona w BLURT, którą przyciąga twoja instancja, daje ci 90% — tylko 10% trafia do skarbca Morphit na rozwój i utrzymanie oprogramowania Morphit.\n\nŻaden pośrednik nie ma dostępu do twoich pieniędzy: każda opłata to dwa automatyczne przelewy w blockchainie — 90% prosto na twoje konto opłat, 10% do skarbca.\n\nWypłaty są w BLURT, więc jeśli BLURT zyska na wartości, zyskają też twoje zarobki — bez dodatkowej pracy z twojej strony.",
 		"how_heading": "Jak zacząć",
 		"step1_title": "Zdobądź maszynę i adres internetowy",
-		"step1_body": "Tani VPS albo stary PC/laptop z Ubuntu — celuj w 4 GB RAM lub więcej (8 GB jest wygodne) i 80 GB dysku. Raspberry Pi 4 też się nada. Dodaj nazwę domeny (około 10 $/rok) od dowolnego rejestratora i skieruj ją na maszynę. Hostujesz w domu? Stały IP nie jest potrzebny — kreator instalacji włącza dynamiczny DNS za ciebie. Zobacz FAQ o minimalnych wymaganiach sprzętowych, aby poznać pełne zestawienie.",
+		"step1_body": "Tani VPS albo stary PC/laptop z Ubuntu — celuj w 4 GB RAM lub więcej (8 GB jest wygodne) i 80 GB dysku. Raspberry Pi 4 też się nada. Dodaj nazwę domeny (około 10 $/rok) od dowolnego rejestratora i skieruj ją na maszynę. Hostujesz w domu? Stały IP nie jest potrzebny — kreator instalacji włącza dynamiczny DNS za ciebie.",
 		"step2_title": "Uruchom jedno polecenie",
-		"step2_body": "Pobierz najnowsze wydanie, rozpakuj je do folderu /morphit/, otwórz tam terminal i uruchom sudo bash morphit-setup.sh — następnie wybierz „Full guided install”. Krótki kreator zadaje kilka pytań prostym językiem (twoja domena, twoje konto Blurt, e-mail do HTTPS) i konfiguruje wszystko za ciebie: Node.js, PostgreSQL, aplikację i jej usługi, HTTPS z automatycznym odnawianiem, zaporę oraz twoje adresy Tor i I2P. Bez edytowania plików.",
-		"step3_title": "Zarejestruj się jako operator",
-		"step3_body": "Uruchom sudo morphit-ops register, aby zająć swój tag w łańcuchu — kto pierwszy, ten lepszy. Twoja instancja pojawia się w katalogu /operators i zaczyna automatycznie zarabiać twoje 90% opłat za wystawienie płaconych w Blurt, wypłacanych w łańcuchu. Zobacz FAQ o zarobkach operatora, aby poznać ekonomię.",
-		"asset_policy_heading": "Twoja instancja, twoja polityka aktywów",
-		"asset_policy_body": "Federacja Morphit pozwala każdemu operatorowi wybrać, dla których aktywów handlowych jego instancja przyjmuje nowe zlecenia. Nowe aktywa są dostarczane WŁĄCZONE domyślnie na poziomie instancji — operatorzy wyłączają je per-aktyw poprzez zmienną środowiskową `MORPHIT_INDEXER_DISABLED_ASSETS`. Tak federacja instancji może obsługiwać różne preferencje użytkowników bez potrzeby forkowania kodu przez kogokolwiek.",
-		"asset_policy_default_label": "Domyślnie włączone dla nowych aktywów.",
-		"asset_policy_default_body": "Gdy projekt dodaje nowe aktywo handlowe (USDT wdrożono jako ostatnie), każda instancja przyjmuje zlecenia dla niego w momencie aktualizacji. Bez zmian kodu, bez kroku włączania per-aktyw.",
-		"asset_policy_opt_out_label": "Jedna zmienna środowiskowa, by odmówić.",
-		"asset_policy_opt_out_body": "Operatorzy preferujący, by ich instancja specjalizowała się w aktywach privacy-first lub decentralization-first, mogą wyłączyć dowolne aktywo trade-only poprzez `MORPHIT_INDEXER_DISABLED_ASSETS=\"USDT\"` (lub listę oddzieloną przecinkami dla wielu). Użytkownicy publikujący przez frontend tego operatora nie mogą wybrać wyłączonego aktywa.",
+		"step3_title": "Opowiedz światu o swojej stronie",
+		"step3_body": "Od razu pojawiasz się w katalogach /operators i /instances i automatycznie zaczynasz zarabiać 90% opłat za ogłoszenia płaconych w Blurt na twojej stronie. Zobacz FAQ o zarobkach operatora, aby poznać ekonomię.",
+		"asset_policy_heading": "Twoja instancja, twoje zasady dotyczące aktywów i metod płatności",
+		"asset_policy_body": "Federacja pozwala każdemu operatorowi wybrać, które aktywa handlowe obsługuje jego strona. Możesz wyłączać pojedyncze aktywa, a nawet ustawić, które metody płatności ma obsługiwać twoja strona, np. gotówkę, PayPal, Klarnę itd.",
 		"asset_policy_federation_label": "Federacja pozostaje niezmienna.",
-		"asset_policy_federation_body": "Wyłączenie aktywa na twojej instancji nie ukrywa zleceń z instancji partnerskich przed twoimi użytkownikami — historia łańcucha jest współdzielona, więc orderbook nadal pokazuje je w trybie tylko-do-odczytu. Blokada dotyczy tylko NOWYCH zleceń publikowanych Z twojej instancji.",
+		"asset_policy_federation_body": "Wyłączenie aktywa na twojej instancji nie ukrywa przed twoimi użytkownikami zleceń innych instancji — historia łańcucha jest wspólna, więc twój arkusz zleceń nadal może je pokazywać.",
 		"requirements_heading": "Wymagania sprzętowe",
 		"req_hw_label": "Sprzęt",
 		"req_hw_value": "2+ CPU, 4+ GB RAM, 80+ GB miejsca na dysku (najlepiej SSD)",
 		"req_network_label": "Sieć",
 		"req_network_value": "Domowy internet wystarczy — DDNS obsługuje dynamiczne IP, statyczny IP nie jest wymagany",
 		"req_time_label": "Twój czas",
-		"req_time_value": "Poniżej 15 minut miesięcznie na sprawdzenie salda przekaźnika, odebranie dochodu itp.",
+		"req_time_value": "Mniej niż 15 minut miesięcznie na sprawdzenie salda twojego relaya",
 		"cta_heading": "Gotowy, żeby zacząć?",
-		"cta_body": "Sklonuj repo, przygotuj sprzęt (Pi 4 lub jakikolwiek stary laptop wystarczy), postępuj według runbook. Gdy raz nadasz operację register-operator, twoja instancja działa i zarabia.",
-		"cta_repo": "Zobacz repozytorium",
-		"cta_directory": "Przeglądaj operatorów",
-		"register": {
-			"heading": "Zarezerwuj swój tag operatora",
-			"explain": "Rejestracja operatora nie wymaga zezwoleń. Rozgłaszaj jednorazową op, aby zarezerwować tag on-chain — kto pierwszy ten lepszy. Ten tag pojawia się w zleceniach przez twoją instancję oraz w katalogu /operators. Twój klucz posting podpisuje op, więc tylko ty kontrolujesz swój tag.",
-			"need_signin": "Zaloguj się kontem Morphit, aby zarejestrować się jako operator.",
-			"signin_cta": "Zaloguj się",
-			"success": "Jesteś zarejestrowany. Op została rozgłoszona i pojawi się w następnym zindeksowanym bloku.",
-			"view_directory": "Zobacz swoją instancję w katalogu",
-			"tag_label": "Tag operatora",
-			"tag_placeholder": "np. alice-exchange",
-			"tag_help": "1-64 znaków. Tylko małe litery, cyfry i znaki . _ - . To twój publiczny identyfikator na zawsze — wybieraj ostrożnie.",
-			"display_name_label": "Nazwa wyświetlana",
-			"display_name_placeholder": "np. Morphit Alicji",
-			"display_name_help": "Czytelna nazwa pokazywana w katalogu operatorów i na twojej hostowanej instancji.",
-			"contact_url_label": "URL kontaktowy (opcjonalny)",
-			"contact_url_help": "Strona kontaktowa (https://) lub link do komunikatora — np. Telegram, Matrix, Signal, Discord, XMPP, SimpleX, Session, Briar, Cwtch lub Jami.",
-			"submit": "Zarejestruj operatora",
-			"err_generic": "Rejestracja nie powiodła się. Spróbuj ponownie.",
-			"err_unknown": "Nieoczekiwany błąd. Spróbuj ponownie.",
-			"err_no_account": "Brak konta na tym urządzeniu. Najpierw dokończ onboarding.",
-			"err_tag_too_short": "Tag jest za krótki.",
-			"err_tag_too_long": "Tag jest za długi (maksymalnie 64 znaki).",
-			"err_tag_invalid_chars": "Tag może zawierać tylko małe litery, cyfry i znaki . _ - .",
-			"err_tag_already_claimed": "Ten tag jest już zarejestrowany przez inne konto. Wybierz inny tag.",
-			"err_display_name_too_short": "Nazwa wyświetlana jest wymagana.",
-			"err_display_name_too_long": "Nazwa wyświetlana jest za długa (maksymalnie 64 znaki).",
-			"err_contact_url_too_long": "URL kontaktowy jest za długi.",
-			"err_contact_url_bad_scheme": "URL kontaktowy musi używać https:// lub http://.",
-			"err_contact_url_not_url": "URL kontaktowy nie jest prawidłowym URL.",
-			"err_account_already_registered": "To konto jest już zarejestrowane jako operator. Ponowna rejestracja aktualizuje nazwę wyświetlaną, kontakt i origin — na stałe pozostaje tylko tag po zarezerwowaniu.",
-			"err_tag_reserved": "Ten tag jest zastrzeżony dla projektu Morphit. Wybierz inny."
-		},
-		"beginner_label": "Pierwszy raz?",
-		"beginner_pointer": "Jeśli nigdy wcześniej nie konfigurowałeś serwera, zacznij od przyjaznego przewodnika w",
+		"cta_repo": "Pobierz Morphit w wersji {version} teraz",
 		"key_terms": {
 			"heading": "Kluczowe pojęcia używane na tej stronie",
 			"aria": "Pojęcia ze słowniczka używane na tej stronie",
@@ -3897,6 +3863,25 @@
 			"intro_3": ", które czytają z blockchaina. Wielu operatorów tworzy ",
 			"term_federation": "federację",
 			"intro_4": " — jeśli jeden operator wypadnie, użytkownicy przenoszą się do innego i znajdują tam te same zlecenia, te same transakcje, te same reputacje."
+		},
+		"step2_download": "Pobierz",
+		"step2_body_1": " najnowsze wydanie „offline”, rozpakuj je do folderu /morphit/, otwórz tam terminal i uruchom ",
+		"step2_body_2": " — następnie wybierz „Full guided install”. Krótki kreator zada kilka prostych pytań (twoja nazwa domeny (jeśli chcesz), twoje 2 konta Blurt (relay i opłaty), e-mail do HTTPS (jeśli używasz nazwy domeny)) i wszystko za ciebie skonfiguruje: Node.js, PostgreSQL, aplikację i jej usługi, automatycznie odnawiany HTTPS, zaporę, twoje adresy Tor i I2P oraz rejestrację tagu operatora w federacji. Żadnych plików do edycji.",
+		"earn_box": {
+			"heading": "Co zarabiasz, a za co płacisz",
+			"earn_title": "Zarabiasz",
+			"earn_listing": "90% każdej opłaty za ogłoszenie w BLURT płaconej na twojej stronie (każda warta około $0.125 w BLURT).",
+			"earn_featured": "90% ofert za wyróżnione sloty na twojej stronie (sam ustalasz minimalną stawkę godzinową; domyślnie 50 BLURT/godz.).",
+			"earn_stranger": "90% opłat, które obcy płacą za wysłanie pierwszej wiadomości z twojej strony (od 5 BLURT wzwyż).",
+			"earn_when": "Wypłacane w łańcuchu prosto na twoje konto opłat, w tym samym bloku co płatność użytkownika.",
+			"pay_title": "Twoje konto relay płaci",
+			"pay_account": "Około 102 BLURT za każde nowe konto utworzone przez twoją stronę (opłata łańcucha 100 BLURT plus 2 BLURT na start).",
+			"pay_bonus": "10 BLURT + 10 BLURT Power, gdy zostanie zakończona pierwsza transakcja użytkownika na ogłoszeniu, za które zapłacił przez twoją stronę.",
+			"pay_lent": "BLURT Power, który pożyczasz jako nagrody: powitalną stawkę 1 BP i nagrody lojalnościowe do 1 260 BP na użytkownika. Pozostaje twój i możesz go odebrać. Blurt pożycza jednorazowo co najmniej około 34 BP, więc mniejsze nagrody są pożyczane, gdy suma użytkownika osiągnie tę kwotę.",
+			"pay_top_up": "Doładowania po 1 BLURT dla twoich aktywnych użytkowników, którym kończą się środki (każdemu najwyżej raz na 3 dni).",
+			"pay_server": "Twój serwer.",
+			"rule": "Praktyczna zasada: przy cenie BLURT $0.002 opłata za ogłoszenie to około 62.5 BLURT, a twoja część około 56 BLURT, więc mniej więcej 2 płatne ogłoszenia pokrywają jedno nowe konto. Opłata za konto jest stała w BLURT, więc gdy BLURT jest wart więcej, potrzeba więcej ogłoszeń.",
+			"fund": "Zanim otworzysz rejestracje, wpłać na konto relay BLURT na nowe konta i BLURT Power na nagrody. Twój dzienny limit rejestracji ogranicza, ile może ono wydać na nowe konta."
 		}
 	},
 	"scan_login": {
@@ -3953,7 +3938,7 @@
 		"open_source_body": "Pełny model zagrożeń jest w {security_doc} repo. Jesteśmy jednoznaczni co do tego przed czym chronimy a przed czym nie — udawanie byłoby gorsze niż szczerość.",
 		"footer_body": "Znalazłeś problem z bezpieczeństwem? Wyślij go wyłącznie jako prywatną wiadomość Matrix do @agorise:matrix.org. Nigdy nie publikuj szczegółów: ani w zgłoszeniu na Forgejo (zgłoszenia są tam publiczne), ani w pokoju czatu, ani w łańcuchu (wiadomość do {morphit_account} pozostaje tam publiczna na zawsze).",
 		"bounty_title": "Program nagród za błędy",
-		"bounty_body": "Prowadzimy uznaniowy program uznawania bezpieczeństwa. Każde wykonalne odkrycie jest sprawdzane przez prawdziwego inżyniera, otrzymuje odpowiedź i — jeśli istotnie poprawia postawę bezpieczeństwa Morphit — jest nagradzane w BLURT (płacone z @morphit-fees) lub BTC, skalowane według powagi i jakości raportu. Brak stałej tabeli poziomów; ocena indywidualna. Kredyt w hall of fame dostępny nawet bez płatności. Pełny zakres, wytyczne dotyczące powagi, przepływ płatności i czego nie zrobimy (brak NDA, brak ekskluzywnego ujawnienia) jest udokumentowane w SECURITY.md.",
+		"bounty_body": "Prowadzimy uznaniowy program uznawania bezpieczeństwa. Każde wykonalne odkrycie jest sprawdzane przez prawdziwego inżyniera, otrzymuje odpowiedź i — jeśli istotnie poprawia postawę bezpieczeństwa Morphit — jest nagradzane w BLURT (płacone z @morphit-fees) lub BTC, skalowane według powagi i jakości raportu. Brak stałej tabeli poziomów; ocena indywidualna. Kredyt w hall of fame dostępny nawet bez płatności. Pełny zakres, wytyczne dotyczące powagi, przepływ płatności i czego nie zrobimy (brak NDA, brak ekskluzywnego ujawnienia) jest udokumentowane w docs/SECURITY.md.",
 		"bounty_link": "Przeczytaj pełny zakres i zasady",
 		"canary_title": "Kanarek nakazu",
 		"canary_body": "Publikujemy cotygodniowy kanarek podpisany kluczem PGP operatora. Kanarek wyraźnie deklaruje, że żadne NSL / FISA / nakaz milczenia / żądanie tylnych drzwi nie zostało otrzymane. Dowody świeżości obejmują aktualny nagłówek blockchaina, aktualny nagłówek łańcucha Bitcoin i aktualny nagłówek wiadomości (dowodzi, że kanarek nie może być wygenerowany z wyprzedzeniem). Jeśli kanarek przestaje się aktualizować przez ponad 14 dni, traktuj go jako milczącego: operator może być pod presją przymusu, a ty powinieneś przejść do innego operatora federacyjnego.",
@@ -4783,7 +4768,7 @@
 		"bullet_free": "<strong>Opłata za wystawienie jest bezpłatna.</strong> Morphit płaci opłatę sieciową za twoją pierwszą transakcję — twoim jedynym kosztem jest to, co zgodzisz się zapłacić kontrahentowi.",
 		"bullet_starter": "<strong>Wychodzisz z prawdziwymi środkami w swoim portfelu on-chain</strong> na opłaty transakcyjne (również po obniżonej stawce (~12,5 ¢ każda)) od pierwszego dnia.",
 		"bullet_runway": "<strong>BLURT działa w całej sieci społecznościowej Blurt.</strong> Używaj go do głosowania na posty na blurt.blog, blurt.media itd. i zdobywaj nagrody, po prostu klikając \"Like\" przy dobrych treściach.",
-		"bullet_bp_stake": "<strong>Natychmiast odblokowujesz 1 BP powitalnej stawki</strong> w momencie, gdy uruchomi się twoja pierwsza opłata za wystawienie zapłacona w BLURT. Po twojej pierwszej udanej transakcji to staje się 10 BLURT liquid + 10 BLURT Power — stawka generująca dochód pasywny w sieci.",
+		"bullet_bp_stake": "<strong>Twoja powitalna stawka 1 BP zostaje odłożona</strong>, gdy zapłacisz swoją pierwszą opłatę za wystawienie w BLURT, i pożyczona razem z nagrodami lojalnościowymi, gdy osiągną minimum łańcucha (około 34 BP). Twoja pierwsza zakończona transakcja na ogłoszeniu, za które zapłaciłeś, przynosi 10 BLURT + 10 BLURT Power — stawkę generującą dochód pasywny w sieci.",
 		"why_blurt_minimum": "Dlaczego BLURT a nie BTC lub XMR za darmową transakcję? Ponieważ BLURT w twoim portfelu pozwala ci robić wszystko inne na {brand} później — płacić opłaty za wystawianie przyszłych transakcji (za pół ceny!), uczestniczyć w warstwie społecznej Blurt i zdobywać nagrody lojalnościowe. Chcemy, żebyś był gotowy do bycia aktywnym, a nie zablokowany z pustym saldem.",
 		"cta_compose": "Skomponuj mój pierwszy bezpłatny zakup",
 		"collapse_aria": "Zwiń tę kartę powitalną",
@@ -4942,5 +4927,26 @@
 		"check_now": "Zapłaciłem — sprawdź teraz",
 		"checking_now": "Sprawdzanie…",
 		"check_again_in": "Sprawdź ponownie za {seconds} s"
+	},
+	"rewards": {
+		"heading": "Co dostajesz na {brand}",
+		"intro": "Każdą nagrodę wypłaca w łańcuchu Blurt relay tej strony, zwykle mniej więcej minutę po tym, jak łańcuch zapisze to, za co ją dostajesz (doładowania są sprawdzane co kilka godzin).",
+		"free_account_title": "Darmowe konto",
+		"free_account_body": "Płacimy opłatę łańcucha za konto (około 100 BLURT) i wpłacamy 2 BLURT do twojego portfela na start.",
+		"free_buy_title": "Pierwszy zakup za darmo",
+		"free_buy_body": "Twoje pierwsze zlecenie może być zakupem co najmniej $1 w BLURT bez opłaty za ogłoszenie. Jeśli najpierw opublikujesz inne zlecenie, ta oferta przepada.",
+		"welcome_stake_title": "Powitalna stawka 1 BP",
+		"welcome_stake_body": "Gdy zapłacisz pierwszą opłatę za ogłoszenie w BLURT, zostaje dla ciebie odłożony 1 BLURT Power. Blurt pożycza jednorazowo co najmniej około 34 BP, więc dostajesz go w pożyczce razem z nagrodami lojalnościowymi, gdy łącznie osiągną tę kwotę.",
+		"first_trade_title": "10 BLURT + 10 BLURT Power",
+		"first_trade_body": "Gdy twoja pierwsza transakcja na ogłoszeniu, za które zapłaciłeś, zostanie zakończona, a partner transakcji wystawi ci opinię (dowolną ocenę), otrzymujesz 10 BLURT plus 10 BLURT w mocy. Jedno i drugie należy do ciebie.",
+		"loyalty_title": "Nagrody lojalnościowe, do 1 260 BP",
+		"loyalty_body": "Gdy twoje opłaty za ogłoszenia w BLURT osiągną łącznie 100, 500, 2 000 i 10 000 BLURT, dostajesz w pożyczce dodatkowo 10, 50, 200 i 1 000 BLURT Power. Nagrody poniżej minimum łańcucha (około 34 BP) dostajesz w pożyczce, gdy twoja suma je osiągnie, zwykle przy progu 500 BLURT (61 BP).",
+		"top_up_title": "Doładowania, gdy kończą się środki",
+		"top_up_body": "Jeśli opublikowałeś tu zlecenie w ostatnim tygodniu, a twoje saldo spadnie poniżej 0.5 BLURT, otrzymujesz 1 BLURT (najwyżej raz na 3 dni).",
+		"lent_note": "Pożyczony BLURT Power zwiększa twoją wagę głosu w Blurt i pozostaje własnością relaya.",
+		"cta_signup": "Załóż darmowe konto",
+		"learn_more": "Jak działają nagrody",
+		"show_all": "Zobacz wszystko, co dostajesz",
+		"show_less": "Pokaż mniej"
 	}
 }

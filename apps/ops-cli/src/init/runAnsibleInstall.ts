@@ -24,6 +24,8 @@ import { renderRemediationReport, getRemediationJournal } from './remediation.ts
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
 import { step, beginSteps, endSteps, currentStepNum, ask } from './prompt.ts';
 import { offerTorOnlyRekey, readPriorIdentity } from '../lib/torOnlyRekey.ts';
+import { withSpinner } from './spinner.ts';
+import { runSpinning, showOutput } from '../lib/spinRun.ts';
 
 /** Ansible's `morphit_relay_keystore_path` default; we write the keystore here
  *  and pass the same path in the vars, so the two match by construction. */
@@ -370,15 +372,17 @@ export async function runAnsibleInstall(opts: {
 	// compute the review now (after desktop + canary) so canary.txt etc.
 	// are ✓; everythingUp gates the listing step next. The DISPLAY happens as the
 	// final step, after listing.
-	const summaryRows = await collectInstallSummary({
-		domain: inputs.domain,
-		torOnly: inputs.torOnly,
-		mode: inputs.mode,
-		enableBunkerweb: inputs.enableBunkerweb ?? true,
-		repoPath: '/opt/morphit',
-		relayAccount: relay.name,
-		contactConfigured: !!inputs.contactUrl
-	});
+	const summaryRows = await withSpinner('Checking every part of your node is up…', () =>
+		collectInstallSummary({
+			domain: inputs.domain,
+			torOnly: inputs.torOnly,
+			mode: inputs.mode,
+			enableBunkerweb: inputs.enableBunkerweb ?? true,
+			repoPath: '/opt/morphit',
+			relayAccount: relay.name,
+			contactConfigured: !!inputs.contactUrl
+		})
+	);
 	const everythingUp = allComponentsUp(summaryRows);
 	// Is the box actually ONLINE? The summary's "Blurt RPC connectivity" row is ✓
 	// only when the indexer can reach a Blurt RPC. If it isn't reachable, a
@@ -476,7 +480,16 @@ export async function runAnsibleInstall(opts: {
 	if (inputs.mode === 'home' && !inputs.torOnly) {
 		const reachScript = join(opts.repoRoot, 'ops', 'scripts', 'morphit-reachability-check.sh');
 		if (existsSync(reachScript)) {
-			spawnSync('bash', [reachScript, inputs.domain], { stdio: 'inherit' });
+			// Its Tor probes are silent for up to 30 s each: run it under the
+			// turning spinner and show its report after.
+			showOutput(
+				await runSpinning(
+					'Checking the internet can reach this node (through Tor — up to a few minutes)…',
+					'bash',
+					[reachScript, inputs.domain],
+					{ timeoutMs: 10 * 60_000 }
+				)
+			);
 		}
 	}
 	return 0;

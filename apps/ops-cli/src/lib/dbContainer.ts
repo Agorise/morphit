@@ -25,6 +25,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
+import { runAsync } from './spinRun.ts';
 
 /** Read MORPHIT_INDEXER_DATABASE_URL out of the deployed `morphit.env` in
  *  `installDir`, so a post-install flow (harden, upgrade) can resolve the
@@ -199,6 +200,45 @@ export function detectDbContainer(dbUser: string, dbName: string): string | null
 		const image = containerImage(name);
 		if (!isPostgresImage(image)) continue; // skip the non-Postgres probe cost
 		candidates.push({ name, image, dbPresent: probeDbPresent(name, dbUser, dbName) });
+	}
+	return selectDbContainer(candidates);
+}
+
+/** {@link detectDbContainer} without blocking the event loop, so the braille
+ *  spinner an operator sees while it runs (up to ~5 s per docker call) keeps
+ *  turning. Same probes, same answer. Never throws. */
+export async function detectDbContainerAsync(
+	dbUser: string,
+	dbName: string
+): Promise<string | null> {
+	const docker = (args: readonly string[], timeoutMs: number) =>
+		runAsync('docker', args, { timeoutMs });
+	if ((await docker(['--version'], 3000)).status !== 0) return null;
+	const ps = await docker(['ps', '--format', '{{.Names}}'], 5000);
+	if (ps.status !== 0) return null;
+	const names = parseContainerNames(ps.stdout);
+	const candidates: DbContainerCandidate[] = [];
+	for (const name of names) {
+		const insp = await docker(['inspect', '--format', '{{.Config.Image}}', name], 5000);
+		const image = insp.status === 0 ? insp.stdout.trim() : '';
+		if (!isPostgresImage(image)) continue;
+		const res = await docker(
+			[
+				'exec',
+				name,
+				'psql',
+				'-U',
+				dbUser,
+				'-tAc',
+				`SELECT 1 FROM pg_database WHERE datname='${dbName}'`
+			],
+			8000
+		);
+		candidates.push({
+			name,
+			image,
+			dbPresent: res.status !== 0 ? null : res.stdout.trim() === '1'
+		});
 	}
 	return selectDbContainer(candidates);
 }

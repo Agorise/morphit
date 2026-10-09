@@ -181,8 +181,8 @@ describe('sign once, broadcast to ranked nodes (D12)', () => {
 	});
 
 	it('an answer without the id, with a block before the head, or whose block lacks it is not a confirmation', async () => {
-		// Each case breaks one rule only: in the first three every block asked
-		// about lists the transaction, so only the answer itself can reject it.
+		// Each case breaks one rule only: in the first three the block the answer
+		// names lists the transaction, so only the answer itself can reject it.
 		for (const [answer, blockLists] of [
 			[(_trx: string) => ({ block_num: 105, transaction_id: 'f'.repeat(40) }), true], // another id
 			[(trx: string) => ({ block_num: 90, transaction_id: trx }), true], // before the head it was built on
@@ -198,7 +198,12 @@ describe('sign once, broadcast to ranked nodes (D12)', () => {
 					id = trx;
 					return answer(trx);
 				},
-				getBlock: async () => ({ block_id: 'x', transaction_ids: blockLists ? [id] : [] }),
+				// Only the block the answer names exists (no new block yet for the
+				// scan of new blocks), and it lists the id unless this case says not.
+				getBlock: async (_u, num) =>
+					num === answer(id).block_num
+						? { block_id: 'x', transaction_ids: blockLists ? [id] : [] }
+						: null,
 				send: async () => ({})
 			});
 			expect(r.confirmedBy).toBeNull();
@@ -242,6 +247,72 @@ describe('sign once, broadcast to ranked nodes (D12)', () => {
 		// Every round asks all three other nodes.
 		expect(calls.length % 3).toBe(0);
 		expect(calls.filter((u) => u === 'a').length).toBe(0);
+	});
+
+	// 2026-10-08 (v1.21.2 release broadcast): in block 64,311,469 within ~12 s,
+	// but the look-up by id found it only after ~55 s, close to the give-up time.
+	it('found in a new block as soon as another node serves it, without waiting for the look-up by id', async () => {
+		const lines: string[] = [];
+		let id = '';
+		const c = clock();
+		const r = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2), ok('c', 3)], {
+			log: (l) => void lines.push(l),
+			...c,
+			// The look-up by id never knows it (its index lags).
+			getTx: async (_u, trx) => {
+				id = trx;
+				return null;
+			},
+			// Blocks 101 and 102 are out without it; 103 lists it; 104 is not out yet.
+			getBlock: async (_u, num) =>
+				num <= 102
+					? { block_id: 'x', transaction_ids: [] }
+					: num === 103
+						? { block_id: 'x', transaction_ids: [id] }
+						: null,
+			send: async () => ({})
+		});
+		expect(r.blockNum).toBe(103);
+		expect(r.confirmedBy).not.toBeNull();
+		expect(r.confirmedBy, 'the node it was sent to confirmed itself').not.toBe('a');
+		expect(lines.join('\n')).toMatch(/Confirmed: .* in block 103/);
+		expect(
+			lines.filter((l) => /round \d+:/.test(l)).length,
+			'it waited rounds for the look-up'
+		).toBe(0);
+	});
+
+	it('a block only the node it was sent to serves is not a confirmation', async () => {
+		let id = '';
+		const r = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2)], {
+			log: () => undefined,
+			...clock(),
+			getTx: async (_u, trx) => {
+				id = trx;
+				return null;
+			},
+			getBlock: async (u, num) =>
+				u === 'a' && num === 101 ? { block_id: 'x', transaction_ids: [id] } : null,
+			send: async () => ({})
+		});
+		expect(r.confirmedBy).toBeNull();
+	});
+
+	it('no block after the last one the transaction can be in is read', async () => {
+		const asked: number[] = [];
+		await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2)], {
+			log: () => undefined,
+			...clock(),
+			getTx: async () => null,
+			getBlock: async (_u, num) => {
+				asked.push(num);
+				return { block_id: 'x', transaction_ids: [] };
+			},
+			send: async () => ({})
+		});
+		// Built on head 100; it expires 60 s (20 blocks) later, plus two.
+		expect(Math.max(...asked)).toBeLessThanOrEqual(100 + 20 + 2);
+		expect(Math.min(...asked)).toBe(101);
 	});
 
 	it('"duplicate transaction": the block is looked up by id too', async () => {

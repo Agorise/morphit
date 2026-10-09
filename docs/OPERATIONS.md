@@ -3151,7 +3151,7 @@ load environment variables):
 
 > **Tip:** these two thresholds are operator-tunable via
 > `morphit.config.env` (see §23) — copy
-> `morphit.config.env.example` to `morphit.config.env` and
+> `ops/env/morphit.config.env.example` to `morphit.config.env` and
 > uncomment the relevant lines.  OS-set env vars (SystemD
 > `Environment=`, Docker `-e`, shell `export`) always win
 > over the file, so existing env-driven deployments keep
@@ -5551,7 +5551,7 @@ variables, with prose comments explaining each.
 ### Where the file lives
 
 `morphit.config.env` at the repo root. A template is
-shipped as `morphit.config.env.example` — copy it,
+shipped as `ops/env/morphit.config.env.example` — copy it,
 uncomment the lines you want to set, restart.
 
 If your deployment runs from somewhere other than the repo
@@ -5579,7 +5579,7 @@ So keep each operator-editable key in exactly one file —
 
 The allowlist accepts **41 keys** — the complete set is
 listed (commented, ready to uncomment) in
-`morphit.config.env.example` and enforced by
+`ops/env/morphit.config.env.example` and enforced by
 `@morphit/operator-config`. The handful you'd actually
 reach for *after* launch are detailed below with their
 purpose; the remainder (per-instance branding, SEO
@@ -5691,7 +5691,7 @@ known price.
 1. SSH to the indexer box.
 2. `cd /opt/morphit` (or wherever your repo lives).
 3. If `morphit.config.env` doesn't exist yet:
-   `cp morphit.config.env.example morphit.config.env`.
+   `cp ops/env/morphit.config.env.example morphit.config.env`.
 4. Edit `morphit.config.env`:
    ```
    MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR=0.0026
@@ -5764,7 +5764,7 @@ deployments.
 Every key in the file is checked against an allowlist in
 `packages/operator-config/src/index.ts`. Adding a new key
 requires editing that allowlist (and the
-`morphit.config.env.example` template, and this section
+`ops/env/morphit.config.env.example` template, and this section
 of the runbook). The deliberate friction is the point —
 each new operator-tunable lever is a new responsibility
 to document and a new federation-uniformity question to
@@ -6160,9 +6160,9 @@ Three moving parts:
    and the signed tag to the other git hosts, and every Morphit
    instance's Kubo pins the release directory by its CID (your
    release box seeds it when it upgrades, in Block 5). If
-   `release.yml` could not compute the CID, Block 3 stops; its note
-   has morphit.io seed the release (installing nothing) and print
-   the CID to pass with `--ipfs-cid`.
+   `release.yml` could not compute the CID, Block 3's payload line
+   stops and prints a command for morphit.io that seeds the release
+   (installing nothing) and prints the CID to pass with `--ipfs-cid`.
 3. **Anchor** — broadcast `morphit_release_v1` with a
    `distribution` block carrying `source_sha256`,
    `gpg_fingerprint`, the `mirrors` list, and optionally
@@ -9042,12 +9042,11 @@ install wizard has a step "Encrypt your daily backups
 (recommended)": paste an age PUBLIC key made on your own
 computer (`age-keygen -o morphit-backup-key.txt`); pressing
 Enter keeps plain-text backups (kept 30 days). `morphit-ops
-upgrade` asks once about plain-text backups already on the box:
-paste a key (they and every new backup are encrypted to it),
-ENCRYPT (the key is already in `backup.env`), DELETE, or Enter to
-leave them (recorded in `/etc/morphit/backup-plaintext.decision`,
-not asked again). To restore an encrypted backup you need the
-secret key file:
+upgrade` leaves the backups alone and asks nothing about them
+(since v1.21.3: it used to offer to encrypt or delete them and
+named that question after every upgrade until answered). To
+encrypt later, set `AGE_RECIPIENT` in `backup.env` (below). To
+restore an encrypted backup you need the secret key file:
 `age -d -i morphit-backup-key.txt morphit-<time>.sql.gz.age | gunzip | psql …`.
 Push subscription rows are not in the dumps.
 
@@ -9185,7 +9184,7 @@ Morphit keeps working. Everything a clearnet node still contacts by itself:
 | Ubuntu's apt mirrors (and Docker's / NodeSource's repositories) | Security updates | Point apt at your own mirror |
 | NTP (chrony's default pools) | A correct clock (TLS, signatures) | Your own time source in `/etc/chrony/chrony.conf` |
 | Other Morphit instances | Federation | — (that is how instances find each other) |
-| `git.agorise.net` (every 6 h) and `registry.npmjs.org` (upgrades) | Morphit's own release check; a new release's dependencies | `sudo systemctl disable --now morphit-release-monitor.timer`; upgrade from the offline bundle |
+| `git.agorise.net` (the release check, twice a day, only when this node's own indexer holds no release record; the main menu, only when that record does not answer; and upgrades) and `registry.npmjs.org` (upgrades) | Morphit's own release check; a new release's dependencies | `sudo systemctl disable --now morphit-release-monitor.timer` (until the next upgrade, which turns it on again); upgrade from the offline bundle |
 | The Tor network; I2P routers (and i2pd's reseed servers at first start) | Your `.onion` and `.b32.i2p` addresses | Do not run Tor / i2pd |
 | IPFS bootstrap peers and the public DHT | Seeding the release so other nodes can upgrade from you | `sh ops/ipfs/morphit-ipfs-privacy.sh apply-hidden` (as the ipfs user) |
 | Browser push services (Google, Mozilla, Apple, Microsoft) | Push notifications; the browser chose the service | Empty `MORPHIT_RELAY_VAPID_SUBJECT` |
@@ -10951,7 +10950,7 @@ unset $(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v<semver>/distribution-anchor.env -o /tmp/morphit-anchor.env
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v<semver>/morphit-v<semver>.tar.gz -o /tmp/morphit-v<semver>.tar.gz
 node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env \
-  --tarball /tmp/morphit-v<semver>.tar.gz > apps/web/build-manifest.release.json
+  --tarball /tmp/morphit-v<semver>.tar.gz > /tmp/morphit-build-manifest.json
 
 # 1) build the payload — BTC/XMR treasury pre-filled from
 #    apps/indexer/src/config/canonicalTreasury.ts; the anchor file is parsed
@@ -10959,14 +10958,14 @@ node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-
 #    redirected stdout is clean JSON (not echoed prompts):
 MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=<semver> \
   MORPHIT_BUILD_BLURT_BASE=125 \
-  MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json \
-  ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
+  MORPHIT_BUILD_HASH_MANIFEST_FILE=/tmp/morphit-build-manifest.json \
+  ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > /tmp/morphit-release.json
 
 # 2) PREVIEW — prints the exact op, asks for NO key, sends nothing:
-./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
+./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts /tmp/morphit-release.json --dry-run
 
 # 3) sign + broadcast for real (prompts for the PRIVATE posting key / WIF, masked):
-./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json
+./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts /tmp/morphit-release.json
 ```
 
 **Broadcast BEFORE any instance upgrades, morphit.io included.** Since

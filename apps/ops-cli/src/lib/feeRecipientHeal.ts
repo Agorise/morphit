@@ -215,9 +215,15 @@ export async function healFeeRecipientRegistration(
 	// re-registers too) and wipe fields the config lacks; peers on an older
 	// indexer overwrite every field with what the op carries. If the accepted
 	// payload cannot be read reliably, nothing is broadcast.
-	const accepted = await (
-		deps.acceptedRegistration ?? ((a: string, r: typeof reg) => acceptedRegistration(a, r))
-	)(env.account, reg);
+	stop = deps.spinner('Reading the registration the chain accepted…');
+	let accepted: Awaited<ReturnType<typeof acceptedRegistration>>;
+	try {
+		accepted = await (
+			deps.acceptedRegistration ?? ((a: string, r: typeof reg) => acceptedRegistration(a, r))
+		)(env.account, reg);
+	} finally {
+		stop();
+	}
 	if (accepted.state !== 'ok' || accepted.payload.tag !== tag) {
 		return calm(
 			` (this server could not read the registration the chain accepted reliably${

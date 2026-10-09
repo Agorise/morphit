@@ -185,6 +185,24 @@
 			<PrioritiesSection />
 		{/await}
 
+		<!-- v1.21.3: the home page's own invitation to run a site (it used to
+		     be only a footer link). -->
+		<section
+			class="mx-auto mt-16 max-w-3xl rounded-3xl border border-ink-200 bg-white/70 p-8 text-center dark:border-ink-800 dark:bg-ink-900/70"
+			aria-labelledby="run-node-heading"
+		>
+			<h2 id="run-node-heading" class="font-display text-2xl font-bold md:text-3xl">
+				<span class="brand-gradient-text">{$_('home.run_node_heading')}</span>
+			</h2>
+			<p class="mx-auto mt-4 max-w-2xl text-ink-700 dark:text-ink-200">
+				{$_('home.run_node_body')}
+			</p>
+			<div class="mt-6 flex flex-wrap items-center justify-center gap-3">
+				<a href={lp('/run-a-node')} class="btn-primary btn-shine">{$_('home.run_node_cta')}</a>
+				<a href={lp('/instances')} class="btn-secondary">{$_('home.run_node_instances')}</a>
+			</div>
+		</section>
+
 		<!-- Below-the-fold: carousel of supported assets + 5 settlement
 		     networks + barter, lazy-mounted via IntersectionObserver,
 		     lazy-loaded images. -->

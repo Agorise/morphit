@@ -391,7 +391,8 @@ async function main(): Promise<number> {
 		// warnings rendered as plain text.
 		initColorMode(readColorMode());
 		// Best-effort annotations (live version on Upgrade, attention marker
-		// on Moderation). Never throws or hangs — bounded by short timeouts.
+		// on Moderation). Never throws or hangs — bounded timeouts, and the
+		// braille spinner turns while it waits.
 		const annotations = await gatherMenuAnnotations();
 		const selection = await runMainMenu(annotations);
 		if (selection === null) {

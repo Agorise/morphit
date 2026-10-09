@@ -294,17 +294,19 @@ async function fetchAdditions(
 	const { createDatabase } = await import('../db.ts');
 	const db = await createDatabase(loadConfig());
 	try {
-		const result = await db.query<{
-			key: string;
-			name: string;
-			category: string;
-			state: string;
-		}>(
-			`SELECT key, name, category, state
-			   FROM instance_payment_methods
-			  WHERE operator = $1
-			  ORDER BY state DESC, category, name`,
-			[account]
+		const result = await withSpinner('Reading your payment methods from the database…', () =>
+			db.query<{
+				key: string;
+				name: string;
+				category: string;
+				state: string;
+			}>(
+				`SELECT key, name, category, state
+				   FROM instance_payment_methods
+				  WHERE operator = $1
+				  ORDER BY state DESC, category, name`,
+				[account]
+			)
 		);
 		return result.rows;
 	} finally {
@@ -380,7 +382,9 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	if (!VALID_CATEGORIES.has(category)) {
 		// operator's --category flag value echoed in
 		// error.  Sanitize before display.
-		console.log(`✗ Invalid --category: "${sanitizeForTerm(category)}".  Must be one of: crypto, in_person, online.`);
+		console.log(
+			`✗ Invalid --category: "${sanitizeForTerm(category)}".  Must be one of: crypto, in_person, online.`
+		);
 		return 1;
 	}
 
@@ -399,10 +403,11 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	}
 
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
-	const keyFile =
-		process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
+	const keyFile = process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
 	if (!account) {
-		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.');
+		console.log(
+			'✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.'
+		);
 		return 1;
 	}
 	if (!keyFile) {
@@ -415,12 +420,16 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	console.log(`  Action:      add`);
 	console.log(`  Key:         ${sanitizeForTerm(key)}`);
 	console.log(`  Name:        ${sanitizeForTerm(name)}`);
-	console.log(`  Description: ${description.length > 0 ? sanitizeForTerm(description) : '(empty)'}`);
+	console.log(
+		`  Description: ${description.length > 0 ? sanitizeForTerm(description) : '(empty)'}`
+	);
 	console.log(`  Category:    ${sanitizeForTerm(category)}`);
 	console.log(`  URL:         ${url !== null ? sanitizeForTerm(url) : '(none)'}`);
 	console.log('');
 	console.log('  This op is signed and broadcast on chain.  Other Morphit');
-	console.log('  instances will see the addition is namespaced (@instance:' + sanitizeForTerm(key) + ')');
+	console.log(
+		'  instances will see the addition is namespaced (@instance:' + sanitizeForTerm(key) + ')'
+	);
 	console.log("  and only this instance's picker will offer it as a selectable");
 	console.log('  option.  Cross-instance order filtering still matches by the');
 	console.log('  exact namespaced key.');
@@ -451,21 +460,23 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 		// on a hidden-only node this goes through the
 		// node's own indexer over Tor/I2P and can take a minute, so show a spinner
 		// rather than a silent terminal.
-		result = await withSpinner('Broadcasting to the chain…', () => broadcastCustomJson({
-			account,
-			wif,
-			opId: 'morphit_payment_method_addition_v1',
-			payload: {
-				v: 1,
-				action: 'add',
-				key,
-				name,
-				description,
-				category,
-				url,
-				ts: Math.floor(Date.now() / 1000)
-			}
-		}));
+		result = await withSpinner('Broadcasting to the chain…', () =>
+			broadcastCustomJson({
+				account,
+				wif,
+				opId: 'morphit_payment_method_addition_v1',
+				payload: {
+					v: 1,
+					action: 'add',
+					key,
+					name,
+					description,
+					category,
+					url,
+					ts: Math.floor(Date.now() / 1000)
+				}
+			})
+		);
 	} catch (err) {
 		printChainErrorHelp(errMsg(err), {
 			opLabel: 'morphit_payment_method_addition_v1',
@@ -483,7 +494,9 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	console.log('✓ Broadcast successfully.');
 	console.log(`  Transaction: ${sanitizeForTerm(result.trx_id)}`);
 	console.log('');
-	console.log(`  Once the indexer ingests this op, the picker will offer "${sanitizeForTerm(name)}"`);
+	console.log(
+		`  Once the indexer ingests this op, the picker will offer "${sanitizeForTerm(name)}"`
+	);
 	console.log(`  in the ${sanitizeForTerm(category)} category, with the description you provided.`);
 	return 0;
 }
@@ -502,16 +515,19 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 		return 1;
 	}
 	if (RESERVED_CANONICAL_KEYS.has(key)) {
-		console.log(`✗ "${sanitizeForTerm(key)}" is a canonical key — operators can\'t remove canonical entries.`);
+		console.log(
+			`✗ "${sanitizeForTerm(key)}" is a canonical key — operators can\'t remove canonical entries.`
+		);
 		console.log('  This is a federation-safety guarantee.  See ADR-0021.');
 		return 1;
 	}
 
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
-	const keyFile =
-		process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
+	const keyFile = process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
 	if (!account) {
-		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.');
+		console.log(
+			'✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.'
+		);
 		return 1;
 	}
 	if (!keyFile) {
@@ -547,12 +563,14 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	let result: { trx_id: string };
 	try {
 		// Spinner: see add().
-		result = await withSpinner('Broadcasting to the chain…', () => broadcastCustomJson({
-			account,
-			wif,
-			opId: 'morphit_payment_method_addition_v1',
-			payload: { v: 1, action: 'remove', key, ts: Math.floor(Date.now() / 1000) }
-		}));
+		result = await withSpinner('Broadcasting to the chain…', () =>
+			broadcastCustomJson({
+				account,
+				wif,
+				opId: 'morphit_payment_method_addition_v1',
+				payload: { v: 1, action: 'remove', key, ts: Math.floor(Date.now() / 1000) }
+			})
+		);
 	} catch (err) {
 		printChainErrorHelp(errMsg(err), {
 			opLabel: 'morphit_payment_method_addition_v1',
@@ -577,7 +595,9 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 async function runList(_ctx: PaymentMethodCtx): Promise<number> {
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
 	if (!account) {
-		console.log('✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.');
+		console.log(
+			'✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.'
+		);
 		return 1;
 	}
 
@@ -588,20 +608,22 @@ async function runList(_ctx: PaymentMethodCtx): Promise<number> {
 	const { createDatabase } = await import('../db.ts');
 	const db = await createDatabase(loadConfig());
 	try {
-		const result = await db.query<{
-			key: string;
-			name: string;
-			description: string;
-			category: string;
-			url: string | null;
-			state: string;
-			updated_at: Date;
-		}>(
-			`SELECT key, name, description, category, url, state, updated_at
-			   FROM instance_payment_methods
-			  WHERE operator = $1
-			  ORDER BY state DESC, category, name`,
-			[account]
+		const result = await withSpinner('Reading your payment methods from the database…', () =>
+			db.query<{
+				key: string;
+				name: string;
+				description: string;
+				category: string;
+				url: string | null;
+				state: string;
+				updated_at: Date;
+			}>(
+				`SELECT key, name, description, category, url, state, updated_at
+				   FROM instance_payment_methods
+				  WHERE operator = $1
+				  ORDER BY state DESC, category, name`,
+				[account]
+			)
 		);
 		if (result.rows.length === 0) {
 			console.log('(no instance additions configured)');

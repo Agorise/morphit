@@ -8,7 +8,9 @@
  *
  * Checks:
  *   1. the top level holds only the entries listed below (anything else needs a
- *      deliberate decision: add it here, or put it in a folder);
+ *      deliberate decision: add it here, or put it in a folder); the files moved
+ *      off it in v1.21.3 are where they now live; the release ceremony writes
+ *      nothing into the repository;
  *   2. no release notes at the top level; this version's notes are in
  *      docs/release-notes/;
  *   3. release.yml publishes the release body from docs/release-notes/;
@@ -57,23 +59,29 @@ const ALLOWED = new Set([
 	'scripts',
 	// what people look for first
 	'README.md',
-	'SECURITY.md',
 	'LICENSE',
-	'THIRD-PARTY-LICENSES.md',
 	// the installer (release tarballs are unpacked and run from their top level)
 	'morphit-setup.sh',
-	'morphit.config.env.example',
-	// tool configuration that has to sit at the top
+	// tool configuration that has to sit at the top:
 	'package.json',
 	'package-lock.json',
-	'tsconfig.smoke.json',
-	'tsconfig.smoke-typecheck.json',
-	'.audit-allowlist.json',
-	'.gitignore',
+	// npm reads a project's settings only from its top folder
 	'.npmrc',
+	// prettier reads its ignore list from the folder it runs in (editors too)
 	'.prettierignore',
-	'.prettierrc'
+	// not only for smokes: installed servers load it at run time (fast-sync,
+	// the snapshot scripts and the commands they print)
+	'tsconfig.smoke.json',
+	'.gitignore'
 ]);
+// 2026-10-08 (v1.21.3): moved off the top level at the maintainer's request.
+const MOVED: ReadonlyArray<readonly [string, string]> = [
+	['SECURITY.md', 'docs/SECURITY.md'],
+	['THIRD-PARTY-LICENSES.md', 'docs/THIRD-PARTY-LICENSES.md'],
+	['morphit.config.env.example', 'ops/env/morphit.config.env.example'],
+	['.audit-allowlist.json', 'scripts/audit-allowlist.json'],
+	['tsconfig.smoke-typecheck.json', 'scripts/tsconfig.smoke-typecheck.json']
+];
 // Never committed (.gitignore): present on a working machine, not in the repo.
 const IGNORED =
 	/^(\.git|node_modules|private|vendor|release|dist|\.canonical-release|\.npm-cache|\.svelte-kit|coverage|morphit-v.*\.tar\.gz.*|release-info\.json|release-signer\.fpr|ipfs-cid\.txt|ipns-.*\.txt|ipns-sign\..*|release\.json|.*\.env|.*\.tsbuildinfo)$/;
@@ -85,6 +93,36 @@ check(
 	extra.length === 0,
 	`unexpected: ${extra.slice(0, 12).join(', ')}${extra.length > 12 ? ` … (+${extra.length - 12})` : ''} — put it in a folder (docs/, scripts/, …) and update what points at it, or add it to ALLOWED here`
 );
+
+for (const [from, to] of MOVED)
+	check(
+		`${from} lives at ${to}, not at the top level`,
+		existsSync(join(REPO, to)) && !existsSync(join(REPO, from))
+	);
+{
+	const pkg = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as {
+		prettier?: { useTabs?: unknown };
+	};
+	check(
+		'the house style is the "prettier" key of package.json (no .prettierrc at the top level)',
+		pkg.prettier?.useTabs === true && !existsSync(join(REPO, '.prettierrc'))
+	);
+}
+// The release ceremony writes its build manifest and payload to /tmp, not into
+// the laptop's repository.
+{
+	const r = spawnSync('bash', [join(REPO, 'scripts', 'eli5-release.sh'), '9.9.9'], {
+		encoding: 'utf8'
+	});
+	check(
+		'the release ceremony writes no file into the repository',
+		r.status === 0 &&
+			!/> (?:apps\/web\/build-manifest\.release\.json|release\.json)\b/.test(r.stdout) &&
+			/> \/tmp\/morphit-release\.json/.test(r.stdout) &&
+			/> \/tmp\/morphit-build-manifest\.json/.test(r.stdout),
+		r.stderr.slice(-300)
+	);
+}
 
 // ── 2. release notes ────────────────────────────────────────────────
 const NOTES_DIR = join(REPO, 'docs', 'release-notes');

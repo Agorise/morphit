@@ -323,9 +323,12 @@ async function getTxOnce(
  * An answer counts only when it names exactly this id and a block the
  * transaction can be in (after the head it was built on, before it expires),
  * and then a node other than the one that answered — when there is one — must
- * list the id in that block (confirmIncluded). The other nodes are asked in
- * parallel each round, a line per round, until the transaction has expired
- * plus two blocks.
+ * list the id in that block (confirmIncluded). Alongside, the new blocks are
+ * read from the other nodes in order (from the block after that head, up to
+ * the last block it can be in): a block one of them serves that lists the id
+ * is a second node's confirmation at once, without waiting for the look-up by
+ * id. The other nodes are asked in parallel each round, a line per round,
+ * until the transaction has expired plus two blocks.
  */
 async function confirmById(
 	ranked: readonly NodeHealth[],
@@ -342,16 +345,48 @@ async function confirmById(
 	if (others.length === 0) return null;
 	const lastBlock = baseHead + Math.ceil(EXPIRE_MS / 3_000) + 2;
 	const giveUpAt = now() + EXPIRE_MS + 6_000;
-	for (let round = 1; now() < giveUpAt; round++) {
-		const answers = await Promise.all(
-			others.map(async (u) => {
+	// 2026-10-08 (v1.21.2 release broadcast): the transaction was in block
+	// 64,311,469 about 12 s after it was sent, but the nodes' look-up by id
+	// found it only after about 55 s, close to the 66 s this waits. So the new
+	// blocks themselves are read too, from the other nodes, one by one from the
+	// block after the head it was built on: a block that lists the id IS the
+	// second node's confirmation, as soon as that block exists.
+	let nextScan = baseHead + 1;
+	const scanBlocks = async (): Promise<{ url: string; blockNum: number } | null> => {
+		while (nextScan <= lastBlock) {
+			let seen = false;
+			for (const u of others) {
+				let b: Awaited<ReturnType<BlockLookup>> = null;
 				try {
-					return { u, t: await getTx(u, trxId) };
+					b = await getBlock(u, nextScan);
 				} catch {
-					return { u, t: null };
+					b = null;
 				}
-			})
-		);
+				if (b === null) continue;
+				seen = true;
+				if ((b.transaction_ids ?? []).includes(trxId)) return { url: u, blockNum: nextScan };
+				break;
+			}
+			// No other node has this block yet: it has not been produced.
+			if (!seen) return null;
+			nextScan++;
+		}
+		return null;
+	};
+	for (let round = 1; now() < giveUpAt; round++) {
+		const [answers, inBlock] = await Promise.all([
+			Promise.all(
+				others.map(async (u) => {
+					try {
+						return { u, t: await getTx(u, trxId) };
+					} catch {
+						return { u, t: null };
+					}
+				})
+			),
+			scanBlocks()
+		]);
+		if (inBlock !== null) return inBlock;
 		for (const { u, t } of answers) {
 			const num = t?.block_num;
 			if (
@@ -378,7 +413,11 @@ async function confirmById(
 				));
 			if (by !== null) return { url: by, blockNum: num };
 		}
-		log(`  round ${round}: no other node has ${trxId} in a block yet …`);
+		const read =
+			nextScan - 1 > baseHead
+				? ` (read blocks ${baseHead + 1}–${nextScan - 1})`
+				: ' (no new block yet)';
+		log(`  round ${round}: no other node has ${trxId} in a block yet${read} …`);
 		await sleep(3_000);
 	}
 	return null;

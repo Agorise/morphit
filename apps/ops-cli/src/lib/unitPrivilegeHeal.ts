@@ -464,7 +464,12 @@ export async function healServicePrivileges(
 			reload();
 			let ok = wrote;
 			if (restart && wrote) {
-				rt.run('systemctl', ['restart', s.unit], 90_000);
+				const stopR = ctx.spinner(`Restarting ${s.unit}…`);
+				try {
+					rt.run('systemctl', ['restart', s.unit], 90_000);
+				} finally {
+					stopR();
+				}
 				ok = await watch(0);
 			}
 			results.push({ s, how: 'fallback', ok, why });
@@ -513,7 +518,13 @@ export async function healServicePrivileges(
 			reload();
 		}
 		const before = show().restarts;
-		const restarted = rt.run('systemctl', ['restart', s.unit], 90_000).ok;
+		const stopR = ctx.spinner(`Restarting ${s.unit}…`);
+		let restarted: boolean;
+		try {
+			restarted = rt.run('systemctl', ['restart', s.unit], 90_000).ok;
+		} finally {
+			stopR();
+		}
 		if (restarted && uid !== null && (await watch(uid))) {
 			results.push({ s, how: 'switched', ok: true });
 			continue;

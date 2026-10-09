@@ -1524,7 +1524,11 @@ let failed = 0;
 	const realSetTimeout = globalThis.setTimeout;
 	const capture = async (hedge: boolean): Promise<number[]> => {
 		const delays: number[] = [];
-		(globalThis as { setTimeout: unknown }).setTimeout = ((fn: () => void, ms?: number, ...a: unknown[]) => {
+		(globalThis as { setTimeout: unknown }).setTimeout = ((
+			fn: () => void,
+			ms?: number,
+			...a: unknown[]
+		) => {
 			if (typeof ms === 'number' && ms >= 1000) delays.push(ms);
 			return realSetTimeout(fn, ms, ...(a as []));
 		}) as typeof setTimeout;
@@ -1539,8 +1543,14 @@ let failed = 0;
 	const bg = await capture(false);
 	const uf = await capture(true);
 	if (bg[0] === DEFAULT_HIDDEN_TIMEOUT_MS && uf[0] === DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS)
-		pass('call(): a background call to a hidden endpoint gets the 60 s floor; a user-facing one 25 s');
-	else fail('call() hidden timeout floor by call type', `background=${bg.join(',')} userFacing=${uf.join(',')}`);
+		pass(
+			'call(): a background call to a hidden endpoint gets the 60 s floor; a user-facing one 25 s'
+		);
+	else
+		fail(
+			'call() hidden timeout floor by call type',
+			`background=${bg.join(',')} userFacing=${uf.join(',')}`
+		);
 }
 
 // ── (D9): the LOSER of a hedge race was aborted BY US, which
@@ -1556,7 +1566,8 @@ let failed = 0;
 		hedgeStaggerFloorMs: 10,
 		cooldownJitterFraction: 0
 	});
-	const eps = (p as unknown as { endpoints: { url: string; ewmaLatencyMs: number | null }[] }).endpoints;
+	const eps = (p as unknown as { endpoints: { url: string; ewmaLatencyMs: number | null }[] })
+		.endpoints;
 	eps[0]!.ewmaLatencyMs = 800;
 	eps[1]!.ewmaLatencyMs = 900;
 	const r = await p.call(
@@ -1572,12 +1583,25 @@ let failed = 0;
 	);
 	await sleep(20);
 	const a = p.snapshot().find((e) => e.url === A)!;
-	if (r === B && a.consecutiveFailures === 0 && a.cooldownUntil <= Date.now() && a.ewmaLatencyMs === 800)
+	if (
+		r === B &&
+		a.consecutiveFailures === 0 &&
+		a.cooldownUntil <= Date.now() &&
+		a.ewmaLatencyMs === 800
+	)
 		pass('hedge: the aborted loser keeps its health (no cooldown, EWMA intact)');
-	else fail('hedge loser health', `winner=${r} A.fails=${a.consecutiveFailures} A.ewma=${a.ewmaLatencyMs}`);
+	else
+		fail(
+			'hedge loser health',
+			`winner=${r} A.fails=${a.consecutiveFailures} A.ewma=${a.ewmaLatencyMs}`
+		);
 
 	const C = 'https://hedge-c.example';
-	const p2 = new EndpointPool({ endpoints: [A, B, C], maxRequestsPerSecond: 0, hedgeStaggerFloorMs: 10 });
+	const p2 = new EndpointPool({
+		endpoints: [A, B, C],
+		maxRequestsPerSecond: 0,
+		hedgeStaggerFloorMs: 10
+	});
 	const eps2 = (p2 as unknown as { endpoints: { ewmaLatencyMs: number | null }[] }).endpoints;
 	eps2[0]!.ewmaLatencyMs = 600;
 	eps2[1]!.ewmaLatencyMs = 600;
@@ -1621,9 +1645,20 @@ let failed = 0;
 		}
 	}
 	const bad = pool.snapshot().find((e) => e.url === 'bad')!;
-	if (got.every((g) => g === 'block') && hits.bad === 1 && bad.consecutiveFailures === 1 && bad.cooldownUntil > Date.now())
-		pass('endpoint fault: a node without the API is rotated off and parked; every call is answered');
-	else fail('endpoint fault rotation', `got=${got.join('|')} hits=${JSON.stringify(hits)} bad=${JSON.stringify(bad)}`);
+	if (
+		got.every((g) => g === 'block') &&
+		hits.bad === 1 &&
+		bad.consecutiveFailures === 1 &&
+		bad.cooldownUntil > Date.now()
+	)
+		pass(
+			'endpoint fault: a node without the API is rotated off and parked; every call is answered'
+		);
+	else
+		fail(
+			'endpoint fault rotation',
+			`got=${got.join('|')} hits=${JSON.stringify(hits)} bad=${JSON.stringify(bad)}`
+		);
 }
 {
 	// A reply that is not JSON at all (an HTML error page with HTTP 200).
@@ -1631,14 +1666,15 @@ let failed = 0;
 	let out: string;
 	try {
 		out = await pool.call(async (u) => {
-			if (u === 'html') throw new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+			if (u === 'html') throw new SyntaxError('Unexpected token \'<\', "<html>" is not valid JSON');
 			return 'ok';
 		});
 	} catch (err) {
 		out = `threw: ${(err as Error).message}`;
 	}
 	const html = pool.snapshot().find((e) => e.url === 'html')!;
-	if (out === 'ok' && html.consecutiveFailures === 1) pass('endpoint fault: a non-JSON-RPC reply is rotated off');
+	if (out === 'ok' && html.consecutiveFailures === 1)
+		pass('endpoint fault: a non-JSON-RPC reply is rotated off');
 	else fail('non-JSON reply rotation', `out=${out} html=${JSON.stringify(html)}`);
 }
 {
@@ -1663,7 +1699,8 @@ let failed = 0;
 			return fn(u);
 		})
 		.catch(() => {});
-	if (order[0] === 'good') pass('endpoint fault: a faulted, never-measured node ranks last after its cooldown');
+	if (order[0] === 'good')
+		pass('endpoint fault: a faulted, never-measured node ranks last after its cooldown');
 	else fail('faulted node ranking', `order=${order.join(',')}`);
 }
 {
@@ -1729,6 +1766,80 @@ let failed = 0;
 	if (msg.includes('missing required active authority') && asked.length === 1 && parked === 0)
 		pass('write: a chain rejection propagates from the first node, no rotation, no cooldown');
 	else fail('write app-error semantics', `msg=${msg} asked=${asked.join(',')} parked=${parked}`);
+}
+
+{
+	// 2026-10-08 (morphit.io relay crash loop): when the primary won before the
+	// hedge's stagger ran out, the hedge was still dispatched — with an
+	// already-aborted signal. The relay then abandoned the RPC it started, and
+	// that call's later failure was an unhandled rejection that exits it.
+	const pool = new EndpointPool({
+		endpoints: ['fast', 'slow'],
+		hedgeThresholdMs: 1,
+		hedgeStaggerFloorMs: 30,
+		maxRequestsPerSecond: 0
+	});
+	const calls: Array<{ url: string; abortedAtCall: boolean }> = [];
+	const fn = async (url: string, signal: AbortSignal): Promise<string> => {
+		calls.push({ url, abortedAtCall: signal.aborted });
+		await new Promise((r) => setTimeout(r, url === 'fast' ? 10 : 200));
+		return url;
+	};
+	// Both answer once, so the primary has a latency above the hedge threshold.
+	await pool.call(fn);
+	await pool.call(fn);
+	calls.length = 0;
+	const winner = await pool.call(fn, { hedge: true });
+	await new Promise((r) => setTimeout(r, 120));
+	const late = calls.filter((c) => c.abortedAtCall);
+	if (winner === 'fast' && late.length === 0 && calls.length === 1)
+		pass('a hedge is never sent once the race is won (no call with an already-aborted signal)');
+	else fail('hedge after the race was won', JSON.stringify(calls));
+}
+
+{
+	// Review 2026-10-08: the caller's equivalenceKey runs on whatever a node
+	// sent. One that throws on a malformed answer (the indexer's
+	// blockConsistencyKey on a non-string block_id) was an unhandled rejection,
+	// and when that was the last operator still out the call never finished, so
+	// the indexer's poller stopped. Such an answer counts as no answer.
+	const pool = new EndpointPool({ endpoints: ['bad', 'good1', 'good2'], maxRequestsPerSecond: 0 });
+	const unhandled: unknown[] = [];
+	const onUnhandled = (e: unknown): void => void unhandled.push(e);
+	process.on('unhandledRejection', onUnhandled);
+	const settled = await Promise.race([
+		pool
+			.quorumCall<{ id: unknown }>(
+				async (u) => {
+					await sleep(u === 'bad' ? 5 : 20);
+					return { id: u === 'bad' ? 42 : 'block-1' };
+				},
+				{
+					equivalenceKey: (v) => (v.id as string).trim(),
+					minAgree: 2,
+					maxOperators: 1,
+					timeoutMs: 1_000
+				}
+			)
+			.then((r) => r),
+		sleep(1_500).then(() => 'hung' as const)
+	]);
+	await sleep(20);
+	process.off('unhandledRejection', onUnhandled);
+	if (
+		settled !== 'hung' &&
+		settled.kind === 'quorum_met' &&
+		settled.agreedKey === 'block-1' &&
+		unhandled.length === 0
+	)
+		pass(
+			'quorumCall: an answer the caller cannot key counts as no answer (no hang, nothing unhandled)'
+		);
+	else
+		fail(
+			'quorumCall with a throwing equivalenceKey',
+			`settled=${settled === 'hung' ? 'hung' : settled.kind} unhandled=${unhandled.length}`
+		);
 }
 
 for (const r of results) {

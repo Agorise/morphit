@@ -7,7 +7,7 @@
  * exclude blocked accounts. Reversible with `unblock`.
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { error as printError, info } from '../render/term.ts';
 import { applyLocalBlock, normalizeAccount, type BlockAction } from '../lib/localBlock.ts';
 
@@ -32,11 +32,13 @@ async function run(ctx: CommandCtx, action: BlockAction): Promise<number> {
 
 	// Reason: --reason flag, else the remaining positional words.
 	const reason =
-		action === 'block'
-			? (ctx.flags.reason ?? ctx.positional.slice(1).join(' ')).slice(0, 500)
-			: '';
+		action === 'block' ? (ctx.flags.reason ?? ctx.positional.slice(1).join(' ')).slice(0, 500) : '';
 
-	const { plan, changed } = await applyLocalBlock(ctx.db, { operator, account, action, reason });
+	const { plan, changed } = await whileReading(
+		ctx,
+		() => applyLocalBlock(ctx.db, { operator, account, action, reason }),
+		action === 'block' ? 'Blocking…' : 'Unblocking…'
+	);
 
 	if (json) {
 		console.log(JSON.stringify({ account, action, operator, op: plan.op, changed }, null, 2));
@@ -45,7 +47,9 @@ async function run(ctx: CommandCtx, action: BlockAction): Promise<number> {
 
 	info(plan.summary);
 	if (changed && action === 'block') {
-		info(`  @${account}'s listings are now hidden on this instance. They'll see a notice with a link to the Matrix chatroom.`);
+		info(
+			`  @${account}'s listings are now hidden on this instance. They'll see a notice with a link to the Matrix chatroom.`
+		);
 		info(`  Reverse with: morphit-ops unblock ${account}`);
 	} else if (changed && action === 'unblock') {
 		info(`  @${account}'s listings will show on this instance again.`);

@@ -62,7 +62,7 @@ import {
 import { LISTING_FEE_USD } from '@morphit/asset-registry';
 import type { ListingFeeResult } from './render.ts';
 import {
-	detectDbContainer,
+	detectDbContainerAsync,
 	dbIdentityFromUrl,
 	BACKUP_DB_NAME,
 	BACKUP_DB_USER
@@ -1019,7 +1019,9 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 	// real DB name/user (resolved above), so it matches provably.
 	let dbContainer: string | null = null;
 	try {
-		dbContainer = detectDbContainer(identity.dbUser, identity.dbName);
+		dbContainer = await withSpinner('Looking for a Postgres container to back up…', () =>
+			detectDbContainerAsync(identity.dbUser, identity.dbName)
+		);
 	} catch {
 		dbContainer = null;
 	}
@@ -1180,8 +1182,11 @@ export async function stepRpcEndpoints(
 		// get_dynamic_global_properties call to each endpoint, so the
 		// operator finds out NOW — not after a silent stalled sync —
 		// whether the list actually works from this box.
-		console.log('\n  Checking the endpoints are reachable…\n');
-		const summary = await probeRpcEndpoints(result);
+		console.log('');
+		const summary = await withSpinner('Checking the endpoints are reachable…', () =>
+			probeRpcEndpoints(result)
+		);
+		console.log('');
 		for (const line of formatRpcProbeLines(summary)) {
 			console.log(`  ${line}`);
 		}
@@ -1462,9 +1467,10 @@ async function renderHealthChecks(
 		console.log('  (no URLs configured)');
 		return;
 	}
-	console.log('  Checking health of each URL...\n');
 	// Probe in parallel — they're independent third-party hosts.
-	const results = await Promise.all(urls.map((u) => probe(u).catch(() => null)));
+	const results = await withSpinner('Checking health of each URL…', () =>
+		Promise.all(urls.map((u) => probe(u).catch(() => null)))
+	);
 	for (let i = 0; i < urls.length; i++) {
 		const r = results[i];
 		const status =
@@ -1939,8 +1945,10 @@ async function editChatLinkUrl(label: string, defaultUrl: string): Promise<strin
 		// (defense-in-depth — askForUrl validates shape but we
 		// also strip terminal-control escapes here).
 		console.log(`  Current ${label}: ${sanitizeForTerm(current)}`);
-		const probe = await probeChatLinkExplorer(current).catch(
-			(): ProbeStatus => ({ kind: 'unreachable', reason: 'probe threw' })
+		const probe = await withSpinner('Checking it answers…', () =>
+			probeChatLinkExplorer(current).catch(
+				(): ProbeStatus => ({ kind: 'unreachable', reason: 'probe threw' })
+			)
 		);
 		console.log(`     ${renderProbeStatus(probe)}\n`);
 		const choice = await askChoice('What would you like to do?', [
@@ -2266,13 +2274,16 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 	});
 
 	// Attempt live recompute via Coingecko.
-	console.log('\n  Fetching live BTC/USD and XMR/USD from Coingecko...\n');
+	console.log('');
 	let btcSatoshis = DEFAULT_LISTING_FEE_BTC_SATOSHIS;
 	let xmrPiconero = DEFAULT_LISTING_FEE_XMR_PICONERO;
 	let source: 'coingecko' | 'manual' | 'default' = 'default';
 
 	try {
-		const prices = await fetchBtcXmrPricesFromCoingecko();
+		const prices = await withSpinner('Fetching live BTC/USD and XMR/USD from Coingecko…', () =>
+			fetchBtcXmrPricesFromCoingecko()
+		);
+		console.log('');
 		const computed = computeFeeAmounts(targetUsd, prices);
 		btcSatoshis = computed.btcSatoshis;
 		xmrPiconero = computed.xmrPiconero;

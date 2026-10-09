@@ -220,7 +220,11 @@ function dirsWithSmokeScripts(): string[] {
 for (const ws of dirsWithSmokeScripts()) {
 	const wsPath = join(ROOT, ws);
 	const label = ws === '.' ? 'scripts/ (root)' : ws;
-	if (!existsSync(join(wsPath, SMOKE_TYPECHECK_CONFIG))) {
+	// The root workspace keeps its config in scripts/ (since v1.21.3, to keep
+	// the repository's top level to what people look for); tsc still runs from
+	// the root, so its error paths start with scripts/ as for every workspace.
+	const config = ws === '.' ? join('scripts', SMOKE_TYPECHECK_CONFIG) : SMOKE_TYPECHECK_CONFIG;
+	if (!existsSync(join(wsPath, config))) {
 		// Not a skip — a workspace that ships smokes and has no gate config is the
 		// hole this whole phase exists to close.
 		fail(
@@ -233,7 +237,7 @@ for (const ws of dirsWithSmokeScripts()) {
 	}
 	let out = '';
 	try {
-		execSync(`npx tsc -p ${SMOKE_TYPECHECK_CONFIG}`, { cwd: wsPath, stdio: 'pipe' });
+		execSync(`npx tsc -p ${config}`, { cwd: wsPath, stdio: 'pipe' });
 	} catch (err: unknown) {
 		const e = err as { stdout?: Buffer; stderr?: Buffer };
 		out = (e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '');

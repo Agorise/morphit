@@ -18,7 +18,7 @@
  *   --since=DUR    Show signups within the last DUR.  Default 24h.
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt, error, blank } from '../render/term.ts';
@@ -45,8 +45,9 @@ export async function runSignups(ctx: CommandCtx): Promise<number> {
 
 	const limit = ctx.flags.json === 'true' ? HUMAN_LIMIT * 10 : HUMAN_LIMIT;
 
-	const result = await ctx.db.query<SignupEntry>(
-		`SELECT
+	const result = await whileReading(ctx, () =>
+		ctx.db.query<SignupEntry>(
+			`SELECT
 		   name,
 		   created_block_num::text,
 		   created_block_time,
@@ -57,7 +58,8 @@ export async function runSignups(ctx: CommandCtx): Promise<number> {
 		   AND created_block_time >= $2
 		 ORDER BY created_block_time DESC
 		 LIMIT $3`,
-		[ctx.config.relayAccount, cutoff, limit]
+			[ctx.config.relayAccount, cutoff, limit]
+		)
 	);
 
 	const entries = result.rows;

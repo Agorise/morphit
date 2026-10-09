@@ -9,11 +9,11 @@
  *
  * Pipeline:
  *   1) Build the payload (pre-filled with the canonical treasury):
- *        node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts > release.json
+ *        node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts > /tmp/morphit-release.json
  *   2) PREVIEW it — shows the exact op, asks for NO key, sends nothing:
- *        node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
+ *        node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts /tmp/morphit-release.json --dry-run
  *   3) Sign + broadcast for real (prompts for the key, masked):
- *        node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json
+ *        node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts /tmp/morphit-release.json
  *
  * Flags:
  *   --dry-run        Print the exact op and exit.  No key, no network.
@@ -73,7 +73,7 @@ for (let i = 0; i < argv.length; i++) {
 if (!fileArg) {
 	die(
 		'usage: tsx release-broadcast.ts <release.json> [--dry-run] [--signer <acct>] [--node <url>] [--include-hidden]\n' +
-			'  build the file first:  tsx release-build-payload.ts > release.json'
+			'  build the file first:  tsx release-build-payload.ts > /tmp/morphit-release.json'
 	);
 }
 

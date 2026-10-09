@@ -3,7 +3,7 @@
  * license-disclosure-smoke — keep the third-party-license disclosure honest.
  *
  * Two jobs:
- *  1. THIRD-PARTY-LICENSES.md exists and still discloses the one known
+ *  1. docs/THIRD-PARTY-LICENSES.md exists and still discloses the one known
  *     non-permissive runtime dependency (`@beblurt/dblurt`, its no-military
  *     clause) + Morphit's own AGPL-3.0-or-later license.
  *  2. DRIFT GUARD: walk the installed dependency tree and flag any package
@@ -33,7 +33,7 @@ import { join } from 'node:path';
 // smoke that means cwd === repo root.
 const REPO_ROOT = process.cwd();
 const NODE_MODULES = join(REPO_ROOT, 'node_modules');
-const DISCLOSURE = join(REPO_ROOT, 'THIRD-PARTY-LICENSES.md');
+const DISCLOSURE = join(REPO_ROOT, 'docs', 'THIRD-PARTY-LICENSES.md');
 
 let failures = 0;
 let n = 0;
@@ -125,7 +125,7 @@ function main(): void {
 	console.log('license-disclosure-smoke');
 
 	// ─── Disclosure-doc content ─────────────────────────────────────────
-	check('THIRD-PARTY-LICENSES.md exists', existsSync(DISCLOSURE));
+	check('docs/THIRD-PARTY-LICENSES.md exists', existsSync(DISCLOSURE));
 	const doc = existsSync(DISCLOSURE) ? readFileSync(DISCLOSURE, 'utf8') : '';
 	check('discloses @beblurt/dblurt', doc.includes('@beblurt/dblurt'));
 	check('names the no-military license', /No-Military/i.test(doc));

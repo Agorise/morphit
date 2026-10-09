@@ -64,6 +64,16 @@ function allSchemaTables(sql: string): Map<string, Set<string>> {
 		}
 		tables.set(table, cols);
 	}
+	// Columns added later by migration (`ALTER TABLE t ADD COLUMN [IF NOT EXISTS] c`,
+	// e.g. relay_pending_transfers.amount_bp) are real columns too.
+	const alter =
+		/ALTER TABLE(?:\s+IF EXISTS)?\s+([a-z_][a-z0-9_]*)\s+((?:ADD COLUMN[\s\S]*?)(?:;|$))/gi;
+	while ((m = alter.exec(sql)) !== null) {
+		const cols = tables.get(m[1]!.toLowerCase());
+		if (cols === undefined) continue;
+		for (const a of m[2]!.matchAll(/ADD COLUMN(?:\s+IF NOT EXISTS)?\s+([a-z_][a-z0-9_]*)/gi))
+			cols.add(a[1]!.toLowerCase());
+	}
 	return tables;
 }
 

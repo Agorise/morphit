@@ -89,6 +89,7 @@ import { resolveWebRoot } from './upgrade.ts';
 import { atomicEnvWrite } from './edit.ts';
 import { ask, askYesNo } from '../init/prompt.ts';
 import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 import { info, warn, error as printError, sanitizeForTerm } from '../render/term.ts';
 
 export interface BrandingCtx {
@@ -696,6 +697,17 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 	}
 
 	let result: BrandingResult;
+	// Rasterizing the icons and launch screens takes a while: the spinner's
+	// label is on the line for it (to stderr under --json, so stdout stays JSON).
+	const spinOut = json ? process.stderr : process.stdout;
+	const stopApply = startDotsSpinner(
+		sub === 'status' || dryRun
+			? 'Comparing the served build with your branding…'
+			: sub === 'reset'
+				? 'Putting back the plain Morphit look…'
+				: 'Applying your branding (drawing the icons and launch screens)…',
+		spinOut
+	);
 	try {
 		result = applyBranding({
 			buildDir,
@@ -703,7 +715,9 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 			dryRun: sub === 'status' || dryRun,
 			reset: sub === 'reset'
 		});
+		stopApply();
 	} catch (err) {
+		stopApply();
 		const msg = err instanceof Error ? err.message : String(err);
 		if (/EACCES|EPERM/.test(msg)) {
 			printError(
@@ -727,7 +741,12 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 	let published = 0;
 	const webRoot = resolveWebRoot(process.env);
 	if (sub !== 'status' && !dryRun && result.touched.length > 0 && existsSync(webRoot)) {
-		published = syncTouchedToWebRoot(buildDir, webRoot, result.touched);
+		const stopCopy = startDotsSpinner(`Copying the changed files to ${webRoot}…`, spinOut);
+		try {
+			published = syncTouchedToWebRoot(buildDir, webRoot, result.touched);
+		} finally {
+			stopCopy();
+		}
 	}
 
 	if (json) {

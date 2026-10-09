@@ -4,7 +4,7 @@ This is a summary of the review behind v1.21.0. The current threat model is in
 [`docs/audit/2026-10-stride-matrix.md`](audit/2026-10-stride-matrix.md),
 [`docs/audit/2026-10-attack-tree.md`](audit/2026-10-attack-tree.md) and
 [`docs/audit/2026-10-red-team-narrative.md`](audit/2026-10-red-team-narrative.md).
-To report a vulnerability, see [SECURITY.md](../SECURITY.md).
+To report a vulnerability, see [docs/SECURITY.md](SECURITY.md).
 
 ## Scope
 

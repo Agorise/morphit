@@ -87,8 +87,9 @@ const ROOT = { uid: 0, gid: 0 };
 
 	const iCapture = src.indexOf('chooseCanaryDirOwner(readOwner');
 	// The web rebuild (its options object may span lines and carry an env).
+	// (Since v1.21.3 it runs under the spinner: runStepWithSpinner(label, 'npm', …).)
 	const iBuild = src.search(
-		/runOrThrow\('npm', \['run', 'build'\], \{\s*cwd: join\(installDir, 'apps', 'web'\)/
+		/'npm',\s*\['run', 'build'\],\s*\{\s*cwd: join\(installDir, 'apps', 'web'\)/
 	);
 	const iRestore = src.indexOf("spawnSync('chown', ['-R', `${canaryDirUid}:${canaryDirGid}`");
 
@@ -194,7 +195,7 @@ const ROOT = { uid: 0, gid: 0 };
 	// Runs the refresh AS the owner, non-interactively, with a timeout (no hang).
 	if (
 		/sudo'[\s\S]{0,80}'-n'[\s\S]{0,80}'-u'[\s\S]{0,120}'bash'/.test(src) &&
-		/timeout: 90_000/.test(src)
+		/timeout(?:Ms)?: 90_000/.test(src)
 	)
 		ok('runs the refresh via sudo -n -u <user> bash with a 90s timeout (can never hang)');
 	else bad('the auto-refresh must be sudo -n -u <user> bash + timeout-guarded');

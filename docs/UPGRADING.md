@@ -364,9 +364,9 @@ by default).
 
 **Nothing in the heal phase stops to ask.** The upgrade's self-heals
 never wait for an answer: where one has a question (old relay log lines
-in the journal, a Matrix bot kept on clearnet on a Tor-only node,
-plain-text backups), it takes the safe default (the journal is left, the
-clearnet bot is stopped, the backups are left), records the question and
+in the journal, a Matrix bot kept on clearnet on a Tor-only node), it
+takes the safe default (the journal is left, the clearnet bot is
+stopped), records the question and
 names it, with the command to answer it, in the upgrade's last lines
 (with any warnings and the background checks still running):
 
@@ -455,38 +455,39 @@ node installs it by the on-chain SHA-256 (path 1).
 
 ## Get notified about new releases — `morphit-release-monitor`
 
-If you'd rather not poll manually, the `morphit-release-monitor`
-sidecar runs every 6 hours, calls `morphit-ops upgrade --check-only`,
-and emits an INFO event when a newer release is available. The
-event surfaces via `journalctl -u morphit-release-monitor`, the
-matrix-bot alert relay (if enabled), or whatever else you point
-your structured-event ingestion at.
+The `morphit-release-monitor` sidecar runs twice a day, calls
+`morphit-ops upgrade --check-only`, and emits an INFO event when a newer
+release is available. With Matrix alerts set up (`sudo morphit-ops`, option
+17) the alert bot sends it to you as a message; it is also in
+`journalctl -u morphit-release-monitor`.
+
+The check reads @morphit's on-chain release record from this node's own
+indexer, so it normally leaves the box not at all. It asks the code host
+(git.agorise.net) only when the indexer answers but holds no release record;
+when the indexer does not answer at all, the check stops there and its alert
+says why (it runs without access to this node's config, so it does not guess
+whether the node may use clearnet). The main menu reads the same record when it
+opens, and asks the code host only when the record does not answer and the node
+is not Tor/I2P-only; it says it couldn't check only when nothing answered.
 
 The sidecar **never applies upgrades itself** — it only watches.
 You still run `morphit-ops upgrade` manually (or with
 `MORPHIT_AUTO_UPGRADE=1` cron) when you decide to apply.
 
-**Turning it on.** Nothing installs it for you. (This page used to
-name an Ansible role, `release_monitor`, for it. That role does not
-exist.) On the node, as root:
+**It is on by itself** since v1.21.3: every install and every upgrade puts
+its unit and timer in place and turns the timer on, and the upgrade also runs
+the check once to see that it works. (Before, nothing installed it, so no operator was ever
+told about a release this way.) It runs as a throwaway user systemd makes for
+each run, so it needs no account of its own.
 
-```
-sudo cp /opt/morphit/ops/systemd/morphit-release-monitor.service \
-        /opt/morphit/ops/systemd/morphit-release-monitor.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now morphit-release-monitor.timer
-```
-
-It runs as the `morphit-host-monitor` user, which the host monitor's
-install creates. If `id morphit-host-monitor` reports no such user,
-create it first:
-`sudo useradd --system --no-create-home --shell /usr/sbin/nologin morphit-host-monitor`.
-
-To check it once without waiting six hours:
+To check it once without waiting:
 `sudo systemctl start morphit-release-monitor.service`, then
 `journalctl -u morphit-release-monitor -n 5 --no-pager`. Nothing
 printed means you are up to date; `release_available` names the
-installed and the new version.
+installed and the new version. To turn it off:
+`sudo systemctl disable --now morphit-release-monitor.timer`. That lasts
+only until the next upgrade, which turns it on again: there is no lasting off
+switch.
 
 **If you enabled it before v1.18.0, it never worked.** Three
 separate faults, all fixed in 1.18.0:

@@ -1124,7 +1124,9 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: [
 			"$_('run_a_node.asset_policy_heading')",
-			"$_('run_a_node.asset_policy_default_label')",
+			// The default-on / one-env-var points were taken out in v1.21.3 (the
+			// page now names asset and payment-method choices in one line).
+			"$_('run_a_node.asset_policy_body')",
 			"$_('run_a_node.asset_policy_federation_label')",
 			'MORPHIT_INDEXER_DISABLED_ASSETS'
 		]
@@ -2565,12 +2567,12 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'cp138-I-1 — repo-root SECURITY.md exists with Matrix DM + Forgejo paths',
-		file: 'SECURITY.md',
+		// The repo-root SECURITY.md moved to the top of docs/SECURITY.md (v1.21.3).
+		name: 'cp138-I-1 — docs/SECURITY.md opens with the Matrix DM + Forgejo reporting paths',
+		file: 'docs/SECURITY.md',
 		rootRelative: true,
 		mustHave: [
 			'@agorise:matrix.org',
-			'docs/SECURITY.md',
 			'Matrix DM',
 			'72 hours',
 			'7 days'

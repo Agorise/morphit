@@ -22,7 +22,9 @@
  */
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
+import { runAsync, sleepMs, systemctlSpinning } from '../lib/spinRun.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { indexerLooksRunning } from './fastForward.ts';
 import { ask, askYesNo } from '../init/prompt.ts';
@@ -71,7 +73,11 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 		info('Restores the newest on-chain-anchored indexer snapshot, then catches up the');
 		info('short tail — minutes to a live orderbook instead of days of full replay.');
 		blank();
-		info('You will be trusting the snapshot PUBLISHER (@' + (ctx.flags.signer ?? 'morphit') + ') for the');
+		info(
+			'You will be trusting the snapshot PUBLISHER (@' +
+				(ctx.flags.signer ?? 'morphit') +
+				') for the'
+		);
 		info('pre-tail state — the same trust as running their software. The tail from the');
 		info('snapshot block to chain head is re-verified by normal indexing, and a Tier-2');
 		info('spot-check proves the snapshot op log against the chain before you serve.');
@@ -90,8 +96,10 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 	let forceEffective = force;
 	let wasRunning = false;
 	try {
-		const res = await ctx.db.query<StateRow>(
-			'SELECT last_applied_block::text, last_applied_at FROM indexer_state LIMIT 1'
+		const res = await whileReading(ctx, () =>
+			ctx.db.query<StateRow>(
+				'SELECT last_applied_block::text, last_applied_at FROM indexer_state LIMIT 1'
+			)
 		);
 		if (res.rows.length > 0) {
 			const lastAppliedAt = res.rows[0]!.last_applied_at
@@ -108,7 +116,7 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 					info('Aborted — the indexer must be stopped to fast-sync. Nothing changed.');
 					return 1;
 				}
-				if (!stopIndexerAndWait()) {
+				if (!(await stopIndexerAndWait())) {
 					info('✗ Could not confirm the indexer stopped. Stop it manually and retry:');
 					info('    sudo systemctl stop morphit-indexer');
 					return 1;
@@ -124,7 +132,7 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 				);
 				if (!discard) {
 					info('Aborted — nothing changed.');
-					if (wasRunning) spawnSync('systemctl', ['start', 'morphit-indexer'], { stdio: 'inherit' });
+					if (wasRunning) await startIndexer();
 					return 1;
 				}
 				forceEffective = true;
@@ -137,7 +145,7 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 	const proceed = (await ask('Type "fast-sync" to restore the newest federation snapshot')).trim();
 	if (proceed !== 'fast-sync') {
 		info('Aborted — nothing changed.');
-		if (wasRunning) spawnSync('systemctl', ['start', 'morphit-indexer'], { stdio: 'inherit' });
+		if (wasRunning) await startIndexer();
 		return 1;
 	}
 
@@ -150,7 +158,7 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 			: fastSyncFromChain({
 					repoRoot: defaultRepoRoot(),
 					signer: ctx.flags.signer,
-			signerPubkey: ctx.flags['signer-pubkey'],
+					signerPubkey: ctx.flags['signer-pubkey'],
 					force: forceEffective,
 					skipVerify: ctx.flags['skip-verify'] === 'true'
 				});
@@ -159,8 +167,7 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 	// things automatically).
 	if (code === 0 && wasRunning) {
 		blank();
-		info('Restarting the indexer to catch up the short tail…');
-		spawnSync('systemctl', ['start', 'morphit-indexer'], { stdio: 'inherit' });
+		await startIndexer('Restarting the indexer to catch up the short tail…');
 	}
 	return code;
 }
@@ -176,18 +183,41 @@ function indexerServiceActive(): boolean | null {
 	return null;
 }
 
+/** `systemctl is-active morphit-indexer`, without blocking the event loop (so
+ *  the spinner keeps turning while it is polled). Same answers as
+ *  {@link indexerServiceActive}. */
+async function indexerServiceActiveAsync(): Promise<boolean | null> {
+	const r = await runAsync('systemctl', ['is-active', 'morphit-indexer'], { timeoutMs: 10_000 });
+	if (r.error !== null) return null;
+	const out = r.stdout.trim(); // stdout only: a warning on stderr is not the state
+	if (out === 'active' || out === 'activating') return true;
+	if (out === 'inactive' || out === 'failed' || out === 'deactivating') return false;
+	return null;
+}
+
 /** Stop the indexer, then poll systemd until it reports inactive (up to ~20s).
  *  Returns true once stopped (or if systemd can't be queried — assume the stop
- *  command took). Observes the RUNNING state, never trusts the exit code alone. */
-function stopIndexerAndWait(): boolean {
-	const stop = spawnSync('systemctl', ['stop', 'morphit-indexer'], { stdio: 'inherit' });
+ *  command took). Observes the RUNNING state, never trusts the exit code alone.
+ *  The braille spinner turns for the whole stop + wait. */
+export async function stopIndexerAndWait(): Promise<boolean> {
+	const stop = await systemctlSpinning('Stopping the indexer…', ['stop', 'morphit-indexer']);
 	if (stop.error) return false;
-	for (let i = 0; i < 20; i++) {
-		const a = indexerServiceActive();
-		if (a === false || a === null) return true;
-		spawnSync('sleep', ['1']);
+	const spin = startDotsSpinner('Waiting for the indexer to stop…');
+	try {
+		for (let i = 0; i < 20; i++) {
+			const a = await indexerServiceActiveAsync();
+			if (a === false || a === null) return true;
+			await sleepMs(1_000);
+		}
+		return (await indexerServiceActiveAsync()) === false;
+	} finally {
+		spin();
 	}
-	return indexerServiceActive() === false;
+}
+
+/** Start the indexer again (under the spinner as root). */
+async function startIndexer(label = 'Starting the indexer again…'): Promise<void> {
+	await systemctlSpinning(label, ['start', 'morphit-indexer']);
 }
 
 /**
@@ -260,7 +290,11 @@ export function fastSyncFromChain(opts: {
  * Sources the same env files as fastSyncFromChain so the config validates. Used when
  * no fresh on-chain @morphit snapshot exists (e.g. the publisher box was rebuilt).
  */
-export function fastSyncFromFile(opts: { repoRoot: string; filePath: string; force?: boolean }): number {
+export function fastSyncFromFile(opts: {
+	repoRoot: string;
+	filePath: string;
+	force?: boolean;
+}): number {
 	const repo = opts.repoRoot;
 	const tsx = join(repo, 'node_modules', '.bin', 'tsx');
 	const bootstrapArgs = [
@@ -272,14 +306,20 @@ export function fastSyncFromFile(opts: { repoRoot: string; filePath: string; for
 	];
 	if (opts.force) bootstrapArgs.push('--force');
 
-	const envFiles = [join(repo, 'morphit.env'), join(repo, 'morphit.config.env'), '/etc/morphit/indexer.env'];
+	const envFiles = [
+		join(repo, 'morphit.env'),
+		join(repo, 'morphit.config.env'),
+		'/etc/morphit/indexer.env'
+	];
 	const shellQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 	const sourceCmd = `set -a; for f in ${envFiles.map(shellQuote).join(' ')}; do [ -f "$f" ] && . "$f"; done; set +a; exec ${shellQuote(tsx)} ${bootstrapArgs.map(shellQuote).join(' ')}`;
 
 	const run = spawnSync('bash', ['-c', sourceCmd], { cwd: repo, stdio: 'inherit' });
 	if (run.status !== 0) {
 		blank();
-		info('✗ Snapshot import did not complete. Check the path + that it is a snapshot-export .tar.gz.');
+		info(
+			'✗ Snapshot import did not complete. Check the path + that it is a snapshot-export .tar.gz.'
+		);
 		return run.status ?? 1;
 	}
 	blank();

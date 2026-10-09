@@ -31,7 +31,7 @@
  *   6. profile feedback_response affordance (own profile, isOwnProfile)
  *   7. order-detail owner-actions affordance
  *   8. /orderbook fee-rejected recovery link widened to $hasAnySession
- *   9. /run-a-node operator_register three-way branch
+ *   9. /run-a-node carries no write form (registration moved to morphit-ops)
  *  10. +layout mobile-nav sign-in link widened to $hasAnySession
  *
  * Also asserts (the cross-cutting variant + locale piece):
@@ -75,11 +75,7 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: '2 — /my/orders inline feature_order affordance for paired users',
 		file: 'src/routes/[lang]/my/orders/+page.svelte',
-		mustHave: [
-			'{#if $isPairedReadOnly}',
-			'variant="feature_order"',
-			'orderPermlink={o.permlink}'
-		]
+		mustHave: ['{#if $isPairedReadOnly}', 'variant="feature_order"', 'orderPermlink={o.permlink}']
 	},
 	{
 		name: '3 — /my/orders inline feedback affordance for paired users (preserves permlink hash deep link)',
@@ -151,22 +147,14 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: '9 — /run-a-node operator_register three-way branch (signed-out / paired / unlocked)',
+		// v1.21.3: the operator-registration form left /run-a-node (operators
+		// register from `sudo morphit-ops` on their server), so the page has
+		// no write for a paired read-only session to be blocked from — and must
+		// not grow one back that sends paired users to "please sign in".
+		name: '9 — /run-a-node carries no write form (operators register from morphit-ops)',
 		file: 'src/routes/[lang]/run-a-node/+page.svelte',
-		mustHave: [
-			"import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte'",
-			"import { liveIdentity, isPairedReadOnly, hasAnySession } from '$stores/identity'",
-			'{#if !$hasAnySession}',
-			'{:else if $isPairedReadOnly}',
-			'<WriteBlockedReadOnly variant="operator_register" />'
-		],
-		mustNotHave: [
-			// Pre-fix sentinel: a !$liveIdentity gate ahead of the
-			// form would, for paired-readonly users, route them into
-			// the "please sign in" branch (since paired sessions have
-			// $liveIdentity === null).
-			'{#if !$liveIdentity}'
-		]
+		mustHave: ['sudo bash morphit-setup.sh'],
+		mustNotHave: ['<form', 'operatorRegister', '{#if !$liveIdentity}']
 	},
 	{
 		// intentionally REMOVED the duplicate mobile-nav sign-in
@@ -178,10 +166,7 @@ const SCENARIOS: readonly Scenario[] = [
 		// silently re-introduce the duplicate link.
 		name: '10 — +layout mobile-nav has NO duplicate sign-in link (AvatarMenu is the single CTA)',
 		file: 'src/routes/[lang]/+layout.svelte',
-		mustHave: [
-			'No sign-in link here on purpose',
-			'<AvatarMenu />'
-		]
+		mustHave: ['No sign-in link here on purpose', '<AvatarMenu />']
 	},
 	{
 		name: '11 — WriteBlockedReadOnly declares the four new variants in its WriteVariant union',

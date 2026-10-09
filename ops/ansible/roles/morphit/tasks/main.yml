@@ -192,6 +192,8 @@
     - morphit-backup.timer
     - morphit-first-online.service
     - morphit-first-online.timer
+    - morphit-release-monitor.service
+    - morphit-release-monitor.timer
   notify: Reload systemd
 
 - name: Ensure morphit-backup.timer drop-in directory exists
@@ -328,6 +330,17 @@
     name: morphit-first-online.timer
     enabled: true
     state: started
+
+# The release check (twice a day): tells the operator, through the Matrix
+# alerts when they are set up, that a newer release exists. On every node: it
+# reads the on-chain release record from this node's own indexer, so it
+# normally leaves the box not at all. Before 2026-10-08 nothing installed it.
+- name: Enable + start morphit-release-monitor.timer (twice-a-day release check)
+  ansible.builtin.systemd:
+    name: morphit-release-monitor.timer
+    enabled: true
+    state: started
+    daemon_reload: true
 
 # ─── Web Push — VAPID keypair (generate-once, §46) ──────────────
 # Web push is a relay feature gated on a VAPID keypair (RFC 8292).

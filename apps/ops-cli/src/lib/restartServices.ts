@@ -21,6 +21,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { askYesNo } from '../init/prompt.ts';
+import { systemctlSpinning } from './spinRun.ts';
 
 /** A restart runner: returns the exit status of `cmd args` (null on a
  *  spawn error, e.g. the binary not found). */
@@ -49,7 +50,10 @@ function isRoot(): boolean {
  * box) surfaces as a non-zero/null status and lands the unit in the
  * returned failure list — the caller degrades to manual instructions.
  */
-export function restartServices(units: readonly string[], exec: RestartExec = defaultExec): string[] {
+export function restartServices(
+	units: readonly string[],
+	exec: RestartExec = defaultExec
+): string[] {
 	const root = isRoot();
 	const failed: string[] = [];
 	for (const unit of units) {
@@ -86,7 +90,10 @@ export interface OfferRestartOpts {
  * instructions).  Returns true iff a restart was attempted AND every unit
  * came back successfully.
  */
-export async function offerRestart(units: readonly string[], opts: OfferRestartOpts = {}): Promise<boolean> {
+export async function offerRestart(
+	units: readonly string[],
+	opts: OfferRestartOpts = {}
+): Promise<boolean> {
 	if (units.length === 0) return false;
 	const confirm = opts.confirm ?? askYesNo;
 	const label = (u: string): string => u.replace(/^morphit-/, '').replace(/\.service$/, '');
@@ -102,7 +109,17 @@ export async function offerRestart(units: readonly string[], opts: OfferRestartO
 		console.log('');
 		return false;
 	}
-	const failed = restartServices(units, opts.exec);
+	// As root (and with the real runner) each restart runs under the turning
+	// braille spinner; otherwise sudo may ask for a password — plain call.
+	const failed: string[] = [];
+	if (opts.exec === undefined && isRoot()) {
+		for (const u of units) {
+			const r = await systemctlSpinning(`Restarting ${label(u)}…`, ['restart', u]);
+			if (r.status !== 0) failed.push(u);
+		}
+	} else {
+		failed.push(...restartServices(units, opts.exec));
+	}
 	if (failed.length === 0) {
 		console.log(`\n  ✓ restarted ${human} — the change is live.`);
 		console.log('');

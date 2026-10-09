@@ -186,3 +186,93 @@ describe('the relay stops publishing its operator block (relay health)', () => {
 		expect(b.restarts).toBe(0);
 	});
 });
+
+// 2026-10-08, morphit.io (v1.21.2): after the upgrade the background check said
+// "anonymous callers get only the status … the local check … got no operator
+// block either, so the indexer's signup check sees nothing" — built from no
+// answer at all. A relay that does not answer is now waited for, and if it
+// never answers that is what is said; nothing is judged from silence.
+describe('a relay that does not answer (yet)', () => {
+	it('never answering: says so, and claims nothing about what it shows', async () => {
+		const b = new Box();
+		b.files.set(RELAY_ENV!, 'MORPHIT_RELAY_LISTEN_PORT=8080\nMORPHIT_RELAY_VERBOSE_HEALTH=false\n');
+		b.verbose = false;
+		b.running = false;
+		const out = await b.run();
+		expect(out.verified).toBe(false);
+		expect(out.detail).toMatch(
+			/the relay did not answer on http:\/\/127\.0\.0\.1:8080\/v1\/health/
+		);
+		expect(out.detail).not.toMatch(/anonymous callers get only the status/);
+		expect(out.detail).not.toMatch(/no operator block/);
+	});
+
+	it('"within 30 s" is 30 s of time, however slow each try is', async () => {
+		// Review 2026-10-08: the wait counted 20 tries; each is a request that can
+		// take up to 8 s to fail, so "30 s" could be over three minutes.
+		const b = new Box();
+		b.files.set(RELAY_ENV!, 'MORPHIT_RELAY_LISTEN_PORT=8080\nMORPHIT_RELAY_VERBOSE_HEALTH=true\n');
+		let t = 0;
+		const get = b.rt.get;
+		b.rt.get = (u, h) => {
+			if (!b.running) t += 8_000;
+			return get(u, h);
+		};
+		b.rt.sleep = async (ms) => void (t += ms);
+		(b.rt as { now?: () => number }).now = () => t;
+		b.stuckRestarts = 0;
+		const restart = b.rt.restartRelay;
+		b.rt.restartRelay = () => {
+			b.running = false;
+			return restart();
+		};
+		const out = await b.run();
+		expect(out.verified).toBe(false);
+		// Two waits (after the restart, then before reading it), 30 s each plus
+		// the try in progress when time ran out, and the two single checks
+		// around the second wait.
+		expect(t).toBeLessThanOrEqual(2 * (30_000 + 9_500) + 2 * 8_000);
+	});
+
+	it('answering after a few seconds: waited for, then judged as usual', async () => {
+		const b = new Box();
+		b.files.set(RELAY_ENV!, 'MORPHIT_RELAY_LISTEN_PORT=8080\nMORPHIT_RELAY_VERBOSE_HEALTH=false\n');
+		b.verbose = false;
+		b.running = false;
+		let waits = 0;
+		b.rt.sleep = async () => {
+			if (++waits === 3) b.running = true;
+		};
+		const out = await b.run();
+		expect(waits).toBeGreaterThanOrEqual(3);
+		expect(out.verified).toBe(true);
+		expect(out.detail).toMatch(/the indexer's local check still gets the operator block/);
+	});
+});
+
+describe('which address the relay health check asks (second review)', () => {
+	it('an IP address is asked as it is; only a name is pointed at this server', async () => {
+		const { curlResolveArgs } = await import('../src/lib/relayHealthEnvHeal.ts');
+		expect(curlResolveArgs('http://172.18.0.1:8080/v1/health')).toEqual([]);
+		expect(curlResolveArgs('http://[::1]:8080/v1/health')).toEqual([]);
+		expect(curlResolveArgs('http://127.0.0.1:8080/v1/health')).toEqual([]);
+		expect(curlResolveArgs('https://trade.example.org/relay/v1/health')).toEqual([
+			'--noproxy',
+			'*',
+			'--resolve',
+			'trade.example.org:443:127.0.0.1'
+		]);
+	});
+
+	it('an empty listen host in the env files means the default, not "http://:8080"', async () => {
+		const b = new Box();
+		b.files.set(
+			RELAY_ENV!,
+			'MORPHIT_RELAY_LISTEN_HOST=\nMORPHIT_RELAY_LISTEN_PORT=\nMORPHIT_RELAY_VERBOSE_HEALTH=false\n'
+		);
+		b.verbose = false;
+		const out = await b.run();
+		expect(out.detail).not.toMatch(/http:\/\/:/);
+		expect(out.verified).toBe(true);
+	});
+});

@@ -20,7 +20,7 @@
  */
 import { deriveBtcFeeAddress, parseAccountXpub } from '@morphit/release-schema';
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { emitJson } from '../render/json.ts';
 import { info, section, blank, warn } from '../render/term.ts';
 
@@ -242,7 +242,7 @@ export async function runTreasury(ctx: CommandCtx): Promise<number> {
 		info('Usage: sudo morphit-ops treasury btc [--addresses] [--json]   (run on the server)');
 		return 1;
 	}
-	const reports = await loadBtcTreasuryReports(ctx);
+	const reports = await whileReading(ctx, () => loadBtcTreasuryReports(ctx));
 	const withAddresses = ctx.flags.addresses === 'true';
 	if (ctx.flags.json === 'true') {
 		emitJson({

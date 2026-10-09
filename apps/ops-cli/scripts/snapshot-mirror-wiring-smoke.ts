@@ -382,7 +382,8 @@ ok(
 // upgradeOutput.test.ts reads from a real tarball.)
 ok(
 	'release notes fall back to the tarball on the hidden path',
-	/notesBody === '' && offline\?\.tarballPath\)\s*\{\s*const fromTar = readNotesFromTarball\(offline\.tarballPath, latestTag\)/.test(
+	// (Since v1.21.3 read without blocking, under the spinner.)
+	/notesBody === '' && offline\?\.tarballPath\)\s*\{[\s\S]{0,200}?readNotesFromTarball(?:Async)?\((?:offline\.tarballPath|tarball), latestTag\)/.test(
 		upgrade
 	) && !/'\*\/RELEASE-NOTES\.md'/.test(upgrade)
 );

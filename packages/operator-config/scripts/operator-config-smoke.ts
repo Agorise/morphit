@@ -170,7 +170,7 @@ await scenario('allowlist deliberately excludes spam-economic constants', () => 
 // the defunct BLURT_PRICE_USD survive in the docs.
 await scenario('morphit.config.env.example exists and matches the allowlist exactly', () => {
 	const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-	const examplePath = join(repoRoot, 'morphit.config.env.example');
+	const examplePath = join(repoRoot, 'ops', 'env', 'morphit.config.env.example');
 	if (!existsSync(examplePath)) {
 		throw new Error(
 			'morphit.config.env.example is missing — OPERATIONS.md §23 tells operators to copy it'

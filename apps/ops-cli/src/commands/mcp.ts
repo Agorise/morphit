@@ -41,6 +41,7 @@ import { spawnSync } from 'node:child_process';
 
 import { askYesNo } from '../init/prompt.ts';
 import { checkService, type ServiceState } from './health.ts';
+import { systemctlSpinning } from '../lib/spinRun.ts';
 
 /** The unit this command toggles.  `.service` suffix is explicit;
  *  systemctl accepts it with or without, but being explicit keeps the
@@ -142,7 +143,8 @@ export async function runMcp(ctx: McpCtx, deps: McpDeps = {}): Promise<number> {
 
 	// Tiny color helper — no dependency on any global color state; a
 	// no-op when the caller says color is off (piped / --no-color).
-	const paint = (open: string, s: string): string => (ctx.colorEnabled ? `${open}${s}\u001b[0m` : s);
+	const paint = (open: string, s: string): string =>
+		ctx.colorEnabled ? `${open}${s}\u001b[0m` : s;
 	const bold = (s: string): string => paint('\u001b[1m', s);
 	const dim = (s: string): string => paint('\u001b[2m', s);
 	const green = (s: string): string => paint('\u001b[32m', s);
@@ -153,7 +155,9 @@ export async function runMcp(ctx: McpCtx, deps: McpDeps = {}): Promise<number> {
 	console.log('');
 	console.log(bold('MCP server (Model Context Protocol — AI-agent orderbook surface)'));
 	console.log(`  Unit:   ${UNIT}`);
-	console.log(`  Status: ${state === 'active' ? green(describeState(state)) : describeState(state)}`);
+	console.log(
+		`  Status: ${state === 'active' ? green(describeState(state)) : describeState(state)}`
+	);
 	console.log('');
 
 	if (state === 'not-installed') {
@@ -183,6 +187,15 @@ export async function runMcp(ctx: McpCtx, deps: McpDeps = {}): Promise<number> {
 
 	const action = nextAction(state);
 	const root = isRoot();
+	// As root the systemctl call runs under the turning braille spinner (its
+	// output shown after). Not as root, `sudo` may ask for a password: the
+	// plain inherited call, no spinner over the prompt.
+	const runCtl = async (label: string, ...systemctlArgs: string[]): Promise<number | null> => {
+		if (deps.exec === undefined && root)
+			return (await systemctlSpinning(label, systemctlArgs)).status;
+		const { cmd, args } = systemctlArgv(root, ...systemctlArgs);
+		return exec(cmd, args).status;
+	};
 
 	if (action === 'disable') {
 		console.log(
@@ -200,8 +213,7 @@ export async function runMcp(ctx: McpCtx, deps: McpDeps = {}): Promise<number> {
 			console.log('');
 			return 0;
 		}
-		const { cmd, args } = systemctlArgv(root, 'disable', '--now', UNIT);
-		const { status } = exec(cmd, args);
+		const status = await runCtl('Stopping and disabling the MCP server…', 'disable', '--now', UNIT);
 		console.log('');
 		if (status === 0) {
 			console.log(green('  ✓ MCP server stopped and disabled.'));
@@ -211,8 +223,7 @@ export async function runMcp(ctx: McpCtx, deps: McpDeps = {}): Promise<number> {
 		}
 		console.log(yellow('  ✗ Could not disable the unit.'));
 		console.log(
-			'    Run it manually:\n' +
-				`      ${root ? '' : 'sudo '}systemctl disable --now ${UNIT}`
+			'    Run it manually:\n' + `      ${root ? '' : 'sudo '}systemctl disable --now ${UNIT}`
 		);
 		console.log('');
 		return 1;
@@ -234,14 +245,11 @@ export async function runMcp(ctx: McpCtx, deps: McpDeps = {}): Promise<number> {
 		console.log('');
 		return 0;
 	}
-	const { cmd, args } = systemctlArgv(root, 'enable', '--now', UNIT);
-	const { status } = exec(cmd, args);
+	const status = await runCtl('Enabling and starting the MCP server…', 'enable', '--now', UNIT);
 	console.log('');
 	if (status === 0) {
 		console.log(green('  ✓ MCP server enabled and started.'));
-		console.log(
-			dim('    Confirm health with: morphit-ops status   (look for morphit-mcp)')
-		);
+		console.log(dim('    Confirm health with: morphit-ops status   (look for morphit-mcp)'));
 		console.log('');
 		return 0;
 	}

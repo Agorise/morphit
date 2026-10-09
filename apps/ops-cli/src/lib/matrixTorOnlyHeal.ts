@@ -92,7 +92,14 @@ export async function healMatrixBotTorOnly(
 			};
 		}
 		const running = rt.unitActive();
-		if (running) rt.restart();
+		if (running) {
+			const stop = ctx.spinner('Restarting the Matrix bot on its Tor route…');
+			try {
+				rt.restart();
+			} finally {
+				stop();
+			}
+		}
 		const after = parseMatrixBotEnvText(rt.readEnv() ?? '');
 		const ok =
 			envFlagOn(after.torOnlyRaw) &&

@@ -215,8 +215,11 @@ interface OrderRow {
 	 *  about, expect competition"; zero means "be the first to
 	 *  reach out."  See Part-13 audit + #5 for design rationale. */
 	engagement_24h: number;
-	/** Timestamp of this account's first COMPLETED trade (earliest
-	 *  counterparty feedback), from accounts.first_trade_complete_at.
+	/** Timestamp of this account's first COMPLETED trade, from
+	 *  accounts.first_trade_complete_at: its earliest counterparty feedback
+	 *  citing an order; for blocks from the consensus activation time
+	 *  (2026-11-01), citing the account's OWN paid listing (the trade the
+	 *  first-trade bonus is paid for — handlers/feedback.ts).
 	 *  NULL when the account has never completed a trade — the order
 	 *  card then shows just the trade count with no "since {month}". */
 	first_trade_complete_at: Date | null;

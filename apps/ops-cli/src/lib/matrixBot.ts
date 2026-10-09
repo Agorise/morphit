@@ -33,6 +33,8 @@ import { existsSync, readFileSync, writeFileSync, statSync, chmodSync, chownSync
 import { dirname, join } from 'node:path';
 import { matrixBotPostureText } from './unitPrivilegeHeal.ts';
 import { envFlagOn, homeserverRoute } from './matrixRoute.ts';
+import { runAsync } from './spinRun.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 
 export { envFlagOn, homeserverRoute };
 
@@ -394,33 +396,70 @@ export function syncMatrixBotService(
 ): MatrixBotSyncResult {
 	const exec = opts.exec ?? defaultExec;
 	const root = opts.root ?? isRoot();
-
-	if (!run) {
-		const { cmd, args } = systemctlArgv(root, 'disable', '--now', MATRIX_BOT_UNIT);
-		const { status } = exec(cmd, args);
-		return { action: 'disable-stop', ok: status === 0 };
-	}
-
-	// run === true: reload (in case the unit file changed on upgrade),
-	// enable for autostart, then start-or-restart.
 	let ok = true;
-	{
-		const { cmd, args } = systemctlArgv(root, 'daemon-reload');
+	for (const call of matrixBotSystemctlCalls(run, opts.restart === true)) {
+		const { cmd, args } = systemctlArgv(root, ...call);
 		const { status } = exec(cmd, args);
 		if (status !== 0) ok = false;
 	}
-	{
-		const { cmd, args } = systemctlArgv(root, 'enable', MATRIX_BOT_UNIT);
-		const { status } = exec(cmd, args);
-		if (status !== 0) ok = false;
+	return { action: matrixBotSyncAction(run, opts.restart === true), ok };
+}
+
+/** The systemctl calls {@link syncMatrixBotService} makes, in order. PURE.
+ *   run === true  → daemon-reload (in case the unit file changed on upgrade),
+ *                   enable for autostart, then start-or-restart;
+ *   run === false → disable --now. */
+function matrixBotSystemctlCalls(run: boolean, restart: boolean): string[][] {
+	if (!run) return [['disable', '--now', MATRIX_BOT_UNIT]];
+	return [
+		['daemon-reload'],
+		['enable', MATRIX_BOT_UNIT],
+		[restart ? 'restart' : 'start', MATRIX_BOT_UNIT]
+	];
+}
+
+function matrixBotSyncAction(run: boolean, restart: boolean): MatrixBotSyncResult['action'] {
+	return !run ? 'disable-stop' : restart ? 'enable-restart' : 'enable-start';
+}
+
+/**
+ * {@link syncMatrixBotService} for an operator at the terminal. As root each
+ * systemctl call runs without blocking the event loop, under the turning
+ * braille spinner, and what systemctl printed is shown after. NOT as root,
+ * `sudo` may ask for a password, so it is the plain call (no spinner over a
+ * password prompt).
+ */
+export async function syncMatrixBotServiceAtTerminal(
+	run: boolean,
+	opts: { readonly restart?: boolean } = {}
+): Promise<MatrixBotSyncResult> {
+	if (!isRoot()) return syncMatrixBotService(run, opts);
+	const restart = opts.restart === true;
+	const label = !run
+		? 'Stopping the Matrix alert bot…'
+		: restart
+			? 'Restarting the Matrix alert bot…'
+			: 'Starting the Matrix alert bot…';
+	let ok = true;
+	let output = '';
+	const stop = startDotsSpinner(label);
+	try {
+		for (const call of matrixBotSystemctlCalls(run, restart)) {
+			const r = await runAsync('systemctl', call, { timeoutMs: 120_000 });
+			output +=
+				r.output +
+				(r.error !== null
+					? `${r.error}\n`
+					: r.timedOut
+						? `systemctl ${call.join(' ')} did not finish within 2 minutes and was stopped; check: sudo systemctl status morphit-matrix-bot\n`
+						: '');
+			if (r.status !== 0) ok = false;
+		}
+	} finally {
+		stop();
 	}
-	{
-		const verb = opts.restart ? 'restart' : 'start';
-		const { cmd, args } = systemctlArgv(root, verb, MATRIX_BOT_UNIT);
-		const { status } = exec(cmd, args);
-		if (status !== 0) ok = false;
-	}
-	return { action: opts.restart ? 'enable-restart' : 'enable-start', ok };
+	if (output.trim() !== '') process.stdout.write(output.endsWith('\n') ? output : `${output}\n`);
+	return { action: matrixBotSyncAction(run, restart), ok };
 }
 
 /**

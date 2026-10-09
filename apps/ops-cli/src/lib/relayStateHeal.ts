@@ -34,6 +34,7 @@ import {
 	chmodSync
 } from 'node:fs';
 import { join } from 'node:path';
+import { startDotsSpinner } from '../init/spinner.ts';
 
 export const RELAY_STATE_DIR = '/var/lib/morphit-relay';
 export const LEGACY_RELAY_STATE_DIR = '/var/lib/morphit/relay';
@@ -157,7 +158,9 @@ export function startIfEnabledButStopped(
 	unit: string,
 	log: (m: string) => void,
 	warn: (m: string) => void,
-	rt: UnitRuntime = realUnits
+	rt: UnitRuntime = realUnits,
+	/** Shown for the start and the 15 s it is watched (the braille spinner). */
+	spinner: (label: string) => () => void = (l) => startDotsSpinner(l)
 ): StartOutcome {
 	const active = rt.systemctl(['is-active', unit]).out;
 	if (active === 'active' || active === 'activating' || active === 'reloading') return 'running';
@@ -165,12 +168,23 @@ export function startIfEnabledButStopped(
 	if (enabled.out === '' || /not-found/.test(enabled.out)) return 'no-unit';
 	if (enabled.out !== 'enabled') return 'not-enabled';
 	log(`${unit} is enabled but was not running (${active || 'inactive'}); starting it…`);
-	if (rt.systemctl(['start', unit]).status !== 0) {
+	const stop = spinner(`Starting ${unit} and checking it stays up (15 s)…`);
+	let started: boolean;
+	let up = false;
+	try {
+		started = rt.systemctl(['start', unit]).status === 0;
+		if (started) {
+			rt.sleep(15_000);
+			up = rt.systemctl(['is-active', unit]).out === 'active';
+		}
+	} finally {
+		stop();
+	}
+	if (!started) {
 		warn(`${unit} could not be started. See: sudo journalctl -u ${unit} -n 50`);
 		return 'failed';
 	}
-	rt.sleep(15_000);
-	if (rt.systemctl(['is-active', unit]).out === 'active') {
+	if (up) {
 		log(`✓ ${unit} is running again.`);
 		return 'started';
 	}

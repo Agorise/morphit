@@ -175,8 +175,13 @@ export interface ChainAccount {
  *  signal aborts mid-flight; we just stop awaiting it.  Cost: one
  *  abandoned RPC per hedge — same tradeoff hedging already makes
  *  intentionally (the hedge double-fires the request anyway). */
-function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+export function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 	if (signal.aborted) {
+		// `promise` has already been started by the caller. Returning without a
+		// handler on it left its later failure UNHANDLED (the indexer logs one;
+		// the relay's copy of this code crashed on it, 2026-10-08, morphit.io).
+		// It is still abandoned, but its outcome is now observed.
+		promise.catch(() => undefined);
 		return Promise.reject(new Error('aborted'));
 	}
 	return new Promise<T>((resolve, reject) => {

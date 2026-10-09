@@ -9,7 +9,7 @@
  * category the gate/humans don't recognise).
  *
  * Coverage:
- *   - .audit-allowlist.json exists and is valid JSON
+ *   - scripts/audit-allowlist.json exists and is valid JSON
  *   - has an `allow` object and a `_categories` map
  *   - every entry has package + severity + a recognised category
  *   - every category used is documented in `_categories`
@@ -43,7 +43,7 @@ function assert(cond: unknown, msg: string): asserts cond {
 	if (!cond) throw new Error(msg);
 }
 
-const ALLOWLIST = '.audit-allowlist.json';
+const ALLOWLIST = 'scripts/audit-allowlist.json';
 const GATE = 'scripts/audit-gate.mjs';
 const VALID_SEVERITIES = new Set(['info', 'low', 'moderate', 'high', 'critical']);
 
@@ -54,7 +54,7 @@ let parsed: {
 	_categories?: Record<string, string>;
 } = {};
 
-check('.audit-allowlist.json exists and is valid JSON', () => {
+check('scripts/audit-allowlist.json exists and is valid JSON', () => {
 	assert(existsSync(ALLOWLIST), `${ALLOWLIST} not found`);
 	parsed = JSON.parse(readFileSync(ALLOWLIST, 'utf8'));
 	assert(typeof parsed === 'object' && parsed !== null, 'not an object');

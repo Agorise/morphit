@@ -16,26 +16,38 @@ import { freshFileNoFollow, writeNoFollow } from './noFollowFs.ts';
 import { dirname } from 'node:path';
 import { BASE_FETCH_TIMEOUT_MS } from './frontendBaseFetch.ts';
 import { EGRESS_HEAL_MAX_MS } from './torOnlyEgressHeal.ts';
+import { localIndexerBases } from './hiddenOnly.ts';
+import {
+	configuredIndexerBase,
+	indexerUnitEnvFiles,
+	readIndexerConfig
+} from '../init/hiddenUpgradeLocalIndexer.ts';
+import { envValueIn, relayEnvFiles } from './relayHealthEnvHeal.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 
 export const AFTER_RESTART_SUBCOMMAND = '__post-upgrade-after-restart';
 export const AFTER_RESTART_UNIT = 'morphit-after-upgrade-heal';
 /** Longest wait for the restarts, then the heals run anyway. */
 export const AFTER_RESTART_WAIT_MS = 15 * 60_000;
+/** Longest wait, after the restarts, for the services to answer. */
+export const AFTER_RESTART_ANSWER_MS = 5 * 60_000;
 /** Longest wait for the background web heal to be idle (waitForUnitIdle). */
 export const WEB_HEAL_IDLE_MAX_MS = 10 * 60_000;
-/** The heals before the egress heal (hidden RPC list … fee address check):
- *  each a few local calls. The fetch, last, takes only what is left. */
-export const EARLY_HEALS_MAX_MS = 10 * 60_000;
+/** The heals before the egress heal (hidden RPC list … release check): each
+ *  a few local calls, plus the release check's one run (up to two runs of 2
+ *  minutes and a pause, 2026-10-08). The fetch, last, takes only what is left. */
+export const EARLY_HEALS_MAX_MS = 15 * 60_000;
 /** Kept for the end of the unit (the rebuild's start, the summary, "Done."). */
 export const UNIT_END_RESERVE_MS = 2 * 60_000;
 /** The unit's time limit (systemd RuntimeMaxSec), from the steps' own limits
- *  in the order the unit runs them: the restarts, the early heals, the egress
+ *  in the order the unit runs them: the restarts, the services answering, the early heals, the egress
  *  heal (after the web heal is idle), the frontend base fetch through Tor and
  *  the wait for the web heal before the rebuild onto it. The fetch fits its
  *  pull into what is left (fetchFrontendBaseNow), so the unit is never killed
  *  in the middle of it. */
 export const UNIT_MAX_S = Math.ceil(
 	(AFTER_RESTART_WAIT_MS +
+		AFTER_RESTART_ANSWER_MS +
 		EARLY_HEALS_MAX_MS +
 		WEB_HEAL_IDLE_MAX_MS +
 		EGRESS_HEAL_MAX_MS +
@@ -124,6 +136,95 @@ export async function waitForRestarts(
 	}
 }
 
+/** Does `svc` answer its health endpoint on this box? (Any HTTP answer: it is
+ *  listening; whether its answer is right is each heal's own check.) */
+export async function serviceAnswers(svc: string): Promise<boolean> {
+	const urls =
+		svc === 'morphit-indexer.service'
+			? indexerHealthUrls()
+			: svc === 'morphit-relay.service'
+				? [relayHealthUrl()]
+				: null;
+	if (urls === null) return true;
+	for (const url of urls) {
+		const ctrl = new AbortController();
+		const t = setTimeout(() => ctrl.abort(), 3_000);
+		try {
+			const res = await fetch(url, { signal: ctrl.signal, redirect: 'manual' });
+			if (res.status > 0) return true;
+		} catch {
+			/* not this address */
+		} finally {
+			clearTimeout(t);
+		}
+	}
+	return false;
+}
+
+/** Where the indexer listens, as its unit sees its env files (all of them,
+ *  in systemd's order); when they do not say, every standard address. Review
+ *  2026-10-08: only indexer.env was read, and a host needed its port beside it,
+ *  so some indexers were asked at the wrong address and every upgrade waited
+ *  five minutes for them. */
+export function indexerHealthUrls(root = process.env.MORPHIT_ENV_ROOT ?? ''): string[] {
+	const installDir = process.env.MORPHIT_INSTALL_DIR ?? '/opt/morphit';
+	const etcDir = process.env.MORPHIT_ETC_DIR ?? `${root}/etc/morphit`;
+	const base = configuredIndexerBase(readIndexerConfig(indexerUnitEnvFiles(installDir, etcDir)));
+	return (base !== null ? [base] : localIndexerBases()).map((b) => `${b}/v1/health`);
+}
+
+/** The relay's own /v1/health on this box, from the env files its unit reads. */
+export function relayHealthUrl(root = process.env.MORPHIT_ENV_ROOT ?? ''): string {
+	const texts = relayEnvFiles(root).map((f) => {
+		try {
+			return readFileSync(f, 'utf8');
+		} catch {
+			return '';
+		}
+	});
+	// An empty value is the relay's default, as for an unset one.
+	const host = envValueIn(texts, 'MORPHIT_RELAY_LISTEN_HOST') || '127.0.0.1';
+	const port = envValueIn(texts, 'MORPHIT_RELAY_LISTEN_PORT') || '8080';
+	const h = host === '0.0.0.0' || host === '::' || host === '[::]' ? '127.0.0.1' : host;
+	return `http://${h.includes(':') && !h.startsWith('[') ? `[${h}]` : h}:${port}/v1/health`;
+}
+
+/**
+ * After the restarts: wait until every service in `services` that is active
+ * answers on its health endpoint, or `maxMs` passes. Returns the ones that did
+ * not answer.
+ *
+ * 2026-10-08 (morphit.io, v1.21.2): systemd reports a service of this type
+ * "active" the moment its process starts. The relay listens only after it has
+ * unlocked its key, checked its clock against the chain (up to 30 s) and read
+ * the RPC directory, so the relay check ran against a relay that was not
+ * listening yet and reported "no operator block" from no answer at all.
+ */
+export async function waitForAnswers(
+	services: readonly string[],
+	deps: {
+		readonly answers?: (svc: string) => Promise<boolean>;
+		readonly isActive?: (svc: string) => boolean;
+		readonly sleep?: (ms: number) => Promise<void>;
+		readonly now?: () => number;
+		readonly maxMs?: number;
+	} = {}
+): Promise<string[]> {
+	const answers = deps.answers ?? serviceAnswers;
+	const active = deps.isActive ?? isActive;
+	const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+	const now = deps.now ?? Date.now;
+	const stopAt = now() + (deps.maxMs ?? AFTER_RESTART_ANSWER_MS);
+	let pending = services.filter((s) => active(s));
+	for (;;) {
+		const still: string[] = [];
+		for (const s of pending) if (!(await answers(s))) still.push(s);
+		pending = still;
+		if (pending.length === 0 || now() >= stopAt) return pending;
+		await sleep(3_000);
+	}
+}
+
 /**
  * Wait until `unit` is no longer active (another background job of the same
  * upgrade has finished), or `maxMs` passes.
@@ -135,16 +236,26 @@ export async function waitForUnitIdle(
 		readonly sleep?: (ms: number) => Promise<void>;
 		readonly now?: () => number;
 		readonly maxMs?: number;
+		/** Shown while it waits (up to 10 minutes): the braille spinner. */
+		readonly spinner?: (label: string) => () => void;
 	} = {}
 ): Promise<'idle' | 'timed-out'> {
 	const active = deps.isActive ?? isActive;
 	const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
 	const now = deps.now ?? Date.now;
 	const stopAt = now() + (deps.maxMs ?? WEB_HEAL_IDLE_MAX_MS);
-	for (;;) {
-		if (!active(unit)) return 'idle';
-		if (now() >= stopAt) return 'timed-out';
-		await sleep(10_000);
+	if (!active(unit)) return 'idle';
+	const stop = (deps.spinner ?? ((l: string) => startDotsSpinner(l)))(
+		`Waiting for ${unit} to finish (up to ${Math.max(1, Math.round((deps.maxMs ?? WEB_HEAL_IDLE_MAX_MS) / 60_000))} minutes)…`
+	);
+	try {
+		for (;;) {
+			if (now() >= stopAt) return 'timed-out';
+			await sleep(10_000);
+			if (!active(unit)) return 'idle';
+		}
+	} finally {
+		stop();
 	}
 }
 

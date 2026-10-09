@@ -22,7 +22,7 @@
  *   --since=DUR    Window for the report.  Default 24h.
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { applyThreshold } from '../config.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
@@ -67,9 +67,10 @@ export async function runAbuse(ctx: CommandCtx): Promise<number> {
 
 	const limit = ctx.flags.json === 'true' ? PER_STREAM_HUMAN_LIMIT * 10 : PER_STREAM_HUMAN_LIMIT;
 
-	const [failuresResult, recipResult, relatedResult] = await Promise.all([
-		ctx.db.query<PersistentFailureRow>(
-			`SELECT
+	const [failuresResult, recipResult, relatedResult] = await whileReading(ctx, () =>
+		Promise.all([
+			ctx.db.query<PersistentFailureRow>(
+				`SELECT
 			   id::text,
 			   recipient,
 			   kind,
@@ -84,16 +85,16 @@ export async function runAbuse(ctx: CommandCtx): Promise<number> {
 			   AND broadcast_at IS NULL
 			 ORDER BY last_error_at DESC
 			 LIMIT $2`,
-			[cutoff, limit]
-		),
-		ctx.db.query<ReciprocityRow>(
-			// suspicious_reciprocity may not always have these
-			// optional columns; the actual indexer schema uses
-			// suspicious_reciprocity stores the signal as a mutual-review
-			// count + average rating (no free-text reason column — that
-			// lives on related_accounts). Synthesize a human reason +
-			// score from the real columns so the unified row shape holds.
-			`SELECT
+				[cutoff, limit]
+			),
+			ctx.db.query<ReciprocityRow>(
+				// suspicious_reciprocity may not always have these
+				// optional columns; the actual indexer schema uses
+				// suspicious_reciprocity stores the signal as a mutual-review
+				// count + average rating (no free-text reason column — that
+				// lives on related_accounts). Synthesize a human reason +
+				// score from the real columns so the unified row shape holds.
+				`SELECT
 			   account_a,
 			   account_b,
 			   detected_at,
@@ -104,10 +105,10 @@ export async function runAbuse(ctx: CommandCtx): Promise<number> {
 			 WHERE detected_at >= $1
 			 ORDER BY detected_at DESC
 			 LIMIT $2`,
-			[cutoff, limit]
-		),
-		ctx.db.query<RelatedRow>(
-			`SELECT
+				[cutoff, limit]
+			),
+			ctx.db.query<RelatedRow>(
+				`SELECT
 			   account_a,
 			   account_b,
 			   detected_at,
@@ -116,9 +117,10 @@ export async function runAbuse(ctx: CommandCtx): Promise<number> {
 			 WHERE detected_at >= $1
 			 ORDER BY detected_at DESC
 			 LIMIT $2`,
-			[cutoff, limit]
-		)
-	]);
+				[cutoff, limit]
+			)
+		])
+	);
 
 	const failures = failuresResult.rows;
 	const reciprocity = recipResult.rows;

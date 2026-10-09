@@ -45,6 +45,7 @@
 	// import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	// import FeaturedAuctionHistory from '$components/FeaturedAuctionHistory.svelte';
 	import WelcomeFirstBuyHero from '$components/WelcomeFirstBuyHero.svelte';
+	import RewardsPanel from '$components/RewardsPanel.svelte';
 	import AssetFilterSelect from '$components/AssetFilterSelect.svelte';
 	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
 	import PaymentFilterSelect from '$components/PaymentFilterSelect.svelte';
@@ -1213,6 +1214,11 @@
 	     registered account name who've actually posted an order. -->
 
 	<WelcomeFirstBuyHero />
+
+	<!-- v1.21.3: what a visitor gets for joining, with the signup button. -->
+	{#if !$hasAnySession}
+		<RewardsPanel showSignup collapsible />
+	{/if}
 
 	<!-- Sally finding H4: if the user is unlocked but
 	     hasn't completed account-name registration, the per-row

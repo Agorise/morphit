@@ -526,7 +526,7 @@ console.log('');
 	const src = readFileSync(new URL('../src/commands/upgrade.ts', import.meta.url), 'utf8');
 	expect(
 		'cp688: served-frontend verify retries before giving up',
-		/servedVersion === null && attempt < \d+/.test(src) &&
+		/(?:servedVersion|\bv) === null && attempt < \d+/.test(src) &&
 			/resolveServedVersion\(plan, webRoot\)/.test(src)
 	);
 }

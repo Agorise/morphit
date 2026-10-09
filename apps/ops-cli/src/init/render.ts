@@ -584,7 +584,7 @@ function renderConfig(answers: WizardAnswers): string {
 	lines.push('#');
 	lines.push('# Critical infrastructure (database URL, relay/fees accounts,');
 	lines.push('# active-key file path) lives in the SEPARATE morphit.env file');
-	lines.push('# generated alongside this one.  See morphit.config.env.example');
+	lines.push('# generated alongside this one.  See ops/env/morphit.config.env.example');
 	lines.push('# for the full list of allowed keys.');
 	lines.push('');
 

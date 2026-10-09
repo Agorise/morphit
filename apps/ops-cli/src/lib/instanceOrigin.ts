@@ -308,41 +308,63 @@ export function syncInstanceOrigin(
 	const run = opts.run ?? realRun;
 	const { origin, why } = opts.origin ?? resolveInstanceOrigin(opts.installDir);
 	const label = origin === '-' ? 'no absolute URLs' : origin;
-	const st = originStatus(opts.installDir, buildDir, run);
+	// Every wait below is under the caller's spinner (`origin-slots.mjs` runs
+	// for up to 300 s; the branding reset/re-apply rasterizes images).
+	const spun = <T>(what: string, fn: () => T): T => {
+		const stop = ctx.spinner(what);
+		try {
+			return fn();
+		} finally {
+			stop();
+		}
+	};
+	const st = spun('Reading which origin the served pages carry…', () =>
+		originStatus(opts.installDir, buildDir, run)
+	);
 	if (!st.recorded) {
 		return { strategy: 'no-map', verified: true, detail: '', touched: [], origin };
 	}
 	const touched = new Set<string>();
 	let strategy = 'already';
-	if (st.applied !== origin || st.pending) {
-		const settings = readBrandingSettings(opts.installDir);
-		let branded = false;
-		const reset = applyBranding({ buildDir, settings, reset: true });
-		reset.touched.forEach((t) => touched.add(t));
-		branded = reset.touched.length > 0;
-		const a = runOriginApply(opts.installDir, buildDir, origin, run);
-		if (!a.ok) {
-			// Put the branding back on whatever is there, then say so.
-			const back = applyBranding({ buildDir, settings });
-			back.touched.forEach((t) => touched.add(t));
-			mirror(buildDir, opts.webRoot, [...touched]);
-			return {
-				strategy: 'failed',
-				verified: false,
-				detail: `Your instance origin could not be applied (${a.error}); pages name the build's origin until fixed. Run: sudo morphit-ops upgrade`,
-				touched: [...touched],
-				origin
-			};
+	const stopApply =
+		st.applied !== origin || st.pending
+			? ctx.spinner(`Putting ${label} on the served pages…`)
+			: () => {};
+	try {
+		if (st.applied !== origin || st.pending) {
+			const settings = readBrandingSettings(opts.installDir);
+			let branded = false;
+			const reset = applyBranding({ buildDir, settings, reset: true });
+			reset.touched.forEach((t) => touched.add(t));
+			branded = reset.touched.length > 0;
+			const a = runOriginApply(opts.installDir, buildDir, origin, run);
+			if (!a.ok) {
+				// Put the branding back on whatever is there, then say so.
+				const back = applyBranding({ buildDir, settings });
+				back.touched.forEach((t) => touched.add(t));
+				mirror(buildDir, opts.webRoot, [...touched]);
+				return {
+					strategy: 'failed',
+					verified: false,
+					detail: `Your instance origin could not be applied (${a.error}); pages name the build's origin until fixed. Run: sudo morphit-ops upgrade`,
+					touched: [...touched],
+					origin
+				};
+			}
+			a.touched.forEach((t) => touched.add(t));
+			if (brandingConfigured(settings) || branded) {
+				applyBranding({ buildDir, settings }).touched.forEach((t) => touched.add(t));
+			}
+			strategy = branded ? 'applied-around-branding' : 'applied';
 		}
-		a.touched.forEach((t) => touched.add(t));
-		if (brandingConfigured(settings) || branded) {
-			applyBranding({ buildDir, settings }).touched.forEach((t) => touched.add(t));
-		}
-		strategy = branded ? 'applied-around-branding' : 'applied';
+	} finally {
+		stopApply();
 	}
-	mirror(buildDir, opts.webRoot, [...touched]);
 	const served = opts.webRoot && existsSync(opts.webRoot) ? opts.webRoot : buildDir;
-	const seen = checkOriginApplied(buildDir, origin, served);
+	const seen = spun(`Checking the served pages name ${label}…`, () => {
+		mirror(buildDir, opts.webRoot, [...touched]);
+		return checkOriginApplied(buildDir, origin, served);
+	});
 	if (!seen.ok) {
 		return {
 			strategy: `${strategy}-unverified`,

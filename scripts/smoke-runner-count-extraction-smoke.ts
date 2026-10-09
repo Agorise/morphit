@@ -24,9 +24,15 @@
  * the right number). Any smoke whose name contains a word ending in "all" (like
  * "install", "wall", "small", "ball") followed by the trailing " checks/scenarios
  * passed" would have silently regressed the tally; this locks that door.
+ *
+ * EXIT STATUS (v1.21.3). run-smokes-chunk.sh printed "N runners failed" and
+ * then exited 0 whatever N was, so a caller checking its status (a release
+ * battery run in 50-runner chunks) read every failing chunk as passed. The
+ * behavioural check below runs the REAL chunk runner on a throwaway repo with
+ * one passing and one failing smoke and asserts the status.
  */
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, copyFileSync, chmodSync } from 'node:fs';
+import { execSync, spawnSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -87,6 +93,30 @@ function extractGreedy(line: string): string {
 	return execSync(`sed -f "${greedyFile}" < "${lineFile}"`, { encoding: 'utf8' }).trim();
 }
 check('regression documented: the greedy sed DID capture empty on install', extractGreedy('✓ all 19 assemble-install checks passed') === '');
+
+// Behavioural: the chunk runner's exit status. A throwaway repo whose
+// run-smokes.sh lists a passing and a failing smoke, and whose tsx is a stub
+// that runs the smoke file with bash (the runner passes `--tsconfig CFG FILE`).
+const fake = mkdtempSync(join(tmpdir(), 'morphit-chunk-'));
+mkdirSync(join(fake, 'scripts'));
+mkdirSync(join(fake, 'node_modules', '.bin'), { recursive: true });
+copyFileSync(join(REPO, 'scripts', 'run-smokes-chunk.sh'), join(fake, 'scripts', 'run-smokes-chunk.sh'));
+writeFileSync(join(fake, 'scripts', 'run-smokes.sh'), 'SMOKES=(\n\t".:pass-smoke"\n\t".:fail-smoke"\n)\n');
+writeFileSync(join(fake, 'scripts', 'pass-smoke.ts'), "echo '✓ all 3 pass scenarios passed'\n");
+writeFileSync(join(fake, 'scripts', 'fail-smoke.ts'), "echo '✗ 1 of 1 FAILED'; exit 1\n");
+const tsx = join(fake, 'node_modules', '.bin', 'tsx');
+writeFileSync(tsx, '#!/usr/bin/env bash\nexec bash "$3"\n');
+chmodSync(tsx, 0o755);
+function chunk(start: number, end: number): { status: number | null; out: string } {
+	const r = spawnSync('bash', [join(fake, 'scripts', 'run-smokes-chunk.sh'), String(start), String(end)], {
+		encoding: 'utf8'
+	});
+	return { status: r.status, out: r.stdout + r.stderr };
+}
+const ok = chunk(1, 1);
+check('chunk runner: a chunk whose runners all pass exits 0', ok.status === 0 && /3 scenarios, 0 runners failed/.test(ok.out));
+const bad = chunk(1, 2);
+check('chunk runner: a chunk with a failing runner exits non-zero', bad.status !== 0 && /1 runners failed/.test(bad.out));
 
 if (failed > 0) {
 	console.log(`\n✗ ${failed} of ${checks} smoke-runner-count-extraction checks FAILED`);

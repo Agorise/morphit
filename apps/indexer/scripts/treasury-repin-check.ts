@@ -18,8 +18,8 @@
  *   # key-gated — the deliberate safety boundary):
  *   tsx treasury-repin-check.ts --node <url> --emit > treasury.json
  *   MORPHIT_BUILD_BLURT_BASE=$(jq -r .blurt.base treasury.json) \
- *     ... tsx release-build-payload.ts > release.json
- *   tsx release-broadcast.ts release.json     # laptop, key-gated
+ *     ... tsx release-build-payload.ts > /tmp/morphit-release.json
+ *   tsx release-broadcast.ts /tmp/morphit-release.json     # laptop, key-gated
  *
  * Exit codes: 0 = no re-pin due (or --emit succeeded), 3 = re-pin
  * due (so a timer/cron can branch on it), 1 = error.  Choosing a

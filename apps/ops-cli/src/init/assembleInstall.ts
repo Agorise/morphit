@@ -15,12 +15,14 @@
  *     failure (finally), so DB passwords never linger in a temp file;
  *   - a non-zero exit turns into a plain, reassuring message (a re-run is safe).
  */
-import { writeFileSync, unlinkSync, existsSync, mkdirSync, chmodSync, readFileSync} from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync, mkdirSync, chmodSync, readFileSync } from 'node:fs';
 import { SUPPORT_EMAIL, SUPPORT_MATRIX } from './remediation.ts';
 import { join, dirname } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { buildAnsiblePlaybookArgv, renderVarsFile } from './ansibleVars.ts';
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
+import { startDotsSpinner } from './spinner.ts';
+import { runSpinning, showOutput } from '../lib/spinRun.ts';
 
 /**
  * The one-command (Ansible) installer only provisions the Ubuntu 24.04 "noble"
@@ -104,14 +106,16 @@ export interface AssembleDeps {
 	/** Run argv, streaming output; resolve with the process exit code. */
 	readonly spawn?: (argv: readonly string[]) => Promise<number>;
 	/** Resolve how many hosts the playbook targets (pre-flight guard). */
-	readonly probeHosts?: (argv: readonly string[]) => ProbeResult;
+	readonly probeHosts?: (argv: readonly string[]) => ProbeResult | Promise<ProbeResult>;
 	/** Read /etc/os-release (injected for the OS pre-check test). Defaults to the
 	 *  real file; returns '' if it can't be read. */
 	readonly readOsRelease?: () => string;
 	readonly print?: (s: string) => void;
 }
 
-export type AssembleResult = { readonly ok: true } | { readonly ok: false; readonly reason: string };
+export type AssembleResult =
+	| { readonly ok: true }
+	| { readonly ok: false; readonly reason: string };
 
 // ─── Real implementations (validated on a real machine) ──────────
 function realWrite0600(path: string, content: string): void {
@@ -141,7 +145,15 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 		// Best-effort — Ansible still falls back to a system temp dir if this
 		// can't be created for some reason.
 	}
-	const have = spawnSync('ansible-playbook', ['--version'], { stdio: 'ignore' });
+	// Each silent wait below runs asynchronously under the turning spinner.
+	const have = await runSpinning(
+		'Checking Ansible is installed…',
+		'ansible-playbook',
+		['--version'],
+		{
+			timeoutMs: 60_000
+		}
+	);
 	// a self-contained (offline) bundle ships ansible in its apt closure
 	// (vendor/apt) and the galaxy collections it needs (vendor/ansible-collections).
 	// ansibleDir is <bundleRoot>/ops/ansible, so the bundle's vendor/ dir is two
@@ -183,11 +195,29 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 			}
 		} else {
 			// No bundle — online install (source-tarball path on a connected box).
-			spawnSync('apt-get', ['update', '-qq'], { stdio: 'inherit' });
+			// -qq prints nothing until it is done: a long silent stretch, so it
+			// runs under the spinner and only what it did print is shown after.
+			showOutput(
+				await runSpinning(
+					'Refreshing the package lists (apt-get update)…',
+					'apt-get',
+					['update', '-qq'],
+					{
+						timeoutMs: 15 * 60_000
+					}
+				)
+			);
 			spawnSync('apt-get', ['install', '-y', 'ansible'], { stdio: 'inherit' });
 		}
 	}
-	if (spawnSync('ansible-playbook', ['--version'], { stdio: 'ignore' }).status !== 0) return false;
+	if (
+		(
+			await runSpinning('Checking Ansible is installed…', 'ansible-playbook', ['--version'], {
+				timeoutMs: 60_000
+			})
+		).status !== 0
+	)
+		return false;
 	// The playbook uses community.general / community.postgresql / community.docker.
 	// The apt `ansible` metapackage (9.x) already BUNDLES all three, so on the
 	// common path they're present the moment ansible installs. Running
@@ -200,10 +230,15 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 	const NEEDED = ['community.general', 'community.postgresql', 'community.docker'];
 	let installedList = '';
 	{
-		const r = spawnSync('ansible-galaxy', ['collection', 'list'], {
-			stdio: ['ignore', 'pipe', 'ignore']
-		});
-		installedList = r.status === 0 ? String(r.stdout ?? '') : '';
+		const r = await runSpinning(
+			'Checking the Ansible collections…',
+			'ansible-galaxy',
+			['collection', 'list'],
+			{
+				timeoutMs: 120_000
+			}
+		);
+		installedList = r.status === 0 ? r.stdout : '';
 	}
 	const isPresent = (fqcn: string) =>
 		new RegExp(`^${fqcn.replace('.', '\\.')}\\s+\\d`, 'm').test(installedList);
@@ -266,7 +301,10 @@ const FAILURE_HINTS: ReadonlyArray<{ readonly re: RegExp; readonly hint: string 
 		re: /Missing sudo password|a password is required|Incorrect sudo password|sudo: a terminal is required|Failed to become/i,
 		hint: "The install needs sudo. Run it as a user with sudo (you'll be prompted), or set up passwordless sudo, then re-run."
 	},
-	{ re: /No space left on device/i, hint: 'The disk filled up. Free space (or attach a larger volume) and re-run.' },
+	{
+		re: /No space left on device/i,
+		hint: 'The disk filled up. Free space (or attach a larger volume) and re-run.'
+	},
 	{
 		re: /requires ansible[- ]?core|is not compatible with the current ansible|needs ansible.*version/i,
 		hint: 'A collection needs a newer ansible-core. Upgrade Ansible (pipx install --include-deps ansible) and re-run.'
@@ -289,7 +327,11 @@ const FAILURE_HINTS: ReadonlyArray<{ readonly re: RegExp; readonly hint: string 
  *  tested. Names the failed task, quotes Ansible's message, maps it to a likely
  *  fix when we recognise it, and — only when we DON'T recognise it (a genuine
  *  dead-end) — points at support. */
-export function summarizePlaybookFailure(logText: string, exitCode: number, logPath: string): string {
+export function summarizePlaybookFailure(
+	logText: string,
+	exitCode: number,
+	logPath: string
+): string {
 	const lines = logText.split('\n');
 	let failedTask = '';
 	let fatalLine = '';
@@ -306,7 +348,8 @@ export function summarizePlaybookFailure(logText: string, exitCode: number, logP
 		}
 	}
 	const hint = FAILURE_HINTS.find((h) => h.re.test(logText))?.hint;
-	const msg = fatalLine.match(/"msg":\s*"([^"]+)"/)?.[1] ?? fatalLine.match(/=>\s*(\{.*\}|.+)$/)?.[1];
+	const msg =
+		fatalLine.match(/"msg":\s*"([^"]+)"/)?.[1] ?? fatalLine.match(/=>\s*(\{.*\}|.+)$/)?.[1];
 	const out: string[] = [`The install stopped (Ansible exit ${exitCode}).`];
 	if (failedTask) out.push(`Failed step: ${failedTask}`);
 	if (msg) out.push(`Ansible said: ${msg.replace(/\s+/g, ' ').slice(0, 300)}`);
@@ -365,7 +408,9 @@ export function describeInstallError(err: unknown, logExists = false): string {
 			`\nSend the above${logExists ? ' and the log' : ''} to ${SUPPORT_EMAIL} or on Matrix ${SUPPORT_MATRIX} (preferred) and we'll get you online.`
 		);
 	}
-	out.push("\nNothing is left half-installed that a re-run can't recover \u2014 you can safely run the installer again.");
+	out.push(
+		"\nNothing is left half-installed that a re-run can't recover \u2014 you can safely run the installer again."
+	);
 	return out.join('\n');
 }
 
@@ -403,7 +448,11 @@ function localAnsibleEnv(): NodeJS.ProcessEnv {
 export const QUIET_REMIND_MS = 3 * 60 * 1000;
 
 /** PURE + tested: has the run been silent long enough to reassure the operator? */
-export function shouldRemindQuiet(now: number, lastOutput: number, softMs = QUIET_REMIND_MS): boolean {
+export function shouldRemindQuiet(
+	now: number,
+	lastOutput: number,
+	softMs = QUIET_REMIND_MS
+): boolean {
 	return now - lastOutput >= softMs;
 }
 
@@ -417,8 +466,9 @@ async function realSpawn(argv: readonly string[]): Promise<number> {
 		// writes ANSIBLE_LOG_PATH independently, so the failure summary is intact.
 		const child = spawn(cmd, args, { stdio: ['inherit', 'pipe', 'pipe'], env: localAnsibleEnv() });
 		let lastOutput = Date.now();
+		const quiet = quietSpinner();
 		const tee = (chunk: Buffer, out: NodeJS.WriteStream): void => {
-			out.write(chunk);
+			quiet.write(chunk, out);
 			lastOutput = Date.now();
 		};
 		child.stdout?.on('data', (c: Buffer) => tee(c, process.stdout));
@@ -430,12 +480,13 @@ async function realSpawn(argv: readonly string[]): Promise<number> {
 		// choose to stop. This is the "hold her hand through a quiet moment" step.
 		const watchdog = setInterval(() => {
 			if (shouldRemindQuiet(Date.now(), lastOutput)) {
-				process.stdout.write(
+				quiet.write(
 					'\n  \u23f3 Still working \u2014 this step has been quiet for a few minutes. That is normal\n' +
 						'     for a big download, a first-time database migration, or issuing your HTTPS\n' +
 						'     certificate. It will continue on its own \u2014 you do not need to do anything.\n' +
 						'     (Recommended: just wait. If you ever do want to stop, press Ctrl-C \u2014 re-running\n' +
-						'     the installer later is always safe.)\n\n'
+						'     the installer later is always safe.)\n\n',
+					process.stdout
 				);
 				lastOutput = Date.now(); // re-arm for the next quiet stretch, don't nag every tick
 			}
@@ -443,13 +494,67 @@ async function realSpawn(argv: readonly string[]): Promise<number> {
 		if (typeof watchdog.unref === 'function') watchdog.unref();
 		child.on('error', () => {
 			clearInterval(watchdog);
+			quiet.end();
 			resolve(1);
 		});
 		child.on('close', (code) => {
 			clearInterval(watchdog);
+			quiet.end();
 			resolve(code ?? 1);
 		});
 	});
+}
+
+/** After this long without output from the playbook, the braille spinner turns
+ *  on its own line until the next output arrives. */
+export const QUIET_SPINNER_MS = 2_000;
+
+/**
+ * The braille spinner for the silent stretches of a STREAMED run (the Ansible
+ * playbook): it appears once the run has been quiet for {@link QUIET_SPINNER_MS}
+ * and is cleared off its line BEFORE the next chunk is written, so the streamed
+ * output is never mixed with it. It only ever starts at the beginning of a line
+ * — never after a partial line such as a password prompt, which it would
+ * otherwise overwrite — and only on a terminal (a log would just collect labels).
+ */
+export function quietSpinner(
+	opts: {
+		readonly quietMs?: number;
+		readonly label?: string;
+		readonly out?: NodeJS.WriteStream;
+	} = {}
+): { write: (chunk: Buffer | string, to: NodeJS.WriteStream) => void; end: () => void } {
+	const out = opts.out ?? process.stdout;
+	const quietMs = opts.quietMs ?? QUIET_SPINNER_MS;
+	const label = opts.label ?? 'Still working on this step…';
+	let stop: (() => void) | null = null;
+	let atLineStart = true;
+	let last = Date.now();
+	const tick = setInterval(() => {
+		if (stop === null && atLineStart && out.isTTY === true && Date.now() - last >= quietMs) {
+			stop = startDotsSpinner(label, out);
+		}
+	}, 250);
+	if (typeof tick.unref === 'function') tick.unref();
+	const clear = (): void => {
+		if (stop !== null) {
+			stop();
+			stop = null;
+		}
+	};
+	return {
+		write: (chunk, to) => {
+			clear();
+			const s = typeof chunk === 'string' ? chunk : chunk.toString();
+			if (s.length > 0) atLineStart = s.endsWith('\n');
+			to.write(chunk);
+			last = Date.now();
+		},
+		end: () => {
+			clearInterval(tick);
+			clear();
+		}
+	};
 }
 /** Resolve how many hosts the playbook's pattern matches WITHOUT running it
  *  (`--list-hosts`).  Ansible prints "hosts (N):" per play; take the max.
@@ -516,16 +621,23 @@ export function interpretProbeResult(r: ProbeResult): {
 	};
 }
 
-/** Run `--list-hosts` and capture BOTH the exit code and the output. */
-function realProbeHosts(argv: readonly string[]): ProbeResult {
+/** Run `--list-hosts` and capture BOTH the exit code and the output (under
+ *  the turning spinner — it parses the whole playbook, several seconds). */
+async function realProbeHosts(argv: readonly string[]): Promise<ProbeResult> {
 	const [cmd, ...args] = argv;
 	if (cmd === undefined) return { exitCode: 1, output: '' };
-	const r = spawnSync(cmd, args, { encoding: 'utf8', env: localAnsibleEnv() });
-	return { exitCode: r.status ?? 1, output: `${r.stdout ?? ''}\n${r.stderr ?? ''}` };
+	const r = await runSpinning('Checking the install plan (Ansible pre-flight)…', cmd, args, {
+		env: localAnsibleEnv(),
+		timeoutMs: 5 * 60_000
+	});
+	return { exitCode: r.status ?? 1, output: `${r.output}\n${r.error ?? ''}` };
 }
 
 /** Drive the plan.  Order + cleanup are the whole point — see the header. */
-export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}): Promise<AssembleResult> {
+export async function assembleInstall(
+	plan: InstallPlan,
+	deps: AssembleDeps = {}
+): Promise<AssembleResult> {
 	const print = deps.print ?? ((s: string): void => console.log(s));
 	const writeVarsFile = deps.writeVarsFile ?? realWrite0600;
 	const removeVarsFile = deps.removeVarsFile ?? realRemove;
@@ -576,7 +688,8 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 		if (!haveAnsible) {
 			return {
 				ok: false,
-				reason: 'Ansible could not be installed automatically. Install it with `sudo apt-get install -y ansible`, then run this again.'
+				reason:
+					'Ansible could not be installed automatically. Install it with `sudo apt-get install -y ansible`, then run this again.'
 			};
 		}
 
@@ -589,7 +702,7 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 			varsFilePath: plan.varsFilePath,
 			listHosts: true
 		});
-		const probeVerdict = interpretProbeResult(probeHosts(probeArgv));
+		const probeVerdict = interpretProbeResult(await probeHosts(probeArgv));
 		if (!probeVerdict.ok) {
 			return {
 				ok: false,
@@ -598,14 +711,19 @@ export async function assembleInstall(plan: InstallPlan, deps: AssembleDeps = {}
 		}
 
 		// 4. Run the playbook against THIS box.
-		print('\n  Setting up your node \u2014 this takes several minutes. Ansible\u2019s progress is below.\n');
+		print(
+			'\n  Setting up your node \u2014 this takes several minutes. Ansible\u2019s progress is below.\n'
+		);
 		// Start the run log fresh so the failure summary reflects THIS run only.
 		try {
 			writeFileSync(INSTALL_LOG_PATH, '');
 		} catch {
 			/* non-fatal — summary just falls back to the exit code */
 		}
-		const argv = buildAnsiblePlaybookArgv({ playbookPath: plan.playbookPath, varsFilePath: plan.varsFilePath });
+		const argv = buildAnsiblePlaybookArgv({
+			playbookPath: plan.playbookPath,
+			varsFilePath: plan.varsFilePath
+		});
 		const code = await spawn(argv);
 		if (code !== 0) {
 			let log = '';

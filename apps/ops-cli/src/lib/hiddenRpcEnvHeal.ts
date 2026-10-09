@@ -199,9 +199,15 @@ export async function healHiddenRpc(
 			continue;
 		}
 		let after: number | null = null;
-		for (let i = 0; i < 10 && after === null; i++) {
-			after = rt.rpcTotal(svc.health);
-			if (after === null) await rt.sleep(2_000);
+		// Up to ~20 s for its health answer: under the spinner.
+		const stopHealth = ctx.spinner(`Waiting for ${svc.unit} to answer on its health address…`);
+		try {
+			for (let i = 0; i < 10 && after === null; i++) {
+				after = rt.rpcTotal(svc.health);
+				if (after === null) await rt.sleep(2_000);
+			}
+		} finally {
+			stopHealth();
 		}
 		const grew = before !== null && after !== null ? after - before : null;
 		lines.push(

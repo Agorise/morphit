@@ -16,7 +16,7 @@
  *   --since=DUR    Window for the report.  Default 7d.
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt, error } from '../render/term.ts';
@@ -47,8 +47,9 @@ export async function runLoyalty(ctx: CommandCtx): Promise<number> {
 	// Join milestones with their queued/broadcast transfer.  A
 	// milestone may not yet have a transfer (race window in the
 	// loyalty handler) — LEFT JOIN handles that.
-	const result = await ctx.db.query<LoyaltyEntry>(
-		`SELECT
+	const result = await whileReading(ctx, () =>
+		ctx.db.query<LoyaltyEntry>(
+			`SELECT
 		   m.account,
 		   m.milestone_blurt::text,
 		   m.bp_rewarded::text,
@@ -63,7 +64,8 @@ export async function runLoyalty(ctx: CommandCtx): Promise<number> {
 		 WHERE COALESCE(t.created_at, NOW()) >= $1
 		 ORDER BY COALESCE(t.created_at, NOW()) DESC
 		 LIMIT $2`,
-		[cutoff, limit]
+			[cutoff, limit]
+		)
 	);
 
 	const entries = result.rows;

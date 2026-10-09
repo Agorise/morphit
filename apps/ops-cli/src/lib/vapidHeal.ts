@@ -76,7 +76,13 @@ export async function healVapid(
 	let next = text;
 	let what = '';
 	if (!hasKeys(text)) {
-		const gen = rt.generate(subject ?? '');
+		const stopGen = ctx.spinner('Making Web Push keys for the relay…');
+		let gen: string | null;
+		try {
+			gen = rt.generate(subject ?? '');
+		} finally {
+			stopGen();
+		}
 		if (gen === null || !hasKeys(gen))
 			return {
 				strategy: 'left-alone',

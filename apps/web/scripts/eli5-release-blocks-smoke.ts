@@ -120,12 +120,12 @@ if (missing.length > 0) for (const m of missing) console.error(`      missing: $
 check(
 	'the dry-run line is exactly canonical',
 	out.includes(
-		'./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run'
+		'./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts /tmp/morphit-release.json --dry-run'
 	)
 );
 check(
 	'the real-broadcast line is exactly canonical',
-	/\n\.\/node_modules\/\.bin\/tsx apps\/indexer\/scripts\/release-broadcast\.ts release\.json\n/.test(
+	/\n\.\/node_modules\/\.bin\/tsx apps\/indexer\/scripts\/release-broadcast\.ts \/tmp\/morphit-release\.json\n/.test(
 		out
 	)
 );
@@ -190,7 +190,7 @@ check(
 );
 check(
 	'a dry-run precedes the real broadcast',
-	out.indexOf('--dry-run') < out.lastIndexOf('release-broadcast.ts release.json')
+	out.indexOf('--dry-run') < out.lastIndexOf('release-broadcast.ts /tmp/morphit-release.json')
 );
 check(
 	'BLOCK 6 repairs the canary via the migrated refresh ~/.morphit/update-canary.sh (upgrade wipes build/canary.txt)',
@@ -227,27 +227,24 @@ check(
 	);
 }
 
-// ─── (v1.21.1) a release whose anchor has no CID: Block 3 says how to supply it ───
-// Behaviour: apps/indexer/test/scripts/releaseCeremony.test.ts runs the printed
-// seed command with stub ipfs/curl (the "hosted" line, the copy that ran, a
-// tarball failing its hash) and the --ipfs-cid recovery line.
-// 2026-10-07: the CID can no longer come from the upgrade, which now runs after
-// the broadcast; morphit.io seeds on its own (it installs nothing), with the
-// NEW release's seed scripts from the checked tarball, never the installed ones
-// (an older stager stages different bytes, so a different CID).
+// ─── (v1.21.1) a release whose anchor has no CID ───
+// 2026-10-08: Block 3 no longer prints the fallback every time (a successful
+// dry-run means it is not needed); one line says the payload builder prints it
+// when the CID is missing. Behaviour (the printed seed command run with stub
+// ipfs/curl, the --ipfs-cid retry): apps/indexer/test/scripts/releaseCeremony.test.ts.
 {
 	const b3 = out.slice(out.indexOf('**BLOCK 3**'), out.indexOf('**BLOCK 4**'));
-	const note = b3.slice(b3.indexOf('this release has no IPFS CID'));
-	const cmd = /```\n([^\n]+)\n```/.exec(note)?.[1] ?? '';
+	const payloadSrc = readFileSync(
+		join(REPO, 'apps', 'indexer', 'scripts', 'release-build-payload.ts'),
+		'utf8'
+	);
 	check(
-		'BLOCK 3 has morphit.io seed the release with its own scripts, and passes the CID with --ipfs-cid',
-		/sha256sum -c/.test(cmd) &&
-			/MORPHIT_STAGE_TARBALL="\$D\/morphit-v9\.9\.9\.tar\.gz"/.test(cmd) &&
-			/sh "\$D\/ops\/ipfs\/morphit-ipfs-seed\.sh" v9\.9\.9$/.test(cmd) &&
-			!/\/opt\/morphit\/ops/.test(cmd) &&
-			/morphit\.io, logged in as root/.test(note) &&
-			/hosted v9\.9\.9 → bafy/.test(note) &&
-			/release-build-payload\.ts --ipfs-cid <cid> < \/dev\/null > release\.json/.test(note)
+		'BLOCK 3 says the payload builder prints the no-CID fallback, and prints no seed command itself',
+		/stops with "this release has no IPFS CID".*prints the one command to run on morphit\.io/s.test(
+			b3
+		) &&
+			!/morphit-ipfs-seed\.sh/.test(b3) &&
+			/noCidSeedCommand\(i\.version\)/.test(payloadSrc)
 	);
 }
 
@@ -258,7 +255,7 @@ check(
 	const b3 = out.slice(out.indexOf('**BLOCK 3**'), out.indexOf('**BLOCK 4**'));
 	check(
 		'BLOCK 3 computes the manifest from the published tarball it downloaded',
-		/verify-json-to-release-manifest\.mjs --anchor \/tmp\/morphit-anchor\.env --tarball \/tmp\/morphit-v9\.9\.9\.tar\.gz > apps\/web\/build-manifest\.release\.json/.test(
+		/verify-json-to-release-manifest\.mjs --anchor \/tmp\/morphit-anchor\.env --tarball \/tmp\/morphit-v9\.9\.9\.tar\.gz > \/tmp\/morphit-build-manifest\.json/.test(
 			b3
 		) && /-o \/tmp\/morphit-v9\.9\.9\.tar\.gz$/m.test(b3)
 	);
@@ -418,7 +415,7 @@ check(
 		gateRefusesUnanchored
 	);
 	const broadcastAt = out.search(
-		/\n\.\/node_modules\/\.bin\/tsx apps\/indexer\/scripts\/release-broadcast\.ts release\.json\n/
+		/\n\.\/node_modules\/\.bin\/tsx apps\/indexer\/scripts\/release-broadcast\.ts \/tmp\/morphit-release\.json\n/
 	);
 	const upgradeAt = out.search(/^sudo morphit-ops\b/m);
 	check(

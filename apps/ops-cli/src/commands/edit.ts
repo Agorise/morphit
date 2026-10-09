@@ -53,6 +53,7 @@ import { runRegister } from './register.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { offerRestart } from '../lib/restartServices.ts';
 import { syncInstanceOrigin } from '../lib/instanceOrigin.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 import { resolveWebRoot } from './upgrade.ts';
 import {
 	stepOrigin,
@@ -524,7 +525,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 				{
 					info: (m) => console.log(`  ${m}`),
 					warn: (m) => console.log(`  ! ${m}`),
-					spinner: () => () => {}
+					spinner: (l) => startDotsSpinner(l)
 				},
 				{ installDir: repoRoot, webRoot: existsSync(webRoot) ? webRoot : null }
 			);

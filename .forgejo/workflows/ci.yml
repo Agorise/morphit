@@ -2,7 +2,7 @@
 #
 # Six gates, in order of cheapness:
 #   1. supply-chain-audit — `npm audit` against the triaged allowlist
-#      (.audit-allowlist.json); fails on a new high/critical advisory
+#      (scripts/audit-allowlist.json); fails on a new high/critical advisory
 #   2. typecheck-sweep — fast, catches type errors across all
 #      backend + library workspaces (apps/web excluded — it
 #      extends the generated .svelte-kit/tsconfig.json, which
@@ -55,7 +55,7 @@ jobs:
     name: Supply-chain audit gate (every advisory triaged, none fixable in range)
     runs-on: ubuntu-24.04
     # Fails on a moderate/high/critical advisory not triaged in
-    # .audit-allowlist.json (each entry carries its reason and review date), on
+    # scripts/audit-allowlist.json (each entry carries its reason and review date), on
     # an allowlist entry npm no longer reports, on an advisory an in-range
     # update fixes, and when the audit cannot run (registry unreachable): no
     # information is not a pass.

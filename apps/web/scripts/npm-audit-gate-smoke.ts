@@ -4,7 +4,7 @@
  *
  * ONE allowlist, ONE rule set: this runs
  * scripts/audit-gate.mjs's verdict over `npm audit` against
- * .audit-allowlist.json. It used to carry its own, different allowlist (by
+ * scripts/audit-allowlist.json. It used to carry its own, different allowlist (by
  * package and title) and skipped with exit 0 when the registry could not be
  * reached; now an audit that cannot run fails, a stale entry fails, and an
  * advisory npm can fix within the current major fails (update instead).
@@ -57,5 +57,5 @@ if (v.failures.length > 0) {
 // The runner tallies the canonical `✓ all N` line; without it a pass counts as
 // a failure.
 console.log(
-	`✓ all 1 npm-audit-gate checks passed — every advisory triaged in .audit-allowlist.json${REPORT_MODE ? ' (report mode)' : ''}`
+	`✓ all 1 npm-audit-gate checks passed — every advisory triaged in scripts/audit-allowlist.json${REPORT_MODE ? ' (report mode)' : ''}`
 );

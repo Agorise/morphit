@@ -50,6 +50,13 @@ for (const [mod, name] of [
 		)
 	}));
 }
+vi.doMock('../src/lib/releaseMonitorHeal.ts', async () => ({
+	...((await vi.importActual('../src/lib/releaseMonitorHeal.ts')) as object),
+	healReleaseMonitor: async () => (
+		called.push('releaseMonitor'),
+		{ strategy: 'installed', verified: true, detail: 'RELEASEMONITOR-DETAIL' }
+	)
+}));
 vi.doMock('../src/lib/proxyConfigHeal.ts', async () => ({
 	...((await vi.importActual('../src/lib/proxyConfigHeal.ts')) as object),
 	healProxyConfig: async () => (called.push('proxy'), { kind: 'already' })
@@ -142,11 +149,7 @@ describe('heal wiring in the self-heal phase', () => {
 			expect(n.indexOf(s), s).toBeLessThan(n.indexOf('the after-restart heals'));
 		// …and before every step that has a question for the operator: a child
 		// stopped at 300 s while one is pending still has the unit running.
-		for (const s of [
-			'the relay log notice',
-			'the Matrix bot tor-only heal',
-			'the backup encryption offer'
-		])
+		for (const s of ['the relay log notice', 'the Matrix bot tor-only heal'])
 			expect(n.indexOf(s), s).toBeGreaterThan(n.indexOf('the after-restart heals'));
 		const after = (
 			upgrade as { afterRestartHealSteps?: () => Array<[string, () => Promise<void>]> }
@@ -161,10 +164,11 @@ describe('heal wiring in the self-heal phase', () => {
 			'shadow',
 			'vapid',
 			'logLevel',
+			'releaseMonitor',
 			'egress'
 		]);
 		expect(out).toMatch(
-			/HIDDENRPC-DETAIL[\s\S]*SHADOW-DETAIL[\s\S]*VAPID-DETAIL[\s\S]*LOGLEVEL-DETAIL[\s\S]*EGRESS-DETAIL/
+			/HIDDENRPC-DETAIL[\s\S]*SHADOW-DETAIL[\s\S]*VAPID-DETAIL[\s\S]*LOGLEVEL-DETAIL[\s\S]*RELEASEMONITOR-DETAIL[\s\S]*EGRESS-DETAIL/
 		);
 	});
 
@@ -217,12 +221,17 @@ describe('heal wiring in the self-heal phase', () => {
 		expect(out).toMatch(/MEMORY-DETAIL/);
 	});
 
-	it('the backup encryption offer runs in the self-heal phase (the new code), after the after-restart unit is started', () => {
-		const n = names();
-		expect(n).toContain('the backup encryption offer');
-		expect(n.indexOf('the backup encryption offer')).toBeGreaterThan(
-			n.indexOf('the after-restart heals')
-		);
+	// 2026-10-08: the upgrade no longer asks about plain-text database backups
+	// (the database holds nothing sensitive); it named that question after
+	// every upgrade until answered.
+	it('no heal and no question is about the database backups', () => {
+		const all = [
+			...names(),
+			...(upgrade as { afterRestartHealSteps: () => Array<[string, unknown]> })
+				.afterRestartHealSteps()
+				.map(([x]) => x)
+		];
+		expect(all.filter((x) => /backup/i.test(x))).toEqual([]);
 	});
 
 	it('the tor-only egress heal waits for the background web-proxy heal (it may restart Docker), and runs after it', async () => {
@@ -258,5 +267,37 @@ describe('heal wiring in the self-heal phase', () => {
 		await upgrade.runWebProxyHealsNow({ background: true });
 		expect(called).toEqual(['proxy', 'jobs']);
 		expect(out).toMatch(/JOBS-DETAIL/);
+	});
+});
+
+describe('the after-restart run', () => {
+	it('runs its checks only once the restarted services answer, and names one that never did', async () => {
+		const events: string[] = [];
+		const run = (
+			upgrade as {
+				runAfterRestartHeals: (
+					sinceUs: number,
+					deps: {
+						waitRestarts: () => Promise<'restarted' | 'timed-out'>;
+						waitAnswers: (s: readonly string[]) => Promise<string[]>;
+						steps: () => Array<[string, () => Promise<void>]>;
+					}
+				) => Promise<void>;
+			}
+		).runAfterRestartHeals;
+		await run(0, {
+			waitRestarts: async () => (events.push('restarted'), 'restarted'),
+			waitAnswers: async (s) => (
+				events.push(`answers: ${s.join(', ')}`),
+				['morphit-relay.service']
+			),
+			steps: () => [['a check', async () => void events.push('check')]]
+		});
+		expect(events).toEqual([
+			'restarted',
+			'answers: morphit-indexer.service, morphit-relay.service',
+			'check'
+		]);
+		expect(err).toMatch(/morphit-relay\.service did not answer on its health address/);
 	});
 });

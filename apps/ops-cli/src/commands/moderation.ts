@@ -20,7 +20,7 @@
  *   --json                       Emit JSON, skip the resolution prompt.
  */
 
-import type { CommandCtx } from '../lib/ctx.ts';
+import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt, error, blank } from '../render/term.ts';
@@ -71,17 +71,23 @@ export async function runModeration(ctx: CommandCtx): Promise<number> {
 	const limit = json ? HUMAN_LIMIT * 10 : HUMAN_LIMIT;
 	const operator = ctx.config.operatorAccount;
 
-	const reciprocity = showReciprocity ? await fetchReciprocityFlags(ctx.db, cutoff, limit) : [];
-	const related = showRelated ? await fetchRelatedFlags(ctx.db, cutoff, limit) : [];
-	const pileOn = showPileOn ? await fetchPileOnFlags(ctx.db, cutoff, limit) : [];
-	const concentration = showConcentration
-		? await fetchConcentrationFlags(ctx.db, cutoff, limit)
-		: [];
-	const accounts = collectFlaggedAccounts(
-		[...reciprocity, ...pileOn, ...concentration],
-		related
+	const { reciprocity, related, pileOn, concentration, accounts, blocks } = await whileReading(
+		ctx,
+		async () => {
+			const reciprocity = showReciprocity ? await fetchReciprocityFlags(ctx.db, cutoff, limit) : [];
+			const related = showRelated ? await fetchRelatedFlags(ctx.db, cutoff, limit) : [];
+			const pileOn = showPileOn ? await fetchPileOnFlags(ctx.db, cutoff, limit) : [];
+			const concentration = showConcentration
+				? await fetchConcentrationFlags(ctx.db, cutoff, limit)
+				: [];
+			const accounts = collectFlaggedAccounts(
+				[...reciprocity, ...pileOn, ...concentration],
+				related
+			);
+			const blocks = await fetchBlockStatuses(ctx.db, operator, accounts);
+			return { reciprocity, related, pileOn, concentration, accounts, blocks };
+		}
 	);
-	const blocks = await fetchBlockStatuses(ctx.db, operator, accounts);
 
 	if (json) {
 		emitJson({
@@ -126,7 +132,7 @@ export async function runModeration(ctx: CommandCtx): Promise<number> {
 		return 0;
 	}
 
-	const hidden = await countActiveFlagsOutsideWindow(ctx.db, cutoff);
+	const hidden = await whileReading(ctx, () => countActiveFlagsOutsideWindow(ctx.db, cutoff));
 	renderHuman(sinceSec, reciprocity, related, pileOn, concentration, blocks, hidden);
 
 	// Interactive resolution: only on a real TTY (the menu path and
@@ -174,7 +180,7 @@ async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
 	if (kind === 6) return;
 
 	if (kind === 5) {
-		const rows = await fetchClearances(ctx.db, 50);
+		const rows = await whileReading(ctx, () => fetchClearances(ctx.db, 50));
 		blank();
 		if (rows.length === 0) {
 			info(fmt.dim('  No clearances in force.'));
@@ -232,10 +238,16 @@ async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
 	const note = (await ask('Note for your own records (optional)')).slice(0, 500);
 
 	let removed = 0;
-	for (const signal of signals) {
-		const { cleared } = await clearFlag(ctx.db, { signal, accountA, accountB, note });
-		removed += cleared;
-	}
+	await whileReading(
+		ctx,
+		async () => {
+			for (const signal of signals) {
+				const { cleared } = await clearFlag(ctx.db, { signal, accountA, accountB, note });
+				removed += cleared;
+			}
+		},
+		'Recording the clearance…'
+	);
 	blank();
 	if (removed > 0) {
 		info(
@@ -252,13 +264,11 @@ async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
 			)
 		);
 	}
-	info(
-		fmt.dim(
-			'  Instance-local: nothing was broadcast and no other instance is affected.'
-		)
-	);
+	info(fmt.dim('  Instance-local: nothing was broadcast and no other instance is affected.'));
 	if (signals.includes('related')) {
-		info(fmt.dim('  Related-accounts (Signal A): permanent — it rests on facts that cannot change.'));
+		info(
+			fmt.dim('  Related-accounts (Signal A): permanent — it rests on facts that cannot change.')
+		);
 	}
 	if (signals.includes('reciprocity')) {
 		info(
@@ -416,12 +426,7 @@ async function resolutionLoop(ctx: CommandCtx, operator: string): Promise<number
 		blank();
 		const choice = await askChoice(
 			'Resolve a flag?',
-			[
-				'Block an account',
-				'Unblock an account',
-				'Clear a flag (restore an account)',
-				'Done'
-			],
+			['Block an account', 'Unblock an account', 'Clear a flag (restore an account)', 'Done'],
 			2,
 			{ showList: true }
 		);
@@ -460,7 +465,11 @@ async function resolutionLoop(ctx: CommandCtx, operator: string): Promise<number
 		);
 		if (!ok) continue;
 
-		const { plan, changed } = await applyLocalBlock(ctx.db, { operator, account, action, reason });
+		const { plan, changed } = await whileReading(
+			ctx,
+			() => applyLocalBlock(ctx.db, { operator, account, action, reason }),
+			action === 'block' ? 'Blocking…' : 'Unblocking…'
+		);
 		info(`  ${plan.summary}`);
 		if (changed && action === 'block') {
 			info(fmt.dim(`  @${account}'s listings are now hidden on this instance.`));

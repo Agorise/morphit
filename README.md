@@ -52,7 +52,7 @@ For the long version, every claim is enumerated and source-anchored in [`docs/MO
 | `docs/release-notes/` | One `RELEASE-NOTES-v*.md` per release |
 | `ops/` | Ansible role, systemd units, env templates, nginx + BunkerWeb configs, postgres init |
 | `scripts/` | Build, smoke, mediakit, sitemap, llms.txt, and ceremony helpers |
-| top level | `morphit-setup.sh` (the installer), `morphit.config.env.example`, `README.md`, `SECURITY.md`, `LICENSE`, `THIRD-PARTY-LICENSES.md`, and the npm, TypeScript, Prettier and audit config files |
+| top level | `morphit-setup.sh` (the installer), `README.md`, `LICENSE`, the npm files (`package.json`, `package-lock.json`, `.npmrc`), `tsconfig.smoke.json` and `.prettierignore`. The config example is `ops/env/morphit.config.env.example`; the security policy and third-party licenses are in `docs/` |
 
 ## Running an instance
 
@@ -92,7 +92,7 @@ Triple-pulse it (run three times back-to-back) to filter flakes before submittin
 
 ## Reporting bugs
 
-Use Forgejo's New Issue form — the bug-report template auto-loads and walks you through the fields we need. Issues are public. **Security-sensitive issues** (anything involving keys, funds, fee bypass, or leaked private data) go ONLY by Matrix direct message to **`@agorise:matrix.org`**, as [`SECURITY.md`](SECURITY.md) describes — never as a public issue or in the community chat room.
+Use Forgejo's New Issue form — the bug-report template auto-loads and walks you through the fields we need. Issues are public. **Security-sensitive issues** (anything involving keys, funds, fee bypass, or leaked private data) go ONLY by Matrix direct message to **`@agorise:matrix.org`**, as [`docs/SECURITY.md`](docs/SECURITY.md) describes — never as a public issue or in the community chat room.
 
 Offline alternative: `docs/NEW-ISSUE-FOUND.md` (plain Markdown copy of the bug-report fields you can email).
 
@@ -105,7 +105,7 @@ Offline alternative: `docs/NEW-ISSUE-FOUND.md` (plain Markdown copy of the bug-r
 
 AGPL-3.0-or-later. Every operator running a modified instance must make their source available to their users. See [`LICENSE`](LICENSE).
 
-Third-party dependencies are used under their own licenses (overwhelmingly permissive — MIT/ISC/Apache-2.0/BSD); see [`THIRD-PARTY-LICENSES`](THIRD-PARTY-LICENSES.md). Note that the Blurt client `@beblurt/dblurt` carries a `BSD-3-Clause-No-Military-License` (a no-military-use restriction) — disclosed there for operators and redistributors.
+Third-party dependencies are used under their own licenses (overwhelmingly permissive — MIT/ISC/Apache-2.0/BSD); see [`docs/THIRD-PARTY-LICENSES.md`](docs/THIRD-PARTY-LICENSES.md). Note that the Blurt client `@beblurt/dblurt` carries a `BSD-3-Clause-No-Military-License` (a no-military-use restriction) — disclosed there for operators and redistributors.
 
 ---
 

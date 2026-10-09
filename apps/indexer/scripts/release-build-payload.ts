@@ -47,7 +47,7 @@
  *   #   MORPHIT_BUILD_XMR_PRIMARY=4...   (v1.20.0 MK-H2; default: CANONICAL_TREASURY.xmrPrimary)
  *   #   MORPHIT_BUILD_HASH_MANIFEST_FILE=/path/to/manifest.json
  *   #   MORPHIT_BUILD_ENDPOINTS_FILE=/path/to/endpoints.json
- *   #   tsx apps/indexer/scripts/release-build-payload.ts > release.json
+ *   #   tsx apps/indexer/scripts/release-build-payload.ts > /tmp/morphit-release.json
  *
  * Flags:
  *   --ipfs-cid <cid>       the release's IPFS CID, for an anchor
@@ -605,11 +605,13 @@ function buildDistribution(i: Inputs, flags: BuilderFlags): ReleaseDistributionB
 		// zero-clearnet instance (Tor/I2P only) was left unable to fetch the release.
 		fail(
 			`this release has no IPFS CID, and zero-clearnet instances (Tor/I2P only) cannot fetch a release without one.\n` +
-				`  release.yml could not compute it. Have morphit.io host the release and print it (as root there; this installs nothing).\n` +
-				`  This downloads the release, checks it against the anchored SHA-256, and seeds it with the release's own seed scripts:\n` +
+				`  release.yml could not compute it. Have morphit.io host the release and print it.\n` +
+				`  1. On morphit.io, logged in as root (this installs nothing; it downloads the release, checks it against the\n` +
+				`     anchored SHA-256, and seeds it with the release's own seed scripts):\n` +
 				`      ${noCidSeedCommand(i.version)}\n` +
-				`  It prints the line:  morphit-ipfs-seed: hosted v${i.version} → bafy…  (that CID, even if lines after it warn)\n` +
-				`  Run this payload command again with --ipfs-cid and that CID added after release-build-payload.ts.\n` +
+				`     It prints the line:  morphit-ipfs-seed: hosted v${i.version} → bafy…  (use that CID, even if lines after it warn)\n` +
+				`  2. On the laptop, run this payload line again with  --ipfs-cid <that CID>  added right after release-build-payload.ts,\n` +
+				`     then the dry-run line again.\n` +
 				`  (Only if no box printed one: --allow-no-ipfs-cid publishes without it, and zero-clearnet nodes cannot upgrade.)`
 		);
 	} else if (cid === '') {
@@ -626,8 +628,9 @@ function buildDistribution(i: Inputs, flags: BuilderFlags): ReleaseDistributionB
  * and staging scripts, from the published tarball after checking it against
  * the anchored SHA-256. The installed copies are the previous release's, and a
  * change in how a release directory is staged would give a CID this release's
- * own upgrades never reproduce. Identical to the command in the note after
- * Block 3 of scripts/eli5-release.sh (releaseCeremony.test.ts runs both).
+ * own upgrades never reproduce. Printed only when the anchor has no CID (the
+ * line under Block 3 of scripts/eli5-release.sh says so); releaseCeremony.test.ts
+ * runs it.
  */
 export function noCidSeedCommand(version: string): string {
 	const url = `https://git.agorise.net/agorise/morphit/releases/download/v${version}`;

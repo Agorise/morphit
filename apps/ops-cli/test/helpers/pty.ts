@@ -58,7 +58,11 @@ export function commandInTerminal(
 
 /** How many times a braille spinner frame was drawn beside `label`. */
 export function spinnerFrames(out: string, label: string): number {
-	const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	// As drawn on an 80-column terminal: a longer label is cut to fit the line
+	// (init/spinner.ts), and these terminals report no size, so 80 is assumed.
+	const chars = [...label];
+	const shown = chars.length <= 75 ? label : `${chars.slice(0, 74).join('')}…`;
+	const esc = shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	return (out.match(new RegExp(`\\r {2}[\\u2800-\\u28ff] ${esc}`, 'g')) ?? []).length;
 }
 

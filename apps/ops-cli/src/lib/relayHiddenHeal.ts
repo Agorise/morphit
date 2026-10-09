@@ -439,7 +439,13 @@ export async function applyAndVerifyRelayHeal(
 	} catch {
 		/* the restart below still runs; the warning names the file */
 	}
-	rt.restart();
+	const stopRevert =
+		rt.spinner?.('Restarting the relay on its previous settings…') ?? (() => undefined);
+	try {
+		rt.restart();
+	} finally {
+		stopRevert();
+	}
 	warn(
 		`The relay kept failing after being set to hidden-only RPC, so ${target} was put ` +
 			`back as it was and the relay restarted on it: it is on its previous settings, ` +

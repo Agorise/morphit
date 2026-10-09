@@ -51,7 +51,7 @@ import {
 	matrixBotReadiness,
 	readMatrixBotEnv,
 	readMatrixBotHealthcheckPort,
-	syncMatrixBotService,
+	syncMatrixBotServiceAtTerminal,
 	writeAlertMxid,
 	writeMatrixCreds,
 	writeConfigMxid,
@@ -65,6 +65,7 @@ import {
 	type MatrixBotSyncResult
 } from '../lib/matrixBot.ts';
 import { parseMxid } from '@morphit/operator-config';
+import { withSpinner } from '../init/spinner.ts';
 
 export interface MatrixCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -78,7 +79,10 @@ export interface MatrixDeps {
 	readonly readEnv?: (path?: string) => MatrixBotEnv;
 	readonly readState?: (unit: string) => ServiceState;
 	readonly writeMxid?: (value: string, path?: string) => boolean;
-	readonly sync?: (run: boolean, restart: boolean) => MatrixBotSyncResult;
+	readonly sync?: (
+		run: boolean,
+		restart: boolean
+	) => MatrixBotSyncResult | Promise<MatrixBotSyncResult>;
 	readonly confirm?: (question: string, defaultYes: boolean) => Promise<boolean>;
 	readonly selfTest?: (port: number) => Promise<MatrixSelfTestResult>;
 	readonly readHealthcheckPort?: (path?: string) => number;
@@ -122,7 +126,8 @@ export async function configureMatrixAlerts(
 	const yellow = (s: string): string => (c ? `\u001b[33m${s}\u001b[0m` : s);
 	const dim = (s: string): string => (c ? `\u001b[2m${s}\u001b[0m` : s);
 	const sync =
-		deps.sync ?? ((run: boolean, restart: boolean) => syncMatrixBotService(run, { restart }));
+		deps.sync ??
+		((run: boolean, restart: boolean) => syncMatrixBotServiceAtTerminal(run, { restart }));
 
 	// Never block on stdin in a non-interactive context (a piped/CI invocation, or
 	// a smoke driving the status flow) — this whole flow is interactive by nature.
@@ -208,8 +213,11 @@ export async function configureMatrixAlerts(
 			console.log('  Username/password empty — aborted, no changes made.');
 			return 1;
 		}
-		console.log(dim('  Minting a fresh access token (a new device — avoids E2EE key collisions)…'));
-		const minted = await (deps.mint ?? mintMatrixToken)(homeserver, user, password);
+		// A login over Tor can take a while: the spinner is on the line for it.
+		const minted = await withSpinner(
+			'Minting a fresh access token (a new device — avoids E2EE key collisions)…',
+			() => (deps.mint ?? mintMatrixToken)(homeserver, user, password)
+		);
 		if (minted === null) {
 			console.log(
 				yellow('  ✗ Login failed. Check the username, password, and homeserver, then retry.')
@@ -260,7 +268,7 @@ export async function configureMatrixAlerts(
 	}
 
 	// 6. Enable + start.
-	const res = sync(true, true);
+	const res = await sync(true, true);
 	console.log('');
 	if (!res.ok) {
 		console.log(yellow('  ✗ Saved, but the bot did not start cleanly.'));
@@ -273,7 +281,7 @@ export async function configureMatrixAlerts(
 	const port = (deps.readHealthcheckPort ?? readMatrixBotHealthcheckPort)(MATRIX_BOT_ENV_PATH);
 	const selfTest = deps.selfTest ?? postSelfTest;
 	try {
-		const t = await selfTest(port);
+		const t = await withSpinner('Sending you a test alert…', () => selfTest(port));
 		if (t.ok && t.sent.length > 0) {
 			console.log(green(`  ✓ Test alert sent to ${t.sent.join(', ')} — check your Matrix client.`));
 			console.log(dim('    The first message arrives as an invite/request — accept it once.'));
@@ -356,7 +364,8 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 	const readState = deps.readState ?? checkService;
 	const writeMxid = deps.writeMxid ?? writeAlertMxid;
 	const sync =
-		deps.sync ?? ((run: boolean, restart: boolean) => syncMatrixBotService(run, { restart }));
+		deps.sync ??
+		((run: boolean, restart: boolean) => syncMatrixBotServiceAtTerminal(run, { restart }));
 	const confirm = deps.confirm ?? askYesNo;
 	const selfTest = deps.selfTest ?? postSelfTest;
 	const readHealthcheckPort = deps.readHealthcheckPort ?? readMatrixBotHealthcheckPort;
@@ -435,7 +444,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 
 		let result: MatrixSelfTestResult;
 		try {
-			result = await selfTest(port);
+			result = await withSpinner('Waiting for the bot to send it…', () => selfTest(port));
 		} catch (err) {
 			console.log(yellow(`  Couldn't reach the bot's healthcheck endpoint on 127.0.0.1:${port}.`));
 			console.log(
@@ -551,7 +560,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 
 		const readiness = matrixBotReadiness(readEnv(MATRIX_BOT_ENV_PATH));
 		if (readiness.run) {
-			const res = sync(true, true);
+			const res = await sync(true, true);
 			console.log('');
 			if (res.ok) {
 				console.log(green('  ✓ matrix-bot enabled and (re)started — alerts will DM to you now.'));
@@ -568,7 +577,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 		// Username valid but the bot is not ready to run (almost always:
 		// no access token yet).  Make sure it is NOT running on a partial
 		// config, and tell the operator exactly what is missing.
-		sync(false, false);
+		await sync(false, false);
 		console.log('');
 		console.log(yellow(`  ⓘ Bot not started yet — ${describeNotReady(readiness)}.`));
 		if (readiness.reason === 'no-token' || readiness.reason === 'placeholder-token') {
@@ -599,7 +608,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 			}
 			console.log(green('  ✓ Alert username removed.'));
 		}
-		const res = sync(false, false);
+		const res = await sync(false, false);
 		console.log('');
 		if (res.ok) {
 			console.log(green('  ✓ matrix-bot stopped and disabled (Matrix alerting is off).'));
@@ -662,7 +671,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 			console.log('  Left stopped.  No change made.');
 			return 0;
 		}
-		const res = sync(true, true);
+		const res = await sync(true, true);
 		console.log('');
 		if (res.ok) {
 			console.log(green('  ✓ matrix-bot enabled and started.'));
@@ -679,7 +688,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 			console.log('  Left running.  No change made.');
 			return 0;
 		}
-		const res = sync(false, false);
+		const res = await sync(false, false);
 		console.log('');
 		if (res.ok) {
 			console.log(green('  ✓ matrix-bot stopped and disabled.'));

@@ -215,7 +215,11 @@ if (codeOnly.includes('copyFileSync') && codeOnly.includes('cpSync')) {
 //    own order (npm ci runs in installDepsWithNpmCi, called from step 9).
 {
 	const runIdx = codeOnly.indexOf('export async function runUpgrade(');
-	const extractIdx = codeOnly.indexOf("runOrThrow('tar'", runIdx);
+	// The unpack: runOrThrow('tar', …) before v1.21.3, now under the spinner.
+	const extractIdx = Math.max(
+		codeOnly.indexOf("runOrThrow('tar'", runIdx),
+		codeOnly.search(/runStepWithSpinner\(\s*'Unpacking the new release…',\s*'tar'/)
+	);
 	const carryIdx = codeOnly.indexOf('preserve', extractIdx);
 	const npmCiIdx = codeOnly.indexOf('await installDepsWithNpmCi(installDir, backupDir)', runIdx);
 	const ciFn = codeOnly.slice(codeOnly.indexOf('export async function installDepsWithNpmCi('));
@@ -224,7 +228,7 @@ if (codeOnly.includes('copyFileSync') && codeOnly.includes('cpSync')) {
 		extractIdx !== -1 &&
 		carryIdx !== -1 &&
 		npmCiIdx !== -1 &&
-		/'ci', '--ignore-scripts'/.test(ciFn.slice(0, 800)) &&
+		/'ci', '--ignore-scripts'/.test(ciFn.slice(0, 1000)) &&
 		extractIdx < carryIdx &&
 		carryIdx < npmCiIdx
 	) {

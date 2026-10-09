@@ -1,5 +1,29 @@
 # Morphit — Security & Threat Model
 
+## Reporting a vulnerability
+
+1. **Matrix DM** to **`@agorise:matrix.org`** (a user, not a room) — the
+   channel for every vulnerability report. End-to-end encrypted by default in
+   Element / most Matrix clients.
+2. If you cannot use Matrix DMs: post in the public room
+   **`#agorise:matrix.org`** that you have a security report — **with no
+   details** — and a maintainer will DM you.
+
+Never post an exploitable problem as a public issue on
+[git.agorise.net/agorise/morphit](https://git.agorise.net/agorise/morphit):
+issues there are public.
+
+We commit to:
+
+- Acknowledging receipt within **72 hours**
+- Triaging severity within **7 days**
+- Coordinating a fix-and-disclose timeline with you
+- Crediting your finding in the project changelog (with your consent)
+
+The disclosure program in full (severity ladder, scope, what is out of
+scope, the discretionary recognition program) is in "Responsible
+disclosure (updated)" and "Bug bounty program" below.
+
 ## Non-negotiable security guarantees
 
 ### 1. Private keys never leave the device
@@ -483,7 +507,7 @@ base-uri 'self'
 
 ## Responsible disclosure
 
-The root [`SECURITY.md`](../SECURITY.md) is the one procedure: a **Matrix
+[Reporting a vulnerability](#reporting-a-vulnerability), at the top of this file, is the one procedure: a **Matrix
 DM to `@agorise:matrix.org`** (a user, not a room). If you cannot DM, say
 in the public room `#agorise:matrix.org` that you have a report — with no
 details — and a maintainer will DM you. Never use a public issue, a public
@@ -690,7 +714,7 @@ These are the operator's responsibility:
   the in-memory rate limits (OPERATIONS.md §18, §34).
 - **The dependency audit gate.** CI and the release run
   `scripts/audit-gate.mjs`, with ONE allowlist
-  (`.audit-allowlist.json`, every entry with its reason and review
+  (`scripts/audit-allowlist.json`, every entry with its reason and review
   date). It fails when the audit cannot run, on any untriaged
   moderate/high/critical advisory, on an allowlisted advisory npm no
   longer reports, and on an advisory an in-range update fixes.
@@ -798,7 +822,7 @@ still pins `request: ^2.88.2` + `request-promise: ^4.2.6`, and
 Bumping the SDK does not remove the chain.
 
 **Enforced by CI:** the accepted entries live in ONE allowlist,
-`.audit-allowlist.json`, which `scripts/audit-gate.mjs` (CI and
+`scripts/audit-allowlist.json`, which `scripts/audit-gate.mjs` (CI and
 release) and `apps/web/scripts/npm-audit-gate-smoke.ts` both read.
 That file, not this table, is authoritative; the table is a
 snapshot.
@@ -833,7 +857,7 @@ for a `request`-free release.
 
 **Recommended operator practice:** when deploying, run
 `npm audit --omit=dev` for the runtime-only view. The expected
-runtime findings are the entries in `.audit-allowlist.json`
+runtime findings are the entries in `scripts/audit-allowlist.json`
 (the `matrix-bot-sdk` / `request` cluster matters only if you
 enabled the optional Matrix bot). If anything beyond those shows
 up, triage before deploying.
@@ -1258,9 +1282,9 @@ installer; `RUN-A-MORPHIT-NODE.md` §9) writes gzipped `pg_dump`s to
 `/home/morphit/backups/` mode 0600, keeps 30 days, and renames from
 `.partial` → final so a half-written file is never mistaken for a
 backup. **They are plain text unless you give an age public key**:
-the install wizard asks for one ("Encrypt your daily backups"), and
-`morphit-ops upgrade` asks once about plain-text backups already on
-the box. Contents include chat ciphertexts (which only the
+the install wizard asks for one ("Encrypt your daily backups"), or
+set `AGE_RECIPIENT` in `/etc/morphit/backup.env` later; upgrades leave
+the backups alone and ask nothing about them. Contents include chat ciphertexts (which only the
 participants can decrypt), feedback, engagement aggregates, and also
 local data the chain does not have (operator blocks, moderation
 records, view counters). Push subscription rows are left out of the

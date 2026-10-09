@@ -220,9 +220,11 @@ export class BroadcastOutcomeUnknownError extends Error {
 	constructor(
 		readonly txid: string,
 		readonly expirationMs: number,
-		cause: string
+		/** What the nodes answered to the send (a transport failure, or a node's
+		 *  own rejection, which is not trusted as proof but is worth reading). */
+		readonly reason: string
 	) {
-		super(`broadcast outcome unknown for ${txid}: ${cause}`);
+		super(`broadcast outcome unknown for ${txid}: ${reason}`);
 		this.name = 'BroadcastOutcomeUnknownError';
 	}
 }
@@ -418,7 +420,10 @@ export class BlurtClient {
 	 *
 	 * Returns the URLs actually added (already-known ones are ignored).
 	 */
-	mergeRpcEndpoints(urls: readonly string[], operators?: Readonly<Record<string, string>>): string[] {
+	mergeRpcEndpoints(
+		urls: readonly string[],
+		operators?: Readonly<Record<string, string>>
+	): string[] {
 		return this.pool.mergeEndpoints(urls, operators);
 	}
 
@@ -470,9 +475,7 @@ export class BlurtClient {
 		// Tolerate missing/malformed values — return undefined so the
 		// caller can surface a clear error instead of throwing here.
 		let postingPubkey: string | undefined;
-		const postingAuth = acct.posting as
-			| { key_auths?: unknown }
-			| undefined;
+		const postingAuth = acct.posting as { key_auths?: unknown } | undefined;
 		if (postingAuth && Array.isArray(postingAuth.key_auths)) {
 			const first = postingAuth.key_auths[0];
 			if (Array.isArray(first) && typeof first[0] === 'string') {
@@ -599,7 +602,10 @@ export class BlurtClient {
 			throw new BroadcastNotSentError(err instanceof Error ? err.message : String(err));
 		}
 		const observed = parseBlurtAssetNumber(fee);
-		if (observed !== null && observed > this.fallbackAccountCreationFeeBlurt * FEE_REFUSE_MULTIPLIER) {
+		if (
+			observed !== null &&
+			observed > this.fallbackAccountCreationFeeBlurt * FEE_REFUSE_MULTIPLIER
+		) {
 			throw new FeeSpikeRefusedError(observed, this.fallbackAccountCreationFeeBlurt);
 		}
 
@@ -720,10 +726,10 @@ export class BlurtClient {
 		let expirationMs: number;
 		try {
 			const props = await this.callWithRotation<Record<string, unknown>>(async (client, signal) => {
-				return (await withSignal(client.condenser.getDynamicGlobalProperties(), signal)) as unknown as Record<
-					string,
-					unknown
-				>;
+				return (await withSignal(
+					client.condenser.getDynamicGlobalProperties(),
+					signal
+				)) as unknown as Record<string, unknown>;
 			});
 			if (
 				typeof props.head_block_number !== 'number' ||
@@ -741,13 +747,23 @@ export class BlurtClient {
 				ref_block_prefix: Buffer.from(props.head_block_id, 'hex').readUInt32LE(4)
 			};
 			// Local crypto only — the client here is never asked to send anything.
-			signed = cryptoUtils.signTransaction(tx as never, priv, clientFor(this.anyEndpoint()).chainId);
+			signed = cryptoUtils.signTransaction(
+				tx as never,
+				priv,
+				clientFor(this.anyEndpoint()).chainId
+			);
 			txid = cryptoUtils.generateTrxId(signed as never);
 			if (opts.onSigned) await opts.onSigned({ txid, expirationMs });
 		} catch (err) {
 			throw new BroadcastNotSentError(err instanceof Error ? err.message : String(err));
 		}
-		const ok = (recovered: boolean) => ({ id: txid, block_num: 0, trx_num: 0, expired: false, ...(recovered ? { recovered } : {}) });
+		const ok = (recovered: boolean) => ({
+			id: txid,
+			block_num: 0,
+			trx_num: 0,
+			expired: false,
+			...(recovered ? { recovered } : {})
+		});
 
 		let lastCause = 'no endpoint confirmed the broadcast';
 		const deadline = expirationMs + 2 * 3000 + this.verifyPollMs;
@@ -762,12 +778,14 @@ export class BlurtClient {
 				}
 			}
 			// The bytes may be on the network. Never read a rejection as proof.
-			if (opts.confirm === undefined) throw new BroadcastOutcomeUnknownError(txid, expirationMs, lastCause);
+			if (opts.confirm === undefined)
+				throw new BroadcastOutcomeUnknownError(txid, expirationMs, lastCause);
 			const state = await opts.confirm(expirationMs).catch(() => null);
 			if (state === 'landed') return ok(true);
 			if (state === 'absent') throw new BroadcastNotLandedError(txid, lastCause);
 			if (state === 'taken') throw new AccountTakenError('');
-			if (Date.now() > deadline) throw new BroadcastOutcomeUnknownError(txid, expirationMs, lastCause);
+			if (Date.now() > deadline)
+				throw new BroadcastOutcomeUnknownError(txid, expirationMs, lastCause);
 			await sleep(this.verifyPollMs);
 		}
 	}
@@ -789,7 +807,10 @@ export class BlurtClient {
 			async (url, signal) => {
 				const client = clientFor(url);
 				const [accts, dgp] = (await withSignal(
-					Promise.all([client.condenser.getAccounts([name]), client.condenser.getDynamicGlobalProperties()]),
+					Promise.all([
+						client.condenser.getAccounts([name]),
+						client.condenser.getDynamicGlobalProperties()
+					]),
 					signal
 				)) as unknown as [Array<Record<string, unknown>>, Record<string, unknown>];
 				const acct = Array.isArray(accts) ? accts.find((a) => a && a.name === name) : undefined;
@@ -843,7 +864,8 @@ export class BlurtClient {
 					throw new Error('malformed head from this node');
 				}
 				const headMs = new Date(dgp.time + 'Z').getTime();
-				const lib = typeof dgp.last_irreversible_block_num === 'number' ? dgp.last_irreversible_block_num : 0;
+				const lib =
+					typeof dgp.last_irreversible_block_num === 'number' ? dgp.last_irreversible_block_num : 0;
 				const libMs = headMs - Math.max(0, dgp.head_block_number - lib) * 3000;
 				let start = -1;
 				let reachedSince = false;
@@ -860,10 +882,16 @@ export class BlurtClient {
 						if (!Array.isArray(row) || typeof row[0] !== 'number') continue;
 						const e = row[1] as { timestamp?: unknown; op?: unknown; trx_id?: unknown } | undefined;
 						oldestIdx = Math.min(oldestIdx, row[0]);
-						const ts = typeof e?.timestamp === 'string' ? new Date(e.timestamp + 'Z').getTime() : NaN;
+						const ts =
+							typeof e?.timestamp === 'string' ? new Date(e.timestamp + 'Z').getTime() : NaN;
 						if (Number.isFinite(ts)) oldestMs = Math.min(oldestMs, ts);
 						const op = e?.op;
-						if (Array.isArray(op) && typeof op[0] === 'string' && op[1] && typeof op[1] === 'object') {
+						if (
+							Array.isArray(op) &&
+							typeof op[0] === 'string' &&
+							op[1] &&
+							typeof op[1] === 'object'
+						) {
 							const trxId = typeof e?.trx_id === 'string' ? e.trx_id : undefined;
 							if (args.match(op[0], op[1] as Record<string, unknown>, trxId)) return 'found';
 						}
@@ -896,9 +924,13 @@ export class BlurtClient {
 		try {
 			await this.pool.call(
 				async (url, signal) => {
-					if (Date.now() >= expirationMs - 3000) throw new UnconfirmedBroadcast('transaction window closed');
+					if (Date.now() >= expirationMs - 3000)
+						throw new UnconfirmedBroadcast('transaction window closed');
 					const client = clientFor(url);
-					return await withSignal(client.call('condenser_api', 'broadcast_transaction', [signed]), signal);
+					return await withSignal(
+						client.call('condenser_api', 'broadcast_transaction', [signed]),
+						signal
+					);
 				},
 				{ timeoutMs: this.broadcastAttemptTimeoutMs }
 			);
@@ -1002,6 +1034,45 @@ export class BlurtClient {
 		return this.broadcastSignedOnce([op], priv, { onSigned: args.onSigned });
 	}
 
+	/** What the chain allows for a delegation from `delegator` to `delegatee`
+	 *  now, in BLURT Power. Blurt's delegate_vesting_shares evaluator (as in
+	 *  Steem from HF20): a NEW delegation must be at least
+	 *  account_creation_fee / 3, and a change to an existing one at least
+	 *  account_creation_fee / 30 (both converted to VESTS at the current
+	 *  price). `currentBp` is what is delegated now (0 when none). */
+	async delegationRules(
+		delegator: string,
+		delegatee: string
+	): Promise<{ minNewBp: number; minChangeBp: number; currentBp: number }> {
+		const [props, vi, list] = await Promise.all([
+			this.getChainProperties(),
+			this.getVestingInfo(),
+			this.callWithRotation<unknown>(async (client, signal) =>
+				withSignal(
+					client.call('condenser_api', 'get_vesting_delegations', [delegator, delegatee, 1]),
+					signal
+				)
+			)
+		]);
+		const fee = parseBlurtAssetNumber(props.account_creation_fee);
+		const fund = parseGrapheneAmount(vi.total_vesting_fund_blurt);
+		const shares = parseGrapheneAmount(vi.total_vesting_shares);
+		if (fee === null || fund === null || shares === null || shares.amount <= 0n)
+			throw new Error('delegationRules: unreadable chain properties');
+		const blurtPerVest =
+			Number(fund.amount) / 10 ** fund.scale / (Number(shares.amount) / 10 ** shares.scale);
+		let currentBp = 0;
+		if (Array.isArray(list)) {
+			const d = (list as Array<Record<string, unknown>>).find(
+				(x) => x && x.delegator === delegator && x.delegatee === delegatee
+			);
+			const v =
+				typeof d?.vesting_shares === 'string' ? parseGrapheneAmount(d.vesting_shares) : null;
+			if (v !== null) currentBp = (Number(v.amount) / 10 ** v.scale) * blurtPerVest;
+		}
+		return { minNewBp: fee / 3, minChangeBp: fee / 30, currentBp };
+	}
+
 	/** BP-to-VESTS conversion. Pure BigInt arithmetic — no float
 	 *  math at any step. The chain accepts VESTS with 6 decimals;
 	 *  we compute the exact integer microvests output, then format.
@@ -1090,8 +1161,14 @@ export class BlurtClient {
  *  signal aborts mid-flight; we just stop awaiting it.  Cost: one
  *  abandoned RPC per hedge — same tradeoff hedging already makes
  *  intentionally (the hedge double-fires the request anyway). */
-function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+export function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 	if (signal.aborted) {
+		// `promise` has already been started by the caller. Returning without a
+		// handler on it left its later failure UNHANDLED, and the relay exits on
+		// an unhandled rejection (2026-10-08, morphit.io: five crashes in six
+		// minutes, "AbortError: This operation was aborted"). It is still
+		// abandoned, but its outcome is now observed.
+		promise.catch(() => undefined);
 		return Promise.reject(new Error('aborted'));
 	}
 	return new Promise<T>((resolve, reject) => {
@@ -1150,7 +1227,9 @@ function clientFor(url: string): Client {
 		// Guarded: dblurt followed redirects and read
 		// replies whole, so a directory-listed node could bounce a broadcast to
 		// our own loopback or stream memory into us. See rpcFetch.ts.
-		c = guardDblurtClient(new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(VERSION) }));
+		c = guardDblurtClient(
+			new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(VERSION) })
+		);
 		clientCache.set(url, c);
 	}
 	return c;
