@@ -621,7 +621,6 @@
 						<li><a href={lp('/download')} class={footLink}>{$_('footer.download')}</a></li>
 						<li><a href={lp('/stats')} class={footLink} title={$_('footer.stats_title')}>{$_('footer.stats')}</a></li>
 						<li><a href="{lp('/faq')}?q=wallet_developer_api&lang={currentLang}" class={footLink} title={$_('footer.api_title')}>{$_('footer.api')}</a></li>
-						<li><a href="https://git.agorise.net/agorise/morphit" class={footLink} target="_blank" rel="noopener noreferrer">{$_('footer.source')}</a></li>
 						<li><a href="/licenses.txt" data-sveltekit-reload class={footLink} title={$_('footer.licenses_title')} rel="noopener">{$_('footer.licenses')}</a></li>
 					</ul>
 				</div>

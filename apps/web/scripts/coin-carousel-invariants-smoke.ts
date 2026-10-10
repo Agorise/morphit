@@ -64,8 +64,28 @@ const scenarios: Scenario[] = [
 			if (!/visibleSlots[\s\S]{0,200}?\$derived\.by/.test(src)) {
 				return 'visibleSlots not declared as a $derived.by reactive computation';
 			}
-			if (!/for\s*\(\s*const\s+a\s+of\s+ASSETS\s*\)/.test(src)) {
-				return 'visibleSlots computation does not iterate ASSETS';
+			// v1.21.5: it iterates the assets this site accepts — ASSETS filtered by
+			// the operator's disabled list (I-2).
+			if (
+				!/const\s+accepted\s*=\s*ASSETS\.filter\(/.test(src) ||
+				!/for\s*\(\s*const\s+a\s+of\s+accepted\s*\)/.test(src)
+			) {
+				return 'visibleSlots computation does not iterate the accepted ASSETS';
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-1b (v1.21.5): a network shows only while an accepted coin uses it; barter only when accepted',
+		test: () => {
+			if (!/networksInUse\s*=\s*new Set\(accepted\.flatMap\(\(a\)\s*=>\s*a\.supportedNetworks\)\)/.test(src)) {
+				return 'network slots are not derived from the accepted coins’ networks';
+			}
+			if (!/if\s*\(!networksInUse\.has\(n\.network\)\)\s*continue;/.test(src)) {
+				return 'network slots are not skipped when no accepted coin uses them';
+			}
+			if (!/accepted\.some\(\(a\)\s*=>\s*a\.ticker\s*===\s*'barter'\)/.test(src)) {
+				return 'the barter slot is not gated on barter being accepted';
 			}
 			return null;
 		}

@@ -29,8 +29,7 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import { instance } from '$stores/instance';
 	import { showFeeRecipientUnregistered } from '$stores/feeRecipient';
-	import { chainPinnedTreasury, integritySummary } from '$stores/release';
-	import { btcFeeKeyId } from '$lib/orders/btcFeeAddress';
+	import { integritySummary } from '$stores/release';
 	import { findPaymentMethod } from '$lib/payments/registry';
 
 	interface VerifyPayload {
@@ -203,22 +202,6 @@
 							{$_('about_this_instance.field.branding_value', {
 								values: { name: branding.name, count: branding.count }
 							})}
-						</dd>
-					</div>
-				{/if}
-				{#if btcFeeKeyId($chainPinnedTreasury) !== null}
-					<!-- v1.20.0 (MK-H2): the chain-pinned treasury BTC key that every BTC
-					     listing fee address is derived from. Only its short public id is
-					     shown here (the full key is public in the release op anyway). -->
-					<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
-						<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
-							{$_('about_this_instance.field.btc_fee_key')}
-						</dt>
-						<dd>
-							<span class="font-mono">{btcFeeKeyId($chainPinnedTreasury)}</span>
-							<span class="ml-2 text-ink-500">
-								{$_('about_this_instance.field.btc_fee_key_hint')}
-							</span>
 						</dd>
 					</div>
 				{/if}

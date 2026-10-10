@@ -18,6 +18,7 @@
 	import { _ } from 'svelte-i18n';
 	import { ASSETS, isGoodsAsset } from '@morphit/asset-registry';
 	import Head from '$components/Head.svelte';
+	import { instance } from '$stores/instance';
 	import { breadcrumbListSchema } from '$seo/jsonld';
 	import { localizedUrl } from '$seo/urls';
 	import type { LocaleCode } from '$i18n/locales';
@@ -25,7 +26,14 @@
 	const lang = $derived($page.params.lang ?? 'en');
 	// v1.20.2 — goods (BARTER) have no on-chain privacy guide (/privacy/barter
 	// redirects here), so they get no card: the card showed a raw key.
-	const tradable = $derived(ASSETS.filter((a) => a.canBeTraded && !isGoodsAsset(a.ticker)));
+	// v1.21.5: the coins THIS site accepts (the operator can switch some off);
+	// a guide for any other coin is still reachable at its own address.
+	const tradable = $derived.by(() => {
+		const off = new Set($instance.disabled_assets.map((t) => t.toUpperCase()));
+		return ASSETS.filter(
+			(a) => a.canBeTraded && !isGoodsAsset(a.ticker) && !off.has(a.ticker.toUpperCase())
+		);
+	});
 
 	/** BreadcrumbList for SERP breadcrumb display.  Two items: site
 	 *  root → privacy index.  Asset-specific subpages render their

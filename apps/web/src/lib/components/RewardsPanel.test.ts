@@ -2,9 +2,8 @@
 /**
  * RewardsPanel ("What you get on {brand}", v1.21.3): rewards are paid by the
  * relay of the site whose operator tag is on the order, so a site without an
- * operator tag pays none and must not list them; on the orderbook the list
- * starts rolled up so the orders stay near the top, with the signup button
- * always there.
+ * operator tag pays none and must not list them. (v1.21.5: no longer on the
+ * orderbook; shown during signup.)
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readable, writable } from 'svelte/store';
@@ -30,12 +29,12 @@ afterEach(() => {
 	document.body.innerHTML = '';
 });
 
-async function render(props: Record<string, unknown>): Promise<HTMLElement> {
+async function render(): Promise<HTMLElement> {
 	const { mount, flushSync } = await import('svelte');
 	const { default: RewardsPanel } = await import('./RewardsPanel.svelte');
 	const target = document.createElement('div');
 	document.body.appendChild(target);
-	mount(RewardsPanel, { target, props });
+	mount(RewardsPanel, { target });
 	flushSync();
 	return target;
 }
@@ -43,7 +42,7 @@ async function render(props: Record<string, unknown>): Promise<HTMLElement> {
 describe('RewardsPanel', () => {
 	it('lists every reward on a site that pays them', async () => {
 		inst.set({ loaded: true, operator_tag: 'morphit' });
-		const t = await render({});
+		const t = await render();
 		for (const k of [
 			'free_account',
 			'free_buy',
@@ -58,23 +57,7 @@ describe('RewardsPanel', () => {
 
 	it('is not shown on a site without an operator tag (its relay pays no rewards)', async () => {
 		inst.set({ loaded: true, operator_tag: null });
-		const t = await render({ showSignup: true });
+		const t = await render();
 		expect(t.querySelector('[data-testid="rewards-panel"]')).toBeNull();
-	});
-
-	it('on the orderbook: rolled up, signup button shown, the list opens on request', async () => {
-		inst.set({ loaded: true, operator_tag: 'morphit' });
-		const { flushSync } = await import('svelte');
-		const t = await render({ showSignup: true, collapsible: true });
-		expect(t.textContent).not.toContain('rewards.loyalty_title');
-		expect(t.querySelector('a[href="/en/onboarding"]')).not.toBeNull();
-		const toggle = t.querySelector<HTMLButtonElement>(
-			'button[aria-controls="rewards-panel-list"]'
-		)!;
-		expect(toggle.getAttribute('aria-expanded')).toBe('false');
-		toggle.click();
-		flushSync();
-		expect(t.textContent).toContain('rewards.loyalty_title');
-		expect(toggle.getAttribute('aria-expanded')).toBe('true');
 	});
 });

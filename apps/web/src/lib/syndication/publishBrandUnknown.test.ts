@@ -78,7 +78,7 @@ describe('branded hidden-only instance whose brand cannot be read at post time',
 	});
 	it('a branded site whose brand.json has no og_image yet (written by an older upgrader): no picture, never Morphit’s', async () => {
 		vi.stubGlobal('location', new URL('https://vigilante.trading/en/@alice/order-abc'));
-		brandJsonAnswer({ schema: 1, name: 'Vigilante Trading', beta_badge: false });
+		brandJsonAnswer({ schema: 1, name: 'Vigilante Trading' });
 		document.documentElement.dataset.brandName = 'Vigilante Trading';
 		await publishFirstTradePost({} as never, { seller: 'bob' });
 		expect(posted[0]!.body).not.toContain(MORPHIT_PICTURE);
@@ -86,13 +86,13 @@ describe('branded hidden-only instance whose brand cannot be read at post time',
 	});
 	it('control: an unbranded https instance keeps the Morphit picture', async () => {
 		vi.stubGlobal('location', new URL('https://morphit.io/en/@alice/order-abc'));
-		brandJsonAnswer({ schema: 1, name: 'Morphit', beta_badge: true });
+		brandJsonAnswer({ schema: 1, name: 'Morphit' });
 		document.documentElement.dataset.brandName = 'Morphit';
 		await publishFirstTradePost({} as never, { seller: 'bob' });
 		expect(posted[0]!.body).toContain(MORPHIT_PICTURE);
 	});
 	it('control: brand.json readable (og_image own) → no picture at all on Tor', async () => {
-		brandJsonAnswer({ schema: 1, name: 'Libertad Latina', beta_badge: false, og_image: 'own' });
+		brandJsonAnswer({ schema: 1, name: 'Libertad Latina', og_image: 'own' });
 		document.documentElement.dataset.brandName = 'Morphit';
 		await publishFirstTradePost({} as never, { seller: 'bob' });
 		expect(posted[0]!.body).not.toContain('![');

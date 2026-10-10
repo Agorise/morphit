@@ -100,12 +100,16 @@
 	// implicitly represented by ETH and SOL assets in the coin half
 	// of the carousel).  Order: alphabetical by display label so the
 	// visible sequence reads cleanly.
-	const NETWORK_SLOTS: ReadonlyArray<{ key: string; iconBasename: string; labelKey: string; srKey: string }> = [
-		{ key: 'net-arbitrum', iconBasename: 'icon-network-arbitrum.svg', labelKey: 'arbitrum', srKey: 'arbitrum_sr' },
-		{ key: 'net-base',     iconBasename: 'icon-network-base.svg',     labelKey: 'base',     srKey: 'base_sr' },
-		{ key: 'net-bep20',    iconBasename: 'icon-network-bep20.svg',    labelKey: 'bep20',    srKey: 'bep20_sr' },
-		{ key: 'net-polygon',  iconBasename: 'icon-network-polygon.svg',  labelKey: 'polygon',  srKey: 'polygon_sr' },
-		{ key: 'net-trc20',    iconBasename: 'icon-network-trc20.svg',    labelKey: 'trc20',    srKey: 'trc20_sr' }
+	// `network` is the registry's network id (AssetMetadata.supportedNetworks):
+	// a network slot shows only while at least one coin this site accepts
+	// settles on it (v1.21.5) — an operator who switches off USDT, USDC and DAI
+	// no longer advertises Arbitrum, Base, BEP-20, Polygon or TRC-20.
+	const NETWORK_SLOTS: ReadonlyArray<{ key: string; network: string; iconBasename: string; labelKey: string; srKey: string }> = [
+		{ key: 'net-arbitrum', network: 'arbitrum', iconBasename: 'icon-network-arbitrum.svg', labelKey: 'arbitrum', srKey: 'arbitrum_sr' },
+		{ key: 'net-base',     network: 'base',     iconBasename: 'icon-network-base.svg',     labelKey: 'base',     srKey: 'base_sr' },
+		{ key: 'net-bep20',    network: 'bep20',    iconBasename: 'icon-network-bep20.svg',    labelKey: 'bep20',    srKey: 'bep20_sr' },
+		{ key: 'net-polygon',  network: 'polygon',  iconBasename: 'icon-network-polygon.svg',  labelKey: 'polygon',  srKey: 'polygon_sr' },
+		{ key: 'net-trc20',    network: 'trc20',    iconBasename: 'icon-network-trc20.svg',    labelKey: 'trc20',    srKey: 'trc20_sr' }
 	];
 
 	/** Build the carousel sequence:
@@ -126,11 +130,15 @@
 		);
 		const seenBasenames = new Set<string>();
 		const out: CarouselSlot[] = [];
+		// Every asset this site accepts (barter included, for its own slot below).
+		const accepted = ASSETS.filter(
+			(a) => a.canBeTraded && !disabled.has(a.displayTicker.toUpperCase())
+		);
 
-		// Source 1 — coin assets from the canonical registry.
-		for (const a of ASSETS) {
-			if (!a.canBeTraded) continue;
-			if (disabled.has(a.displayTicker.toUpperCase())) continue;
+		// Source 1 — coin assets from the canonical registry. (Barter is a
+		// registry asset too, but it gets its own localized slot, Source 3.)
+		for (const a of accepted) {
+			if (a.ticker === 'barter') continue;
 			const basename = a.logoSvgPath.split('/').pop() ?? '';
 			if (basename === '' || seenBasenames.has(basename)) continue;
 			seenBasenames.add(basename);
@@ -144,8 +152,10 @@
 			});
 		}
 
-		// Source 2 — network indicators.
+		// Source 2 — network indicators, for networks an accepted coin uses.
+		const networksInUse = new Set(accepted.flatMap((a) => a.supportedNetworks));
 		for (const n of NETWORK_SLOTS) {
+			if (!networksInUse.has(n.network)) continue;
 			if (seenBasenames.has(n.iconBasename)) continue;
 			seenBasenames.add(n.iconBasename);
 			out.push({
@@ -158,9 +168,9 @@
 			});
 		}
 
-		// Source 3 — barter (raster PNG; explicit dimensions so the
-		// browser reserves the box before the lazy load resolves).
-		if (!seenBasenames.has('icon-barter.svg')) {
+		// Source 3 — barter, when this site accepts it (explicit dimensions so
+		// the browser reserves the box before the lazy load resolves).
+		if (accepted.some((a) => a.ticker === 'barter') && !seenBasenames.has('icon-barter.svg')) {
 			seenBasenames.add('icon-barter.svg');
 			out.push({
 				key: 'barter',

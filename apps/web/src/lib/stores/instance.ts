@@ -25,6 +25,7 @@ import { feeRecipientRegisteredOf } from './feeRecipient';
 import { writable, get, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { getInstance } from '$indexer/client';
+import { setDisabledAssets } from '$lib/assets/acceptedCoins';
 
 /** Shape held by the store.  Mirrors InstanceResponse plus a
  *  `loaded` flag so components can distinguish "default brand
@@ -279,6 +280,11 @@ function normalizeAltNetworksFromWire(an: {
 const store = writable<InstanceState>(FALLBACK);
 
 export const instance: Readable<InstanceState> = { subscribe: store.subscribe };
+
+// v1.21.5: copy that names the coins traded here follows this site's list
+// (src/lib/assets/coinTokens.ts); hand it to the dependency-free store the
+// i18n loader reads.
+store.subscribe((s) => setDisabledAssets(s.disabled_assets));
 
 /** Promise that resolves after the first fetch completes (success
  *  or failure).  Components that need the data before rendering

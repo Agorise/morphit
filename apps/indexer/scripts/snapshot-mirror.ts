@@ -61,7 +61,11 @@ import { bootChainClient, installChainRouting } from '../src/indexer/bootChainCl
 import { INDEXER_SNAPSHOT_SIGNER_DEFAULT } from '../src/blurt/indexerSnapshotOp.ts';
 import { resolveTrustedSnapshotOp } from '../src/blurt/snapshotOpTrust.ts';
 import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
-import { buildSnapshotSources, extractPeerAddressesFromHistory } from '../src/blurt/snapshotMirrors.ts';
+import {
+	buildSnapshotSources,
+	mirrorPeers,
+	readLocalDirectory
+} from '../src/blurt/snapshotMirrors.ts';
 import { importCarWith, pinSnapshotFromPeers } from '../src/blurt/snapshotCarFetch.ts';
 
 // The RPC library's own failover chatter ("Didn't failover for error …") is
@@ -155,19 +159,18 @@ const IPFS_USER = process.env.MORPHIT_IPFS_USER ?? 'ipfs';
  * are already root — so dropping privileges with it is unaffected. sudo remains
  * a fallback for hosts without runuser.
  */
-const DROP_PRIV: readonly string[] = spawnSync('sh', ['-c', 'command -v runuser'], { encoding: 'utf8' })
-	.status === 0
-	? ['runuser', '-u', IPFS_USER, '--']
-	: ['sudo', '-n', '-u', IPFS_USER];
+const DROP_PRIV: readonly string[] =
+	spawnSync('sh', ['-c', 'command -v runuser'], { encoding: 'utf8' }).status === 0
+		? ['runuser', '-u', IPFS_USER, '--']
+		: ['sudo', '-n', '-u', IPFS_USER];
 
 /** Run kubo as the repo's owner. Never throws; returns stdout (trimmed) or null. */
 function ipfs(args: readonly string[], timeoutMs = 120_000): string | null {
 	const [cmd, ...pre] = DROP_PRIV;
-	const r = spawnSync(
-		cmd!,
-		[...pre, 'env', `IPFS_PATH=${IPFS_REPO}`, 'ipfs', ...args],
-		{ encoding: 'utf8', timeout: timeoutMs }
-	);
+	const r = spawnSync(cmd!, [...pre, 'env', `IPFS_PATH=${IPFS_REPO}`, 'ipfs', ...args], {
+		encoding: 'utf8',
+		timeout: timeoutMs
+	});
 	if (r.status !== 0) return null;
 	return typeof r.stdout === 'string' ? r.stdout.trim() : '';
 }
@@ -183,7 +186,9 @@ function readState(): MirrorState | null {
 	try {
 		const text =
 			readOwnFile(STATE_PATH) ??
-			(process.env.MORPHIT_SNAPSHOT_MIRROR_STATE === undefined ? readOwnFile(LEGACY_STATE_PATH) : null);
+			(process.env.MORPHIT_SNAPSHOT_MIRROR_STATE === undefined
+				? readOwnFile(LEGACY_STATE_PATH)
+				: null);
 		if (text === null) return null;
 		const v = JSON.parse(text) as Partial<MirrorState>;
 		if (typeof v.cid !== 'string' || v.cid === '') return null;
@@ -229,7 +234,6 @@ function writeState(s: MirrorState): void {
 	}
 }
 
-
 /** A peer's CAR into kubo, pinning only the anchored CID (importCarWith). */
 function importCar(bytes: Uint8Array, cid: string, budgetMs?: number): boolean {
 	return importCarWith(ipfs, bytes, cid, budgetMs);
@@ -260,7 +264,10 @@ async function main(): Promise<void> {
 	// router cannot be installed: never read the chain unrouted.
 	installChainRouting(config);
 	const signer = (flag('signer') ?? INDEXER_SNAPSHOT_SIGNER_DEFAULT).toLowerCase();
-	const limit = Math.max(1, Math.min(10_000, parseInt(flag('history-limit') ?? '1000', 10) || 1000));
+	const limit = Math.max(
+		1,
+		Math.min(10_000, parseInt(flag('history-limit') ?? '1000', 10) || 1000)
+	);
 
 	// the op was read from ONE RPC endpoint and
 	// accepted on the strength of naming @signer — so one hostile node could make
@@ -269,9 +276,13 @@ async function main(): Promise<void> {
 	// recover to the pinned posting key, exactly as fast-sync requires.
 	const pinnedPubkey =
 		flag('signer-pubkey') ??
-		(signer === config.officialAccountName.toLowerCase() ? config.officialPostingPubkey : undefined);
+		(signer === config.officialAccountName.toLowerCase()
+			? config.officialPostingPubkey
+			: undefined);
 	if (pinnedPubkey === undefined || pinnedPubkey === '') {
-		say(`@${signer} is not the official account, so its key is not pinned — pass --signer-pubkey <BLT…>. Nothing to do.`);
+		say(
+			`@${signer} is not the official account, so its key is not pinned — pass --signer-pubkey <BLT…>. Nothing to do.`
+		);
 		return;
 	}
 	const blurt = bootChainClient(config);
@@ -279,7 +290,9 @@ async function main(): Promise<void> {
 	// A slow read (two RPC operators, over Tor on a hidden node): never a
 	// silent pause. At a terminal a spinner; from the weekly timer one line;
 	// piped into `morphit-ops upgrade` nothing (its own spinner shows it).
-	const stopReading = readingChainSpinner(`reading @${signer}'s chain history for the newest indexer_snapshot_v1…`);
+	const stopReading = readingChainSpinner(
+		`reading @${signer}'s chain history for the newest indexer_snapshot_v1…`
+	);
 	try {
 		resolved = await resolveTrustedSnapshotOp(blurt, {
 			signer,
@@ -290,7 +303,9 @@ async function main(): Promise<void> {
 		});
 	} catch (e) {
 		stopReading();
-		say(`could not read the chain right now (${e instanceof Error ? e.message : String(e)}) — will retry on the next run.`);
+		say(
+			`could not read the chain right now (${e instanceof Error ? e.message : String(e)}) — will retry on the next run.`
+		);
 		return;
 	}
 	stopReading();
@@ -303,7 +318,9 @@ async function main(): Promise<void> {
 	// Chain gate. Mirroring another chain's state would hand newcomers a snapshot
 	// their own node must reject — refuse rather than waste everyone's time.
 	if (op.chain_id !== config.chainId) {
-		say(`the anchored snapshot is for chain '${op.chain_id}' but this node indexes '${config.chainId}' — refusing to mirror.`);
+		say(
+			`the anchored snapshot is for chain '${op.chain_id}' but this node indexes '${config.chainId}' — refusing to mirror.`
+		);
 		return;
 	}
 
@@ -314,7 +331,9 @@ async function main(): Promise<void> {
 		// leave the box advertising a snapshot it no longer holds.
 		const pinned = ipfs(['pin', 'ls', '--type=recursive', op.ipfs_cid], 30_000);
 		if (pinned !== null && pinned.includes(op.ipfs_cid)) {
-			say(`already mirroring the newest snapshot (block ${op.last_applied_block.toLocaleString()}) — nothing to do.`);
+			say(
+				`already mirroring the newest snapshot (block ${op.last_applied_block.toLocaleString()}) — nothing to do.`
+			);
 			return;
 		}
 		say('state says we mirror this snapshot but kubo does not hold it — re-pinning.');
@@ -337,7 +356,8 @@ async function main(): Promise<void> {
 		const out = ipfs(['swarm', 'peers'], 20_000);
 		peers = out === null || out === '' ? 0 : out.split('\n').filter((l) => l.trim() !== '').length;
 		if (peers > 0) break;
-		if (i === 0) say('kubo has no peers yet (it may have just restarted) — waiting before fetching …');
+		if (i === 0)
+			say('kubo has no peers yet (it may have just restarted) — waiting before fetching …');
 		await new Promise((r) => setTimeout(r, 2000));
 	}
 	let pinned = false;
@@ -355,14 +375,31 @@ async function main(): Promise<void> {
 		if (!pinned) say('kubo could not fetch it from its swarm.');
 	}
 	// FALLBACK (morphitlat, 2026-10-08: 2 swarm peers, never a mirror): ask the
-	// federation peers that re-serve it — the publisher's own .onion and
-	// .b32.i2p, from its registration in the history just read — for the CAR,
-	// and import it under the same CID (src/blurt/snapshotCarFetch.ts). The
-	// sha256 check below still decides whether it is kept.
+	// federation peers that re-serve it over Tor/I2P for the CAR, and import it
+	// under the same CID (src/blurt/snapshotCarFetch.ts). The peers come from
+	// this node's federation directory (its indexer's /v1/instances, the
+	// signer's own instance first), then any registration in the history just
+	// read: v1.21.4 read only the history, which held none on morphitlat
+	// (2026-10-10). A peer that does not hold it answers at once (its gateway
+	// serves only what it pins). The sha256 check below still decides.
 	if (!pinned) {
+		const listen = ['0.0.0.0', '::', 'localhost', ''].includes(config.listenHost)
+			? '127.0.0.1'
+			: config.listenHost;
+		const host = listen.includes(':') ? `[${listen}]` : listen;
+		const directory = await readLocalDirectory(`http://${host}:${config.listenPort}`);
+		if (directory === null)
+			say(
+				"this node's indexer did not list the federation directory; using the history read alone."
+			);
 		const sources = buildSnapshotSources({
 			cid: op.ipfs_cid,
-			peers: extractPeerAddressesFromHistory(resolved.history),
+			peers: mirrorPeers({
+				published: op.hidden_mirrors,
+				directory,
+				history: resolved.history,
+				signer
+			}),
 			publicGateways: [],
 			localGateway: null,
 			hiddenOnly: config.blurtRpcEndpoints.length === 0
@@ -377,7 +414,9 @@ async function main(): Promise<void> {
 		if (got.ok) say(`imported from ${got.from} under ${op.ipfs_cid}.`);
 	}
 	if (!pinned) {
-		say('could not fetch/pin the snapshot right now — will retry on the next run. (Nothing is broken; this box just is not a mirror yet.)');
+		say(
+			'could not fetch/pin the snapshot right now — will retry on the next run. (Nothing is broken; this box just is not a mirror yet.)'
+		);
 		return;
 	}
 
@@ -395,13 +434,17 @@ async function main(): Promise<void> {
 	});
 	const body = tar.status === 0 && Buffer.isBuffer(tar.stdout) ? tar.stdout : null;
 	if (!body || body.length === 0) {
-		say('could not read the pinned snapshot back to verify it — unpinning rather than serving unverified bytes.');
+		say(
+			'could not read the pinned snapshot back to verify it — unpinning rather than serving unverified bytes.'
+		);
 		ipfs(['pin', 'rm', op.ipfs_cid], 60_000);
 		return;
 	}
 	const got = createHash('sha256').update(body).digest('hex');
 	if (got !== op.sha256) {
-		say(`sha256 MISMATCH: pinned content hashes ${got}, the signed op says ${op.sha256}. Unpinning — this box will not serve it.`);
+		say(
+			`sha256 MISMATCH: pinned content hashes ${got}, the signed op says ${op.sha256}. Unpinning — this box will not serve it.`
+		);
 		ipfs(['pin', 'rm', op.ipfs_cid], 60_000);
 		return;
 	}
@@ -435,8 +478,11 @@ async function main(): Promise<void> {
 // flight are abandoned, but an abandoned RPC call keeps retrying in the
 // background until its own timeout (a minute for .onion/.i2p), holding the
 // process open for nothing.
-main().then(() => process.exit(0), (err) => {
-	// Never fail: this runs inside upgrades and on a timer.
-	say(`unexpected error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
-	process.exit(0);
-});
+main().then(
+	() => process.exit(0),
+	(err) => {
+		// Never fail: this runs inside upgrades and on a timer.
+		say(`unexpected error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+		process.exit(0);
+	}
+);

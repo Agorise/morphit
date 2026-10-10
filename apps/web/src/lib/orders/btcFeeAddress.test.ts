@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	btcFeeAddressMode,
-	btcFeeKeyId,
 	checkIndexerFeeAddress,
 	externalTxidRequired,
 	satsToBtc
@@ -101,12 +100,6 @@ describe('per-order BTC fee address in the browser', () => {
 		expect(satsToBtc(123_456_789)).toBe('1.23456789');
 		expect(satsToBtc(100_000_000)).toBe('1');
 		expect(satsToBtc(416)).toBe('0.00000416');
-	});
-
-	it('gives About-this-instance a short key id, not the whole xpub', () => {
-		// HASH160(pubkey)[0:4] of the BIP84 test account (bip_utils agrees: fd13aac9).
-		expect(btcFeeKeyId(pinned)).toBe('fd13aac9');
-		expect(btcFeeKeyId(legacy)).toBeNull();
 	});
 
 	it('lets a BTC order go out without a txid only in per-order-address mode', () => {

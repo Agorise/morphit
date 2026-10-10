@@ -207,11 +207,34 @@ const PROBE_TIMEOUT_MS = 6_000;
  *  hidden nodes as unreachable and undercounts the pool — so hidden transports
  *  get a wider window. Probes run in parallel, so this lengthens the check only
  *  when a hidden node is actually slow, and never blocks the request path. */
+const PROBE_TIMEOUT_TOR_MS = 12_000;
+const PROBE_TIMEOUT_I2P_MS = 20_000;
 function probeTimeoutMs(url: string): number {
 	const t = rpcTransportOf(url);
 	// local = loopback (instant); clearnet 6s; tor/i2p need the wide window.
-	return t === 'i2p' ? 20_000 : t === 'tor' ? 12_000 : PROBE_TIMEOUT_MS;
+	return t === 'i2p' ? PROBE_TIMEOUT_I2P_MS : t === 'tor' ? PROBE_TIMEOUT_TOR_MS : PROBE_TIMEOUT_MS;
 }
+
+/** How long one per-transport proxy check may take (see transportProxyReachable). */
+const PROXY_CHECK_TIMEOUT_MS = 1_200;
+
+/**
+ * The longest a `?probe=1` answer can take (v1.21.5). The nodes are probed in
+ * parallel, but the reply waits for the slowest: a node that misses is tried
+ * twice, and each miss on a hidden node may add a check of this instance's own
+ * proxy — so two full I2P windows plus two proxy checks.
+ *
+ * The browser's wait for this reply has to be longer than this. It was the
+ * ordinary 8 s indexer budget, so whenever one hidden node was slow or down the
+ * browser gave up first and the stats card kept the pool's passive snapshot:
+ * "Probing…" for the hidden nodes (which the pool seldom calls, so it has no
+ * latency for them) and stale figures for the clearnet ones the pool had not
+ * used lately. `RPC_PROBE_SERVER_WORST_MS` in apps/web/src/lib/net/transportBudget.ts
+ * covers it; rpc-probe-budget-smoke holds the two together, and holds both
+ * under the reverse proxy's 60 s read timeout for /v1/.
+ */
+export const PROBE_WORST_CASE_MS =
+	2 * (Math.max(PROBE_TIMEOUT_MS, PROBE_TIMEOUT_TOR_MS, PROBE_TIMEOUT_I2P_MS) + PROXY_CHECK_TIMEOUT_MS);
 
 /**
  * map a thrown fetch error to a stable {@link RpcProbeFailure}.
@@ -303,7 +326,7 @@ async function transportProxyReachable(transport: 'tor' | 'i2p'): Promise<boolea
 		const lastColon = addr.lastIndexOf(':');
 		const host = lastColon > 0 ? addr.slice(0, lastColon) : addr;
 		const port = lastColon > 0 ? Number(addr.slice(lastColon + 1)) : NaN;
-		up = await tcpConnectable(host || '127.0.0.1', Number.isFinite(port) ? port : transport === 'tor' ? 9050 : 4444, 1200);
+		up = await tcpConnectable(host || '127.0.0.1', Number.isFinite(port) ? port : transport === 'tor' ? 9050 : 4444, PROXY_CHECK_TIMEOUT_MS);
 	}
 	proxyUpCache.set(transport, { up, at: Date.now() });
 	return up;

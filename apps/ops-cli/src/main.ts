@@ -233,11 +233,11 @@ function printHelp(): void {
 		'                                  operator tag, or RPC endpoints of an existing config',
 		'  branding [status|setup|apply|reset] [--dry-run]',
 		'                                  Your own site branding: logo, favicon + app icons, the site',
-		'                                  name (MORPHIT_INSTANCE_BRAND_NAME), the BETA marker. Files go',
+		'                                  name (MORPHIT_INSTANCE_BRAND_NAME), the colours. Files go',
 		'                                  in /etc/morphit/branding; re-applied on every upgrade. See',
 		'                                  docs/BRANDING.md. One-command setup:',
 		'                                  branding apply --logo F --logo-footer F --icon F --name "…"',
-		'                                  Also: --short-name "…" (Android label), --beta on|off|auto,',
+		'                                  Also: --short-name "…" (Android label),',
 		'                                  --json (machine-readable result).',
 		"                                  Colours: --theme-from '#f3dca0' --theme-to '#bb872f'",
 		"                                  [--theme-mid '#…'] [--theme-background '#121212'], or a",
@@ -571,7 +571,7 @@ async function main(): Promise<number> {
 	}
 
 	// `branding` — per-instance site branding (docs/BRANDING.md): logo, icons,
-	// the site's brand name, the BETA marker. Re-brands the served build in
+	// the site's brand name, the colours. Re-brands the served build in
 	// place (never rebuilds it). Pure file work — no DB needed.
 	if (args.subcommand === 'branding') {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;

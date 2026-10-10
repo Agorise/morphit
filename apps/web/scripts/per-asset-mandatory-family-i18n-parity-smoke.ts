@@ -228,12 +228,13 @@ if (missing.length === 0) {
 		join(__dirname, '..', 'src', 'routes', '[lang]', 'privacy', '+page.svelte'),
 		'utf-8'
 	);
-	if (/ASSETS\.filter\(\(a\)\s*=>\s*a\.canBeTraded\s*&&\s*!\s*isGoodsAsset\(a\.ticker\)\)/.test(indexSrc)) {
+	// (v1.21.5: the filter goes on to drop the coins this site switched off.)
+	if (/ASSETS\.filter\(\s*\(a\)\s*=>\s*a\.canBeTraded\s*&&\s*!\s*isGoodsAsset\(a\.ticker\)/.test(indexSrc)) {
 		pass('the /privacy index lists only assets that have a guide (goods skipped)');
 	} else {
 		fail(
 			'the /privacy index lists only assets that have a guide (goods skipped)',
-			'expected ASSETS.filter((a) => a.canBeTraded && !isGoodsAsset(a.ticker)) in privacy/+page.svelte'
+			'expected ASSETS.filter((a) => a.canBeTraded && !isGoodsAsset(a.ticker) …) in privacy/+page.svelte'
 		);
 	}
 }

@@ -152,7 +152,7 @@ console.log('\n── ops-scripts-behaviour smoke ──────────
 // the way ops/test/pin-indexer-snapshot-harness.sh does — no root, no host
 // process ever looked at.
 {
-	const run = (routing: string) => {
+	const run = (routing: string, extraEnv: Record<string, string> = {}) => {
 		const w = mkdtempSync(join(tmpdir(), 'morphit-pis-'));
 		const standIn = spawn('sleep', ['60'], {
 			env: { ...process.env, IPFS_PATH: join(w, 'repo') },
@@ -209,7 +209,8 @@ console.log('\n── ops-scripts-behaviour smoke ──────────
 				env: {
 					PATH: `${bin}:${process.env.PATH}`,
 					MORPHIT_INDEXER_ENV: join(w, 'none.env'),
-					HOME: w
+					HOME: w,
+					...extraEnv
 				}
 			});
 			return { out: `${r.stdout ?? ''}${r.stderr ?? ''}`, calls: readFileSync(calls, 'utf8') };
@@ -239,6 +240,52 @@ console.log('\n── ops-scripts-behaviour smoke ──────────
 		'C9: its copy-down instruction uses scp -O',
 		plainScp(r.out).length === 0 && /scp -O/.test(r.out),
 		plainScp(r.out).join(' | ')
+	);
+	// v1.21.5: the record names this publisher's own .onion/.b32.i2p, as its
+	// indexer advertises them to peers (/v1/instance), so a brand-new Tor/I2P-only
+	// server can fast-sync privately (it has no indexer to ask a directory).
+	const payloadOf = (out: string): Record<string, unknown> | null => {
+		const m = /\n {4}\{\n([\s\S]*?)\n {4}\}/.exec(out);
+		if (!m) return null;
+		try {
+			return JSON.parse(`{${m[1]!.replace(/^ {4}/gm, '')}}`) as Record<string, unknown>;
+		} catch {
+			return null;
+		}
+	};
+	const onion = `${'m'.repeat(56)}.onion`;
+	const b32 = `${'m'.repeat(52)}.b32.i2p`;
+	const port = 18000 + Math.floor(Math.random() * 1000);
+	const srv = spawn(
+		process.execPath,
+		[
+			'-e',
+			`require('http').createServer((q,s)=>{s.setHeader('content-type','application/json');s.end(JSON.stringify(q.url==='/v1/instance'?{alt_networks:{tor:'${onion}',i2p_b32:'${b32}'}}:{}))}).listen(${port},'127.0.0.1')`
+		],
+		{ stdio: 'ignore' }
+	);
+	spawnSync('sleep', ['1']);
+	try {
+		const withIndexer = payloadOf(
+			run('none', { MORPHIT_SNAPSHOT_INSTANCE_URL: `http://127.0.0.1:${port}/v1/instance` }).out
+		);
+		check(
+			"C8b: the payload names this publisher's own .onion and .b32.i2p (hidden_mirrors)",
+			JSON.stringify(withIndexer?.hidden_mirrors) === JSON.stringify({ tor: onion, i2p_b32: b32 }),
+			JSON.stringify(withIndexer)
+		);
+	} finally {
+		srv.kill();
+	}
+	const noIndexer = payloadOf(
+		run('none', { MORPHIT_SNAPSHOT_INSTANCE_URL: 'http://127.0.0.1:9/v1/instance' }).out
+	);
+	check(
+		'C8b: with no indexer answering, the payload is still written, without hidden_mirrors',
+		noIndexer !== null &&
+			noIndexer.ipfs_cid === 'bafyTESTCID' &&
+			noIndexer.hidden_mirrors === undefined,
+		JSON.stringify(noIndexer)
 	);
 	r = run('auto');
 	check(

@@ -45,7 +45,6 @@
 	// import FeaturedOrders from '$components/FeaturedOrders.svelte';
 	// import FeaturedAuctionHistory from '$components/FeaturedAuctionHistory.svelte';
 	import WelcomeFirstBuyHero from '$components/WelcomeFirstBuyHero.svelte';
-	import RewardsPanel from '$components/RewardsPanel.svelte';
 	import AssetFilterSelect from '$components/AssetFilterSelect.svelte';
 	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
 	import PaymentFilterSelect from '$components/PaymentFilterSelect.svelte';
@@ -73,7 +72,12 @@
 	import { nowMs } from '$lib/stores/now';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { AssetTicker } from '@morphit/asset-registry';
-	import type { OrderbookQuery, OrderRecord, ProfileResponse, HealthResponse } from '@morphit/indexer-client';
+	import type {
+		OrderbookQuery,
+		OrderRecord,
+		ProfileResponse,
+		HealthResponse
+	} from '@morphit/indexer-client';
 
 	import { hiddenAccounts, hideAccount, unhideAccount } from '$lib/utils/hiddenAccounts';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -836,7 +840,6 @@
 		}, PROFILE_HYDRATE_RETRY_MS);
 	}
 
-
 	/** re-read the logged-in user's OWN profile into
 	 *  profileMap when the shared selfProfile store changes. profileMap is a
 	 *  one-shot snapshot from hydrateProfiles; on a "Load it now" SW-upgrade
@@ -1215,11 +1218,6 @@
 
 	<WelcomeFirstBuyHero />
 
-	<!-- v1.21.3: what a visitor gets for joining, with the signup button. -->
-	{#if !$hasAnySession}
-		<RewardsPanel showSignup collapsible />
-	{/if}
-
 	<!-- Sally finding H4: if the user is unlocked but
 	     hasn't completed account-name registration, the per-row
 	     "Message" CTA is silently invisible (see line where
@@ -1255,10 +1253,7 @@
 	{/if}
 
 	<!-- Filters -->
-	<section
-		class="card mb-6 {filtersExpanded ? '' : 'px-6 py-1'}"
-		aria-labelledby="filters-heading"
-	>
+	<section class="card mb-6 {filtersExpanded ? '' : 'px-6 py-1'}" aria-labelledby="filters-heading">
 		<h2 id="filters-heading" class={filtersExpanded ? 'mb-4' : 'mb-0'}>
 			<button
 				type="button"
@@ -1663,7 +1658,7 @@
 				{#each visibleItems as o (o.account + '/' + o.permlink)}
 					{@const accountIsHidden = $hiddenAccounts.has(o.account.toLowerCase())}
 					{@const accountIsBlocked = $blockedAccounts.has(o.account.toLowerCase())}
-				<!-- v1.8.13 — prefer the INLINE profile the orderbook now
+					<!-- v1.8.13 — prefer the INLINE profile the orderbook now
 				     returns, so the card is correct on FIRST paint and never
 				     shows @account + identicon before swapping to the real
 				     identity. That swap took ~7s on morphit.io and read as a
@@ -1674,9 +1669,9 @@
 				     (a profile edited after this page loaded) — and an older
 				     indexer that omits the inline fields falls back to exactly
 				     the previous behaviour. -->
-				{@const labelProps = extractLabelPropsFromProfile(
-					profileMap[o.account] ?? inlineProfileOf(o)
-				)}
+					{@const labelProps = extractLabelPropsFromProfile(
+						profileMap[o.account] ?? inlineProfileOf(o)
+					)}
 					{@const networkChip = networkChipFor(o, $_)}
 					<!-- v1.8.12: the Message button now shows for SIGNED-OUT
 					     visitors too. It was hidden whenever `viewerAccount` was
@@ -1742,8 +1737,12 @@
 
 <ConfirmModal
 	open={accountPendingHide !== null}
-	title={$_('orderbook.hide_confirm_title', { values: { account: accountPendingHide ?? '' } }) as string}
-	body={$_('orderbook.hide_confirm_body', { values: { account: accountPendingHide ?? '' } }) as string}
+	title={$_('orderbook.hide_confirm_title', {
+		values: { account: accountPendingHide ?? '' }
+	}) as string}
+	body={$_('orderbook.hide_confirm_body', {
+		values: { account: accountPendingHide ?? '' }
+	}) as string}
 	confirmLabel={$_('orderbook.hide_confirm_yes') as string}
 	cancelLabel={$_('common.cancel') as string}
 	variant="destructive"

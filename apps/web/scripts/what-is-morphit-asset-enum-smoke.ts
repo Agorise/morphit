@@ -16,6 +16,10 @@
  * underclaiming capability on the headline FAQ for a dozen
  * checkpoints.
  *
+ * (v1.21.5: the enumeration is now the `{coins}` token — the coins THIS
+ * instance accepts, derived from the registry at runtime — which counts as
+ * naming every coin; barter is still checked by name.)
+ *
  * This smoke pins the enumeration to a per-asset name list
  * derived from packages/asset-registry — every tradable ticker
  * MUST have its display name (or a known alias) appear in the
@@ -136,7 +140,17 @@ for (const locale of locales) {
 		continue;
 	}
 
+	// v1.21.5: the crypto list is the `{coins}` token, filled in with the coins
+	// THIS instance accepts — every tradable coin of the registry unless the
+	// operator switched some off (apps/web/src/lib/assets/coinTokens.ts, whose
+	// test pins the full list to the registry). The token stands for every
+	// coin; barter is still named in words.
+	const hasCoinsToken = /\{coins\}/.test(answer);
 	for (const ticker of ASSET_TICKERS) {
+		if (hasCoinsToken && ticker !== 'BARTER') {
+			passed++;
+			continue;
+		}
 		const accepted = acceptedNames(locale, ticker);
 		const present = accepted.some((name) => answer.includes(name));
 		if (present) {

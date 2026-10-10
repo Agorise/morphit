@@ -175,7 +175,9 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: 'DL1 — /download direct-APK link no longer points at /morphit.apk',
 		file: 'src/routes/[lang]/download/+page.svelte',
-		mustHave: ['Sally finding DL1', 'https://git.agorise.net/agorise/morphit/releases'],
+		// v1.21.5: the "Source code & releases" card (and its releases link) left
+		// the page at the maintainer's request; the mirror cards link the code.
+		mustHave: ['Sally finding DL1', 'https://git.agorise.net/agorise/morphit'],
 		// Pre-Part-69 the direct-download went to /morphit.apk on
 		// the local origin — 404 on every instance that didn't
 		// manually drop the APK in static/.

@@ -111,6 +111,26 @@ export function indexerTimeoutMs(targetOrigin?: string | null): number {
 }
 
 /**
+ * (v1.21.5) The longest the indexer itself takes to answer
+ * `/v1/rpc-endpoints?probe=1`: it pings every RPC node and waits for the
+ * slowest, trying a node that misses twice — PROBE_WORST_CASE_MS in
+ * apps/indexer/src/api/rpcHealth.ts (42.4 s), rounded up.
+ *
+ * Under the plain 8 s indexer budget the browser gave up on that answer
+ * whenever one hidden node was slow or down, and the stats page's RPC card was
+ * left on the pool's passive snapshot: "Probing…" for the hidden nodes and
+ * stale figures for some clearnet ones. rpc-probe-budget-smoke holds this at
+ * or above the indexer's figure.
+ */
+export const RPC_PROBE_SERVER_WORST_MS = 45_000;
+
+/** Budget for the active RPC probe: reaching the indexer (as any API call)
+ *  plus the time the indexer spends probing the nodes. A ceiling, not a delay. */
+export function rpcProbeTimeoutMs(targetOrigin?: string | null): number {
+	return indexerTimeoutMs(targetOrigin) + RPC_PROBE_SERVER_WORST_MS;
+}
+
+/**
  * Raise ANY clearnet budget to the hidden-transport floor when the call
  * crosses one, and otherwise leave it exactly as the caller set it.
  *

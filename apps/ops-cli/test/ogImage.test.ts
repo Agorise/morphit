@@ -210,7 +210,6 @@ function settings(over: Partial<BrandingSettings> = {}): BrandingSettings {
 		brandName: null,
 		invalidBrandName: null,
 		shortName: null,
-		betaBadge: null,
 		dir: brandDir,
 		...over
 	};
@@ -249,7 +248,7 @@ beforeEach(() => {
 	mkdirSync(join(buildDir, 'brand'), { recursive: true });
 	writeFileSync(
 		join(buildDir, 'brand', 'brand.json'),
-		'{\n\t"schema": 1,\n\t"name": "Morphit",\n\t"beta_badge": true\n}\n'
+		'{\n\t"schema": 1,\n\t"name": "Morphit"\n}\n'
 	);
 	writeFileSync(join(buildDir, 'og-image.png'), CANONICAL_OG);
 	const r = spawnSync(process.execPath, [SLOT_BUILDER, buildDir], { encoding: 'utf8' });

@@ -7,12 +7,18 @@
  * output is the same on every run. The built file itself is checked by
  * scripts/license-disclosure-smoke.ts (repo root).
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildLicensesText, packageRootOf } from './vite-licenses';
+import {
+	buildLicensesText,
+	fontsIn,
+	packageRootOf,
+	sourceUrlOf,
+	viteHelperRootOf
+} from './vite-licenses';
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(join(WEB, 'package.json'));
@@ -99,6 +105,55 @@ check(
 	buildLicensesText([...ids].reverse(), (id) => (id === moduleOf('jspdf') ? jspdfCode : null)) ===
 		text
 );
+
+// ── v1.21.5: what the browser gets that is not a package module ────────────
+{
+	const withHelper = buildLicensesText([...ids, '\0vite/preload-helper.js']);
+	check(
+		"Vite's lazy-chunk helper (a virtual module) is listed as Vite",
+		/\n5 packages\./.test(withHelper) && /\nvite \d+\.\d+\.\d+\nLicense: MIT/.test(withHelper)
+	);
+	const vite = withHelper.slice(withHelper.indexOf('\nvite '));
+	check(
+		"…with Vite's own licence only, not those of the build tooling it bundles",
+		vite.includes('Vite is released under the MIT license') &&
+			!vite.includes('Licenses of bundled dependencies') &&
+			!vite.includes('@rollup/plugin-commonjs')
+	);
+	check(
+		'other virtual modules stay out',
+		viteHelperRootOf('\0virtual:morphit-i18n-loaders') === null
+	);
+}
+check(
+	'repository shorthands and git URLs become links',
+	sourceUrlOf('lukeed/clsx') === 'https://github.com/lukeed/clsx' &&
+		sourceUrlOf('github:nodeca/pako') === 'https://github.com/nodeca/pako' &&
+		sourceUrlOf('git://github.com/feross/ieee754.git') === 'https://github.com/feross/ieee754' &&
+		sourceUrlOf('git+https://github.com/x/y.git') === 'https://github.com/x/y' &&
+		sourceUrlOf('https://svelte.dev') === 'https://svelte.dev'
+);
+{
+	const fonts = fontsIn(join(import.meta.dirname, '..', 'static', 'fonts'));
+	const served = readdirSync(join(import.meta.dirname, '..', 'static', 'fonts')).filter((f) =>
+		f.endsWith('.woff2')
+	);
+	check(
+		'every served font file is listed, under its OFL',
+		fonts.length === 1 &&
+			fonts[0]!.name === 'Comfortaa' &&
+			served.every((f) => fonts[0]!.files.includes(f)) &&
+			fonts[0]!.licenseFile.text.includes('SIL OPEN FONT LICENSE Version 1.1')
+	);
+	const withFonts = buildLicensesText(ids, () => null, fonts);
+	check(
+		'the font section follows the packages, with the full OFL text and the copyright line',
+		/\n4 packages\./.test(withFonts) &&
+			withFonts.indexOf('\nComfortaa (font)\n') > withFonts.indexOf('\nqrcode ') &&
+			withFonts.includes('Copyright 2011 The Comfortaa Project Authors') &&
+			withFonts.includes('Source: https://github.com/alexeiva/comfortaa')
+	);
+}
 
 console.log('');
 if (failed > 0) {

@@ -73,6 +73,10 @@ const SLOT_RE = new RegExp(`${MARK}(${SLOT_FORM_SOURCE})${MARK}`, 'g');
 const ANY_MARK_RE = /\u2060|&#8288;/;
 /** The data attributes a canonical page is stamped with. `morphit-ops branding
  *  apply` rewrites exactly this string (keep in sync with ops-cli branding.ts). */
+// `data-brand-beta="on"` is inert since v1.21.5 (the BETA marker is gone and
+// nothing reads it) but stays in the stamp: `morphit-ops upgrade` runs the
+// PREVIOUS ops-cli's branding against the new build (step 9b3), and that code
+// finds this exact string. Dropping it would break every branded upgrade.
 export const CANONICAL_HTML_ATTRS = 'data-brand-name="Morphit" data-brand-beta="on"';
 /** The canonical <meta name="theme-color"> value (src/app.html) — the Morphit
  *  gradient's middle stop. Keep in sync with THEME_TOKENS brand-2. */

@@ -12,6 +12,7 @@
 	} from '$lib/mirrorLogos';
 	import { ipfsCidTarballUrl, ipnsNativeTarballUrl, ipnsNativeDirUrl } from '$lib/ipns';
 	import { release } from '$lib/stores/release';
+	import { renderFaqInline } from '$lib/faq/renderInline';
 
 	// Source mirrors.  Morphit's canonical repository is our own Forgejo
 	// server; it's mirrored across the web so the code stays reachable
@@ -42,7 +43,10 @@
 			id: 'codeberg',
 			name: 'Codeberg',
 			url: 'https://codeberg.org/agorise/morphit',
-			status: 'live'
+			status: 'live',
+			// v1.21.5 — Codeberg bans crypto projects; the card says so, in red,
+			// instead of "Open repository".
+			banned: true
 		},
 		// v1.8.16 — SourceForge + SourceHut mirrors are live and anchored
 		// on-chain (buildDistribution baked list). They link straight to the repo.
@@ -170,31 +174,13 @@
 		<h1 class="font-display text-4xl font-extrabold md:text-5xl">
 			<span class="brand-gradient-text">{$_('download.title')}</span>
 		</h1>
+		<!-- v1.21.5 — the intro links "instance" and "Federation directory" to
+		     /instances and "run your own node" to /run-a-node ([text](/path) in
+		     the copy; renderFaqInline escapes first and locale-prefixes them). -->
 		<p class="mx-auto mt-4 max-w-2xl text-ink-600 dark:text-ink-300">
-			{$_('download.subtitle')}
+			{@html renderFaqInline($_('download.subtitle'), lp)}
 		</p>
 	</header>
-
-	<!-- Install Morphit (PWA).  Morphit installs from the browser on every
-	     platform — no app store, no native package. -->
-	<!-- Already emerald-tinted at rest; adding the hover would DIM its
-	     border (/40 -> /20) on hover, which reads as the card receding. -->
-	<section class="card border-morphit-emerald/40 bg-morphit-emerald/5">
-		<h2 class="font-display text-xl font-bold">
-			{$_('download.pwa_heading')}
-		</h2>
-		<p class="mt-2 text-ink-700 dark:text-ink-300">
-			{$_('download.pwa_body')}
-		</p>
-		<p class="mt-3 text-sm text-ink-600 dark:text-ink-400">
-			{$_('download.pwa_platforms')}
-		</p>
-		<div class="mt-4 flex flex-wrap gap-3">
-			<a href={lp('/')} class="btn-primary">
-				{$_('download.web_cta')}
-			</a>
-		</div>
-	</section>
 
 	<!-- Source code & mirrors.  Canonical Forgejo repo + web mirrors;
 	     pending mirrors link to the site root (no broken links) and the
@@ -249,11 +235,13 @@
 							<span class="min-w-0">
 								<span class="block font-display font-bold">{m.name}</span>
 								<span
-									class="block text-xs {m.status === 'pending'
-										? 'text-ink-500 dark:text-ink-400'
-										: 'text-morphit-emerald'}"
+									class="block text-xs {'banned' in m && m.banned
+										? 'font-semibold text-red-600 dark:text-red-400'
+										: m.status === 'pending'
+											? 'text-ink-500 dark:text-ink-400'
+											: 'text-morphit-emerald'}"
 								>
-									{mirrorLabel(m.status)}
+									{'banned' in m && m.banned ? $_('download.mirror_banned') : mirrorLabel(m.status)}
 								</span>
 							</span>
 						</span>
@@ -305,71 +293,10 @@
 			</p>
 		</header>
 
-		<!-- Source code primary CTA. -->
-		<!-- Already emerald-tinted at rest; adding the hover would DIM its
-	     border (/40 -> /20) on hover, which reads as the card receding. -->
-		<section class="card border-morphit-emerald/40 bg-morphit-emerald/5">
-			<h3 class="font-display text-xl font-bold">
-				{$_('download.operator_source_heading')}
-			</h3>
-			<p class="mt-2 text-ink-700 dark:text-ink-300">
-				{$_('download.operator_source_body')}
-			</p>
-			<div class="mt-4 flex flex-wrap gap-3">
-				<a
-					href="https://git.agorise.net/agorise/morphit"
-					target="_blank"
-					rel="noopener noreferrer external"
-					class="btn-primary"
-				>
-					{$_('download.operator_source_cta')}
-				</a>
-				<a
-					href="https://git.agorise.net/agorise/morphit/releases"
-					target="_blank"
-					rel="noopener noreferrer external"
-					class="btn-secondary"
-				>
-					{$_('download.operator_releases_cta')}
-				</a>
-			</div>
-			<!-- Verification: every release has a SHA-256 manifest +
-			     optionally a GPG signature, recorded on-chain.  Applies to
-			     the source tarballs + container images operators run. -->
-			<p class="mt-4 text-sm text-ink-500 dark:text-ink-400">
-				{$_('download.operator_verify_note')}
-			</p>
-		</section>
-
-		<!-- Setup walkthrough. -->
-		<section class="card card-hover-emerald mt-6">
-			<h3 class="font-display text-xl font-bold">
-				{$_('download.operator_setup_heading')}
-			</h3>
-			<p class="mt-2 text-ink-700 dark:text-ink-300">
-				{$_('download.operator_setup_body')}
-			</p>
-			<ul class="mt-4 list-disc space-y-1 pl-6 text-ink-700 dark:text-ink-300">
-				<li>{$_('download.operator_setup_doc_run')}</li>
-				<li>{$_('download.operator_setup_doc_ops')}</li>
-				<li>{$_('download.operator_setup_doc_switching')}</li>
-				<li>{$_('download.operator_setup_doc_security')}</li>
-			</ul>
-			<div class="mt-4 flex flex-wrap gap-3">
-				<a
-					href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/RUN-A-MORPHIT-NODE.md"
-					target="_blank"
-					rel="noopener noreferrer external"
-					class="btn-secondary"
-				>
-					{$_('download.operator_setup_cta')}
-				</a>
-			</div>
-		</section>
-
 		<!-- Distros / package formats — honest section about what's
-		     possible and what isn't. -->
-		<section class="card card-hover-emerald mt-6">
+		     possible and what isn't. (v1.21.5: the source, setup and join cards
+		     left; /run-a-node is the operator's page now.) -->
+		<section class="card card-hover-emerald">
 			<h3 class="font-display text-xl font-bold">
 				{$_('download.operator_distros_heading')}
 			</h3>
@@ -379,24 +306,6 @@
 			<div class="mt-4 flex flex-wrap gap-3">
 				<a href={lp('/faq#node_minimum_requirements')} class="btn-ghost">
 					{$_('download.operator_distros_faq_cta')}
-				</a>
-			</div>
-		</section>
-
-		<!-- Operators directory. -->
-		<section class="card card-hover-emerald mt-6">
-			<h3 class="font-display text-xl font-bold">
-				{$_('download.operator_join_heading')}
-			</h3>
-			<p class="mt-2 text-ink-700 dark:text-ink-300">
-				{$_('download.operator_join_body')}
-			</p>
-			<div class="mt-4 flex flex-wrap gap-3">
-				<a href={lp('/operators')} class="btn-secondary">
-					{$_('download.operator_join_cta')}
-				</a>
-				<a href={lp('/instances')} class="btn-ghost">
-					{$_('download.operator_instances_cta')}
 				</a>
 			</div>
 		</section>

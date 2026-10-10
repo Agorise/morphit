@@ -7,7 +7,7 @@
  *
  *   1. Prerendered pages carry it on the root element, written server-side by
  *      `morphit-ops branding apply`:
- *        <html data-brand-name="Vigilante Trading" data-brand-beta="off">
+ *        <html data-brand-name="Vigilante Trading">
  *      (a canonical, unbranded page carries data-brand-name="Morphit"). Read
  *      SYNCHRONOUSLY at module load — before the locale bundle loads and before
  *      hydration — so the dictionary is branded from its very first use and
@@ -50,8 +50,6 @@ export { applyTheme };
 export interface BrandState {
 	/** The site's brand name ("Morphit" on an unbranded instance). */
 	readonly name: string;
-	/** Show the red "BETA" marker over the header/hero/footer logo. */
-	readonly betaBadge: boolean;
 	/** Where the values came from — `default` until something better is known. */
 	readonly source: 'default' | 'page' | 'json';
 }
@@ -63,7 +61,7 @@ export const BRAND_JSON_PATH = '/brand/brand.json';
  *  the default brand (clearnet budget; Tor/I2P get the transport floor). */
 const BRAND_FETCH_TIMEOUT_MS = 3_000;
 
-const DEFAULT_STATE: BrandState = { name: DEFAULT_BRAND_NAME, betaBadge: true, source: 'default' };
+const DEFAULT_STATE: BrandState = { name: DEFAULT_BRAND_NAME, source: 'default' };
 
 /** Read the brand a prerendered page was stamped with, if any. */
 function readFromDocument(): BrandState | null {
@@ -71,11 +69,11 @@ function readFromDocument(): BrandState | null {
 	const ds = document.documentElement.dataset;
 	const name = sanitizeBrandName(ds.brandName);
 	if (name === null) return null;
-	return { name, betaBadge: ds.brandBeta !== 'off', source: 'page' };
+	return { name, source: 'page' };
 }
 
-/** Mirror the resolved brand onto <html> so CSS (the BETA marker) and any later
- *  synchronous reader agree with the store — needed on the SPA-fallback shell,
+/** Mirror the resolved brand onto <html> so any later synchronous reader
+ *  agrees with the store — needed on the SPA-fallback shell,
  *  whose markup was never stamped server-side. Also the iOS home-screen label:
  *  Safari reads `apple-mobile-web-app-title` from the live DOM when the visitor
  *  taps "Add to Home Screen", and the shell's static tag says "Morphit". */
@@ -83,7 +81,6 @@ function stampDocument(state: BrandState): void {
 	if (!browser) return;
 	const ds = document.documentElement.dataset;
 	ds.brandName = state.name;
-	ds.brandBeta = state.betaBadge ? 'on' : 'off';
 	const apple = document.querySelector('meta[name="apple-mobile-web-app-title"]');
 	if (apple !== null && state.source !== 'default') apple.setAttribute('content', state.name);
 }
@@ -158,11 +155,12 @@ export function ensureBrand(): Promise<BrandState> {
 			if (res.ok) {
 				const body: unknown = await res.json();
 				if (body !== null && typeof body === 'object') {
-					const b = body as { name?: unknown; beta_badge?: unknown; theme?: unknown };
+					// (A `beta_badge` field from an older ops-cli is ignored: the
+					// BETA marker was removed in v1.21.5.)
+					const b = body as { name?: unknown; theme?: unknown };
 					applyTheme(b.theme);
 					next = {
 						name: sanitizeBrandName(b.name) ?? DEFAULT_BRAND_NAME,
-						betaBadge: b.beta_badge !== false,
 						source: 'json'
 					};
 				}

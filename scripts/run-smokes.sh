@@ -787,6 +787,7 @@ SMOKES=(
 	"apps/matrix-bot:classifier-emitter-coverage-smoke"
 	"apps/matrix-bot:journal-tailer-respawn-smoke"
 	"apps/web:vite-licenses-smoke"
+	"apps/indexer:rpc-probe-budget-smoke"
 	"apps/ops-cli:apt-key-pin-smoke"
 	"apps/ops-cli:backup-push-exclusion-smoke"
 	"apps/ops-cli:bunkerweb-privacy-settings-smoke"

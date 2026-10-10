@@ -1,9 +1,9 @@
 # Verify your Morphit download
 
-Morphit's source is public and pushed to **three independent git hosts**
-— the project's own Forgejo, plus GitHub and Codeberg (Forgejo mirrors
-every commit and signed tag to them automatically) — so no single host
-can quietly disappear or tamper with it. This page shows you how to
+Morphit's source is public: the project's own Forgejo, mirrored to many
+independent git hosts (the download page lists them, and each release's
+signed on-chain record names them), so no single host can quietly
+disappear or tamper with it. This page shows you how to
 **prove** that the code you got is the genuine, unmodified release.
 
 Pick whichever matches how you got the code:

@@ -6,6 +6,8 @@ import { isolateAtHandles } from './rtlHandle';
 import { derived, get } from 'svelte/store';
 import { brand, brandRenderer, brandTextNow } from '$lib/brand/brand';
 import { applyBrandToMessages } from '$lib/brand/brandName';
+import { disabledAssets } from '$lib/assets/acceptedCoins';
+import { applyCoinTokensToMessages } from '$lib/assets/coinTokens';
 
 // Pure constants + matchSupported() are SSoT in ./locales.  This
 // module re-exports them so existing call sites that do
@@ -71,10 +73,40 @@ function loaderFor(code: string, part: LocalePart): () => Promise<Dictionary> {
 			let parts = rawBundles.get(code);
 			if (parts === undefined) rawBundles.set(code, (parts = new Map()));
 			parts.set(part, raw);
-			return applyBrandToMessages(raw, brandRenderer());
+			return renderBundle(code, raw);
 		});
 	};
 }
+
+/**
+ * v1.21.5 — coin tokens ({coins}, {coin_count}, src/lib/assets/coinTokens.ts)
+ * are substituted the same way as the brand: textually, per bundle, from the
+ * kept un-substituted copy, and again when this site's list of accepted coins
+ * arrives from /v1/instance (or changes). Until then every coin is named.
+ */
+let appliedDisabled: readonly string[] = get(disabledAssets);
+
+/** A raw bundle part with the brand and this site's coins filled in. */
+function renderBundle(code: string, raw: Dictionary): Dictionary {
+	return applyCoinTokensToMessages(
+		applyBrandToMessages(raw, brandRenderer()),
+		code,
+		appliedDisabled
+	);
+}
+
+/** Re-render every loaded bundle part (a brand or coin list arrived late). */
+function rerenderBundles(): void {
+	for (const [code, parts] of rawBundles) {
+		for (const raw of parts.values()) addMessages(code, renderBundle(code, raw));
+	}
+}
+
+disabledAssets.subscribe((list) => {
+	if (list === appliedDisabled) return;
+	appliedDisabled = list;
+	rerenderBundles();
+});
 
 for (const { code } of SUPPORTED_LOCALES) register(code, loaderFor(code, CORE_PART));
 
@@ -101,10 +133,7 @@ brand.subscribe(() => {
 	const text = brandTextNow();
 	if (text === appliedBrandText) return;
 	appliedBrandText = text;
-	const render = brandRenderer();
-	for (const [code, parts] of rawBundles) {
-		for (const raw of parts.values()) addMessages(code, applyBrandToMessages(raw, render));
-	}
+	rerenderBundles();
 });
 
 /**

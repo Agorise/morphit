@@ -102,7 +102,11 @@ export function buildSnapshotSources(input: SnapshotSourceInputs): SnapshotSourc
 	// 1. Our own gateway: loopback, instant, and it may already hold the bytes
 	//    from a previous mirror run. Costs nothing to try first.
 	if (input.localGateway && input.localGateway.trim() !== '') {
-		push({ url: `${stripSlash(input.localGateway)}${path}`, transport: 'local', label: 'local gateway' });
+		push({
+			url: `${stripSlash(input.localGateway)}${path}`,
+			transport: 'local',
+			label: 'local gateway'
+		});
 	}
 
 	// 2. Federation peers over hidden transports. These come first among network
@@ -217,4 +221,109 @@ export function extractPeerAddressesFromHistory(history: unknown): PeerHiddenAdd
 	}
 
 	return [...byAccount.values()].filter((p) => p.tor !== null || p.i2p_b32 !== null);
+}
+
+/**
+ * Hidden addresses from this node's federation directory (/v1/instances): the
+ * instances the indexer knows from their on-chain registrations, with the
+ * snapshot signer's own instance first (the publisher always holds the
+ * snapshot). PURE + fail-closed: malformed rows and anything that is not a
+ * .onion / .b32.i2p are skipped.
+ *
+ * WHY (morphitlat, v1.21.4, 2026-10-10): the snapshot mirror's CAR fallback
+ * read peers only from registrations in @morphit's history, which held none
+ * ("no federation peer's .onion or .b32.i2p address was found"), while the
+ * same box's hidden upgrade found 8 gateways in this directory a minute before.
+ */
+export function peerAddressesFromDirectory(
+	dir: unknown,
+	preferAccount?: string
+): PeerHiddenAddresses[] {
+	if (!dir || typeof dir !== 'object') return [];
+	const rows = (dir as { instances?: unknown }).instances;
+	if (!Array.isArray(rows)) return [];
+	const pick = (...vals: unknown[]): string | null => {
+		for (const v of vals)
+			if (typeof v === 'string' && v.trim() !== '') return v.trim().toLowerCase();
+		return null;
+	};
+	const out: Array<{ account: string; peer: PeerHiddenAddresses }> = [];
+	for (const r of rows) {
+		if (!r || typeof r !== 'object') continue;
+		const i = r as Record<string, unknown>;
+		const an = (i.alt_networks ?? {}) as Record<string, unknown>;
+		const ra = (i.reg_alt_networks ?? {}) as Record<string, unknown>;
+		const tor = pick(an.tor, ra.tor, i.tor);
+		const i2p = pick(an.i2p_b32, ra.i2p_b32, i.i2p_b32);
+		const peer = {
+			tor: tor !== null && ONION_RE.test(tor) ? tor : null,
+			i2p_b32: i2p !== null && I2P_B32_RE.test(i2p) ? i2p : null
+		};
+		if (peer.tor === null && peer.i2p_b32 === null) continue;
+		out.push({
+			account: typeof i.operator_account === 'string' ? i.operator_account.toLowerCase() : '',
+			peer
+		});
+	}
+	const first = preferAccount?.toLowerCase();
+	return [...out.filter((o) => o.account === first), ...out.filter((o) => o.account !== first)].map(
+		(o) => o.peer
+	);
+}
+
+/** The mirror's (and fast-sync's) peers: the publisher's own addresses from
+ *  the signed record first, then the directory (signer's instance leading),
+ *  then registrations found in the history read; each address once. PURE. */
+export function mirrorPeers(o: {
+	readonly directory: unknown;
+	readonly history: unknown;
+	readonly signer: string;
+	/** The publisher's own addresses from the signed snapshot record. */
+	readonly published?: PeerHiddenAddresses | null;
+}): PeerHiddenAddresses[] {
+	const seen = new Set<string>();
+	const out: PeerHiddenAddresses[] = [];
+	const own = o.published
+		? {
+				tor: o.published.tor && ONION_RE.test(o.published.tor) ? o.published.tor : null,
+				i2p_b32:
+					o.published.i2p_b32 && I2P_B32_RE.test(o.published.i2p_b32) ? o.published.i2p_b32 : null
+			}
+		: null;
+	for (const p of [
+		...(own ? [own] : []),
+		...peerAddressesFromDirectory(o.directory, o.signer),
+		...extractPeerAddressesFromHistory(o.history)
+	]) {
+		const tor = p.tor && !seen.has(p.tor) ? p.tor : null;
+		const i2p = p.i2p_b32 && !seen.has(p.i2p_b32) ? p.i2p_b32 : null;
+		if (tor === null && i2p === null) continue;
+		if (tor) seen.add(tor);
+		if (i2p) seen.add(i2p);
+		out.push({ tor, i2p_b32: i2p });
+	}
+	return out;
+}
+
+/** This node's federation directory from its own indexer (loopback), or null
+ *  when it does not answer. Never throws. */
+export async function readLocalDirectory(
+	base: string,
+	fetchFn: (
+		url: string,
+		init: { signal: AbortSignal; headers: Record<string, string> }
+	) => Promise<Response> = (u, init) => fetch(u, init)
+): Promise<unknown> {
+	try {
+		const r = await fetchFn(`${base.replace(/\/+$/, '')}/v1/instances`, {
+			signal: AbortSignal.timeout(15_000),
+			// Named, like every indexer fetch (rpc-user-agent-smoke), though it
+			// only asks this node's own indexer.
+			headers: { 'user-agent': 'morphit-indexer/snapshot-mirror' }
+		});
+		if (!r.ok) return null;
+		return (await r.json()) as unknown;
+	} catch {
+		return null;
+	}
 }

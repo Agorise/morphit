@@ -321,8 +321,10 @@ on chain instead.
 - Builds are **not** byte-for-byte reproducible today (the release
   pipeline says so): a third party can rebuild and compare file by file,
   but should expect differences and cannot treat a matching hash as proof
-- The release job fails without the signing key (there is no unsigned
-  release), it refuses to attach anything to a release that was already
+- Without the tarball-signing key the release job publishes no `.asc`
+  files, and installed nodes then accept the tarball only by its SHA-256 in
+  @morphit's signed on-chain record (the tag itself is always signed); it
+  refuses to attach anything to a release that was already
   published from a different tag object (a tag moved after publication),
   and only a tag signed by a pinned fingerprint
   (`RELEASE_SIGNER_FINGERPRINTS` in `packages/operator-config`, mirrored in

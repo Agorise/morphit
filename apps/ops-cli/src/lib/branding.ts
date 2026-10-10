@@ -31,7 +31,6 @@
  *     static/…          optional: any other static file, same relative path
  *   morphit.config.env
  *     MORPHIT_INSTANCE_BRAND_NAME, MORPHIT_INSTANCE_BRAND_SHORT_NAME,
- *     MORPHIT_INSTANCE_BETA_BADGE,
  *     MORPHIT_INSTANCE_THEME (preset) + MORPHIT_INSTANCE_THEME_FROM / _MID /
  *     _TO / _BACKGROUND (colour theme — every brand/surface colour is derived
  *     from these by @morphit/operator-config/theme)
@@ -115,7 +114,11 @@ import {
 
 /** Written by scripts/build-brand-slots.mjs — keep in sync. */
 export const BRAND_SLOTS_FILE = '.brand-slots.json';
-/** The attributes build-brand-slots.mjs stamps on every prerendered <html>. */
+/** The attributes build-brand-slots.mjs stamps on every prerendered <html>.
+ *  `data-brand-beta="on"` is inert since v1.21.5 (the BETA marker is gone and
+ *  nothing reads it) but stays, byte for byte: upgrade step 9b3 runs the
+ *  previous ops-cli's branding against the new build, and it looks for this
+ *  exact string. brandPage only ever changes the name in it. */
 export const CANONICAL_HTML_ATTRS = 'data-brand-name="Morphit" data-brand-beta="on"';
 
 /** The app icons' / launch screens' canvas, as in the canonical icons (the
@@ -195,8 +198,6 @@ export interface BrandingSettings {
 	/** The raw value when it was set but rejected by sanitizeBrandName. */
 	readonly invalidBrandName: string | null;
 	readonly shortName: string | null;
-	/** Explicit on/off, or null = automatic (off when a custom logo exists). */
-	readonly betaBadge: 'on' | 'off' | null;
 	/** Directory holding the operator's logo/icon files. */
 	readonly dir: string;
 	/** Colour-theme inputs, or null/absent for the Morphit colours. Validated
@@ -297,7 +298,6 @@ export function readBrandingSettings(
 ): BrandingSettings {
 	const name = effectiveName(readConfigValue(installDir, INSTANCE_ENV.BRAND_NAME, env));
 	const short = effectiveName(readConfigValue(installDir, INSTANCE_ENV.BRAND_SHORT_NAME, env));
-	const beta = (readConfigValue(installDir, INSTANCE_ENV.BETA_BADGE, env) ?? '').toLowerCase();
 	const themeIn: ThemeInput = {
 		preset: readConfigValue(installDir, INSTANCE_ENV.THEME, env),
 		from: readConfigValue(installDir, INSTANCE_ENV.THEME_FROM, env),
@@ -310,11 +310,6 @@ export function readBrandingSettings(
 		brandName: name.name,
 		invalidBrandName: name.invalid ?? short.invalid,
 		shortName: short.name,
-		betaBadge: ['on', 'true', '1', 'yes'].includes(beta)
-			? 'on'
-			: ['off', 'false', '0', 'no'].includes(beta)
-				? 'off'
-				: null,
 		dir: brandingDir(env),
 		theme: themeSettingOf(themeIn)
 	};
@@ -415,7 +410,7 @@ export function atomicWrite(dest: string, data: Buffer | string, mode = 0o644): 
 /** True when the operator configured ANY branding (so callers can announce the
  *  apply step, which recompresses every page and takes a little while). */
 export function brandingConfigured(s: BrandingSettings): boolean {
-	if (s.brandName !== null || s.invalidBrandName !== null || s.betaBadge !== null) return true;
+	if (s.brandName !== null || s.invalidBrandName !== null) return true;
 	if (s.theme !== null && s.theme !== undefined) return true;
 	try {
 		return existsSync(s.dir) && readdirSync(s.dir).some((n) => !n.startsWith('.'));
@@ -717,7 +712,6 @@ export function brandPage(
 	canonical: string,
 	slots: readonly Slot[],
 	brandName: string | null,
-	beta: boolean,
 	theme: PageTheme | null = null
 ): string {
 	let out = canonical;
@@ -747,7 +741,7 @@ export function brandPage(
 		const text = continuesAsCompound(out, off + len) ? brandForCompound(brandName) : brandName;
 		out = out.slice(0, off) + (ctx === 'raw' ? text : htmlEscape(text)) + out.slice(off + len);
 	}
-	const attrs = `data-brand-name="${htmlEscape(brandName ?? DEFAULT_BRAND_NAME)}" data-brand-beta="${beta ? 'on' : 'off'}"`;
+	const attrs = `data-brand-name="${htmlEscape(brandName ?? DEFAULT_BRAND_NAME)}" data-brand-beta="on"`;
 	if (attrs !== CANONICAL_HTML_ATTRS) {
 		const at = out.indexOf(CANONICAL_HTML_ATTRS);
 		const htmlTag = /<html\b[^>]*>/i.exec(out);
@@ -876,7 +870,6 @@ export interface BrandingPlan {
 	/** rel path → desired bytes (only files that differ from canonical). */
 	readonly files: Map<string, Buffer>;
 	readonly brandName: string | null;
-	readonly beta: boolean;
 	readonly active: boolean;
 	readonly warnings: string[];
 	readonly notes: string[];
@@ -1251,13 +1244,11 @@ export function planBranding(
 		}
 	}
 
-	// Brand name + BETA marker.
+	// Brand name.
 	const brandName = settings.brandName;
-	const beta = settings.betaBadge === null ? !customLogo : settings.betaBadge === 'on';
 	const brandDoc: Record<string, unknown> = {
 		schema: 1,
-		name: brandName ?? DEFAULT_BRAND_NAME,
-		beta_badge: beta
+		name: brandName ?? DEFAULT_BRAND_NAME
 	};
 	// The served og-image.png is this instance's own (drawn above, or the
 	// operator's static/og-image.png). The page reads this to put the instance's
@@ -1297,9 +1288,6 @@ export function planBranding(
 	put(BRAND_TARGETS.brandJson, Buffer.from(brandJson));
 	if (brandName !== null)
 		notes.push(`brand name: "${brandName}" (every place the UI names the site)`);
-	notes.push(
-		`BETA marker: ${beta ? 'on' : 'off'}${settings.betaBadge === null ? ' (automatic)' : ''}`
-	);
 
 	if (brandName !== null || settings.shortName !== null || palette !== null) {
 		const m = canon(BRAND_TARGETS.manifest);
@@ -1334,10 +1322,7 @@ export function planBranding(
 		const c = canon(rel);
 		if (c === null) continue;
 		try {
-			put(
-				rel,
-				Buffer.from(brandPage(c.toString('utf8'), slots, brandName, beta, pageTheme), 'utf8')
-			);
+			put(rel, Buffer.from(brandPage(c.toString('utf8'), slots, brandName, pageTheme), 'utf8'));
 		} catch (err) {
 			throw new Error(
 				`${rel}: ${err instanceof Error ? err.message : String(err)} — the build does not match its brand-slot map`
@@ -1354,7 +1339,6 @@ export function planBranding(
 	return {
 		files,
 		brandName,
-		beta,
 		active: files.size > 0,
 		warnings,
 		notes,
@@ -1369,7 +1353,6 @@ export function planBranding(
 export interface BrandingResult {
 	readonly active: boolean;
 	readonly brandName: string | null;
-	readonly beta: boolean;
 	/** Build-relative paths (incl. .gz/.br siblings) whose bytes changed on disk. */
 	readonly touched: string[];
 	readonly warnings: string[];
@@ -1466,7 +1449,6 @@ export function applyBranding(opts: {
 		return {
 			active: false,
 			brandName: null,
-			beta: true,
 			touched: [],
 			warnings: [],
 			notes: [],
@@ -1499,7 +1481,6 @@ function applyLocked(
 				brandName: null,
 				invalidBrandName: null,
 				shortName: null,
-				betaBadge: 'on',
 				dir: join(paths.pristineDir, '__none__'),
 				theme: null
 			}
@@ -1538,7 +1519,6 @@ function applyLocked(
 	const result = (): BrandingResult => ({
 		active: state.modified.length + state.added.length > 0 || plan.active,
 		brandName: plan.brandName,
-		beta: plan.beta,
 		touched: [...touched].sort(),
 		warnings: plan.warnings,
 		notes: plan.notes,
@@ -1659,7 +1639,6 @@ function updateVerifyJson(
 	if (overridden.length > 0) {
 		doc.operator_branding = {
 			brand_name: plan.brandName ?? DEFAULT_BRAND_NAME,
-			beta_badge: plan.beta,
 			...(plan.theme !== null
 				? {
 						colour_theme: {

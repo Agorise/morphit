@@ -58,7 +58,7 @@ function makeBuild(): void {
 	mkdirSync(join(buildDir, 'brand'), { recursive: true });
 	writeFileSync(
 		join(buildDir, 'brand', 'brand.json'),
-		'{\n\t"schema": 1,\n\t"name": "Morphit",\n\t"beta_badge": true\n}\n'
+		'{\n\t"schema": 1,\n\t"name": "Morphit"\n}\n'
 	);
 	const page = (path: string): string =>
 		`<!doctype html><html><head><title>Morphit</title><link rel="canonical" href="${M}https://morphit.io${M}${path}">` +

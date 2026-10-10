@@ -104,7 +104,7 @@ export async function pinSnapshotFromPeers(
 	const peers = sources.filter((s) => s.transport === 'tor' || s.transport === 'i2p');
 	if (peers.length === 0) {
 		deps.say(
-			"no federation peer's .onion or .b32.i2p address was found in the history read, so there is no peer to ask for it."
+			"no federation peer's .onion or .b32.i2p address was found (in this node's federation directory or the history read), so there is no peer to ask for it."
 		);
 		return { ok: false };
 	}

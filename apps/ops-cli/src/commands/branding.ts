@@ -2,7 +2,7 @@
  * morphit-ops branding [status | setup | apply | reset] — per-instance site branding.
  *
  * Re-brands THIS instance's served frontend in place (logo, favicon + app
- * icons, the site's name wherever the UI names the site, the BETA marker)
+ * icons, the site's name wherever the UI names the site, the colours)
  * without rebuilding it, so the canonical bytes the on-chain build-integrity
  * check covers stay untouched. See docs/BRANDING.md and src/lib/branding.ts.
  *
@@ -10,8 +10,9 @@
  *   /etc/morphit/branding/   logo.svg, logo-footer.svg, icon.svg, optional
  *                            PNG icons, optional static/ overlay
  *   morphit.config.env       MORPHIT_INSTANCE_BRAND_NAME,
- *                            MORPHIT_INSTANCE_BRAND_SHORT_NAME,
- *                            MORPHIT_INSTANCE_BETA_BADGE
+ *                            MORPHIT_INSTANCE_BRAND_SHORT_NAME
+ *                            (a MORPHIT_INSTANCE_BETA_BADGE line from before
+ *                            v1.21.5 is ignored: the BETA marker is gone)
  *
  * `morphit-ops upgrade` re-applies the branding automatically on every
  * upgrade, so an operator sets it up ONCE. This command applies it right now
@@ -33,7 +34,6 @@
  *   --icon FILE          favicon + app icons symbol  → …/icon.svg
  *   --name "TEXT"        the site's name             → MORPHIT_INSTANCE_BRAND_NAME
  *   --short-name "TEXT"  home-screen label           → MORPHIT_INSTANCE_BRAND_SHORT_NAME
- *   --beta on|off|auto   the red BETA marker         → MORPHIT_INSTANCE_BETA_BADGE
  * Colour theme (every other colour is derived from these; docs/BRANDING.md):
  *   --theme NAME         preset: morphit (default) | champagne-gold
  *                                                    → MORPHIT_INSTANCE_THEME
@@ -119,7 +119,6 @@ function describeSettings(s: BrandingSettings): void {
 		);
 	}
 	if (s.shortName !== null) info(`  Home-screen:    "${sanitizeForTerm(s.shortName)}"`);
-	info(`  BETA marker:    ${s.betaBadge ?? 'automatic (off when you supply logo.svg)'}`);
 	const theme = resolveTheme(s.theme);
 	info(`  Colours:        ${sanitizeForTerm(describeTheme(s.theme, theme.palette))}`);
 	if (theme.problems.length > 0) {
@@ -391,8 +390,7 @@ async function runSetup(ctx: BrandingCtx, installDir: string): Promise<number> {
 /** Config settings `apply` can write, by flag. */
 const CONFIG_FLAGS = {
 	name: INSTANCE_ENV.BRAND_NAME,
-	'short-name': INSTANCE_ENV.BRAND_SHORT_NAME,
-	beta: INSTANCE_ENV.BETA_BADGE
+	'short-name': INSTANCE_ENV.BRAND_SHORT_NAME
 } as const;
 
 /** Colour-theme settings `apply` can write, by flag. */
@@ -523,19 +521,20 @@ function installInputs(ctx: BrandingCtx, installDir: string, brandDir: string): 
 			return `--${flag} needs a file: --${flag} /path/to/${name}`;
 		files.push([flag, name, resolveCallerPath(v, installDir)]);
 	}
+	// v1.21.5: the BETA marker was removed for good. Still parsed as a value
+	// flag (main.ts VALUE_FLAGS), so `--beta off` is refused by name instead of
+	// leaving "off" behind as a stray argument.
+	if (ctx.flags.beta !== undefined) {
+		return '--beta is gone: Morphit no longer shows a BETA marker (since v1.21.5). Drop the flag.';
+	}
 	const updates = new Map<string, string | null>();
 	for (const [flag, key] of Object.entries(CONFIG_FLAGS)) {
 		const raw = ctx.flags[flag];
 		if (raw === undefined) continue;
 		if (raw === 'true') return `--${flag} needs a value: --${flag}="…"  (--${flag}= removes it)`;
 		const v = raw.trim();
-		if (v === '' || (flag === 'beta' && v.toLowerCase() === 'auto')) {
+		if (v === '') {
 			updates.set(key, null);
-			continue;
-		}
-		if (flag === 'beta') {
-			if (!['on', 'off'].includes(v.toLowerCase())) return '--beta takes on, off or auto';
-			updates.set(key, v.toLowerCase());
 			continue;
 		}
 		const problem = brandNameProblem(v);
@@ -756,7 +755,6 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 				subcommand: sub,
 				dry_run: sub === 'status' || dryRun,
 				brand_name: result.brandName,
-				beta_badge: result.beta,
 				changed: result.touched.filter((t) => !/\.(gz|br)$/.test(t)),
 				warnings: result.warnings,
 				notes: result.notes,
@@ -829,7 +827,7 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 			'`morphit-ops upgrade` will apply them again — to stop that, remove the MORPHIT_INSTANCE_BRAND_*'
 		);
 		info(
-			`/ MORPHIT_INSTANCE_BETA_BADGE / MORPHIT_INSTANCE_THEME* lines from morphit.config.env and the files in ${settings.dir}.`
+			`/ MORPHIT_INSTANCE_THEME* lines from morphit.config.env and the files in ${settings.dir}.`
 		);
 		info('(Just the colours: sudo morphit-ops branding apply --theme morphit)');
 	}

@@ -51,6 +51,38 @@ export function resolveBrandDefault(s) {
 }
 
 /**
+ * Coin tokens (v1.21.5; apps/web/src/lib/assets/coinTokens.ts): copy that names
+ * the coins traded here carries `{coins[:filter][|and|or|list]}` / `{coin_count}`,
+ * which the app fills in with the coins THIS instance accepts. llms-full.txt is
+ * the canonical FAQ, so every token resolves to the full list — every tradable
+ * coin, registry order, English list words (Intl.ListFormat 'en' style).
+ * COIN_TICKERS must equal the registry's tradable coins; coinTokens.test.ts
+ * holds the two together.
+ */
+export const COIN_TICKERS = [
+	'XMR', 'BTC', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC',
+	'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL', 'ETH', 'XRP'
+];
+const COIN_TOKEN_RE = /\{coins(?::([a-z0-9,-]+))?(?:\|(and|or|list))?\}|\{coin_count\}/g;
+function joinEn(items, mode) {
+	if (mode === 'list' || items.length < 2) return items.join(', ');
+	const word = mode === 'or' ? 'or' : 'and';
+	if (items.length === 2) return `${items[0]} ${word} ${items[1]}`;
+	return `${items.slice(0, -1).join(', ')}, ${word} ${items[items.length - 1]}`;
+}
+export function resolveCoinTokensFull(s) {
+	if (typeof s !== 'string' || !s.includes('{coin')) return s;
+	return s.replace(COIN_TOKEN_RE, (whole, spec, mode) => {
+		if (whole === '{coin_count}') return String(COIN_TICKERS.length);
+		const names = (spec ?? '').split(',').filter((x) => x.length > 0);
+		const drop = new Set(names.filter((n) => n.startsWith('-')).map((n) => n.slice(1).toUpperCase()));
+		const keep = new Set(names.filter((n) => !n.startsWith('-')).map((n) => n.toUpperCase()));
+		const list = COIN_TICKERS.filter((t) => !drop.has(t) && (keep.size === 0 || keep.has(t)));
+		return joinEn(list, mode ?? 'and');
+	});
+}
+
+/**
  * Pure renderer: parsed en.json object → exact llms-full.txt body.
  * No file I/O, no side effects — safe to import from the smoke.
  */
@@ -71,8 +103,8 @@ export function renderLlmsFull(en) {
 	let count = 0;
 	for (const [key, entry] of Object.entries(entries)) {
 		count++;
-		const q = resolveBrandDefault(entry.q ?? '');
-		const a = resolveBrandDefault(entry.a ?? '');
+		const q = resolveCoinTokensFull(resolveBrandDefault(entry.q ?? ''));
+		const a = resolveCoinTokensFull(resolveBrandDefault(entry.a ?? ''));
 		lines.push(`## ${q}`);
 		lines.push('');
 		lines.push(`**FAQ key:** \`${key}\``);

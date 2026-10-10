@@ -835,7 +835,8 @@ const CHECKS: readonly Check[] = [
 		claim_phrase: 'Dogecoin (DOGE) peer-to-peer',
 		anchor: {
 			kind: 'grep',
-			pattern: 'cheat_sheet.section_assets.doge',
+			// v1.21.5: rows render from SHEET_ORDER (`cheat_sheet.section_assets.${a.ticker}`).
+			pattern: "'doge',",
 			paths: ['apps/web/src/routes/[lang]/cheat-sheet/+page.svelte']
 		},
 		status: 'live'

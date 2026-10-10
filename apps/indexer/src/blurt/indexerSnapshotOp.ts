@@ -52,6 +52,35 @@ export interface IndexerSnapshotPayload {
 	readonly ipns_name?: string;
 	/** Optional https mirror (e.g. the Forgejo download) for when IPFS is slow. */
 	readonly forgejo_url?: string;
+	/** Optional (v1.21.5): the publisher's own .onion / .b32.i2p, which serve this
+	 *  snapshot by CID. A brand-new Tor/I2P-only server fast-syncs before it has
+	 *  an indexer, so this signed record is where it learns a private address to
+	 *  fetch from. Servers that do not know the field ignore it. */
+	readonly hidden_mirrors?: HiddenMirrors;
+}
+
+/** A publisher's own hidden addresses (at least one). */
+export interface HiddenMirrors {
+	readonly tor?: string;
+	readonly i2p_b32?: string;
+}
+
+const ONION_RE = /^[a-z2-7]{56}\.onion$/;
+const I2P_B32_RE = /^[a-z2-7]{52}\.b32\.i2p$/;
+
+/** `hidden_mirrors` when it is well formed (an object with a valid .onion
+ *  and/or .b32.i2p and nothing else malformed), else null. PURE. */
+export function parseHiddenMirrors(x: unknown): HiddenMirrors | null {
+	if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
+	const o = x as Record<string, unknown>;
+	if (o.tor !== undefined && (typeof o.tor !== 'string' || !ONION_RE.test(o.tor))) return null;
+	if (o.i2p_b32 !== undefined && (typeof o.i2p_b32 !== 'string' || !I2P_B32_RE.test(o.i2p_b32)))
+		return null;
+	if (o.tor === undefined && o.i2p_b32 === undefined) return null;
+	return {
+		...(o.tor !== undefined ? { tor: o.tor as string } : {}),
+		...(o.i2p_b32 !== undefined ? { i2p_b32: o.i2p_b32 as string } : {})
+	};
 }
 
 export interface IndexerSnapshotValidateResult {
@@ -89,7 +118,8 @@ export function validateIndexerSnapshotPayload(input: unknown): IndexerSnapshotV
 	if (!isPosInt(p.last_applied_block)) {
 		return { ok: false, reason: 'last_applied_block must be a positive integer' };
 	}
-	if (!isPosInt(p.size_bytes)) return { ok: false, reason: 'size_bytes must be a positive integer' };
+	if (!isPosInt(p.size_bytes))
+		return { ok: false, reason: 'size_bytes must be a positive integer' };
 	if (
 		typeof p.indexer_version !== 'string' ||
 		p.indexer_version.length === 0 ||
@@ -99,7 +129,10 @@ export function validateIndexerSnapshotPayload(input: unknown): IndexerSnapshotV
 	}
 	if (p.ipns_name !== undefined) {
 		if (typeof p.ipns_name !== 'string' || p.ipns_name.length === 0 || p.ipns_name.length > 128) {
-			return { ok: false, reason: 'ipns_name, if present, must be a non-empty string (≤128 chars)' };
+			return {
+				ok: false,
+				reason: 'ipns_name, if present, must be a non-empty string (≤128 chars)'
+			};
 		}
 	}
 	if (p.forgejo_url !== undefined) {
@@ -108,6 +141,9 @@ export function validateIndexerSnapshotPayload(input: unknown): IndexerSnapshotV
 		}
 	}
 
+	// Optional and advisory: a malformed one is dropped, never the record (the
+	// publisher's builder refuses to sign one, below).
+	const mirrors = p.hidden_mirrors === undefined ? null : parseHiddenMirrors(p.hidden_mirrors);
 	const value: IndexerSnapshotPayload = {
 		ipfs_cid: p.ipfs_cid,
 		sha256: p.sha256,
@@ -117,7 +153,8 @@ export function validateIndexerSnapshotPayload(input: unknown): IndexerSnapshotV
 		size_bytes: p.size_bytes,
 		indexer_version: p.indexer_version,
 		...(p.ipns_name !== undefined ? { ipns_name: p.ipns_name as string } : {}),
-		...(p.forgejo_url !== undefined ? { forgejo_url: p.forgejo_url as string } : {})
+		...(p.forgejo_url !== undefined ? { forgejo_url: p.forgejo_url as string } : {}),
+		...(mirrors !== null ? { hidden_mirrors: mirrors } : {})
 	};
 	return { ok: true, value };
 }
@@ -149,6 +186,11 @@ export function buildIndexerSnapshotOp(
 	}
 	const result = validateIndexerSnapshotPayload(parsed);
 	if (!result.ok) throw new Error(`indexer_snapshot payload failed validation: ${result.reason}`);
+	const rawMirrors = (parsed as Record<string, unknown>).hidden_mirrors;
+	if (rawMirrors !== undefined && parseHiddenMirrors(rawMirrors) === null)
+		throw new Error(
+			'indexer_snapshot payload failed validation: hidden_mirrors, if present, must hold a valid .onion and/or .b32.i2p'
+		);
 	if (!ACCOUNT_RE.test(signer)) throw new Error(`invalid signer account name: "${signer}"`);
 
 	const jsonBytes = new TextEncoder().encode(trimmed).length;

@@ -30,8 +30,9 @@ and compatible with AGPL-3.0:
 Morphit site sends to the browser, with its version, license and the notices
 its authors ship (for example `@beblurt/dblurt`, libsodium, and `pako`
 (MIT AND Zlib) and `rgbcolor` (MIT), which arrive inside `jspdf` for the chat
-PDF export). Every instance serves it at `/licenses.txt`, linked from the
-site footer.
+PDF export), plus Vite's small lazy-loading helper (listed as Vite, MIT) and the
+web font (Comfortaa, with its OFL text). Every instance serves it at
+`/licenses.txt`, linked from the site footer.
 
 To see the full dependency graph from an installed tree:
 

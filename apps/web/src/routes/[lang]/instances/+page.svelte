@@ -506,7 +506,10 @@
 								</div>
 								<p class="text-xs text-ink-500">
 								{#if inst.clearnet_eliminated}
-									🏅 {$_('instances.clearnet_eliminated')}
+									<!-- v1.21.5: the badge is the instance's own claim — say so. -->
+									<span class="cursor-help" title={$_('instances.clearnet_eliminated_title')}
+										>🏅 {$_('instances.clearnet_eliminated')}</span
+									>
 								{:else if isHiddenServiceOrigin(inst.origin)}
 									{$_('instances.no_clearnet')}
 								{:else}

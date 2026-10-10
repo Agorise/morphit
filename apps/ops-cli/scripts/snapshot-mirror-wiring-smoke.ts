@@ -204,8 +204,8 @@ ok(
 	/buildSnapshotSources/.test(bootstrap)
 );
 ok(
-	'bootstrap discovers peers from the chain history it already fetched',
-	/extractPeerAddressesFromHistory/.test(bootstrap)
+	'bootstrap discovers peers from the signed record and the chain history it already fetched (v1.21.5)',
+	/mirrorPeers\(\{[^}]*published: op\.hidden_mirrors[^}]*history/.test(bootstrap)
 );
 ok(
 	'bootstrap routes .onion fetches through Tor SOCKS with in-Tor DNS',
@@ -214,7 +214,7 @@ ok(
 ok('bootstrap routes .b32.i2p fetches through the i2pd proxy', /I2P_HTTP_PROXY/.test(bootstrap));
 ok(
 	'bootstrap fails CLOSED on a hidden-only node with no private source (never silently reaches for clearnet)',
-	/hidden-only and no federation peer/.test(bootstrap)
+	/hidden-only, and neither the snapshot record nor any registration/.test(bootstrap)
 );
 
 // ── G. The firewall rule still exists on the Ansible path ────────────

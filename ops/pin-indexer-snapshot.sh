@@ -247,6 +247,38 @@ if [ -n "${FORGEJO_URL:-}" ]; then
 		*) warn "FORGEJO_URL is not an https:// URL — omitting it from the op." ;;
 	esac
 fi
+# hidden_mirrors (v1.21.5): this publisher's own .onion / .b32.i2p, exactly as
+# its indexer advertises them to peers (/v1/instance on loopback; no request
+# leaves the box). A brand-new Tor/I2P-only server fast-syncs before it has an
+# indexer, so the signed record is where it learns a private address to fetch
+# the snapshot from (@morphit's history holds no registration — morphit.io,
+# 2026-10-10). Optional: no answer, or no valid address, leaves it out.
+if [ -z "${MORPHIT_SNAPSHOT_INSTANCE_URL:-}" ]; then
+	_lh=$(sed -n 's/^[[:space:]]*MORPHIT_INDEXER_LISTEN_HOST[[:space:]]*=[[:space:]]*//p' "$_idxenv" 2>/dev/null | tail -n1 | tr -d "\"' \t\r")
+	_lp=$(sed -n 's/^[[:space:]]*MORPHIT_INDEXER_LISTEN_PORT[[:space:]]*=[[:space:]]*//p' "$_idxenv" 2>/dev/null | tail -n1 | tr -d "\"' \t\r")
+	case "${_lh:-}" in ''|0.0.0.0|::|localhost) _lh=127.0.0.1 ;; esac
+	case "$_lh" in *:*) _lh="[$_lh]" ;; esac
+	MORPHIT_SNAPSHOT_INSTANCE_URL="http://${_lh}:${_lp:-8081}/v1/instance"
+fi
+MIRRORS_LINE="$(INSTANCE_URL="$MORPHIT_SNAPSHOT_INSTANCE_URL" python3 - <<'PY' 2>/dev/null || true
+import json, os, re, urllib.request
+try:
+    with urllib.request.urlopen(os.environ["INSTANCE_URL"], timeout=10) as r:
+        alt = (json.load(r) or {}).get("alt_networks") or {}
+except Exception:
+    raise SystemExit(0)
+m = {}
+tor = alt.get("tor"); i2p = alt.get("i2p_b32")
+if isinstance(tor, str) and re.fullmatch(r"[a-z2-7]{56}\.onion", tor.strip().lower()): m["tor"] = tor.strip().lower()
+if isinstance(i2p, str) and re.fullmatch(r"[a-z2-7]{52}\.b32\.i2p", i2p.strip().lower()): m["i2p_b32"] = i2p.strip().lower()
+if m: print(',\n  "hidden_mirrors": ' + json.dumps(m))
+PY
+)"
+if [ -n "$MIRRORS_LINE" ]; then
+	ok "the record names this node's own hidden addresses (hidden_mirrors), for new Tor/I2P-only servers"
+else
+	warn "this node's indexer advertised no .onion/.b32.i2p (or did not answer): the record names none — new Tor/I2P-only servers then fall back to a full replay"
+fi
 cat > "$PAYLOAD" <<JSON
 {
   "ipfs_cid": "$CID",
@@ -256,7 +288,7 @@ cat > "$PAYLOAD" <<JSON
   "last_applied_block": $LAST_BLOCK,
   "size_bytes": $SIZE_BYTES,
   "indexer_version": "$INDEXER_VERSION",
-  "ipns_name": "$IPNS_NAME"$FORGEJO_LINE
+  "ipns_name": "$IPNS_NAME"$FORGEJO_LINE$MIRRORS_LINE
 }
 JSON
 chown "$KUBO_USER" "$PAYLOAD" 2>/dev/null || true

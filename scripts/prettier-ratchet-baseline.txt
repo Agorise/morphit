@@ -90,7 +90,6 @@ apps/indexer/scripts/rss-orderbook-smoke.ts
 apps/indexer/scripts/schema-migration-coverage-smoke.ts
 apps/indexer/scripts/shared-relay-account-guard-smoke.ts
 apps/indexer/scripts/snapshot-manifest-smoke.ts
-apps/indexer/scripts/snapshot-mirror.ts
 apps/indexer/scripts/snapshot-mirrors-smoke.ts
 apps/indexer/scripts/snapshot-oplog-verify-smoke.ts
 apps/indexer/scripts/sse-flush-preamble-smoke.ts
@@ -114,10 +113,8 @@ apps/indexer/src/api/reputationReceipt.ts
 apps/indexer/src/api/rpcHealth.ts
 apps/indexer/src/api/stats.ts
 apps/indexer/src/blurt/chainSnapshotOp.ts
-apps/indexer/src/blurt/indexerSnapshotOp.ts
 apps/indexer/src/blurt/releaseBroadcastOp.ts
 apps/indexer/src/blurt/rpcDirectoryOp.ts
-apps/indexer/src/blurt/snapshotMirrors.ts
 apps/indexer/src/config/index.ts
 apps/indexer/src/db/migrations.ts
 apps/indexer/src/db/snapshotManifest.ts
@@ -602,7 +599,6 @@ apps/web/src/lib/utils/orderTitle.ts
 apps/web/src/libsodium-wrappers-sumo.d.ts
 apps/web/src/routes/+page.svelte
 apps/web/src/routes/[lang]/+layout.svelte
-apps/web/src/routes/[lang]/+page.svelte
 apps/web/src/routes/[lang]/[x+40][account=account]/[permlink=permlink]/+page.svelte
 apps/web/src/routes/[lang]/admin/setup-wizard/+page.svelte
 apps/web/src/routes/[lang]/chat/+page.svelte
@@ -614,11 +610,9 @@ apps/web/src/routes/[lang]/my/orders/+page.svelte
 apps/web/src/routes/[lang]/my/wallet/+page.svelte
 apps/web/src/routes/[lang]/onboarding/+page.svelte
 apps/web/src/routes/[lang]/operators/+page.svelte
-apps/web/src/routes/[lang]/orderbook/+page.svelte
 apps/web/src/routes/[lang]/plan/+page.svelte
 apps/web/src/routes/[lang]/post/+page.svelte
 apps/web/src/routes/[lang]/post/edit/[permlink]/+page.svelte
-apps/web/src/routes/[lang]/run-a-node/+page.svelte
 apps/web/src/routes/[lang]/security/+page.svelte
 apps/web/src/routes/[lang]/stats/+page.svelte
 packages/asset-registry/src/index.ts

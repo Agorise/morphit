@@ -13779,7 +13779,7 @@ Mirroring is **not** a trust claim. A newcomer proves every downloaded byte agai
 
 Before mirroring existed, a newcomer could fetch the snapshot from the canonical box's HTTPS mirror or a handful of public clearnet IPFS gateways. A zero-clearnet node can reach none of those. The result was backwards: the nodes whose privacy posture we most want to encourage were the only ones condemned to a multi-day replay.
 
-With mirrors in place, a hidden-only newcomer fetches from a peer's `.onion` or `.b32.i2p` over the transport it already speaks, and **never opens a clearnet socket to do it**. If no peer advertises a hidden address yet, fast-sync refuses and falls back to a full replay rather than quietly reaching for a clearnet gateway — finishing faster is not worth deanonymising the box.
+With mirrors in place, a hidden-only newcomer fetches from a peer's `.onion` or `.b32.i2p` over the transport it already speaks, and **never opens a clearnet socket to do it**. Since v1.21.5 the signed snapshot record itself names the publisher's own `.onion` and `.b32.i2p` (`hidden_mirrors`, written by `ops/pin-indexer-snapshot.sh` from what the publisher's indexer advertises at `/v1/instance`), so a newcomer — which has no indexer and so no federation directory yet — learns a private source from the record it already verifies. Before that it looked only for operator registrations in `@morphit`'s history, which holds none, and always fell back to a replay. If no private address is known, fast-sync refuses and falls back to a full replay rather than quietly reaching for a clearnet gateway — finishing faster is not worth deanonymising the box.
 
 ### What runs on your instance
 
@@ -13792,7 +13792,7 @@ The mirror job:
 
 1. reads the newest signed `indexer_snapshot_v1` op from chain, over whatever transport your node already uses (hidden RPC included — no clearnet required). Since v1.18.0 it only accepts an op that **two RPC operators agree on** (a node's `.onion` and `.b32.i2p` count as one operator; the default hidden nodes are all run by the project, so on a hidden-only node the signature is the real check) and whose signature comes from the pinned `MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY` — the same key the release and RPC-directory checks use. If the nodes it can reach do not agree yet, it pins nothing and tries again next run;
 2. refuses outright if the snapshot is for a different chain;
-3. pins the CID to your Kubo. When Kubo's own swarm cannot fetch it — a Tor/I2P-only box often has only two or three swarm peers, so with fewer than five the swarm gets 3 minutes — it asks the publisher's own `.onion` and `.b32.i2p` (from its on-chain registration) for the snapshot as a CAR (`/ipfs/<cid>?format=car`; up to 64 MB, no redirects) and imports that, pinning only the anchored CID, whatever roots the CAR names. Fetching stops 18 minutes into the run, which leaves the steps after it the time they may take within the run's 30 minutes;
+3. pins the CID to your Kubo. When Kubo's own swarm cannot fetch it — a Tor/I2P-only box often has only two or three swarm peers, so with fewer than five the swarm gets 3 minutes — it asks the federation peers' `.onion` and `.b32.i2p` addresses (the publisher's own from the signed record first, then this node's federation directory with the publisher's instance leading, then any registration in the history it read) for the snapshot as a CAR (`/ipfs/<cid>?format=car`; up to 64 MB, no redirects) and imports that, pinning only the anchored CID, whatever roots the CAR names. Fetching stops 18 minutes into the run, which leaves the steps after it the time they may take within the run's 30 minutes;
 4. reads the pinned content back and **verifies it against the on-chain SHA-256** — if it does not match, the pin is removed and your box serves nothing rather than serving something a newcomer will reject;
 5. unpins the snapshot it was serving before and runs a repo GC. One live snapshot per box, never a growing pile — nobody wants last month's copy when this month's exists.
 
@@ -13823,7 +13823,7 @@ A healthy run ends with a line confirming the SHA-256 matched and that this inst
 
 ### Fast-syncing a new node
 
-On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order: your own gateway if you run one, then federation peers over Tor and I2P, then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. Whatever answers first is verified against the on-chain hash before anything is restored, so which mirror served you affects only your wait, never your safety.
+On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order: your own gateway if you run one, then federation peers over Tor and I2P (the publisher's own addresses from the signed record first), then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. Whatever answers first is verified against the on-chain hash before anything is restored, so which mirror served you affects only your wait, never your safety.
 
 **What fast-sync checks before it restores anything (v1.18.0).**
 
@@ -13992,9 +13992,8 @@ scripts, links and external references are refused) and copied to
 `morphit.config.env` as `MORPHIT_INSTANCE_BRAND_NAME` (backed up first). The
 branding folder is outside the install and upgrades carry `morphit.config.env`
 forward, so every `morphit-ops upgrade` re-applies them. `--short-name` sets the
-Android home-screen label (iPhones use the name) and `--beta on|off|auto` the red
-BETA marker (automatic: off once you supply a logo). `--name=` or `--name Morphit`
-removes the name.
+Android home-screen label (iPhones use the name). `--name=` or `--name Morphit`
+removes the name. (The red BETA marker and `--beta` were removed in v1.21.5.)
 **Colours (v1.20.0):** `--theme-from '#f3dca0' --theme-to '#bb872f'` (optional
 `--theme-mid`, `--theme-background`, `--theme-button bright|deep`), or a preset
 `--theme champagne-gold`; `--theme morphit` goes back. Keep the quotes (an unquoted

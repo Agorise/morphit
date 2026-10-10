@@ -18,7 +18,6 @@ icons, your name. This guide shows how to brand an instance so that:
 | Launch screens | The iPhone/iPad screen shown while the app opens | made from `logo.svg` |
 | Link preview | The picture shown when a link to your site is shared (`/og-image.png`, 1200 × 630) | drawn from `icon.svg` (or `logo.svg`) and the site name |
 | Site name | Every place the UI names the **site**: "Sign in to …", "Your … password", page titles, RSS feed titles, and — on the pages Morphit prerenders (homepage, sign-in, FAQ, guides) — link previews and the home-screen label (see [Limits](#limits)) | `MORPHIT_INSTANCE_BRAND_NAME` |
-| BETA marker | The small red "BETA" over the logo | `MORPHIT_INSTANCE_BETA_BADGE` (automatic) |
 | Colours | The whole colour scheme: the hero heading gradient, accents, links, buttons, focus rings, chat bubbles, the homepage cards, the page background and its corner glows, the grey text/surface scale, the browser's theme colour and the Android app colours | two or three colours: `--theme-from`, `--theme-to` (optional `--theme-mid`, `--theme-background`), or a preset `--theme champagne-gold` |
 
 Mentions of the **software** and the **federation** stay "Morphit": "Run a Morphit node", "other
@@ -53,8 +52,8 @@ sudo morphit-ops branding apply \
   ran the command from, and `~/my-logo.svg` in your home folder.
 - `--name` is the site's name. Leave it out to keep "Morphit"; `--name Morphit` or `--name=` removes
   it. `--short-name "Vigilante"` sets a shorter label for Android's home screen (iPhones use the
-  full name). `--beta on|off|auto` controls the red BETA marker (automatic: off once you supply a
-  logo).
+  full name). (The red BETA marker and its `--beta` flag were removed in v1.21.5; an old
+  `MORPHIT_INSTANCE_BETA_BADGE` line in `morphit.config.env` is ignored.)
 - Colours: `--theme-from '#…' --theme-to '#…'` or a preset such as `--theme champagne-gold` — see
   [Colours](#colours).
 - Each file is checked first. A file with scripts, event handlers, links, anything loaded from
@@ -93,7 +92,6 @@ name with a space breaks there:
 ```sh
 MORPHIT_INSTANCE_BRAND_NAME='Vigilante Trading'
 #MORPHIT_INSTANCE_BRAND_SHORT_NAME='Vigilante'
-#MORPHIT_INSTANCE_BETA_BADGE=off
 ```
 
 and run `sudo morphit-ops branding apply`.
@@ -249,7 +247,7 @@ sudo morphit-ops branding reset
 ```
 
 This serves the plain Morphit look again. To keep it that way across upgrades, also remove the
-`MORPHIT_INSTANCE_BRAND_*` / `MORPHIT_INSTANCE_BETA_BADGE` / `MORPHIT_INSTANCE_THEME*` lines from
+`MORPHIT_INSTANCE_BRAND_*` / `MORPHIT_INSTANCE_THEME*` lines from
 `morphit.config.env` and the files in `/etc/morphit/branding/`. Just the colours:
 `sudo morphit-ops branding apply --theme morphit`.
 

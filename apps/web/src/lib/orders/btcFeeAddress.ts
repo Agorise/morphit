@@ -59,16 +59,6 @@ export type FeeAddressCheck =
 			readonly reason: 'no_pin' | 'mismatch' | 'bad_data' | 'unverified_key';
 	  };
 
-/** Short public id of the pinned treasury BTC key (first 4 bytes of
- *  HASH160 of its public key, hex) — what About-this-instance shows instead of
- *  the whole xpub. Null when no xpub is pinned. */
-export function btcFeeKeyId(treasury: ReleaseTreasuryBlock | null): string | null {
-	const x = treasury?.btc?.xpub;
-	if (typeof x !== 'string') return null;
-	const p = parseAccountXpub(x);
-	return p.ok ? p.value.keyId : null;
-}
-
 /** Satoshis → BTC decimal string, exact (integer arithmetic). */
 export function satsToBtc(sats: number): string {
 	const s = Math.max(0, Math.trunc(sats));

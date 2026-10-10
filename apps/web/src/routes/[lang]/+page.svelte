@@ -68,8 +68,9 @@
 		import('$components/FeaturedOrders.svelte').then((m) => m.default);
 	const loadPrioritiesSection = () =>
 		import('$components/PrioritiesSection.svelte').then((m) => m.default);
-	const loadCoinCarousel = () =>
-		import('$components/CoinCarousel.svelte').then((m) => m.default);
+	const loadFirstTradesCard = () =>
+		import('$components/FirstTradesCard.svelte').then((m) => m.default);
+	const loadCoinCarousel = () => import('$components/CoinCarousel.svelte').then((m) => m.default);
 
 	// Home page gets the richest JSON-LD: Organization + WebSite (with
 	// SearchAction unlocking the SERP sitelinks search box).
@@ -92,7 +93,6 @@
 			currentLang
 		)
 	]);
-
 </script>
 
 <Head
@@ -100,7 +100,11 @@
 	{jsonLd}
 	feeds={[
 		{ title: $_('seo.site_name') + ' — orderbook (RSS)', href: '/rss/orderbook.xml' },
-		{ title: $_('seo.site_name') + ' — orderbook (Atom)', href: '/rss/orderbook.atom', type: 'atom' },
+		{
+			title: $_('seo.site_name') + ' — orderbook (Atom)',
+			href: '/rss/orderbook.atom',
+			type: 'atom'
+		},
 		{
 			title: $_('seo.site_name') + ' — orderbook (JSON Feed)',
 			href: '/rss/orderbook.json',
@@ -185,23 +189,12 @@
 			<PrioritiesSection />
 		{/await}
 
-		<!-- v1.21.3: the home page's own invitation to run a site (it used to
-		     be only a footer link). -->
-		<section
-			class="mx-auto mt-16 max-w-3xl rounded-3xl border border-ink-200 bg-white/70 p-8 text-center dark:border-ink-800 dark:bg-ink-900/70"
-			aria-labelledby="run-node-heading"
-		>
-			<h2 id="run-node-heading" class="font-display text-2xl font-bold md:text-3xl">
-				<span class="brand-gradient-text">{$_('home.run_node_heading')}</span>
-			</h2>
-			<p class="mx-auto mt-4 max-w-2xl text-ink-700 dark:text-ink-200">
-				{$_('home.run_node_body')}
-			</p>
-			<div class="mt-6 flex flex-wrap items-center justify-center gap-3">
-				<a href={lp('/run-a-node')} class="btn-primary btn-shine">{$_('home.run_node_cta')}</a>
-				<a href={lp('/instances')} class="btn-secondary">{$_('home.run_node_instances')}</a>
-			</div>
-		</section>
+		<!-- v1.21.5: the invitation to sign in and make a first few trades
+		     (replaced the "Run your own Morphit site" card; running a site is
+		     in the footer and on /run-a-node). -->
+		{#await loadFirstTradesCard() then FirstTradesCard}
+			<FirstTradesCard />
+		{/await}
 
 		<!-- Below-the-fold: carousel of supported assets + 5 settlement
 		     networks + barter, lazy-mounted via IntersectionObserver,

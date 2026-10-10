@@ -81,8 +81,12 @@ check('.card-hover-emerald exists as a shared class', /\.card-hover-emerald \{/.
 check('it is defined AFTER .card-interactive so it wins the hover', css.indexOf('.card-hover-emerald') > css.indexOf('.card-interactive'));
 check('OrderCard now uses the shared class', /card-hover-emerald/.test(orderCard));
 check('no inline copy of the four-class incantation remains', !/hover:bg-emerald-50\/30/.test(orderCard) && !/hover:bg-emerald-50\/30/.test(download));
-check('download cards gained the hover', (download.match(/card-hover-emerald/g) ?? []).length >= 4);
-check('the already-emerald sections were left alone (hover would dim their border)', /<section class="card border-morphit-emerald\/40 bg-morphit-emerald\/5">/.test(download));
+// v1.21.5: the page lost its two emerald-tinted sections (Install, Source code &
+// releases) and the setup and join cards; what is left — the mirror cards and
+// the supported-systems card — keeps the hover, and no emerald-tinted section
+// gained one (a hover would dim its border).
+check('download cards keep the hover (mirror cards + supported systems)', (download.match(/card-hover-emerald/g) ?? []).length >= 2);
+check('no emerald-tinted section carries the hover (it would dim its border)', !/<section class="[^"]*card-hover-emerald[^"]*border-morphit-emerald|<section class="[^"]*border-morphit-emerald[^"]*card-hover-emerald/.test(download));
 
 // ─── 5. double-green focus border, repo-wide ─────────────────
 // The §2 site-wide rule turns a text field's border emerald + paints a 1px

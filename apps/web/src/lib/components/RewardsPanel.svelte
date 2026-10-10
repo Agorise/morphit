@@ -17,17 +17,6 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { instance } from '$stores/instance';
 
-	let {
-		showSignup = false,
-		collapsible = false
-	}: {
-		showSignup?: boolean;
-		/** The list starts rolled up (the orderbook, so orders stay near the top). */
-		collapsible?: boolean;
-	} = $props();
-	let open = $state(false);
-	const listShown = $derived(!collapsible || open);
-
 	const ITEMS = [
 		'free_account',
 		'free_buy',
@@ -52,39 +41,21 @@
 			{$_('rewards.heading')}
 		</h2>
 		<p class="mt-2 text-sm text-ink-700 dark:text-ink-300">{$_('rewards.intro')}</p>
-		{#if collapsible}
-			<button
-				type="button"
-				class="mt-3 text-sm font-semibold text-morphit-emerald hover:underline"
-				aria-expanded={open}
-				aria-controls="rewards-panel-list"
-				onclick={() => (open = !open)}
-			>
-				{open ? $_('rewards.show_less') : $_('rewards.show_all')}
-			</button>
-		{/if}
-		{#if listShown}
-			<ul id="rewards-panel-list" class="mt-5 grid gap-4 sm:grid-cols-2">
-				{#each ITEMS as item (item)}
-					<li class="flex items-start gap-3">
-						<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
-						<span>
-							<strong class="block text-ink-900 dark:text-ink-50"
-								>{$_(`rewards.${item}_title`)}</strong
-							>
-							<span class="text-sm text-ink-700 dark:text-ink-300"
-								>{$_(`rewards.${item}_body`)}</span
-							>
-						</span>
-					</li>
-				{/each}
-			</ul>
-			<p class="mt-4 text-xs text-ink-500 dark:text-ink-400">{$_('rewards.lent_note')}</p>
-		{/if}
+		<ul id="rewards-panel-list" class="mt-5 grid gap-4 sm:grid-cols-2">
+			{#each ITEMS as item (item)}
+				<li class="flex items-start gap-3">
+					<span class="mt-0.5 flex-none text-morphit-emerald" aria-hidden="true">✓</span>
+					<span>
+						<strong class="block text-ink-900 dark:text-ink-50"
+							>{$_(`rewards.${item}_title`)}</strong
+						>
+						<span class="text-sm text-ink-700 dark:text-ink-300">{$_(`rewards.${item}_body`)}</span>
+					</span>
+				</li>
+			{/each}
+		</ul>
+		<p class="mt-4 text-xs text-ink-500 dark:text-ink-400">{$_('rewards.lent_note')}</p>
 		<div class="mt-5 flex flex-wrap items-center gap-3">
-			{#if showSignup}
-				<a href={lp('/onboarding')} class="btn-primary btn-shine">{$_('rewards.cta_signup')}</a>
-			{/if}
 			<a
 				href="{lp('/faq')}?q=welcome_bonus&lang={currentLang}"
 				class="text-sm font-semibold text-morphit-emerald hover:underline"

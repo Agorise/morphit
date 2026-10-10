@@ -45,7 +45,7 @@ const ONION = 'http://abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrstuv.oni
 const marked = (path: string) => `${M}${BUILD}${M}${path}`;
 
 const PAGE = [
-	'<!doctype html><html lang="en" data-brand-name="Morphit" data-brand-beta="on"><head>',
+	'<!doctype html><html lang="en" data-brand-name="Morphit"><head>',
 	`<link rel="canonical" href="${marked('/en/faq')}" />`,
 	'<title>FAQ — Morphit</title>',
 	`<meta property="og:image" content="${marked('/og-image.png')}" />`,

@@ -58,7 +58,7 @@ beforeAll(async () => {
 beforeEach(() => {
 	posted.length = 0;
 	at('https://alice.example');
-	brandJson({ schema: 1, name: 'Morphit', beta_badge: true });
+	brandJson({ schema: 1, name: 'Morphit' });
 	document.documentElement.dataset.brandName = 'Morphit';
 });
 
@@ -118,7 +118,7 @@ describe('post pictures carry this instance’s branding', () => {
 		expect(p.extraMetadata?.image).toEqual([MORPHIT_PICTURE]);
 	});
 	it('branded (its own link-preview picture): the first-trade post shows it, never the Morphit picture', async () => {
-		brandJson({ schema: 1, name: 'Vigilante Trading', beta_badge: false, og_image: 'own' });
+		brandJson({ schema: 1, name: 'Vigilante Trading', og_image: 'own' });
 		const p = await firstTrade();
 		expect(p.body).not.toContain(MORPHIT_PICTURE);
 		expect(p.body.startsWith('![](https://alice.example/og-image.png)\n\n')).toBe(true);
@@ -158,13 +158,13 @@ describe('post pictures carry this instance’s branding', () => {
 	// v1.21.1 review: the service worker can answer with an older
 	// brand.json (no og_image flag) on a branded site.
 	it('an older brand.json without the flag on a branded site: still never the Morphit picture', async () => {
-		brandJson({ schema: 1, name: 'Morphit', beta_badge: true });
+		brandJson({ schema: 1, name: 'Morphit' });
 		document.documentElement.dataset.brandName = 'Vigilante Trading';
 		let p = await firstTrade();
 		expect(p.body).not.toContain(MORPHIT_PICTURE);
 		posted.length = 0;
 		document.documentElement.dataset.brandName = 'Morphit';
-		brandJson({ schema: 1, name: 'Vigilante Trading', beta_badge: false });
+		brandJson({ schema: 1, name: 'Vigilante Trading' });
 		p = await firstTrade();
 		// No og_image flag: the served picture may be the shipped one.
 		expect(p.body).not.toContain(MORPHIT_PICTURE);

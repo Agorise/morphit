@@ -8,7 +8,7 @@
 	 *
 	 *   - account name vs seed phrase vs password
 	 *   - network fee vs listing fee vs trade payment
-	 *   - the supported tradable assets at a glance
+	 *   - the tradable assets THIS site accepts, at a glance
 	 *   - what to do if you lose your seed
 	 *
 	 * Designed for paper.  The on-screen view shows the same
@@ -17,7 +17,8 @@
 	 * pattern as SeedBackupPrint so the printout is
 	 * just the cheat-sheet, no chrome.
 	 *
-	 * Static content — doesn't load any user data, can be
+	 * Static content (but for the asset list, which follows this site's
+	 * accepted assets) — doesn't load any user data, can be
 	 * printed by anyone (signed in or not).  All copy is in the
 	 * locale dictionary so it prints in the user's chosen
 	 * language.
@@ -26,6 +27,34 @@
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import Head from '$components/Head.svelte';
+	import { getAsset } from '$lib/assets/registry';
+	import type { ChatAssetTicker } from '$lib/chat/payload';
+	import { instance } from '$stores/instance';
+
+	/** The sheet's asset rows, in this order — the ones this site accepts. */
+	const SHEET_ORDER: readonly ChatAssetTicker[] = [
+		'btc',
+		'xmr',
+		'blurt',
+		'usdt',
+		'usdc',
+		'dai',
+		'bch',
+		'ltc',
+		'dash',
+		'doge',
+		'zec',
+		'arrr',
+		'dcr',
+		'sol',
+		'eth',
+		'xrp',
+		'barter'
+	];
+	const sheetAssets = $derived.by(() => {
+		const off = new Set($instance.disabled_assets.map((t) => t.toUpperCase()));
+		return SHEET_ORDER.map(getAsset).filter((a) => !off.has(a.displayTicker.toUpperCase()));
+	});
 
 	function triggerPrint(): void {
 		if (!browser) return;
@@ -107,75 +136,15 @@
 	<!-- Section 3: assets -->
 	<section class="cheat-section">
 		<h2>{$_('cheat_sheet.section_assets.heading')}</h2>
+		<!-- v1.21.5: only the assets THIS site accepts (the operator can switch
+		     some off — /v1/instance disabled_assets), in the order below. -->
 		<dl class="cheat-table">
-			<div class="cheat-row">
-				<dt>BTC</dt>
-				<dd>{$_('cheat_sheet.section_assets.btc')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>XMR</dt>
-				<dd>{$_('cheat_sheet.section_assets.xmr')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>BLURT</dt>
-				<dd>{$_('cheat_sheet.section_assets.blurt')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>USDT</dt>
-				<dd>{$_('cheat_sheet.section_assets.usdt')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>USDC</dt>
-				<dd>{$_('cheat_sheet.section_assets.usdc')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>DAI</dt>
-				<dd>{$_('cheat_sheet.section_assets.dai')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>BCH</dt>
-				<dd>{$_('cheat_sheet.section_assets.bch')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>LTC</dt>
-				<dd>{$_('cheat_sheet.section_assets.ltc')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>DASH</dt>
-				<dd>{$_('cheat_sheet.section_assets.dash')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>DOGE</dt>
-				<dd>{$_('cheat_sheet.section_assets.doge')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>ZEC</dt>
-				<dd>{$_('cheat_sheet.section_assets.zec')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>ARRR</dt>
-				<dd>{$_('cheat_sheet.section_assets.arrr')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>DCR</dt>
-				<dd>{$_('cheat_sheet.section_assets.dcr')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>SOL</dt>
-				<dd>{$_('cheat_sheet.section_assets.sol')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>ETH</dt>
-				<dd>{$_('cheat_sheet.section_assets.eth')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>XRP</dt>
-				<dd>{$_('cheat_sheet.section_assets.xrp')}</dd>
-			</div>
-			<div class="cheat-row">
-				<dt>Barter</dt>
-				<dd>{$_('cheat_sheet.section_assets.barter')}</dd>
-			</div>
+			{#each sheetAssets as a (a.ticker)}
+				<div class="cheat-row">
+					<dt>{a.ticker === 'barter' ? 'Barter' : a.displayTicker}</dt>
+					<dd>{$_(`cheat_sheet.section_assets.${a.ticker}`)}</dd>
+				</div>
+			{/each}
 		</dl>
 	</section>
 

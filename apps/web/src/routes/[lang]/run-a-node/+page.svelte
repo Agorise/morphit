@@ -5,6 +5,7 @@
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
 	import Term from '$components/Term.svelte';
+	import { renderFaqInline } from '$lib/faq/renderInline';
 
 	/** The release this site runs (baked in at build time), named on the download button. */
 	const version = typeof __MORPHIT_VERSION__ === 'string' ? __MORPHIT_VERSION__ : '';
@@ -47,9 +48,14 @@
 			{$_('run_a_node.key_terms.intro_1')}
 			<Term key="operator">{$_('run_a_node.key_terms.term_operator')}</Term>
 			{$_('run_a_node.key_terms.intro_2')}
-			<Term key="indexer">{$_('run_a_node.key_terms.term_indexer')}</Term>{$_('run_a_node.key_terms.and')}<Term
-				key="relay">{$_('run_a_node.key_terms.term_relay')}</Term>{$_('run_a_node.key_terms.intro_3')}
-			<Term key="federation">{$_('run_a_node.key_terms.term_federation')}</Term>{$_('run_a_node.key_terms.intro_4')}
+			<Term key="indexer">{$_('run_a_node.key_terms.term_indexer')}</Term>{$_(
+				'run_a_node.key_terms.and'
+			)}<Term key="relay">{$_('run_a_node.key_terms.term_relay')}</Term>{$_(
+				'run_a_node.key_terms.intro_3'
+			)}
+			<Term key="federation">{$_('run_a_node.key_terms.term_federation')}</Term>{$_(
+				'run_a_node.key_terms.intro_4'
+			)}
 		</p>
 	</aside>
 
@@ -83,7 +89,9 @@
 				<h3 class="font-display text-lg font-bold">
 					{$_('run_a_node.why_earn_title')}
 				</h3>
-				<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-300">{$_('run_a_node.why_earn_body')}</p>
+				<p class="mt-2 whitespace-pre-line text-ink-700 dark:text-ink-300">
+					{$_('run_a_node.why_earn_body')}
+				</p>
 			</li>
 		</ul>
 	</section>
@@ -110,22 +118,27 @@
 						</li>
 					{/each}
 				</ul>
-				<p class="mt-3 text-sm text-ink-600 dark:text-ink-400">{$_('run_a_node.earn_box.earn_when')}</p>
+				<p class="mt-3 text-sm text-ink-600 dark:text-ink-400">
+					{$_('run_a_node.earn_box.earn_when')}
+				</p>
 			</div>
 			<div class="card border border-ink-200 dark:border-ink-800">
 				<h3 class="font-display text-lg font-bold">{$_('run_a_node.earn_box.pay_title')}</h3>
 				<ul class="mt-3 space-y-2 text-ink-700 dark:text-ink-300">
-					{#each ['pay_account', 'pay_bonus', 'pay_lent', 'pay_top_up', 'pay_server'] as k (k)}
+					{#each ['pay_account', 'pay_bonus', 'pay_lent', 'pay_top_up'] as k (k)}
 						<li class="flex gap-2">
 							<span class="text-ink-500" aria-hidden="true">−</span>
-							<span>{$_(`run_a_node.earn_box.${k}`)}</span>
+							<!-- `**bold**` in the copy (escaped first; renderInline.ts). -->
+							<span>{@html renderFaqInline($_(`run_a_node.earn_box.${k}`))}</span>
 						</li>
 					{/each}
 				</ul>
 			</div>
 		</div>
-		<p class="mt-5 text-ink-700 dark:text-ink-300">{$_('run_a_node.earn_box.rule')}</p>
-		<p class="mt-3 text-ink-700 dark:text-ink-300">{$_('run_a_node.earn_box.fund')}</p>
+		<p class="mt-5 text-ink-700 dark:text-ink-300">{$_('run_a_node.earn_box.fund')}</p>
+		<p class="mt-3 text-ink-700 dark:text-ink-300">
+			{@html renderFaqInline($_('run_a_node.earn_box.rule'))}
+		</p>
 	</section>
 
 	<!-- How: a linear walkthrough of setup, pointing readers at the
@@ -163,7 +176,6 @@
 				</li>
 			{/each}
 		</ol>
-
 	</section>
 
 	<!-- Operator stance: which assets (MORPHIT_INDEXER_DISABLED_ASSETS) and

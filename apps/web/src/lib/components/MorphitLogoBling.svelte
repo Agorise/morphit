@@ -129,23 +129,6 @@
 	const logoSrc = $derived(
 		wordmarkSrc ?? (variant === 'footer' ? SITE_LOGO_FOOTER_PATH : SITE_LOGO_PATH)
 	);
-
-	// TEMPORARY beta marker. Small red "BETA" overlaid in the
-	// bottom-right corner of the logo, everywhere it appears (header, footer,
-	// hero). Sized relative to the logo so it stays proportional at every
-	// placement. Per-instance: an operator turns it off with
-	// MORPHIT_INSTANCE_BETA_BADGE=off (and it is off by default once they supply
-	// their own logo) — `morphit-ops branding apply` stamps
-	// <html data-brand-beta="off">, and a CSS rule below hides the marker, so it
-	// never flashes on first paint. Remove this (the `beta` span + its style +
-	// this size) at the stable public launch.
-	const betaFontStyle = $derived(
-		heightClass
-			? // Responsive hero: scale with the viewport, roughly tracking the
-				// wordmark's breakpoint sizes (h-11 → h-24).
-				'font-size: clamp(0.6rem, 2vw, 1.4rem);'
-			: `font-size: ${Math.max(7, Math.round(heightPx * 0.3))}px;`
-	);
 </script>
 
 <div
@@ -171,8 +154,6 @@
 			aria-hidden="true"><span class="morphit-logo-bling-band"></span></span
 		>
 	{/if}
-	<!-- TEMPORARY beta marker (remove at stable public launch). -->
-	<span class="morphit-logo-bling-beta" style={betaFontStyle} aria-hidden="true">BETA</span>
 </div>
 
 <style>
@@ -266,35 +247,5 @@
 			animation: none;
 			display: none;
 		}
-	}
-	/* Per-instance: hidden when the operator turned the marker off (see the
-	 * script block). The attribute is on <html>, outside this component. */
-	:global(html[data-brand-beta='off']) .morphit-logo-bling-beta {
-		display: none;
-	}
-	/* TEMPORARY beta marker. Small red "BETA" pinned to the wordmark's
-	 * bottom-right corner. z-index 3 so it sits above the wordmark (1) and the
-	 * shine (2); pointer-events:none so it never eats clicks on the wrapping
-	 * <a>. Line-height 1 keeps it tight in the corner. Remove at stable
-	 * public launch. */
-	.morphit-logo-bling-beta {
-		position: absolute;
-		right: 0;
-		bottom: 0;
-		z-index: 3;
-		pointer-events: none;
-		font-weight: 800;
-		line-height: 1;
-		letter-spacing: 0.04em;
-		color: #dc2626;
-		text-shadow:
-			0 0 2px rgba(255, 255, 255, 0.7),
-			0 1px 1px rgba(255, 255, 255, 0.5);
-	}
-	:global(.dark) .morphit-logo-bling-beta {
-		color: #f87171;
-		text-shadow:
-			0 0 2px rgba(0, 0, 0, 0.6),
-			0 1px 1px rgba(0, 0, 0, 0.4);
 	}
 </style>

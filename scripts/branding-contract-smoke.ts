@@ -20,7 +20,7 @@
  *        and in ops-cli (apply locates it byte for byte).
  *   C-3  Every overridable file ships in apps/web/static (so it is precached and
  *        exists on an unbranded instance), and the shipped brand.json is the
- *        default brand with the BETA marker on.
+ *        default brand (and, since v1.21.5, has no BETA marker field).
  *   C-4  Every `{brand…}` token in every locale is well-formed, and each
  *        `{brand|form}` default form is one the slot builder recognises
  *        (otherwise the build fails on an unpaired marker, or worse, a slot
@@ -104,11 +104,11 @@ try {
 		name?: unknown;
 		beta_badge?: unknown;
 	};
-	brandJsonOk = b.schema === 1 && b.name === DEFAULT_BRAND_NAME && b.beta_badge === true;
+	brandJsonOk = b.schema === 1 && b.name === DEFAULT_BRAND_NAME && !('beta_badge' in b);
 } catch {
 	/* reported below */
 }
-check('C-3b: shipped /brand/brand.json is the default brand with BETA on', brandJsonOk);
+check('C-3b: shipped /brand/brand.json is the default brand (no BETA marker)', brandJsonOk);
 
 // C-4 / C-5 / C-6
 type Dict = Record<string, unknown>;

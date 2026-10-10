@@ -15,6 +15,8 @@
 		type FaqKey
 	} from '$utils/faqIndex';
 	import { SUPPORTED_LOCALES, setLocale, currentLocale, type LocaleCode } from '$i18n';
+	import { instance } from '$stores/instance';
+	import { visibleFaqEntries } from '$lib/faq/assetGate';
 	import { renderFaqInline } from '$lib/faq/renderInline';
 	import { stripMarkdown } from '$lib/seo/stripMarkdown';
 	import { splitFaqAnswerForGlossary } from '$lib/faq/glossaryTerms';
@@ -62,17 +64,23 @@
 	let copiedKey = $state<FaqKey | null>(null);
 	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
+	/** v1.21.5: the entries for THIS site — per-asset entries for coins the
+	 *  operator switched off are left out (src/lib/faq/assetGate.ts). */
+	const shownEntries: FaqEntry[] = $derived(
+		visibleFaqEntries($faqEntries, $instance.disabled_assets)
+	);
+
 	// Gate on MIN_QUERY_LEN: 1–2 char queries return nothing (and show no
 	// dropdown at all — not even an empty-state — see the template).
 	const hits: FaqHit[] = $derived(
-		query.trim().length >= MIN_QUERY_LEN ? searchEntries($faqEntries, query, Infinity) : []
+		query.trim().length >= MIN_QUERY_LEN ? searchEntries(shownEntries, query, Infinity) : []
 	);
 	const showDropdown = $derived(query.trim().length >= MIN_QUERY_LEN);
 
 	/** Lookup map key → entry, used to resolve related-entry chips to
 	 *  their localized question strings. Rebuilds when the locale
-	 *  changes because $faqEntries does. */
-	const entriesByKey: Map<FaqKey, FaqEntry> = $derived(new Map($faqEntries.map((e) => [e.key, e])));
+	 *  changes because shownEntries does. */
+	const entriesByKey: Map<FaqKey, FaqEntry> = $derived(new Map(shownEntries.map((e) => [e.key, e])));
 
 	/**
 	 * Handle deep links in three forms:
@@ -107,7 +115,7 @@
 		// footer AGPL link land at the top instead of the article), and an
 		// effect would re-fire on a locale switch and re-yank an already-open
 		// entry back into view..
-		const found = $faqEntries.find((e) => e.key === target);
+		const found = shownEntries.find((e) => e.key === target);
 		if (found) {
 			expanded.add(found.key);
 			void scrollToEntry(found.key);
@@ -437,7 +445,7 @@
 	</div>
 
 	<ol class="mt-10 space-y-3">
-		{#each $faqEntries as entry (entry.key)}
+		{#each shownEntries as entry (entry.key)}
 			{@const isOpen = expanded.has(entry.key)}
 			{@const justCopied = copiedKey === entry.key}
 			<li

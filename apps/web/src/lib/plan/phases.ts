@@ -36,7 +36,7 @@
 export type PhaseStatus = 'shipped' | 'in_progress' | 'planned';
 
 export interface Phase {
-	readonly number: 1 | 2 | 3 | 4 | 5 | 6;
+	readonly number: 1 | 2 | 3 | 4 | 5 | 6 | 7;
 	readonly status: PhaseStatus;
 	/** Title key in i18n (`plan.phase_N_title`). */
 	readonly titleKey: string;
@@ -91,6 +91,12 @@ export const PHASES: readonly Phase[] = [
 		status: 'in_progress',
 		titleKey: 'plan.phase_6_title',
 		bodyKey: 'plan.phase_6_body'
+	},
+	{
+		number: 7,
+		status: 'planned',
+		titleKey: 'plan.phase_7_title',
+		bodyKey: 'plan.phase_7_body'
 	}
 ];
 

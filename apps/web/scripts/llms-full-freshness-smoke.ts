@@ -45,7 +45,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderLlmsFull } from '../../../scripts/build-llms-full.mjs';
+import {
+	renderLlmsFull,
+	COIN_TICKERS,
+	resolveCoinTokensFull
+} from '../../../scripts/build-llms-full.mjs';
+import { acceptedCoinTickers, applyCoinTokens } from '../src/lib/assets/coinTokens';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
@@ -108,6 +113,23 @@ if (typeof renderLlmsFull === 'function') {
 		'build-llms-full.mjs exports a callable renderLlmsFull()',
 		`expected a function export, got ${typeof renderLlmsFull} — the generator must expose its pure renderer so this smoke can re-derive expected bytes`
 	);
+}
+
+// L-1b (v1.21.5): the generator resolves coin tokens ({coins}, {coin_count})
+// to the full list — its own copy of the registry's coins, held equal here.
+{
+	const same = JSON.stringify(COIN_TICKERS) === JSON.stringify(acceptedCoinTickers([]));
+	const sample = '({coins:-blurt|or}) {coins:btc,zec|list} of {coin_count}';
+	const resolved = resolveCoinTokensFull(sample);
+	const want = `(${applyCoinTokens('{coins:-blurt|or}', 'en', [])}) ${applyCoinTokens('{coins:btc,zec|list}', 'en', [])} of ${acceptedCoinTickers([]).length}`;
+	if (same && resolved === want) {
+		pass('llms-full resolves coin tokens to the registry’s full coin list, as the app does');
+	} else {
+		fail(
+			'llms-full resolves coin tokens to the registry’s full coin list, as the app does',
+			`COIN_TICKERS ${same ? 'matches' : 'differs from'} the registry; "${resolved}" vs "${want}"`
+		);
+	}
 }
 
 // L-2: run-as-main guard present (importing the generator above must

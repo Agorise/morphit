@@ -29,7 +29,7 @@ So that no one — not a corporation, not a government, not even us — can take
 
 **FAQ key:** `what_is_morphit`
 
-Morphit is a P2P marketplace where people trade cash for cryptocurrency (Bitcoin, Monero, Blurt, USDT, USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin, Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP) directly with each other. Barter goods/services too. Morphit never touches your assets and never asks anything about you. It's a decentralised/distributed bulletin board service (DBBS), not a bank.
+Morphit is a P2P marketplace where people trade cash for cryptocurrency (XMR, BTC, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, and XRP) directly with each other. Barter goods/services too. Morphit never touches your assets and never asks anything about you. It's a decentralised/distributed bulletin board service (DBBS), not a bank.
 
 ---
 
@@ -544,7 +544,7 @@ We publish these mechanics openly because deterrence works best when attackers c
 
 Morphit settles its on-chain coordination on a public ledger called Blurt. The ledger's native unit is also called Blurt — every block, every signature, every fee transfer flows through it. You can think of Blurt as the gas token for the coordination layer, the same way ETH is gas for Ethereum, but smaller and quieter.
 
-You don't have to hold BLURT to trade BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, or XRP on Morphit — if your operator accepts BTC or XMR for the listing fee, you can pay it that way. Your account still lives on the Blurt chain, though: every order, message and review is a Blurt operation, and the chain charges a small fee in BLURT for each one (see 'What is Mana on Blurt?').
+You don't have to hold BLURT to trade XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, or XRP on Morphit — if your operator accepts BTC or XMR for the listing fee, you can pay it that way. Your account still lives on the Blurt chain, though: every order, message and review is a Blurt operation, and the chain charges a small fee in BLURT for each one (see 'What is Mana on Blurt?').
 
 Why does it come up at all? Three reasons:
 
@@ -616,7 +616,7 @@ The BLURT/USD price you see next to listing fees on Morphit (the "~$0.125" subte
 
 **FAQ key:** `where_to_buy_blurt`
 
-**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; Blurt is one of the sixteen assets traded here, alongside BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, and XRP. Visit /orderbook, filter for Blurt sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send Blurt to your account. Done.
+**Buy it on Morphit itself — that's the whole point.** Morphit is a peer-to-peer marketplace; Blurt is one of the 16 assets traded here, alongside XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, and XRP. Visit /orderbook, filter for Blurt sell orders, and message a counterparty. You pay them in whatever fiat or method they accept; they send Blurt to your account. Done.
 
 **Your first order is free.** New users get a one-time waiver that covers the listing fee on their first Blurt buy — see "Is my first order really free?" for details. So your first Blurt acquisition can also be your first trade on Morphit, with no exchange account, no card, and no KYC required. The waiver is offered automatically when you compose your first order.
 
@@ -663,7 +663,7 @@ There are actually three welcome rewards on Morphit, and they fire at different 
 
 Why the staggered design: handing out the full bonus at signup would be farmed by Sybil accounts in minutes. The 1 BP welcome on first paid fee is a small enough amount that Sybil farming is unprofitable ($0.125 cost per attacker per 1 BP), and the larger 10 Blurt liquid + 10 Blurt Power requires real trade evidence (counterparty feedback). Both add up to meaningful staking weight for honest users. Each reward goes out from the relay a minute or so after the chain records what earned it.
 
-If you trade exclusively in non-Blurt assets (BTC, XMR, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, or XRP) and never pay a Blurt listing fee, you'll receive the 10 Blurt liquid + 10 Blurt Power from your first completed trade on a listing you paid for but not the 1 BP first-fee welcome (which is Blurt-fee-gated). The Blurt bonus is harmless to receive and ignore — it can sit in your account indefinitely or cover future network fees.
+If you trade exclusively in non-Blurt assets (XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, or XRP) and never pay a Blurt listing fee, you'll receive the 10 Blurt liquid + 10 Blurt Power from your first completed trade on a listing you paid for but not the 1 BP first-fee welcome (which is Blurt-fee-gated). The Blurt bonus is harmless to receive and ignore — it can sit in your account indefinitely or cover future network fees.
 
 These rewards are paid by the relay of the instance your order was posted through — each operator's relay pays its own users — and arrive as `delegate_vesting_shares` and `transfer` ops from that relay's account. The delegations (the 1 BP welcome and the milestones) remain the relay's stake, lent to you; the first-trade 10 BLURT + 10 BLURT Power are yours to keep.
 
@@ -742,11 +742,11 @@ Running a node lets you register as an operator and earn a generous share of the
 
 **FAQ key:** `customize_your_instance`
 
-Yes — and it's encouraged. Your logo, favicon and app icons, your site's name and the red BETA marker can all be changed **without rebuilding anything**, so your instance keeps serving the signed release and your users never see the build-integrity warning. Copy your logo files to the server, then run one command:
+Yes — and it's encouraged. Your logo, favicon and app icons, your site's name and its colours can all be changed **without rebuilding anything**, so your instance keeps serving the signed release and your users never see the build-integrity warning. Copy your logo files to the server, then run one command:
 
 `sudo morphit-ops branding apply --logo /home/you/logo.svg --logo-footer /home/you/logo-footer.svg --icon /home/you/icon.svg --name "Your Site"`
 
-`--logo` is the header and homepage logo, `--logo-footer` (optional) the footer logo, `--icon` the favicon and app icon, and `--name` your site's name. It replaces "Morphit" wherever the site names itself ("Sign in to …"); mentions of the Morphit software and federation stay. Prefer to be asked one question at a time? Run `sudo morphit-ops branding setup` (it is also *Branding* in the `sudo morphit-ops` menu). Your files are kept in `/etc/morphit/branding/` and the name in the install's settings file, `morphit.config.env`; upgrades keep both. Set it up once — every upgrade re-applies it. The red BETA marker turns off once you supply a logo (`--beta on` brings it back). RSS feed titles pick up the new name after `sudo systemctl restart morphit-indexer`, and the phone icons and launch screens need a small image converter (`librsvg2-bin`) — the command offers to install it. The picture shown when a link to your site is shared (`/og-image.png`) is redrawn from your icon and site name, when you apply branding and on every upgrade.
+`--logo` is the header and homepage logo, `--logo-footer` (optional) the footer logo, `--icon` the favicon and app icon, and `--name` your site's name. It replaces "Morphit" wherever the site names itself ("Sign in to …"); mentions of the Morphit software and federation stay. Prefer to be asked one question at a time? Run `sudo morphit-ops branding setup` (it is also *Branding* in the `sudo morphit-ops` menu). Your files are kept in `/etc/morphit/branding/` and the name in the install's settings file, `morphit.config.env`; upgrades keep both. Set it up once — every upgrade re-applies it. RSS feed titles pick up the new name after `sudo systemctl restart morphit-indexer`, and the phone icons and launch screens need a small image converter (`librsvg2-bin`) — the command offers to install it. The picture shown when a link to your site is shared (`/og-image.png`) is redrawn from your icon and site name, when you apply branding and on every upgrade.
 
 Each logo keeps its own proportions (it is shown at the height of the logo it replaces, never stretched), and the occasional sheen follows your logo's shape. The full guide is `docs/BRANDING.md` in the Morphit repo.
 
@@ -2025,7 +2025,7 @@ USDC (USD Coin) is a stablecoin issued by Circle, a US-based financial-services 
 
 **FAQ key:** `why_usdt_warning`
 
-USDT is the most-traded stablecoin in the world, and millions of traders rely on its dollar-stability and broad acceptance every day. When Morphit lists an asset, we tell our users about the technical properties of that asset honestly, so they can make an informed choice for each trade. For USDT, two facts worth knowing: (1) USDT is issued and administered by Tether Inc., and Tether has the technical ability to freeze addresses on the host chain — they have used this ability in the past, mostly in response to law-enforcement requests. (2) USDT transactions on every supported host chain (Ethereum, Tron, Solana, BNB Smart Chain) are publicly visible on those chains; this is a property of the chain, not unique to USDT. Different traders weigh these differently. If you want maximum on-chain privacy, XMR is the right tool. If you want maximum decentralization-from-any-single-issuer with transparent chains, BTC, Blurt, BCH, LTC, DASH, DOGE, DCR, SOL, ETH, or XRP are the right tools. If you want dollar-denominated stability and a market that's liquid almost anywhere, USDT is the right tool. The Morphit chip is information, not a verdict — pick the asset that fits the trade you're making.
+USDT is the most-traded stablecoin in the world, and millions of traders rely on its dollar-stability and broad acceptance every day. When Morphit lists an asset, we tell our users about the technical properties of that asset honestly, so they can make an informed choice for each trade. For USDT, two facts worth knowing: (1) USDT is issued and administered by Tether Inc., and Tether has the technical ability to freeze addresses on the host chain — they have used this ability in the past, mostly in response to law-enforcement requests. (2) USDT transactions on every supported host chain (Ethereum, Tron, Solana, BNB Smart Chain) are publicly visible on those chains; this is a property of the chain, not unique to USDT. Different traders weigh these differently. If you want maximum on-chain privacy, XMR is the right tool. If you want maximum decentralization-from-any-single-issuer with transparent chains, BTC, BLURT, BCH, LTC, DASH, DOGE, DCR, SOL, ETH, or XRP are the right tools. If you want dollar-denominated stability and a market that's liquid almost anywhere, USDT is the right tool. The Morphit chip is information, not a verdict — pick the asset that fits the trade you're making.
 
 ---
 
@@ -2033,7 +2033,7 @@ USDT is the most-traded stablecoin in the world, and millions of traders rely on
 
 **FAQ key:** `why_usdc_warning`
 
-USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (BTC, XMR, Blurt, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer.
+USDC carries the same class of warning as USDT: it's a centralized stablecoin. Circle (USDC's issuer) has the technical ability to freeze any individual USDC address on any of the supported networks via a contract-level admin function. They have used it in the past in response to court orders, OFAC sanctions, and reported fraud. None of the other assets on Morphit (XMR, BTC, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) have any issuer; nobody can freeze any address. We don't think this makes USDC bad — many traders consciously accept this trade-off for the dollar stability that comes with it — but we think you should know about it before every USDC trade, the same way we want you to know that XMR trades have stronger privacy than BTC trades. The warning chip on the order form is informational, not blocking; it's there so the choice is yours and informed. Operators can disable USDC instance-wide if they prefer to keep their instance free of centralized stablecoins; users can simply choose a different asset on this instance, or pick a different operator's instance, if they prefer.
 
 ---
 
@@ -2334,7 +2334,7 @@ Three reasons. First: closed source. We can't verify what it does with your secr
 
 **FAQ key:** `privacy_coins_onchain`
 
-Morphit trades several privacy coins — Monero (XMR), Zcash (ZEC), Pirate Chain (ARRR), Dash (DASH), and Decred (DCR) — and applies the same on-chain-footprint protections to all of them.
+Morphit trades several privacy coins — XMR, DASH, ZEC, ARRR, and DCR — and applies the same on-chain-footprint protections to all of them.
 
 **Your actual settlement never touches the blockchain.** When you trade a privacy coin, the coins move peer-to-peer between your wallet and your counterparty's, directly on that coin's own chain. That transfer is never broadcast to, recorded on, or visible from the blockchain Morphit coordinates on. That chain only carries the public order (the advertisement) and the end-to-end-encrypted chat.
 

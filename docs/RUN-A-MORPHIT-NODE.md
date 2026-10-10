@@ -289,7 +289,7 @@ sudo morphit-ops branding apply --logo /home/you/my-logo.svg --logo-footer /home
 
 Prefer to be asked? `sudo morphit-ops branding setup` (or *Branding* in the `sudo morphit-ops` menu) asks for each file, the name and the colours. It is live on visitors' next page load; `sudo morphit-ops branding status` shows what's configured.
 
-Every `morphit-ops upgrade` re-applies it automatically — set it up once. The red **BETA** marker over the logo turns off automatically once you supply your own `logo.svg` (`MORPHIT_INSTANCE_BETA_BADGE=on|off` to choose).
+Every `morphit-ops upgrade` re-applies it automatically — set it up once.
 
 **Tagline and SEO title/description** are config values too: `sudo morphit-ops` → *Edit settings* → *Branding & SEO*.
 

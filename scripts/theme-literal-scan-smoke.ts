@@ -108,16 +108,6 @@ export const ALLOW: readonly Allow[] = [
 		reason: SEMANTIC_RED
 	},
 	{
-		file: 'apps/web/src/lib/components/MorphitLogoBling.svelte',
-		literal: '#dc2626',
-		reason: 'the red BETA marker (light scheme) — a warning, not brand'
-	},
-	{
-		file: 'apps/web/src/lib/components/MorphitLogoBling.svelte',
-		literal: '#f87171',
-		reason: 'the red BETA marker — a warning, not brand'
-	},
-	{
 		file: 'apps/web/src/routes/[lang]/settings/security/2fa/+page.svelte',
 		literal: '#2bb24c',
 		reason: 'var(--success) fallback: semantic success green'

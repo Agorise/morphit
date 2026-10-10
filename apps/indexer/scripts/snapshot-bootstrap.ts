@@ -55,7 +55,7 @@ import {
 } from '../src/blurt/indexerSnapshotOp.ts';
 import {
 	buildSnapshotSources,
-	extractPeerAddressesFromHistory,
+	mirrorPeers,
 	hasUsableSource,
 	type SnapshotSource
 } from '../src/blurt/snapshotMirrors.ts';
@@ -204,7 +204,11 @@ async function acquireFromChain(
 	// sit through a multi-day replay. Peers re-serve the same CID over their own
 	// .onion / .b32.i2p, so we try those FIRST — on the transport this box already
 	// speaks — and a hidden-only node never falls through to clearnet at all.
-	const peers = extractPeerAddressesFromHistory(history);
+	// The publisher's own .onion/.b32.i2p come first, from the signed record this
+	// node just verified (v1.21.5): @morphit's history holds no registration
+	// (morphit.io, 2026-10-10: all 169 entries read), so the history alone gave
+	// a Tor/I2P-only newcomer no private source and it fell back to a replay.
+	const peers = mirrorPeers({ published: op.hidden_mirrors, directory: null, history, signer });
 	const hiddenOnly = config.blurtRpcEndpoints.length === 0;
 	const built = buildSnapshotSources({
 		cid: op.ipfs_cid,
@@ -217,7 +221,7 @@ async function acquireFromChain(
 	if (!hasUsableSource(built)) {
 		die(
 			hiddenOnly
-				? 'this node is hidden-only and no federation peer advertises a Tor/I2P address on-chain yet, ' +
+				? 'this node is hidden-only, and neither the snapshot record nor any registration on chain names a Tor/I2P address yet, ' +
 						'so the snapshot cannot be fetched privately. Refusing to reach for a clearnet gateway. ' +
 						'Full replay still works: set MORPHIT_INDEXER_START_BLOCK to genesis and start the indexer.'
 				: 'no usable snapshot source could be built from the on-chain op.'

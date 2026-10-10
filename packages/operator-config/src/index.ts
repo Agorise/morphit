@@ -492,9 +492,9 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	//   contain { } # | < > " \ or backtick.
 	// MORPHIT_INSTANCE_BRAND_SHORT_NAME: home-screen label (PWA short_name);
 	//   defaults to the brand name.
-	// MORPHIT_INSTANCE_BETA_BADGE: on | off — the red "BETA" marker over the
-	//   logo. Default: off when the operator supplies their own logo
-	//   (/etc/morphit/branding/logo.svg), otherwise on.
+	// MORPHIT_INSTANCE_BETA_BADGE: RETIRED in v1.21.5 with the BETA marker
+	//   itself. Still accepted, so a config that names it keeps loading, and
+	//   ignored.
 	'MORPHIT_INSTANCE_BRAND_NAME',
 	'MORPHIT_INSTANCE_BRAND_SHORT_NAME',
 	'MORPHIT_INSTANCE_BETA_BADGE',
@@ -570,7 +570,6 @@ export const INSTANCE_ENV = {
 	CONTACT_URL: 'MORPHIT_INSTANCE_CONTACT_URL',
 	BRAND_NAME: 'MORPHIT_INSTANCE_BRAND_NAME',
 	BRAND_SHORT_NAME: 'MORPHIT_INSTANCE_BRAND_SHORT_NAME',
-	BETA_BADGE: 'MORPHIT_INSTANCE_BETA_BADGE',
 	THEME: 'MORPHIT_INSTANCE_THEME',
 	THEME_FROM: 'MORPHIT_INSTANCE_THEME_FROM',
 	THEME_MID: 'MORPHIT_INSTANCE_THEME_MID',

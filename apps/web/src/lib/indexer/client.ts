@@ -11,7 +11,7 @@
  */
 
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
-import { indexerTimeoutMs } from '$net/transportBudget';
+import { indexerTimeoutMs, rpcProbeTimeoutMs } from '$net/transportBudget';
 
 import type {
 	AccountFeedbackResponse,
@@ -230,8 +230,15 @@ export function getRpcEndpoints(opts?: {
 	probe?: boolean;
 	signal?: AbortSignal;
 }): Promise<Result<RpcEndpointsResponse>> {
-	const path = opts?.probe === true ? '/v1/rpc-endpoints?probe=1' : '/v1/rpc-endpoints';
-	return request<RpcEndpointsResponse>(path, { signal: opts?.signal });
+	if (opts?.probe === true) {
+		// The indexer pings every node before it answers (up to ~42 s when a
+		// hidden node is slow or down) — the 8 s API budget abandoned it (v1.21.5).
+		return request<RpcEndpointsResponse>('/v1/rpc-endpoints?probe=1', {
+			signal: opts.signal,
+			minTimeoutMs: rpcProbeTimeoutMs(MORPHIT_INDEXER_ORIGIN)
+		});
+	}
+	return request<RpcEndpointsResponse>('/v1/rpc-endpoints', { signal: opts?.signal });
 }
 
 /** GET /v1/instances — federation directory (all known peer

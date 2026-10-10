@@ -122,7 +122,6 @@ function settings(over: Partial<BrandingSettings> = {}): BrandingSettings {
 		brandName: null,
 		invalidBrandName: null,
 		shortName: null,
-		betaBadge: null,
 		dir: brandDir,
 		...over
 	};
@@ -158,11 +157,7 @@ beforeEach(() => {
 		'brand/site-logo-footer.svg',
 		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>'
 	);
-	write(
-		'brand/brand.json',
-		'{\n\t"schema": 1,\n\t"name": "Morphit",\n\t"beta_badge": true\n}\n',
-		true
-	);
+	write('brand/brand.json', '{\n\t"schema": 1,\n\t"name": "Morphit"\n}\n', true);
 	write(
 		'manifest.webmanifest',
 		JSON.stringify({ name: 'Morphit', short_name: 'Morphit', start_url: '/' }, null, '\t') + '\n'
@@ -241,7 +236,6 @@ describe('morphit-ops branding apply / reset', () => {
 		writeFileSync(join(brandDir, 'logo.svg'), LOGO_SVG);
 		const before = snapshot();
 		const r = applyBranding({ buildDir, settings: settings({ brandName: 'A&B Trading' }) });
-		expect(r.beta).toBe(false); // automatic: off once a custom logo exists
 
 		const login = read('en/login.html');
 		expect(login).toContain('<title>Sign in to A&amp;B Trading</title>');
@@ -249,7 +243,8 @@ describe('morphit-ops branding apply / reset', () => {
 		expect(login).toContain('content="A&amp;B Trading"');
 		expect(login).toContain('"name":"A&B Trading"'); // JSON-LD: raw text, not entities
 		expect(login).toContain('Run a Morphit node.'); // software mention untouched
-		expect(login).toContain('data-brand-name="A&amp;B Trading" data-brand-beta="off"');
+		// (data-brand-beta="on" is the inert v1.21.5 remnant: only the name changes.)
+		expect(login).toContain('data-brand-name="A&amp;B Trading" data-brand-beta="on"');
 		expect(read('pl.html')).toContain('Otwórz A&amp;B Trading na telefonie');
 
 		// Compressed copies follow the branded page.
@@ -267,7 +262,6 @@ describe('morphit-ops branding apply / reset', () => {
 		expect(JSON.parse(read('brand/brand.json'))).toEqual({
 			schema: 1,
 			name: 'A&B Trading',
-			beta_badge: false,
 			// Branded, but this test build has no link-preview picture to draw on.
 			og_image: 'shipped'
 		});
@@ -577,8 +571,7 @@ describe('site-name rules', () => {
 		const page = brandPage(
 			html,
 			[[html.indexOf('Morphit-'), 7, 'Morphit', 'html']],
-			'Vigilante Trading',
-			true
+			'Vigilante Trading'
 		);
 		expect(page).toContain('Dein Vigilante-Trading-Passwort');
 		expect(applyBrandToString('Dein {brand}-Passwort', () => 'Vigilante Trading')).toBe(
@@ -625,20 +618,19 @@ describe('site-name rules', () => {
 		expect(m.name).toBe('Morphit');
 	});
 
-	// review H-15: the CLI `--beta off` / `--short-name` flags write these config
-	// KEYS; prove the config-key → settings → served-effect path end to end (the
-	// link the flags feed), not just applyBranding with a hand-built settings obj.
-	it('BETA_BADGE=off in config turns the BETA marker off in the served build', () => {
+	// v1.21.5: the BETA marker is gone. A MORPHIT_INSTANCE_BETA_BADGE line left
+	// in an operator's config from before is ignored end to end: no setting, no
+	// brand.json field, and the pages' (inert) attribute is left as built.
+	it('an old BETA_BADGE line in config is ignored', () => {
 		writeFileSync(
 			join(root, 'morphit.config.env'),
 			'MORPHIT_INSTANCE_BRAND_NAME=Vigi Market\nMORPHIT_INSTANCE_BETA_BADGE=off\n'
 		);
 		const s = readBrandingSettings(root, { MORPHIT_ETC_DIR: join(root, 'etc') });
-		expect(s.betaBadge).toBe('off');
+		expect('betaBadge' in s).toBe(false);
 		applyBranding({ buildDir, settings: s });
-		expect(JSON.parse(read('brand/brand.json')).beta_badge).toBe(false);
-		// The prerendered pages carry data-brand-beta="off".
-		expect(read('en/login.html')).toContain('data-brand-beta="off"');
+		expect(JSON.parse(read('brand/brand.json'))).not.toHaveProperty('beta_badge');
+		expect(read('en/login.html')).toContain('data-brand-name="Vigi Market" data-brand-beta="on"');
 	});
 
 	it('BRAND_SHORT_NAME in config sets the manifest short_name', () => {
@@ -930,11 +922,11 @@ describe('slot map stays readable by a v1.19.x ops-cli (upgrade step 9b3)', () =
 		const name = 'Acme Swap';
 		for (const [rel, slots] of Object.entries(map.files)) {
 			const canonical = read(rel);
-			const old = brandPageV1_19(canonical, slots, name, false);
+			// beta=true: the new CLI leaves the (inert, v1.21.5) data-brand-beta="on"
+			// as built; this test is about the slots, which must agree.
+			const old = brandPageV1_19(canonical, slots, name, true);
 			// Exactly what the new CLI writes for the same name and NO theme.
-			expect(old, rel).toBe(
-				brandPage(canonical, slots as Parameters<typeof brandPage>[1], name, false)
-			);
+			expect(old, rel).toBe(brandPage(canonical, slots as Parameters<typeof brandPage>[1], name));
 			expect(old, rel).not.toContain(`${name}</head>`);
 			if (canonical.includes('name="theme-color"'))
 				expect(old, rel).toContain('<meta name="theme-color" content="#00DA69">');
