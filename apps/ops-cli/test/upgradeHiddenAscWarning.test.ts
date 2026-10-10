@@ -48,6 +48,12 @@ beforeEach(() => {
 	mkdirSync(join(root, 'etc'), { recursive: true });
 	process.env.MORPHIT_INSTALL_DIR = install;
 	process.env.MORPHIT_ETC_DIR = join(root, 'etc');
+	// A configured clearnet node that refuses at once: without a config the
+	// upgrade reads the real public nodes (no test reaches the internet).
+	process.env.MORPHIT_ENV_ROOT = join(root, 'envroot');
+	mkdirSync(join(root, 'envroot', 'etc', 'morphit'), { recursive: true });
+	for (const dir of [join(root, 'etc'), join(root, 'envroot', 'etc', 'morphit')])
+		writeFileSync(join(dir, 'indexer.env'), 'MORPHIT_INDEXER_RPC_ENDPOINTS=http://127.0.0.1:9\n');
 	process.env.MORPHIT_SYSTEMD_DIR = join(root, 'systemd');
 	process.env.MORPHIT_HELPER_DIR = join(root, 'helpers');
 	out = '';

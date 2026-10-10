@@ -128,6 +128,10 @@ afterEach(() => {
 const wasExtracted = (): boolean => existsSync(extracted);
 const trustListener = () => ({ kind: 'verified' as const, how: 'override' as const });
 
+/** A configured clearnet node that refuses at once (nothing listens on port 9):
+ *  never a name that resolves, so no test reaches the internet. */
+const DEAD_NODE = 'http://127.0.0.1:9';
+
 /** The node's root-owned indexer config: hidden-only, or these clearnet nodes. */
 function configure(pool: 'hidden' | string[]): void {
 	const body =
@@ -170,7 +174,7 @@ function run(
 
 describe("one node's answer without the release record does not block the upgrade", () => {
 	it('the first answer lacks the record (a node behind), a later one holds it: it waits and goes ahead', async () => {
-		configure(['https://rpc.example.invalid']);
+		configure([DEAD_NODE]);
 		const tb = releaseTarball(work, 'v1.18.0');
 		const rec = signedRelease('1.18.0', {
 			source_sha256: sha(tb),
@@ -209,7 +213,7 @@ describe("one node's answer without the release record does not block the upgrad
 	});
 
 	it('a record that no source ever holds is still refused, after three minutes of asking, with nothing changed', async () => {
-		configure(['https://rpc.example.invalid']);
+		configure([DEAD_NODE]);
 		const tb = releaseTarball(work, 'v1.18.0');
 		const idx = await stubIndexer({ historyAnswers: [[]] });
 		const c = clock();
@@ -230,7 +234,7 @@ describe("one node's answer without the release record does not block the upgrad
 	});
 
 	it('a release signed by a pinned key needs no record, so it never waits for one', async () => {
-		configure(['https://rpc.example.invalid']);
+		configure([DEAD_NODE]);
 		const tb = releaseTarball(work, 'v1.18.0');
 		expect(gpg(['--armor', '--detach-sign', '--output', `${tb}.asc`, tb]).status).toBe(0);
 		writeFileSync(
@@ -249,7 +253,7 @@ describe("one node's answer without the release record does not block the upgrad
 	});
 
 	it('while it waits, each source is asked for its newest page only (a late record is among the newest entries)', async () => {
-		configure(['https://rpc.example.invalid']);
+		configure([DEAD_NODE]);
 		const tb = releaseTarball(work, 'v1.18.0');
 		// A full page of other ops, its lowest sequence number 501: the first
 		// round may page back; a waiting round must not.

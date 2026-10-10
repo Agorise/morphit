@@ -193,14 +193,21 @@ afterEach(() => {
 const wasExtracted = (): boolean => existsSync(extracted);
 const trustListener = () => ({ kind: 'verified' as const, how: 'override' as const });
 
-/** The node's root-owned indexer config. */
-const configure = (pool: 'hidden' | 'clearnet'): void =>
-	writeFileSync(
-		join(etcDir, 'indexer.env'),
+/** The node's root-owned indexer config. Its clearnet node refuses at once
+ *  (nothing listens on port 9). On a server both paths are
+ *  /etc/morphit/indexer.env; the tests move each root. (Written only under
+ *  MORPHIT_ETC_DIR before, the upgrade read no config, fell back to the real
+ *  public nodes, and these tests timed out on a CI runner that reached them.) */
+const configure = (pool: 'hidden' | 'clearnet'): void => {
+	const body =
 		pool === 'hidden'
 			? 'MORPHIT_INDEXER_RPC_ENDPOINTS=\nMORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=http://x.onion\n'
-			: 'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.example.invalid\n'
-	);
+			: 'MORPHIT_INDEXER_RPC_ENDPOINTS=http://127.0.0.1:9\n';
+	writeFileSync(join(etcDir, 'indexer.env'), body);
+	const envEtc = join(process.env.MORPHIT_ENV_ROOT ?? '', 'etc', 'morphit');
+	mkdirSync(envEtc, { recursive: true });
+	writeFileSync(join(envEtc, 'indexer.env'), body);
+};
 
 let clockMs = 0;
 function run(base: string, flags: Record<string, string>, signerFingerprints: string[] = []) {
