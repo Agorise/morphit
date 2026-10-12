@@ -12,8 +12,7 @@
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import AvatarMenu from '$components/AvatarMenu.svelte';
 	import MorphitLogoBling from '$components/MorphitLogoBling.svelte';
-	import { brand, brandName } from '$lib/brand/brand';
-	import { DEFAULT_BRAND_NAME } from '$lib/brand/brandName';
+	import { brandName } from '$lib/brand/brand';
 	import PermissionBanner from '$components/PermissionBanner.svelte';
 	import SeedBackupNudge from '$components/SeedBackupNudge.svelte';
 	import InstallBanner from '$components/InstallBanner.svelte';
@@ -406,18 +405,6 @@
 			>
 				<MorphitLogoBling heightPx={40} variant="footer" shine />
 			</a>
-			<!-- A branded instance (docs/BRANDING.md) says what it runs on, so a
-			     visitor on "Vigilante Trading" can tell it is a Morphit instance
-			     and check it on "About this instance". Not shown on an unbranded
-			     site, which already says Morphit everywhere. -->
-			{#if $brand.name !== DEFAULT_BRAND_NAME}
-				<a
-					href={lp('/about-this-instance')}
-					class="-mt-4 text-xs text-ink-500 underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald hover:no-underline"
-					title={$_('footer.about_title')}>{$_('footer.runs_on_morphit')}</a
-				>
-			{/if}
-
 
 			<div class="flex flex-col items-center gap-3">
 				<ul class="flex flex-wrap justify-center gap-2">

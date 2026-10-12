@@ -359,17 +359,8 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'chat_identity_key',
 		'chat_vs_feedback_visibility'
 	],
-	chat_message_not_showing: [
-		'what_is_morphit_chat',
-		'chat_inbox_features',
-		'why_chat_on_chain'
-	],
-	login_password_vs_key: [
-		'lock_vs_signout',
-		'auto_lock_timeout',
-		'qr_login',
-		'lost_keys'
-	],
+	chat_message_not_showing: ['what_is_morphit_chat', 'chat_inbox_features', 'why_chat_on_chain'],
+	login_password_vs_key: ['lock_vs_signout', 'auto_lock_timeout', 'qr_login', 'lost_keys'],
 	chat_identity_key: [
 		'what_is_morphit_chat',
 		'chat_key_loss',
@@ -767,12 +758,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'how_morphit_protects_me',
 		'what_is_blurt'
 	],
-	what_is_barter: [
-		'how_to_buy',
-		'fees',
-		'how_morphit_protects_me',
-		'what_is_morphit'
-	],
+	what_is_barter: ['how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_morphit'],
 	// BCH/LTC/DASH FAQ_RELATED parity
 	what_is_bch: [
 		'privacy_practices',
@@ -1215,11 +1201,121 @@ function expandWithSynonyms(tokens: readonly string[]): string[] {
 	for (const t of tokens) {
 		out.push(t);
 		const syns = SYNONYMS_EN[t];
-		if (syns) {
-			for (const s of syns) out.push(s);
-		}
+		if (syns) out.push(...syns);
 	}
 	return out;
+}
+
+/** Words that, alone (after stopwords), ask "what is this site?". */
+const SITE_DEICTIC = new Set([
+	'this',
+	'thing',
+	'site',
+	'app',
+	'platform',
+	'service',
+	'product',
+	'website',
+	'morphit',
+	'about'
+]);
+
+/** True when an English-aided query only asks what this site is ("what is
+ *  this", "what is this site", "what's this app"). Every FAQ question names
+ *  the site, so token scores cannot single out the introduction: the search
+ *  anchors such a query at `what_is_morphit` explicitly. A query that names a
+ *  branded site reaches here as "morphit" (unbrandQuery), and only the WHOLE
+ *  name does: on "Bitcoin Barter", "what is barter" asks about barter. */
+function asksWhatThisSiteIs(rawQuery: string): boolean {
+	if (!shouldApplyEnglishAids(rawQuery)) return false;
+	// "what's" tokenizes to "what" + "s": single letters carry no meaning.
+	const all = tokenize(rawQuery).filter((t) => t.length > 1);
+	const terms = filterStopwords(all);
+	if (terms.length === 0 || terms.length >= all.length) return false;
+	// It must point at the site ("this", or its name): "where is the app" asks
+	// for the app, not what the site is.
+	return (
+		terms.every((t) => SITE_DEICTIC.has(t)) && terms.some((t) => t === 'this' || t === 'morphit')
+	);
+}
+
+/** Letters of scripts written without spaces between words: there a name has
+ *  no word edge to check. */
+const UNSPACED =
+	/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/u;
+const WORDISH = /[\p{L}\p{N}\p{M}]/u;
+/** True when `a` and `b` would run together into one word. */
+function joins(a: string | undefined, b: string | undefined): boolean {
+	return (
+		a !== undefined &&
+		b !== undefined &&
+		WORDISH.test(a) &&
+		WORDISH.test(b) &&
+		!UNSPACED.test(a) &&
+		!UNSPACED.test(b)
+	);
+}
+
+/** `text` with every WHOLE occurrence of `name` (not part of a longer word:
+ *  "Bit" is not in "Bitcoin", "Trade" not in "Trader") replaced by `by`. */
+function replaceWholeName(text: string, name: string, by: string): string {
+	if (name === '') return text;
+	let out = '';
+	let from = 0;
+	for (let at = text.indexOf(name); at !== -1; at = text.indexOf(name, at + 1)) {
+		if (at < from) continue;
+		const end = at + name.length;
+		if (joins(text[at - 1], name[0]) || joins(name[name.length - 1], text[end])) continue;
+		out += text.slice(from, at) + by;
+		from = end;
+		at = end - 1;
+	}
+	return out + text.slice(from);
+}
+
+/** Whether search reads this brand as "Morphit": not for the default name,
+ *  and not for a name that starts or ends in a script without spaces (there a
+ *  brand such as 交易所 is also an everyday word inside other words). */
+function unbrandable(brandName: string | undefined): brandName is string {
+	if (brandName === undefined) return false;
+	const n = normalize(brandName).trim();
+	if (n === '' || n === 'morphit') return false;
+	const chars = [...n];
+	return !UNSPACED.test(chars[0]!) && !UNSPACED.test(chars[chars.length - 1]!);
+}
+
+/** An entry with every mention of the site's brand read as "Morphit" (the
+ *  compound form "Vigilante-Trading-…" too), for scoring only. */
+function unbrandEntry(entry: FaqEntry, brandName: string): FaqEntry {
+	const forms = [brandName, brandName.replace(/\s+/g, '-')];
+	const un = (s: string): string =>
+		forms.reduce((acc, f) => replaceWholeName(acc, f, 'Morphit'), s);
+	return { ...entry, question: un(entry.question), answer: un(entry.answer) };
+}
+
+const unbrandedCache = new WeakMap<readonly FaqEntry[], { brand: string; entries: FaqEntry[] }>();
+/** unbrandEntry over a whole entry list, kept while the list and brand stay
+ *  the same (so the IDF table, cached per list, is not rebuilt per keystroke). */
+function unbrandEntries(entries: FaqEntry[], brandName: string): FaqEntry[] {
+	const hit = unbrandedCache.get(entries);
+	if (hit !== undefined && hit.brand === brandName) return hit.entries;
+	const out = entries.map((e) => unbrandEntry(e, brandName));
+	unbrandedCache.set(entries, { brand: brandName, entries: out });
+	return out;
+}
+
+/** The query with the site's name, where it names it whole, read as
+ *  "morphit" in place (word order and punctuation kept). */
+function unbrandQuery(query: string, brandName: string): string {
+	// A brand's apostrophe is stored as ’ (sanitizeBrandName); visitors type '.
+	const fold = (s: string): string =>
+		normalize(s)
+			.replace(/[\u2018\u2019\u02bc]/g, "'")
+			.replace(/\s+/g, ' ');
+	const q = fold(query);
+	const b = fold(brandName).trim();
+	const out = [b, b.replace(/ /g, '-')].reduce((acc, f) => replaceWholeName(acc, f, 'morphit'), q);
+	return out === q ? query : out;
 }
 
 /** Filter query tokens by stripping stopwords. If removing stopwords
@@ -1376,7 +1472,13 @@ function entryMatchesAllTerms(entry: FaqEntry, rawQuery: string): boolean {
 	});
 }
 
-export function searchEntries(entries: FaqEntry[], query: string, limit = 10): FaqHit[] {
+export function searchEntries(
+	entries: FaqEntry[],
+	query: string,
+	limit = 10,
+	/** This site's brand name (the FAQ text names the site with it). */
+	brandName?: string
+): FaqHit[] {
 	if (!query.trim()) {
 		return entries.map((entry) => ({ entry, score: 0 }));
 	}
@@ -1401,11 +1503,30 @@ export function searchEntries(entries: FaqEntry[], query: string, limit = 10): F
 			.map((entry) => ({ entry, score: 1 }));
 	}
 
-	const idf = computeIdf(entries);
+	// The FAQ names this site with its brand. Scoring reads every brand
+	// mention as "Morphit" again: a brand made of everyday words ("Escrow
+	// Shop") would otherwise make every answer that names the site match
+	// "escrow" and bury the answers about escrow. A query that names the
+	// site (its whole name, in place) reads "morphit" instead.
+	const branded = unbrandable(brandName);
+	const scored = branded ? unbrandEntries(entries, brandName) : entries;
+	const q = branded ? unbrandQuery(query, brandName) : query;
+	const idf = computeIdf(scored);
+	const intro = asksWhatThisSiteIs(q);
 
-	const hits = entries
-		.map((entry) => ({ entry, score: scoreEntry(entry, query, idf) }))
-		.filter((h) => h.score > 0 && entryMatchesAllTerms(h.entry, query));
+	const hits = scored
+		.map((entry, i) => ({
+			entry: entries[i]!,
+			scoredEntry: entry,
+			score: scoreEntry(entry, q, idf) + (intro && entry.key === 'what_is_morphit' ? 10 : 0)
+		}))
+		// The introduction answers "what is this platform about" even though it
+		// does not contain every word of the question.
+		.filter(
+			(h) =>
+				h.score > 0 &&
+				((intro && h.entry.key === 'what_is_morphit') || entryMatchesAllTerms(h.scoredEntry, q))
+		);
 
 	hits.sort((a, b) => b.score - a.score);
 

@@ -16,8 +16,9 @@
 	} from '$utils/faqIndex';
 	import { SUPPORTED_LOCALES, setLocale, currentLocale, type LocaleCode } from '$i18n';
 	import { instance } from '$stores/instance';
+	import { brandName } from '$lib/brand/brand';
 	import { visibleFaqEntries } from '$lib/faq/assetGate';
-	import { renderFaqInline } from '$lib/faq/renderInline';
+	import { keepMarkdownWhole, renderFaqInline } from '$lib/faq/renderInline';
 	import { stripMarkdown } from '$lib/seo/stripMarkdown';
 	import { splitFaqAnswerForGlossary } from '$lib/faq/glossaryTerms';
 	import Term from '$components/Term.svelte';
@@ -73,7 +74,7 @@
 	// Gate on MIN_QUERY_LEN: 1–2 char queries return nothing (and show no
 	// dropdown at all — not even an empty-state — see the template).
 	const hits: FaqHit[] = $derived(
-		query.trim().length >= MIN_QUERY_LEN ? searchEntries(shownEntries, query, Infinity) : []
+		query.trim().length >= MIN_QUERY_LEN ? searchEntries(shownEntries, query, Infinity, $brandName) : []
 	);
 	const showDropdown = $derived(query.trim().length >= MIN_QUERY_LEN);
 
@@ -553,7 +554,7 @@
 						id="faq-body-{entry.key}"
 						class="animate-fade-up px-5 pb-5 text-ink-700 dark:text-ink-200"
 					>
-						<p class="whitespace-pre-line leading-relaxed">{#each splitFaqAnswerForGlossary(entry.answer) as seg}{#if seg.kind === 'term'}<Term key={seg.key} hideUnderlineOnHover>{seg.text}</Term>{:else}{@html renderFaqInline(seg.text, lp)}{/if}{/each}</p>
+						<p class="whitespace-pre-line leading-relaxed">{#each keepMarkdownWhole(splitFaqAnswerForGlossary(entry.answer)) as seg}{#if seg.kind === 'term'}<Term key={seg.key} hideUnderlineOnHover>{seg.text}</Term>{:else}{@html renderFaqInline(seg.text, lp)}{/if}{/each}</p>
 
 						{#if entry.related.length > 0}
 							<!-- ─── Related row ───

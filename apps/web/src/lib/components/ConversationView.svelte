@@ -54,9 +54,12 @@
 	import { daySeparatorAt } from '$lib/chat/daySeparator';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import {
+		CHAT_CONSTANTS,
 		createConversationController,
 		runtimeDeps,
 		type ChatController,
+		type ConversationRecordMessage,
+		type HistoryState,
 		type LocalMessage
 	} from '$lib/chat/chatService';
 	import { liveIdentity, isUnlocked, isPairedReadOnly } from '$stores/identity';
@@ -134,10 +137,6 @@
 
 	let controller: ChatController | null = null;
 	let messages = $state<LocalMessage[]>([]);
-	/** v1.4.8 — false until the controller delivers its first snapshot,
-	 *  so the empty area can say "…is loading" while connecting and only switch to
-	 *  "No messages yet" once we KNOW the conversation is genuinely empty. */
-	let hasLoadedOnce = $state(false);
 
 	// ─── Message windowing (keep opening a long thread fast) ────
 	// A thread with hundreds of messages must not render every bubble the
@@ -188,23 +187,73 @@
 	const visibleMessages = $derived(messages.slice(windowStart));
 	const hasOlder = $derived(windowStart > 0);
 
+	/** v1.21.6 — scrolling back past what is loaded reads older pages from
+	 *  the indexer, to the thread's first message (see chatService loadOlder). */
+	let history = $state<HistoryState>({
+		ready: false,
+		loading: false,
+		complete: false,
+		failed: false
+	});
+
 	/** Background lazy-load: when the reader nears the top of the rendered
-	 *  window and older messages exist, extend the window by OLDER_CHUNK.
+	 *  window and older messages exist, extend the window by OLDER_CHUNK; once
+	 *  every loaded message is shown, read an older page from the indexer.
 	 *  Prepending content would jump the scroll, so measure height before and
 	 *  restore the delta after the DOM settles — the reader stays anchored on
 	 *  the same message and never sees a jump. A guard flag prevents a burst
-	 *  of scroll events from revealing several chunks at once. */
-	async function maybeRevealOlder(): Promise<void> {
-		if (revealingOlder || !hasOlder) return;
+	 *  of scroll events from revealing several chunks at once.
+	 *
+	 *  `fromReader` false is the automatic check (a short thread that cannot
+	 *  scroll, or one that shows nothing yet): it does not retry a failed read,
+	 *  which waits for the reader to scroll or tap Try again. */
+	async function maybeRevealOlder(fromReader = true): Promise<void> {
+		if (revealingOlder) return;
 		const el = scrollEl;
 		if (!el || el.scrollTop > OLDER_REVEAL_THRESHOLD_PX) return;
+		if (hasOlder) {
+			revealingOlder = true;
+			const before = el.scrollHeight;
+			visibleCount = Math.min(messages.length, visibleCount + OLDER_CHUNK);
+			await tick();
+			el.scrollTop += el.scrollHeight - before;
+			revealingOlder = false;
+			return;
+		}
+		if (!history.ready || history.loading || history.complete) return;
+		if (history.failed && !fromReader) return;
+		await loadOlderAnchored();
+	}
+
+	/** Read an older page and keep the reader on the message they were on. */
+	async function loadOlderAnchored(): Promise<void> {
+		const el = scrollEl;
+		const c = controller;
+		if (!el || !c || revealingOlder) return;
 		revealingOlder = true;
 		const before = el.scrollHeight;
-		visibleCount = Math.min(messages.length, visibleCount + OLDER_CHUNK);
-		await tick();
-		el.scrollTop += el.scrollHeight - before;
-		revealingOlder = false;
+		try {
+			await c.loadOlder();
+			await tick();
+			el.scrollTop += el.scrollHeight - before;
+		} finally {
+			revealingOlder = false;
+		}
+		// Still at the top (what came was short): keep going. The automatic
+		// check above may have run while this read was finishing, and nothing
+		// else would ask again for a thread that cannot scroll.
+		void maybeRevealOlder(false);
 	}
+
+	// A thread that does not fill the screen (or shows nothing yet) cannot be
+	// scrolled, so no scroll event would ever ask for older messages: check
+	// after every change. Stops at the first message, or at a failure.
+	$effect(() => {
+		void messages.length;
+		const h = history;
+		if (!h.ready || h.loading || h.complete || h.failed) return;
+		void tick().then(() => maybeRevealOlder(false));
+	});
 
 	/** True while the SSE stream is connected; renders a small
 	 *  "Live" pip in the header so users know the conversation is
@@ -542,16 +591,9 @@
 		verifyPeerOpen = true;
 	}
 
-	/** export this conversation as a printable transcript. Chat is
-	 *  E2EE, so the document is built entirely client-side from the
-	 *  already-decrypted in-memory messages: a self-contained HTML page is
-	 *  opened in a new window and handed to the browser's print dialog,
-	 *  where the user chooses "Save as PDF". Zero added dependencies (the
-	 *  tiny-footprint priority) and no plaintext ever leaves the browser.
-	 *  Timestamps use the canonical UTC formatter; labels are localized. */
 	/** export this conversation as a PDF record. Chat is E2EE, so
-	 *  the document is built entirely client-side from the already-decrypted
-	 *  in-memory messages; no plaintext leaves the browser.
+	 *  the document is built entirely client-side: the ciphertext is read from
+	 *  the indexer and decrypted here; no plaintext leaves the browser.
 	 *
 	 *  The file is an ordinary, editable PDF (see $lib/ui/chatExportPdf).
 	 *  What it can prove is in its content: every message cites its Blurt
@@ -561,12 +603,47 @@
 	 *
 	 *  jsPDF is dynamically imported so it is code-split and only fetched
 	 *  when a user actually exports (footprint + lazy-load). */
+	let exporting = false;
 	async function exportChatToPdf(): Promise<void> {
 		closeOverflowMenu();
-		const { jsPDF } = await import('jspdf');
+		const c = controller;
+		if (exporting || !c) return;
+		exporting = true;
+		try {
+			await buildChatPdf(c);
+		} finally {
+			exporting = false;
+		}
+	}
 
+	/** v1.21.6 — the PDF holds every message ever exchanged with the peer, in
+	 *  every thread, read from the indexer to the first message; each run of
+	 *  messages says which order it is about. If any of it cannot be read,
+	 *  nothing is saved: a record with a hole in it would not say so. */
+	async function buildChatPdf(c: ChatController): Promise<void> {
 		const t = (k: string, v?: Record<string, string | number>): string =>
 			(v ? $_(k, { values: v }) : $_(k)) as string;
+
+		showToast(t('common.downloading'), 'info');
+		// The plaintext read below belongs to this session: if it locks while the
+		// file is being made, nothing is saved.
+		// The identity store says "locked" a moment before the controller hears
+		// of it (its lock hook runs after an import), so both are checked.
+		const generation = c.lockGeneration();
+		const identity = get(liveIdentity);
+		const stillOurs = (): boolean =>
+			controller === c && c.lockGeneration() === generation && get(liveIdentity) === identity;
+		let whole: readonly ConversationRecordMessage[];
+		let jsPDF: (typeof import('jspdf'))['jsPDF'];
+		try {
+			const [w, mod] = await Promise.all([c.loadWholeConversation(), import('jspdf')]);
+			whole = w;
+			jsPDF = mod.jsPDF;
+		} catch {
+			showToast(t('chat.export.failed'), 'error');
+			return;
+		}
+		if (!stillOurs()) return;
 
 		const doc = newChatExportPdf(jsPDF);
 
@@ -647,7 +724,6 @@
 				gap: 3
 			});
 
-		if (orderSummary) para(t('chat.export.regarding', { summary: orderSummary }), 9, { gap: 2 });
 		para(t('chat.export.exported_at', { datetime: formatDayMonthTime(new Date().toISOString()) }), 8, {
 			color: 90,
 			gap: 12
@@ -663,10 +739,22 @@
 		y += 14;
 
 		// ─── The conversation ───
-		if (messages.length === 0) {
+		if (whole.length === 0) {
 			para(t('chat.export.no_messages'), 9.5, { color: 120 });
 		} else {
-			for (const m of messages) {
+			/** The thread of the previous message: a new run says what it is about. */
+			let thread: string | null | undefined = undefined;
+			for (const m of whole) {
+				if (m.orderPermlink !== thread) {
+					thread = m.orderPermlink;
+					const about =
+						thread === null
+							? t('chat.export.no_order_thread')
+							: t('chat.export.regarding', {
+									summary: thread === orderPermlink && orderSummary ? orderSummary : thread
+								});
+					para(about, 9, { style: 'bold', color: 60, gap: 6 });
+				}
 				const when = m.createdAt ? formatDayMonthTime(m.createdAt.toISOString()) : '';
 				const who = m.sender === me ? `${t('chat.export.you')} (@${me})` : `@${peer}`;
 				// Sender + timestamp line.
@@ -681,7 +769,13 @@
 				doc.text(when, PAGE_W - M, y, { align: 'right' });
 				y += 13 * 1.42;
 				// Message body (decrypted plaintext, or an encrypted-marker).
-				para(m.decryptFailed ? t('chat.export.encrypted') : m.text, 9.5, { color: 25, gap: 1 });
+				para(
+					m.decryptFailed || m.text === CHAT_CONSTANTS.ENCRYPTED_PLACEHOLDER
+						? t('chat.export.encrypted')
+						: m.text,
+					9.5,
+					{ color: 25, gap: 1 }
+				);
 				// On-chain proof — the verifiable anchor for this line. A copy the
 				// chain never recorded is NOT "pending": this document tells its
 				// reader every line can be checked on a block explorer, and for
@@ -700,6 +794,7 @@
 		const dateStr = new Date().toISOString().slice(0, 10);
 		// Per-instance brand in the filename (the PDF's title/footer already use
 		// the branded chat.export.* strings). "Morphit-chat-…" when unbranded.
+		if (!stillOurs()) return;
 		doc.save(`${brandFileSlug(get(brand).name)}-chat-${peer}-${dateStr}.pdf`);
 	}
 
@@ -1261,9 +1356,11 @@
 			// entries added since the last snapshot. If the user is
 			// scrolled up, we'll increment the unread pill.
 			const prevMaxSeq = messages.reduce((m, x) => (x.localSeq > m ? x.localSeq : m), 0);
-			const newIncoming = next.filter((m) => m.localSeq > prevMaxSeq && m.sender !== me).length;
+			// Messages read by scrolling back are not news (v1.21.6).
+			const newIncoming = next.filter(
+				(m) => m.localSeq > prevMaxSeq && m.sender !== me && m.backfilled !== true
+			).length;
 			messages = [...next];
-			hasLoadedOnce = true;
 			// After DOM updates, decide how to handle scroll.
 			void tick().then(() => {
 				if (!initialScrollDone && messages.length > 0) {
@@ -1285,6 +1382,9 @@
 			onChange,
 			onStreamingChange: (s: boolean) => {
 				streaming = s;
+			},
+			onHistoryChange: (h: HistoryState) => {
+				history = h;
 			}
 		};
 		controller = createConversationController(fullDeps);
@@ -1994,6 +2094,28 @@
 	     (opaque endpoint, no PII). -->
 	<ChatNotificationNudge {peer} />
 
+	<!-- v1.21.6 — reading older messages: over the top of the list, so the
+	     list itself does not move. -->
+	{#if hasMessages && (history.loading || history.failed)}
+		<div class="chat-older-status pointer-events-none relative z-10">
+			<p
+				class="absolute left-1/2 top-2 w-max max-w-[90%] -translate-x-1/2 rounded-full text-center bg-ink-100 px-3 py-1 text-xs text-ink-600 shadow dark:bg-ink-800 dark:text-ink-300"
+				role="status"
+			>
+				{#if history.loading}
+					{$_('chat.history.loading_older')}
+				{:else}
+					{$_('chat.history.load_failed')}
+					<button
+						type="button"
+						class="pointer-events-auto ml-1 font-semibold text-morphit-emerald underline"
+						onclick={() => void loadOlderAnchored()}>{$_('common.retry')}</button
+					>
+				{/if}
+			</p>
+		</div>
+	{/if}
+
 	<!-- Scrollable message list: the flex-grow child. -->
 	<div
 		class="chat-scroll flex-1 overflow-y-auto px-3 py-4"
@@ -2009,8 +2131,19 @@
 		{#if !hasMessages}
 			<div class="flex h-full items-center justify-center text-center">
 				<p class="max-w-sm text-sm text-ink-500 dark:text-ink-400">
-					{#if hasLoadedOnce}
+					<!-- v1.4.8: "…is loading" until we KNOW the thread is empty; since
+					     v1.21.6 that is when scrolling back has reached its start
+					     (history.complete), not merely when a first answer came in
+					     — the newest 50 of the pair can all be another thread's. -->
+					{#if history.complete}
 						{$_('chat.empty_state', { values: { peer } })}
+					{:else if history.failed}
+						{$_('chat.history.load_failed')}
+						<button
+							type="button"
+							class="ml-1 font-semibold text-morphit-emerald underline"
+							onclick={() => void loadOlderAnchored()}>{$_('common.retry')}</button
+						>
 					{:else}
 						{$_('chat.empty_state_loading', { values: { peer } })}
 					{/if}
@@ -2136,7 +2269,8 @@
 			     all sign with the posting key — which lives on the
 			     phone for paired sessions.  Show the WriteBlocked
 			     affordance with a phone deep-link instead of the
-			     composer; chat history above remains fully readable. -->
+			     composer. Chat messages open only on the phone: a paired
+			     session has no posting key, so no chat key. -->
 			<div
 				class="flex-none border-t border-ink-200 bg-white px-4 py-3 dark:border-ink-800 dark:bg-ink-950"
 			>

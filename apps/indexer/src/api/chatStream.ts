@@ -82,6 +82,10 @@ const SNAPSHOT_LIMIT = 50;
  *  rate message stream could grow this array without bound. */
 const PENDING_DURING_SNAPSHOT_CAP = 1000;
 
+/** v1.21.6: every ORDER BY below names the table's columns. ROW_SELECT's
+ *  `id::text` is also called `id`, and a bare `id` in ORDER BY means that text:
+ *  "100" sorted before "99", so the catch-up read after id 95 could take 100…
+ *  and leave 96–99 out for good (it continues from the highest id it got). */
 const ROW_SELECT = `
 	SELECT id::text, sender, recipient, ciphertext, header, created_at, source_trx_id, order_permlink
 `;
@@ -91,7 +95,7 @@ async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStr
 		 FROM chat_messages
 		 WHERE LEAST(sender, recipient) = $1
 		   AND GREATEST(sender, recipient) = $2
-		 ORDER BY created_at DESC, id ASC
+		 ORDER BY chat_messages.created_at DESC, chat_messages.id ASC
 		 LIMIT ${SNAPSHOT_LIMIT}`;
 	const result = await db.query<{
 		id: string;
@@ -167,7 +171,7 @@ async function fetchMessageById(
 	};
 }
 
-async function fetchSinceId(
+export async function fetchSinceId(
 	db: Database,
 	f: ChatStreamFilter,
 	sinceId: number
@@ -177,7 +181,7 @@ async function fetchSinceId(
 		 WHERE LEAST(sender, recipient) = $1
 		   AND GREATEST(sender, recipient) = $2
 		   AND id > $3
-		 ORDER BY id ASC
+		 ORDER BY chat_messages.id ASC
 		 LIMIT 200`;
 	const result = await db.query<{
 		id: string;

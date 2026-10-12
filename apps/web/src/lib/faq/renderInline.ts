@@ -16,6 +16,8 @@
  * trusted (our own i18n), but escape-first keeps this safe regardless.
  */
 
+import type { FaqAnswerSegment } from './glossaryTerms';
+
 const ESCAPE: Record<string, string> = {
 	'&': '&amp;',
 	'<': '&lt;',
@@ -31,9 +33,14 @@ function escapeHtml(s: string): string {
 /** Allow only safe href schemes; null means "not safe, leave as text". */
 function safeHref(url: string): string | null {
 	const u = url.trim();
-	if (/^https?:\/\//i.test(u) || /^mailto:/i.test(u) || u.startsWith('/') || u.startsWith('#')) {
-		return u;
-	}
+	// Browsers drop tabs and line breaks inside a URL, so `/<TAB>/host` would
+	// pass the `//host` check below and still lead to another site.
+	// eslint-disable-next-line no-control-regex
+	if (/[\u0000-\u001f\u007f]/.test(u)) return null;
+	if (/^https?:\/\//i.test(u) || /^mailto:/i.test(u) || u.startsWith('#')) return u;
+	// A path, but not `//host` or `/\host`: browsers read both as another site,
+	// and a path link gets no rel="noopener".
+	if (u.startsWith('/') && !/^\/[/\\]/.test(u)) return u;
 	return null;
 }
 
@@ -87,4 +94,45 @@ export function renderFaqInline(input: string, localizeHref?: (path: string) => 
 	s = s.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => slots[Number(i)] ?? '');
 
 	return s;
+}
+
+/** The inline-markdown spans renderFaqInline draws as one element, in the
+ *  order it finds them: `code`, [text](url), **bold**, __bold__, *em*. */
+const MARKDOWN_SPANS = [
+	/`[^`\n]+`/g,
+	/\[[^\]\n]+\]\([^)\n]+\)/g,
+	/\*\*[^*\n]+\*\*/g,
+	/__[^_\n]+__/g,
+	/\*[^*\n]+\*/g
+];
+
+/**
+ * FaqSearch renders an answer as text runs (each through renderFaqInline on
+ * its own) and glossary terms (<Term>). A term that sits inside a markdown
+ * span would cut that span in two, and neither half would render: the reader
+ * would see the raw `**`. Such a term goes back into its text run (it is then
+ * plain text inside the bold, link or code); every other term stays.
+ */
+export function keepMarkdownWhole(segs: readonly FaqAnswerSegment[]): FaqAnswerSegment[] {
+	// In renderFaqInline's order: a span already found is masked, so a later
+	// pattern cannot match inside it or across it.
+	let text = segs.map((s) => s.text).join('');
+	const spans: [number, number][] = [];
+	for (const re of MARKDOWN_SPANS) {
+		for (const m of text.matchAll(re)) spans.push([m.index, m.index + m[0].length]);
+		text = text.replace(re, (m) => SENTINEL.repeat(m.length));
+	}
+	const out: FaqAnswerSegment[] = [];
+	let at = 0;
+	for (const seg of segs) {
+		const start = at;
+		at += seg.text.length;
+		const inSpan = seg.kind === 'term' && spans.some(([a, b]) => a < at && start < b);
+		const prev = out[out.length - 1];
+		if (seg.kind === 'term' && !inSpan) out.push(seg);
+		else if (prev !== undefined && prev.kind === 'text')
+			out[out.length - 1] = { kind: 'text', text: prev.text + seg.text };
+		else out.push({ kind: 'text', text: seg.text });
+	}
+	return out;
 }

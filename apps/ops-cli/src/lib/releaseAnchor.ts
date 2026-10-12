@@ -55,6 +55,15 @@ export type ReleaseAnchorResult =
 			 *  source being readable at all): what a record not yet in a node's
 			 *  history, or a node behind the chain, looks like. */
 			readonly notListed?: boolean;
+			/** v1.21.6: no source could be read at all (no answer, or an error
+			 *  instead of a history) — as opposed to an answer without the
+			 *  record. Over Tor/I2P that is often only a slow moment. */
+			readonly unreadable?: boolean;
+			/** v1.21.6 review: some answer named a record that failed its check
+			 *  (signed by another key, or no valid hash) — a fault, never "only a
+			 *  wait", even when another round had no answer. Set only by
+			 *  {@link findSignedReleaseAnchor}. */
+			readonly invalid?: boolean;
 	  };
 
 interface TxLike {
@@ -254,7 +263,8 @@ export async function readSignedReleaseAnchor(
 			if (candidates.length > 0) break;
 			return {
 				ok: false,
-				reason: `could not read @${signer}'s history (${err instanceof Error ? err.message : String(err)})`
+				reason: `could not read @${signer}'s history (${err instanceof Error ? err.message : String(err)})`,
+				unreadable: true
 			};
 		}
 		candidates.push(...releaseCandidates(history, signer, version));
@@ -277,6 +287,12 @@ export async function readSignedReleaseAnchor(
 	// listed yet: the callers wait for it. A block that holds something else
 	// signed, or nothing valid, is not.
 	let lagging = false;
+	// A listed record signed by another key: a forgery. It decides, even beside
+	// a candidate whose block is missing — a node can list a second record and
+	// withhold its block, and a forgery must never read as lag (v1.21.6
+	// review). A record @morphit signed that lacks a usable hash is not an
+	// attacker's (it needs the key), so it does not override a lagging block.
+	let fault: string | null = null;
 	for (const c of candidates) {
 		let block: unknown;
 		try {
@@ -297,6 +313,7 @@ export async function readSignedReleaseAnchor(
 		}
 		if (!recoverSigningKeys(tx, args.chainId).includes(args.pinnedPubkey)) {
 			lastWhy = `the release record in block ${c.blockNum} is not signed by @${signer}'s pinned posting key`;
+			fault = lastWhy;
 			continue;
 		}
 		let payload: Record<string, unknown> | null = null;
@@ -315,6 +332,7 @@ export async function readSignedReleaseAnchor(
 		}
 		return { ok: true, anchor };
 	}
+	if (fault !== null) return { ok: false, reason: fault };
 	return lagging ? { ok: false, reason: lastWhy, notListed: true } : { ok: false, reason: lastWhy };
 }
 
@@ -332,6 +350,10 @@ export interface AnchorSearch {
 	readonly intervalMs?: number;
 	readonly sleep?: (ms: number) => Promise<void>;
 	readonly now?: () => number;
+	/** v1.21.6: told after every round that found nothing and will be followed
+	 *  by another (the round just finished, and why it found nothing), so a
+	 *  caller can say it is still asking. */
+	readonly onRetry?: (round: number, reason: string) => void;
 }
 
 /**
@@ -344,13 +366,16 @@ export async function findSignedReleaseAnchor(
 	search: AnchorSearch,
 	args: Parameters<typeof readSignedReleaseAnchor>[1]
 ): Promise<ReleaseAnchorResult> {
-	const now = search.now ?? Date.now;
+	// A steady clock: a Tor time sync may step the wall clock while it waits.
+	const now = search.now ?? (() => performance.now());
 	const sleep = search.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 	const interval = Math.max(1, search.intervalMs ?? 10_000);
 	const until = now() + Math.max(0, search.waitMs ?? 0);
 	const started = now();
 	const reasons = new Set<string>();
 	let notListed = false;
+	let unreadable = false;
+	let invalid = false;
 	let rounds = 0;
 	for (;;) {
 		rounds++;
@@ -361,14 +386,19 @@ export async function findSignedReleaseAnchor(
 			const r = await readSignedReleaseAnchor(read, args);
 			if (r.ok) return r;
 			reasons.add('reason' in r ? r.reason : 'unknown');
-			if ('notListed' in r && r.notListed === true) notListed = true;
+			const lag = 'notListed' in r && r.notListed === true;
+			if (lag) notListed = true;
+			const silent = 'unreadable' in r && r.unreadable === true;
+			if (silent) unreadable = true;
+			if (!lag && !silent) invalid = true;
 		}
 		if (now() + interval > until) break;
+		search.onRetry?.(rounds, [...reasons].pop() ?? 'unknown');
 		await sleep(interval);
 	}
 	const asked = `${search.sources.length} source${search.sources.length === 1 ? '' : 's'}`;
 	const span = Math.round((now() - started) / 1000);
 	const when = rounds > 1 ? `, asked ${rounds} times over ${span} s` : '';
 	const head = reasons.size > 0 ? [...reasons].join('; ') : 'no source answered';
-	return { ok: false, reason: `${head} (${asked}${when})`, notListed };
+	return { ok: false, reason: `${head} (${asked}${when})`, notListed, unreadable, invalid };
 }

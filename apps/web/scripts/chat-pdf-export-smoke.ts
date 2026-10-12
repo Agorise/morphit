@@ -49,7 +49,7 @@ const cv = read('src/lib/components/ConversationView.svelte');
 check('1 exportChatToPdf function exists (async)', /async function exportChatToPdf\(/.test(cv));
 check(
 	'2 jsPDF is dynamically imported (code-split / lazy)',
-	/await import\(['"]jspdf['"]\)/.test(cv)
+	/\bimport\(['"]jspdf['"]\)/.test(cv)
 );
 check(
 	'3 NO static top-level jspdf import (would defeat code-splitting)',
@@ -79,10 +79,17 @@ check(
 check('9 timestamps use the canonical UTC formatter', /formatDayMonthTime\(m\.createdAt\.toISOString\(\)\)/.test(cv));
 check(
 	'10 failed-decrypt renders the encrypted placeholder',
-	/m\.decryptFailed \?[\s\S]*chat\.export\.encrypted/.test(cv)
+	/m\.decryptFailed(?: \?| \|\|)[\s\S]*chat\.export\.encrypted/.test(cv)
 );
 check('11 kebab menu exposes the export item', /chat\.export\.menu_label/.test(cv) && /onclick=\{exportChatToPdf\}/.test(cv));
 check('12 triggers a real download (doc.save)', /doc\.save\(/.test(cv));
+// v1.21.6 — the export reads (and decrypts) the whole conversation first; a
+// session lock while the file is made must leave nothing saved.
+check(
+	'12b nothing is saved if the session locked while the file was made',
+	/const generation = c\.lockGeneration\(\);\s*const identity = get\(liveIdentity\);[\s\S]*?c\.lockGeneration\(\) === generation && get\(liveIdentity\) === identity[\s\S]*?c\.loadWholeConversation\(\)/.test(cv) &&
+		/if \(!stillOurs\(\)\) return;\s*doc\.save\(/.test(cv)
+);
 
 // ─── source_trx_id plumbed end-to-end ─────────────────────────────
 const rec = read('../../packages/indexer-client/src/index.ts');

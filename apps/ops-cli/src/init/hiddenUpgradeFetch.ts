@@ -54,6 +54,22 @@ export interface HiddenUpgradeDeps {
 	readonly raceLimit?: number;
 	/** Optional progress hook (drive the braille spinner). */
 	onProgress?(msg: string): void;
+	/** v1.21.6: a peer address is being asked (before each URL). */
+	onAttempt?(gatewayBase: string, url: string): void;
+	/** v1.21.6: a peer address has no matching copy (it failed every URL). */
+	onPeerFailed?(gatewayBase: string, reason: string): void;
+}
+
+/** v1.21.6: what each peer address answered when none had a matching copy —
+ *  so the operator is told which instances lack the release yet, and which
+ *  could not be reached. The message is the same as before. */
+export class HiddenFetchError extends Error {
+	readonly perPeer: ReadonlyArray<{ readonly peer: string; readonly reason: string }>;
+	constructor(message: string, perPeer: ReadonlyArray<{ peer: string; reason: string }>) {
+		super(message);
+		this.name = 'HiddenFetchError';
+		this.perPeer = perPeer;
+	}
 }
 
 export interface HiddenUpgradeResult {
@@ -121,8 +137,9 @@ export function resolvePeerGateways(rows: readonly PeerDirectoryRow[]): string[]
 }
 
 /**
- * Fetch + verify the release from federation peers over Tor/I2P. Races peers in
- * batches of `raceLimit`; the first tarball whose SHA-256 matches the on-chain
+ * Fetch + verify the release from federation peers over Tor/I2P. Asks up to
+ * `raceLimit` peers at once and refills a slot as soon as one fails (a silent
+ * peer never holds up the rest); the first tarball whose SHA-256 matches the on-chain
  * `expectedSha256` wins and the rest are aborted. A peer that returns bytes with
  * the WRONG hash (stale/tampered) is discarded and the next peer tried. Throws
  * (fail-closed) if no peer yields a matching tarball — the caller must then stay
@@ -142,6 +159,7 @@ export async function fetchHiddenUpgrade(
 	}
 	const raceLimit = Math.max(1, deps.raceLimit ?? 4);
 	const failures: string[] = [];
+	const perPeer: Array<{ peer: string; reason: string }> = [];
 
 	// One peer attempt: try the CID URL (exact canonical bytes) then the IPNS
 	// fallback; the first that fetches AND matches the on-chain SHA wins. A peer
@@ -151,6 +169,7 @@ export async function fetchHiddenUpgrade(
 		let lastErr = '';
 		for (const url of urls) {
 			try {
+				deps.onAttempt?.(gw, url);
 				deps.onProgress?.(`fetching release from ${url} over the hidden network…`);
 				const bytes = await deps.fetchTarball(url, signal);
 				const got = (await deps.sha256(bytes)).trim().toLowerCase();
@@ -164,32 +183,46 @@ export async function fetchHiddenUpgrade(
 		throw new Error(lastErr || `no_release:${gw}`);
 	};
 
-	// Race peers in batches; first VERIFIED win aborts the rest.
-	for (let i = 0; i < gateways.length; i += raceLimit) {
-		const batch = gateways.slice(i, i + raceLimit);
-		const ac = new AbortController();
+	// Race peers, up to `raceLimit` at a time; first VERIFIED win aborts the rest.
+	// v1.21.6 review: a slot is refilled the moment its peer fails. Batches of
+	// `raceLimit` waited for the slowest peer of each batch before asking the
+	// next one, so ONE peer that answered nothing (a stalled circuit: up to the
+	// fetcher's 600 s per URL) held back every peer after it.
+	const ac = new AbortController();
+	const winner = await new Promise<HiddenUpgradeResult | null>((resolve) => {
 		let settled = false;
-		const winner = await new Promise<HiddenUpgradeResult | null>((resolve) => {
-			let pending = batch.length;
-			for (const gw of batch) {
+		let next = 0;
+		let running = 0;
+		const launch = (): void => {
+			while (!settled && running < raceLimit && next < gateways.length) {
+				const gw = gateways[next++]!;
+				running += 1;
 				attempt(gw, ac.signal)
 					.then((res) => {
 						if (settled) return;
 						settled = true;
-						ac.abort(); // cancel the rest of the batch
+						ac.abort(); // cancel the peers still being asked
 						resolve(res);
 					})
 					.catch((err) => {
-						failures.push(String(err instanceof Error ? err.message : err));
-						pending -= 1;
-						if (pending === 0 && !settled) resolve(null);
+						const why = String(err instanceof Error ? err.message : err);
+						failures.push(why);
+						if (!settled) {
+							perPeer.push({ peer: gw, reason: why });
+							deps.onPeerFailed?.(gw, why);
+						}
+						running -= 1;
+						if (settled) return;
+						launch();
+						if (running === 0 && next >= gateways.length) resolve(null);
 					});
 			}
-		});
-		if (winner) return winner;
-	}
+		};
+		launch();
+	});
+	if (winner) return winner;
 
-	throw new Error(
+	throw new HiddenFetchError(
 		`hidden-upgrade: no federation peer served a tarball matching the on-chain SHA-256 for ${target.version} ` +
 			`(tried ${gateways.length} peer gateway(s); staying on current version, fail-closed). ` +
 			`Two ways forward: (1) upgrade OFFLINE + privately now — copy morphit-${target.version}.tar.gz onto ` +
@@ -197,6 +230,7 @@ export async function fetchHiddenUpgrade(
 			`against the SHA-256 @morphit anchored on-chain (read from your own indexer — zero clearnet), so it's ` +
 			`fully verified. (2) Have a federation peer expose its IPFS gateway over Tor/I2P so the private ` +
 			`auto-upgrade can find it (that peer: morphit-ops → set up Tor/I2P, which serves /ipfs/ automatically). ` +
-			`Reasons: ${failures.slice(0, 6).join('; ')}`
+			`Reasons: ${failures.slice(0, 6).join('; ')}`,
+		perPeer
 	);
 }

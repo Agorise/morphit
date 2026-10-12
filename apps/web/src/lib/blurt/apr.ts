@@ -110,11 +110,19 @@ export interface AprInputs {
 	readonly total_vesting_fund_blurt: string;
 }
 
+/** Stakers get 15% of an inflation of at most 10% a year, so a 20% APR would
+ *  need less than 7.5% of all coins staked — over ten times today's rate. The
+ *  global properties come from whichever RPC node the indexer asked, so a
+ *  lying node could otherwise put any rate on the wallet, the explorer and
+ *  the homepage. */
+export const MAX_PLAUSIBLE_APR = 20;
+
 /** Compute the simple annual percentage rate (APR) earned by
  *  staked BLURT (Blurt Power) as of the given chain state.
  *
  *  Returns the APR as a percentage (e.g. 7.5 for 7.5%/yr) or NaN
- *  on malformed inputs.  See module-level doc for the formula and
+ *  on malformed inputs, or on a rate no real chain state gives (at least
+ *  MAX_PLAUSIBLE_APR).  See module-level doc for the formula and
  *  caveats. */
 export function computeBlurtVestingApr(inputs: AprInputs): number {
 	const inflationBps = currentAnnualInflationBps(inputs.head_block_number);
@@ -127,7 +135,8 @@ export function computeBlurtVestingApr(inputs: AprInputs): number {
 	const annualMintedBlurt = (supply * inflationBps) / 10_000;
 	const annualToVesters = (annualMintedBlurt * VESTING_REWARD_SHARE_BPS) / 10_000;
 	const aprFraction = annualToVesters / pool;
-	return aprFraction * 100;
+	const apr = aprFraction * 100;
+	return apr < MAX_PLAUSIBLE_APR ? apr : NaN;
 }
 
 /** Format an APR for display: "7.50%".  Two decimal places.

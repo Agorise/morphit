@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
@@ -70,6 +71,43 @@
 		import('$components/PrioritiesSection.svelte').then((m) => m.default);
 	const loadFirstTradesCard = () =>
 		import('$components/FirstTradesCard.svelte').then((m) => m.default);
+
+	// Loaded once: the first-trades slot below waits for it (see there).
+	const prioritiesSection = loadPrioritiesSection();
+
+	// v1.21.6: the first-trades card loads only when it scrolls near (its
+	// code, and the staking-rate read it makes). Until then a placeholder
+	// holds its place, so nothing below it jumps when it arrives (without
+	// JavaScript the placeholder is hidden: src/app.html). Without
+	// IntersectionObserver it loads at once. It starts watching only once the
+	// priorities cards above it are drawn: before that the slot sits right
+	// under the hero, inside the margin, and would load at once.
+	let firstTradesNear = $state(false);
+	let firstTradesSlot: HTMLDivElement | undefined = $state();
+	let prioritiesDrawn = $state(false);
+	if (browser)
+		void prioritiesSection.then(
+			() => requestAnimationFrame(() => (prioritiesDrawn = true)),
+			() => (prioritiesDrawn = true)
+		);
+	$effect(() => {
+		if (firstTradesNear || firstTradesSlot === undefined || !prioritiesDrawn) return;
+		if (typeof IntersectionObserver === 'undefined') {
+			firstTradesNear = true;
+			return;
+		}
+		const io = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((e) => e.isIntersecting)) {
+					firstTradesNear = true;
+					io.disconnect();
+				}
+			},
+			{ rootMargin: '300px 0px' }
+		);
+		io.observe(firstTradesSlot);
+		return () => io.disconnect();
+	});
 	const loadCoinCarousel = () => import('$components/CoinCarousel.svelte').then((m) => m.default);
 
 	// Home page gets the richest JSON-LD: Organization + WebSite (with
@@ -185,16 +223,32 @@
 		     surface on the home page.  lazy-loaded (reverted
 		     from eager — measurement showed it sits below the
 		     fold on 1024×768 desktops). -->
-		{#await loadPrioritiesSection() then PrioritiesSection}
+		{#await prioritiesSection then PrioritiesSection}
 			<PrioritiesSection />
 		{/await}
 
 		<!-- v1.21.5: the invitation to sign in and make a first few trades
 		     (replaced the "Run your own Morphit site" card; running a site is
 		     in the footer and on /run-a-node). -->
-		{#await loadFirstTradesCard() then FirstTradesCard}
-			<FirstTradesCard />
-		{/await}
+		{#if firstTradesNear}
+			{#await loadFirstTradesCard()}
+				<div
+					class="mx-auto my-24 min-h-[71rem] max-w-4xl sm:min-h-[41rem] md:min-h-[40.75rem] lg:min-h-[35.5rem]"
+					aria-hidden="true"
+				></div>
+			{:then FirstTradesCard}
+				<FirstTradesCard />
+			{/await}
+		{:else}
+			<!-- `ftc-slot`: hidden for a visitor without JavaScript (Tor Browser
+			     "Safest"), who never gets the card — see the <noscript> style in
+			     src/app.html — so the prerendered page has no empty gap. -->
+			<div
+				class="ftc-slot mx-auto my-24 min-h-[71rem] max-w-4xl sm:min-h-[41rem] md:min-h-[40.75rem] lg:min-h-[35.5rem]"
+				aria-hidden="true"
+				bind:this={firstTradesSlot}
+			></div>
+		{/if}
 
 		<!-- Below-the-fold: carousel of supported assets + 5 settlement
 		     networks + barter, lazy-mounted via IntersectionObserver,

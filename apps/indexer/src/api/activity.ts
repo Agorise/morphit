@@ -7,9 +7,9 @@
  *   - Estimated mid-point volume by asset (notional approximation;
  *     see caveats below).
  *
- * "Trade count" here = unique completed orders that received
- * feedback.  An order with feedback from BOTH parties counts ONCE
- * (DISTINCT on (subject, order_permlink)).
+ * "Trade count" here = orders whose poster received a review citing
+ * them.  An order counts ONCE however many reviews cite it (several
+ * counterparties), and so does its volume.
  *
  * Volume caveat: the feedback row carries the order_permlink but
  * NOT the actual trade amount.  An order has amount_min and
@@ -59,14 +59,17 @@ export function activityRoute(db: Database): Hono {
 		// single CTE; kept separate so each query can be cached
 		// independently in the future without re-running.
 		const sql = `
-			SELECT o.asset                                             AS asset,
-			       COUNT(DISTINCT (f.subject, f.order_permlink))::text AS trade_count,
+			SELECT o.asset                                                     AS asset,
+			       COUNT(*)::text                                              AS trade_count,
 			       SUM((COALESCE(o.amount_min, 0) + COALESCE(o.amount_max, 0)) / 2.0)::text
-			                                                          AS estimated_volume
-			FROM feedback f
-			JOIN orders o ON o.account = f.subject AND o.permlink = f.order_permlink
-			WHERE f.order_permlink IS NOT NULL
-			  AND f.created_at > NOW() - $1::interval
+			                                                                  AS estimated_volume
+			FROM orders o
+			WHERE EXISTS (
+			  SELECT 1 FROM feedback f
+			  WHERE f.subject = o.account
+			    AND f.order_permlink = o.permlink
+			    AND f.created_at > NOW() - $1::interval
+			)
 			GROUP BY o.asset
 			ORDER BY o.asset
 		`;

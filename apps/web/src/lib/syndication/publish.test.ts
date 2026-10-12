@@ -8,6 +8,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addMessages, init } from 'svelte-i18n';
 
 import en from '$lib/i18n/locales/en.json';
+import { applyBrandToMessages } from '$lib/brand/brandName';
 
 vi.mock('$app/environment', () => ({ browser: true, dev: false, building: false, version: 't' }));
 const posted: { body: string; extraMetadata?: Record<string, unknown> }[] = [];
@@ -52,7 +53,9 @@ const MORPHIT_PICTURE =
 	'https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png';
 
 beforeAll(async () => {
-	addMessages('en', en as never);
+	// As the app loads a bundle: `{brand}` is filled in textually first
+	// (src/lib/i18n/index.ts), so ICU never sees it as an argument.
+	addMessages('en', applyBrandToMessages(en, (form) => form) as never);
 	await init({ fallbackLocale: 'en', initialLocale: 'en' });
 });
 beforeEach(() => {

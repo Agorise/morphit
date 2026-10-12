@@ -26,8 +26,7 @@ import { fileURLToPath as _fileURLToPath } from 'node:url';
 import { buildListingFeeBody } from '../src/api/listingFeeBody.ts';
 import { buildStrangerFeeQuoteBody } from '../src/api/strangerFeeQuoteBody.ts';
 import { buildStatsResponse } from '../src/api/stats.ts';
-import { buildRpcEndpointsResponse } from '../src/api/rpcHealth.ts';
-import type { EndpointState } from '@morphit/rpc-pool';
+import { RpcHealthProber, type ProbeResult } from '../src/api/rpcHealth.ts';
 import { isAccountName } from '../src/api/shared.ts';
 import { fakeConfig } from '../test/testutils/context.ts';
 import type { BlurtPriceSource } from '../src/indexer/price/source.ts';
@@ -556,80 +555,66 @@ await scenario('stats: garbage / negative counts coerce to 0', () => {
 	assertEqual(r.assets.with_active_orders, 0, 'garbage assets → 0');
 });
 
-// ─── /v1/rpc-endpoints (buildRpcEndpointsResponse) ───────────────
+// ─── /v1/rpc-endpoints (RpcHealthProber.snapshot) ────────────────
 const NOW = 1_700_000_000_000;
-const mkState = (o: Partial<EndpointState> & { url: string }): EndpointState => ({
-	url: o.url,
-	ewmaLatencyMs: o.ewmaLatencyMs ?? null,
-	consecutiveFailures: o.consecutiveFailures ?? 0,
-	cooldownUntil: o.cooldownUntil ?? 0,
-	// the RPS pacer's per-endpoint cursor. Present only so this fixture
-	// satisfies EndpointState; `buildRpcEndpointsResponse` projects named fields
-	// and deliberately does NOT publish it (an internal pacing cursor is not
-	// operator-facing), which is exactly what the shape assertions below pin.
-	nextAllowedAt: o.nextAllowedAt ?? 0,
-	lastSuccessAt: o.lastSuccessAt ?? 0
-});
 const CANON = ['https://a.example', 'https://b.example', 'https://c.example'];
+const ok = (latencyMs: number): ProbeResult => ({ ok: true, latencyMs, reason: null, httpStatus: null });
+const down = (reason: ProbeResult['reason'], httpStatus: number | null = null): ProbeResult => ({
+	ok: false,
+	latencyMs: null,
+	reason,
+	httpStatus
+});
+/** A prober whose probe answers from `answers` (per URL), measured at NOW. */
+async function measured(answers: Record<string, ProbeResult>, urls = CANON): Promise<RpcHealthProber> {
+	const p = new RpcHealthProber(() => urls, {
+		now: () => NOW,
+		probe: async (u) => answers[u] ?? down('network')
+	});
+	await p.tick();
+	await new Promise((r) => setTimeout(r, 0));
+	return p;
+}
 
-await scenario('rpc-endpoints: PRIVACY — operator-custom URLs are filtered out', () => {
-	const snap = [
-		mkState({ url: 'https://a.example', ewmaLatencyMs: 120 }),
-		mkState({ url: 'https://secret-internal.op', ewmaLatencyMs: 5 })
-	];
-	const r = buildRpcEndpointsResponse(snap, CANON, NOW);
-	assertEqual(
-		r.endpoints.map((e) => e.url),
-		['https://a.example'],
-		'only the canonical URL is present; the custom one is dropped'
-	);
+await scenario('rpc-endpoints: PRIVACY — only the listed (published) URLs are measured and shown', async () => {
+	const probed: string[] = [];
+	const p = new RpcHealthProber(() => ['https://a.example'], {
+		now: () => NOW,
+		probe: async (u) => {
+			probed.push(u);
+			return ok(120);
+		}
+	});
+	await p.tick();
+	const r = p.snapshot(['https://a.example'], NOW);
+	assertEqual(probed, ['https://a.example'], 'nothing outside the published list is probed');
+	assertEqual(r.endpoints.map((e) => e.url), ['https://a.example'], 'only the published URL is shown');
 });
 
-await scenario('rpc-endpoints: order follows the canonical list; missing nodes omitted', () => {
-	const snap = [
-		mkState({ url: 'https://c.example', ewmaLatencyMs: 30 }),
-		mkState({ url: 'https://a.example', ewmaLatencyMs: 10 })
-	];
-	const r = buildRpcEndpointsResponse(snap, CANON, NOW);
-	// b.example is canonical but not in this pool → omitted; a before c (canon order).
-	assertEqual(r.endpoints.map((e) => e.url), ['https://a.example', 'https://c.example'], 'canon order, b omitted');
+await scenario('rpc-endpoints: order follows the list; a node not measured yet is "checking", not down', async () => {
+	const p = new RpcHealthProber(() => CANON, { now: () => NOW, probe: () => new Promise(() => {}) });
+	await p.tick(); // probes never answer
+	const r = p.snapshot(CANON, NOW);
+	assertEqual(r.endpoints.map((e) => e.url), CANON, 'list order');
+	const e = r.endpoints[0]!;
+	assertEqual([e.healthy, e.latency_ms, e.consecutive_failures, e.checked_at], [false, null, 0, null], 'unmeasured');
 });
 
-await scenario('rpc-endpoints: healthy = no failures AND not in cooldown; latency passes through', () => {
-	const r = buildRpcEndpointsResponse([mkState({ url: 'https://a.example', ewmaLatencyMs: 140 })], CANON, NOW);
-	assertEqual(r.endpoints[0]?.healthy, true, 'healthy');
-	assertEqual(r.endpoints[0]?.latency_ms, 140, 'latency passthrough');
-	assertEqual(r.endpoints[0]?.cooldown_ms, 0, 'no cooldown');
+await scenario('rpc-endpoints: a node that answered is healthy with its measured latency and checked_at', async () => {
+	const r = (await measured({ 'https://a.example': ok(140) })).snapshot(CANON, NOW);
+	const e = r.endpoints[0]!;
+	assertEqual(e.healthy, true, 'healthy');
+	assertEqual(e.latency_ms, 140, 'measured latency');
+	assertEqual(e.cooldown_ms, 0, 'no cooldown');
+	assertEqual(e.checked_at, new Date(NOW).toISOString(), 'checked_at');
 });
 
-await scenario('rpc-endpoints: consecutive failures → not healthy', () => {
-	const r = buildRpcEndpointsResponse(
-		[mkState({ url: 'https://a.example', consecutiveFailures: 3 })],
-		CANON,
-		NOW
-	);
-	assertEqual(r.endpoints[0]?.healthy, false, 'failing → unhealthy');
-	assertEqual(r.endpoints[0]?.consecutive_failures, 3, 'failure count surfaced');
-});
-
-await scenario('rpc-endpoints: in cooldown → not healthy, cooldown_ms is remaining time', () => {
-	const r = buildRpcEndpointsResponse(
-		[mkState({ url: 'https://a.example', cooldownUntil: NOW + 45_000 })],
-		CANON,
-		NOW
-	);
-	assertEqual(r.endpoints[0]?.healthy, false, 'cooling down → unhealthy');
-	assertEqual(r.endpoints[0]?.cooldown_ms, 45_000, 'remaining cooldown');
-});
-
-await scenario('rpc-endpoints: past cooldown clamps to 0 (not negative)', () => {
-	const r = buildRpcEndpointsResponse(
-		[mkState({ url: 'https://a.example', cooldownUntil: NOW - 10_000 })],
-		CANON,
-		NOW
-	);
-	assertEqual(r.endpoints[0]?.cooldown_ms, 0, 'expired cooldown clamps to 0');
-	assertEqual(r.endpoints[0]?.healthy, true, 'expired cooldown + no failures → healthy');
+await scenario('rpc-endpoints: a failed round is two misses, with its reason and no stale latency', async () => {
+	const r = (await measured({ 'https://a.example': down('http', 403) })).snapshot(CANON, NOW);
+	const e = r.endpoints[0]!;
+	assertEqual(e.healthy, false, 'down');
+	assertEqual(e.consecutive_failures, 2, 'two misses');
+	assertEqual([e.failure_reason, e.http_status, e.latency_ms], ['http', 403, null], 'reason, status, no latency');
 });
 
 // ─── Final report ───────────────────────────────────────────────

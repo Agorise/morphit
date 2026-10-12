@@ -484,7 +484,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			SELECT bidder, order_permlink, rank::text AS rank
 			  FROM ranked
 			 WHERE rank IN ($1, $2)
-			 ORDER BY rank`,
+			 ORDER BY ranked.rank`,
 				[MAX_SLOTS_FOR_NOTIFY, MAX_SLOTS_FOR_NOTIFY + 1, ctx.blockTime]
 			);
 

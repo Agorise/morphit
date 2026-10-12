@@ -285,6 +285,25 @@ overrides; null means the frontend uses its bundled localized
 defaults.  Operators only set these if they want to override the
 default page metadata for their instance.
 
+#### `GET /v1/rpc-endpoints`
+
+Tier: `resource`
+
+How each public Blurt RPC node is doing, as this indexer measures it: the clearnet
+nodes (only when the instance reads the chain over clearnet), the built-in hidden nodes
+it uses, and the hidden nodes of the signed on-chain RPC directory — never an
+operator's own upstreams. Each node is measured every 20 s (one retry before a miss
+counts); the reply comes at once from those measurements, fastest first. `?probe=1`
+re-measures every node first (at most once per 5 s for all callers together) and can
+take up to ~43 s.
+
+Each `endpoints[]` row: `url`, `transport` (`clearnet`|`tor`|`i2p`|`local`), `healthy`,
+`latency_ms` (null when the last measurement failed or none yet), `consecutive_failures`
+(misses in a row; 2 per failed round), `cooldown_ms` (always 0), `failure_reason`
+(`timeout`|`tls`|`dns`|`refused`|`network`|`transport_off`|`http`|`rpc_error`|`bad_body`,
+or null), `http_status`, `checked_at` (ISO, or null before the first measurement),
+optional `name` (directory handle). Top level: `network`, `generated_at`.
+
 ---
 
 ### Orderbook
@@ -507,22 +526,41 @@ Tier: `list`
 Symmetrical: all feedback authored BY `:account`.  Same row shape
 as `/feedback` above.
 
-#### `GET /v1/accounts/:account`
+#### `GET /v1/accounts/:account/reputation-receipt`
 
-Tier: `resource`
+Tier: `list`
 
-Summary of `:account`'s reputation:
+Everything that goes into `:account`'s published rating, so anyone can
+re-derive the score: every review about the account (counted or not),
+each one's exclusion reason (`null` when counted), its age and decay
+weight, and the formula. Optional `?as_of=<ISO timestamp>` (default now).
 
 ```json
 {
-  "name":              "alice",
-  "feedback_count":    42,
-  "weighted_rating":   "4.7",
-  "by_rating":         { "1": 0, "2": 1, "3": 2, "4": 5, "5": 34 },
-  "first_trade_at":    "2025-08-12T...",
-  "trades_completed":  47
+  "account": "alice",
+  "as_of": "2026-10-11T12:00:00.000Z",
+  "decay_half_life_days": 365,
+  "formula": "…",
+  "summary": {
+    "count_total": 44, "count_included": 42, "count_excluded": 2,
+    "trade_count": 47,
+    "weight_sum": 38.2, "weighted_rating": 4.7,
+    "reputation_score": 91.3, "reputation_base": 88.0, "reputation_bonus": 3.3,
+    "reputation_experience_frac": 1, "reputation_recency_frac": 0.9
+  },
+  "rows": [
+    { "source_trx_id": "…", "reviewer": "bob", "rating": 5,
+      "created_at": "2026-09-01T…", "order_permlink": "order-…",
+      "age_days": 40, "decay_weight": 0.93, "included": true, "excluded_reason": null }
+  ]
 }
 ```
+
+`trade_count` is completed trades (what the 🌱 new-trader mark uses), a
+different number from the rating counts. There is no bare
+`/v1/accounts/:account` route: the rating and review count come from
+`/feedback` above, and each `/v1/orderbook` item carries the poster's
+rating and completed trades.
 
 ---
 
@@ -808,6 +846,29 @@ the federation working.
 }
 ```
 
+#### `GET /v1/stats`
+
+Tier: `list`
+
+An aggregate-only network summary, for P2P aggregators — nothing per account:
+
+```json
+{
+  "network": "morphit",
+  "generated_at": "2026-10-11T12:00:00.000Z",
+  "orders": { "active": 31, "total": 412 },
+  "trades": { "completed_total": 188, "completed_30d": 19 },
+  "assets": { "supported": ["BLURT", "BTC", "XMR"], "with_active_orders": 7 },
+  "fiat_currencies": { "with_active_orders": 9 }
+}
+```
+
+`orders.active` uses the public orderbook's own rule (live, fee verified, not
+expired). A completed trade is one pair of traders per order cited by a review:
+a trade reviewed by both sides counts once; the same order traded with another
+person counts again. `completed_30d` counts such trades with a review in the last
+30 days.
+
 #### `GET /v1/activity/volume`
 
 Tier: `list`
@@ -816,27 +877,11 @@ Aggregate trading-activity stats for the Morphit instance.
 
 ```json
 {
-  "trade_count_by_asset_7d":  { "BTC": 12, "XMR": 8,  "BLURT": 4,  "USDT": 6, "USDC": 4, "DAI": 3, "BCH": 3, "LTC": 5, "DASH": 2, "DOGE": 4, "ZEC": 2, "ARRR": 1, "DCR": 1, "SOL": 5, "ETH": 11, "XRP": 7 },
-  "trade_count_by_asset_30d": { "BTC": 47, "XMR": 31, "BLURT": 19, "USDT": 24, "USDC": 17, "DAI": 13, "BCH": 11, "LTC": 18, "DASH": 9, "DOGE": 15, "ZEC": 8, "ARRR": 4, "DCR": 2, "SOL": 23, "ETH": 42, "XRP": 18 },
-  "trade_count_by_asset_90d": { "BTC": 132, "XMR": 91, "BLURT": 53, "USDT": 72, "USDC": 51, "DAI": 38, "BCH": 28, "LTC": 47, "DASH": 22, "DOGE": 41, "ZEC": 24, "ARRR": 11, "DCR": 6, "SOL": 67, "ETH": 121, "XRP": 49 },
-  "volume_estimate_by_asset_30d": {
-    "BTC": "0.42",
-    "XMR": "23.0",
-    "BLURT": "12500",
-    "USDT": "4200",
-    "USDC": "3100",
-    "DAI": "2400",
-    "BCH": "1.8",
-    "LTC": "8.5",
-    "DASH": "3.2",
-    "DOGE": "1200",
-    "ZEC": "85.5",
-    "ARRR": "12.4",
-    "DCR": "8.7",
-    "SOL": "180.5",
-    "ETH": "2580.12",
-    "XRP": "2.48"
-  }
+  "window_7d":  [ { "asset": "BTC", "trade_count": 12, "estimated_volume": 0.42 },
+                  { "asset": "XMR", "trade_count": 8,  "estimated_volume": 23.0 } ],
+  "window_30d": [ { "asset": "BTC", "trade_count": 47, "estimated_volume": 1.9 } ],
+  "window_90d": [ { "asset": "BTC", "trade_count": 132, "estimated_volume": 5.6 } ],
+  "generated_at": "2026-10-11T12:00:00.000Z"
 }
 ```
 
@@ -848,9 +893,10 @@ or `/v1/orderbook?asset=USDC&asset_network=base` or
 `/v1/orderbook?asset=DAI&asset_network=polygon` for per-network
 filtering on the live orderbook).
 
-**Trade count semantics:** unique completed orders that received
-feedback from at least one party. An order with feedback from
-BOTH parties counts ONCE.
+**Trade count semantics:** orders whose poster received a review
+citing them. An order counts once however many reviews it got
+(both parties, or several counterparties). `/v1/stats` counts
+differently: one per pair of traders per order.
 
 **Volume caveat:** the feedback row carries the order_permlink but
 not the actual filled amount.  Volume is computed as

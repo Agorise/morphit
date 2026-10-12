@@ -59,35 +59,35 @@ const CHECKS: readonly Check[] = [
 	{
 		id: 'notifications-ambient-channel',
 		claim_source: 'faq',
-		claim_phrase: 'favicon',
+		claim_phrase: 'site icon in the tab',
 		anchor: { kind: 'file_exists', path: 'apps/web/src/lib/notifications/ambient.ts' },
 		status: 'live'
 	},
 	{
 		id: 'notifications-os-native',
 		claim_source: 'faq',
-		claim_phrase: 'Notification API',
+		claim_phrase: 'Desktop notifications',
 		anchor: { kind: 'file_exists', path: 'apps/web/src/lib/notifications/native.ts' },
 		status: 'live'
 	},
 	{
 		id: 'notifications-audio-cue',
 		claim_source: 'faq',
-		claim_phrase: 'two-tone chime',
+		claim_phrase: 'a short chime',
 		anchor: { kind: 'file_exists', path: 'apps/web/src/lib/notifications/audio.ts' },
 		status: 'live'
 	},
 	{
 		id: 'notifications-vibrate-cue',
 		claim_source: 'faq',
-		claim_phrase: 'navigator.vibrate',
+		claim_phrase: 'a short buzz',
 		anchor: { kind: 'file_exists', path: 'apps/web/src/lib/notifications/vibrate.ts' },
 		status: 'live'
 	},
 	{
 		id: 'notifications-push-web-push',
 		claim_source: 'faq',
-		claim_phrase: 'Push notifications let Morphit alert you',
+		claim_phrase: 'Push notifications tell you when someone messages you',
 		anchor: {
 			kind: 'any_of',
 			specs: [
@@ -102,6 +102,30 @@ const CHECKS: readonly Check[] = [
 					paths: ['apps/web/src/service-worker.ts']
 				}
 			]
+		},
+		status: 'live'
+	},
+
+	// ─── Chat history (v1.21.6) ─────────────────────────────────
+	{
+		id: 'chat-scroll-back-to-first-message',
+		claim_source: 'faq',
+		claim_phrase: 'scroll back to the very first message',
+		anchor: {
+			kind: 'grep',
+			pattern: 'c\\.loadOlder\\(\\)',
+			paths: ['apps/web/src/lib/components/ConversationView.svelte']
+		},
+		status: 'live'
+	},
+	{
+		id: 'chat-export-whole-conversation',
+		claim_source: 'faq',
+		claim_phrase: 'every message the two of you ever exchanged',
+		anchor: {
+			kind: 'grep',
+			pattern: 'c\\.loadWholeConversation\\(\\)',
+			paths: ['apps/web/src/lib/components/ConversationView.svelte']
 		},
 		status: 'live'
 	},

@@ -147,6 +147,14 @@
 	</head>
 	<body data-sveltekit-preload-data="hover" class="bg-ink-950 text-ink-100 antialiased">
 		<noscript>
+			<!-- Space the homepage keeps for a card that only JavaScript loads, and
+			     live figures that only JavaScript fills (`js-only`). -->
+			<style>
+				.ftc-slot,
+				.js-only {
+					display: none;
+				}
+			</style>
 			<div
 				style="
 					max-width: 640px;
@@ -159,13 +167,18 @@
 				"
 			>
 				<h1 style="margin-top: 0; font-size: 22px">&#8288;Morphit&#8288; works without JavaScript — partly.</h1>
-				<p>You can browse orders, profiles, and feedback with JavaScript off. That is by design.</p>
+				<p>
+					With JavaScript off you can read the pages with fixed text, like the security page, the
+					glossary and the run-a-node page. The FAQ lists its questions, but its answers, the privacy
+					guides, the orderbook, profiles, reviews and chat load with JavaScript, so they stay empty
+					without it. To follow new orders, use the RSS feeds in any feed reader.
+				</p>
 				<p>
 					<strong>Trading</strong> (creating orders, chatting, signing feedback) needs JavaScript,
 					because all cryptography happens inside your browser. &#8288;Morphit&#8288; never sees your keys. If JS
 					ran on our servers instead, we'd have to hold them — and we refuse to.
 				</p>
-				<p>Turn on JS only when you're ready to trade. Browsing is safe without it.</p>
+				<p>Turn JavaScript on to read the FAQ answers, see orders or trade.</p>
 			</div>
 		</noscript>
 

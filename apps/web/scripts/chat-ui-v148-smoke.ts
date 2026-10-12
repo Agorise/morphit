@@ -5,8 +5,10 @@
  *   #2 "Mark all as read" only shows where there's a markable unread — the Inbox
  *      or Starred tab with unread cards, NEVER on Archived (nor on a tab with
  *      nothing unread).
- *   #3 the conversation empty area says "…is loading" until the first snapshot
- *      arrives, and only then falls back to "No messages yet".
+ *   #3 the conversation empty area says "…is loading" until the thread is known
+ *      to be empty — since v1.21.6, until scrolling back has reached its start
+ *      (the newest 50 messages of the pair can all belong to other threads) —
+ *      and only then falls back to "No messages yet".
  *   #7 every chatroom action-toolbar button uses the same green outlined style
  *      (no lone solid brand-face button among them).
  * Source-level invariants, tamper-tested.
@@ -45,13 +47,16 @@ check(
 check(
 	'#3 a distinct loading key exists and is used while not-yet-loaded',
 	Boolean(en.chat.empty_state_loading) &&
-		/\{#if hasLoadedOnce\}[\s\S]*?chat\.empty_state[\s\S]*?\{:else\}[\s\S]*?chat\.empty_state_loading/.test(
+		/\{#if history\.complete\}[\s\S]*?chat\.empty_state[\s\S]*?\{:else\}[\s\S]*?chat\.empty_state_loading/.test(
 			convo
 		)
 );
 check(
-	'#3 hasLoadedOnce flips true only once the controller delivers a snapshot',
-	/let hasLoadedOnce = \$state\(false\)/.test(convo) && /hasLoadedOnce = true/.test(convo)
+	'#3 "empty" comes from the controller: the thread was read back to its start',
+	/onHistoryChange: \(h: HistoryState\) => \{\s*history = h;/.test(convo) &&
+		/let history = \$state<HistoryState>\(\{\s*ready: false,\s*loading: false,\s*complete: false,/.test(
+			convo
+		)
 );
 
 // #7 — the toolbar buttons share one green outlined style; no lone solid one.

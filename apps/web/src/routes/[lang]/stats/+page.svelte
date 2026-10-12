@@ -13,37 +13,62 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import EndpointList from '$components/EndpointList.svelte';
 	import { getStats } from '$lib/indexer/client';
+	import { disabledAssets } from '$lib/assets/acceptedCoins';
+	import { ASSET_TICKERS, isGoodsAsset } from '@morphit/asset-registry';
 	import type { StatsResponse } from '@morphit/indexer-client';
 
 	let stats = $state<StatsResponse | null>(null);
 	let loadError = $state<string>('');
 
+	/** The figures the page shows, all present (an answer without them is an
+	 *  error, not a crash). */
+	function isStats(d: unknown): d is StatsResponse {
+		const s = d as StatsResponse | null;
+		const n = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
+		return (
+			typeof s === 'object' &&
+			s !== null &&
+			n(s.orders?.active) &&
+			n(s.orders?.total) &&
+			n(s.trades?.completed_total) &&
+			n(s.trades?.completed_30d) &&
+			n(s.assets?.with_active_orders) &&
+			n(s.fiat_currencies?.with_active_orders) &&
+			Array.isArray(s.assets?.supported) &&
+			typeof s.generated_at === 'string'
+		);
+	}
+
 	onMount(async () => {
 		const res = await getStats();
-		if (res.ok) {
+		if (res.ok && isStats(res.data)) {
 			stats = res.data;
 		} else {
 			loadError = $_('stats.error');
 		}
 	});
 
+	// v1.21.6: the RPC card below is drawn at once, so while the figures load
+	// their cards are drawn already, at their final size (the coin list is
+	// this site's own, as /v1/stats derives it), and the RPC card does not
+	// jump down when they arrive.
+	const placeholderCoins = $derived(
+		ASSET_TICKERS.filter((t) => !$disabledAssets.includes(t) && !isGoodsAsset(t))
+	);
+
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 
 	// The six headline counts, in display order. Labels are resolved in the
 	// template so they stay reactive to a locale switch.
-	const tiles = $derived(
-		stats
-			? [
-					{ count: stats.orders.active, key: 'stats.orders_active' },
-					{ count: stats.orders.total, key: 'stats.orders_total' },
-					{ count: stats.trades.completed_total, key: 'stats.trades_total' },
-					{ count: stats.trades.completed_30d, key: 'stats.trades_30d' },
-					{ count: stats.assets.with_active_orders, key: 'stats.assets_active' },
-					{ count: stats.fiat_currencies.with_active_orders, key: 'stats.fiats_active' }
-				]
-			: []
-	);
+	const TILES: readonly { key: string; count: (s: StatsResponse) => number }[] = [
+		{ key: 'stats.orders_active', count: (s) => s.orders.active },
+		{ key: 'stats.orders_total', count: (s) => s.orders.total },
+		{ key: 'stats.trades_total', count: (s) => s.trades.completed_total },
+		{ key: 'stats.trades_30d', count: (s) => s.trades.completed_30d },
+		{ key: 'stats.assets_active', count: (s) => s.assets.with_active_orders },
+		{ key: 'stats.fiats_active', count: (s) => s.fiat_currencies.with_active_orders }
+	];
 </script>
 
 <Head routeKey="stats" />
@@ -58,26 +83,27 @@
 
 	{#if loadError}
 		<StatusLine kind="error">{loadError}</StatusLine>
-	{:else if !stats}
-		<p class="text-ink-500">{$_('common.loading')}</p>
 	{:else}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-			{#each tiles as tile (tile.key)}
+		<div class="js-only grid grid-cols-2 gap-4 sm:grid-cols-3" aria-busy={stats === null}>
+			{#each TILES as tile (tile.key)}
 				<div class="card text-center">
 					<div
 						class="font-display text-3xl font-extrabold text-morphit-teal dark:text-morphit-emerald"
 					>
-						{tile.count.toLocaleString(currentLang)}
+						{stats ? tile.count(stats).toLocaleString(currentLang) : '–'}
 					</div>
 					<div class="mt-1 text-sm text-ink-600 dark:text-ink-300">{$_(tile.key)}</div>
 				</div>
 			{/each}
 		</div>
+		{#if !stats}
+			<p class="js-only sr-only" role="status">{$_('common.loading')}</p>
+		{/if}
 
-		<section class="card mt-6">
+		<section class="js-only card mt-6">
 			<h2 class="font-display text-lg font-bold">{$_('stats.assets_supported')}</h2>
-			<div class="mt-3 flex flex-wrap gap-2">
-				{#each stats.assets.supported as asset (asset)}
+			<div class="mt-3 flex flex-wrap gap-2" class:invisible={!stats} aria-hidden={!stats}>
+				{#each stats ? stats.assets.supported : placeholderCoins as asset (asset)}
 					<span
 						class="rounded-full bg-ink-100 px-3 py-1 text-sm font-semibold text-ink-700 dark:bg-ink-800 dark:text-ink-200"
 						>{asset}</span
@@ -88,8 +114,10 @@
 
 		<!-- The "updated" + aggregator/JSON note, on their own card. -->
 		<section class="card mt-6">
-			<p class="text-sm text-ink-500">
-				{$_('stats.updated', { values: { time: formatDayMonthTime(stats.generated_at) } })}
+			<p class="js-only text-sm text-ink-500" class:invisible={!stats}>
+				{$_('stats.updated', {
+					values: { time: stats ? formatDayMonthTime(stats.generated_at) : '–' }
+				})}
 			</p>
 			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 				{$_('stats.json_note')}
@@ -102,19 +130,21 @@
 				>
 			</p>
 		</section>
-
-		<!-- RPC endpoints — the nodes this site syncs from (moved here from settings). -->
-		<section class="card mt-6" aria-labelledby="endpoints-heading">
-			<h2 id="endpoints-heading" class="font-display text-xl font-bold">
-				{$_('settings.endpoints.heading')}
-			</h2>
-			<p class="mt-2 text-ink-600 dark:text-ink-300">
-				{$_('settings.endpoints.explain')}
-			</p>
-
-			<div class="mt-4">
-				<EndpointList />
-			</div>
-		</section>
 	{/if}
+
+	<!-- RPC endpoints — the nodes this site syncs from (moved here from settings). Outside the
+	     stats block: it loads its own data at once, so it never waits for /v1/stats (or
+	     disappears when that fails). -->
+	<section class="js-only card mt-6" aria-labelledby="endpoints-heading">
+		<h2 id="endpoints-heading" class="font-display text-xl font-bold">
+			{$_('settings.endpoints.heading')}
+		</h2>
+		<p class="mt-2 text-ink-600 dark:text-ink-300">
+			{$_('settings.endpoints.explain')}
+		</p>
+
+		<div class="mt-4">
+			<EndpointList />
+		</div>
+	</section>
 </div>

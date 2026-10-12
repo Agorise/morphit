@@ -22,9 +22,9 @@ icons, your name. This guide shows how to brand an instance so that:
 
 Mentions of the **software** and the **federation** stay "Morphit": "Run a Morphit node", "other
 Morphit instances", "Morphit is open source (AGPL)". A Vigilante Trading user sees
-"Sign in to Vigilante Trading". Under the footer logo a small "Runs on Morphit" line links to
-*About this instance*, which shows your site's name and how many files you re-branded — so a
-visitor can always tell that your site is a Morphit instance, and check it.
+"Sign in to Vigilante Trading". *About this instance* (linked in the footer) shows your site's name,
+the Morphit version it runs and how many files you re-branded — so a visitor can always check what
+your site runs. (The footer's "Runs on Morphit" line was removed in v1.21.6.)
 
 ## Set it up (once)
 

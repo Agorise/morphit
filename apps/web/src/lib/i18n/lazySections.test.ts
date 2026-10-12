@@ -24,9 +24,11 @@ describe('splitLocaleMessages', () => {
 		}
 		expect(merged).toEqual(en);
 	});
-	it('the lazy sections are most of the file (the point of the split)', () => {
+	it('the lazy sections are a large part of the file (the point of the split)', () => {
+		// v1.21.6: the FAQ answers were cut to about half their length, so the
+		// lazy sections went from most of the file to about two fifths of it.
 		const size = (o: unknown) => JSON.stringify(o).length;
-		expect(size(splitLocaleMessages(en, CORE_PART))).toBeLessThan(size(en) * 0.5);
+		expect(size(splitLocaleMessages(en, CORE_PART))).toBeLessThan(size(en) * 0.62);
 	});
 	it('a locale without a section gives {} (svelte-i18n falls back to English)', () => {
 		expect(splitLocaleMessages({ common: { ok: 'OK' } }, 'faq')).toEqual({});

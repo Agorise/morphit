@@ -22,18 +22,29 @@
 
 import { searchEntries, type FaqEntry } from '../src/lib/utils/faqIndex';
 import enRaw from '../src/lib/i18n/locales/en.json' with { type: 'json' };
+import { applyBrandToString } from '../../../packages/operator-config/src/brand.ts';
 
 interface EnShape {
 	faq: { entries: Record<string, { q: string; a: string }> };
 }
 const en = enRaw as unknown as EnShape;
 
-const entries: FaqEntry[] = Object.entries(en.faq.entries).map(([key, v]) => ({
-	key: key as FaqEntry['key'],
-	question: v.q,
-	answer: v.a,
-	related: []
-}));
+// The FAQ names the SITE with `{brand}` (docs/BRANDING.md); the browser fills
+// it in before anyone searches. So search what a visitor sees: an unbranded
+// site ("Morphit") and a branded one, whose name the search is told (v1.21.6).
+const BRANDED = 'Vigilante Trading';
+function entriesFor(brand: string | null): FaqEntry[] {
+	const fill = (s: string): string =>
+		applyBrandToString(s, (form) => (brand === null ? form : brand));
+	return Object.entries(en.faq.entries).map(([key, v]) => ({
+		key: key as FaqEntry['key'],
+		question: fill(v.q),
+		answer: fill(v.a),
+		related: []
+	}));
+}
+const entries: FaqEntry[] = entriesFor(null);
+const brandedEntries: FaqEntry[] = entriesFor(BRANDED);
 
 interface Case {
 	query: string;
@@ -137,23 +148,90 @@ if (orphans.length > 0) {
 	pass(`all ${referencedKeys.size} referenced FAQ keys exist in en.json`);
 }
 
-// Per-case checks
-for (const { query, acceptableTopHits } of CASES) {
-	const hits = searchEntries(entries, query, 1);
-	if (hits.length === 0) {
-		fail(`"${query}" returned ZERO hits`, `Synonym map needs an entry that maps this phrase's tokens to something in the FAQ.`);
-		continue;
+// Per-case checks, on an unbranded site and on a branded one.
+for (const [site, list, name] of [
+	['unbranded', entries, undefined],
+	[`branded "${BRANDED}"`, brandedEntries, BRANDED]
+] as const) {
+	for (const { query, acceptableTopHits } of CASES) {
+		const hits = searchEntries(list, query, 1, name);
+		if (hits.length === 0) {
+			fail(
+				`${site}: "${query}" returned ZERO hits`,
+				`Synonym map needs an entry that maps this phrase's tokens to something in the FAQ.`
+			);
+			continue;
+		}
+		const top = hits[0];
+		if ((acceptableTopHits as readonly string[]).includes(top.entry.key as string)) {
+			pass(`${site}: "${query}" → [${top.entry.key}] (acceptable)`);
+		} else {
+			fail(
+				`${site}: "${query}" top hit is [${top.entry.key}] (${top.entry.question})`,
+				`Expected one of: ${acceptableTopHits.join(', ')}. ` +
+					`Adjust SYNONYMS_EN in apps/web/src/lib/utils/faqIndex.ts so this query routes correctly.`
+			);
+		}
 	}
-	const top = hits[0];
-	if ((acceptableTopHits as readonly string[]).includes(top.entry.key as string)) {
-		pass(`"${query}" → [${top.entry.key}] (acceptable)`);
-	} else {
+}
+
+// A site whose name holds a word that is also an FAQ topic ("Bitcoin Barter"):
+// only the WHOLE name asks what the site is; one of its words asks about that
+// topic ("what is barter" is the barter entry, not the site's introduction).
+const TOPICAL = 'Bitcoin Barter';
+const topicalEntries = entriesFor(TOPICAL);
+for (const [query, want] of [
+	['what is barter', 'what_is_barter'],
+	['what is bitcoin barter', 'what_is_morphit'],
+	['what is this site', 'what_is_morphit']
+] as const) {
+	const top = searchEntries(topicalEntries, query, 1, TOPICAL)[0];
+	if (top?.entry.key === want) pass(`branded "${TOPICAL}": "${query}" → [${want}]`);
+	else
 		fail(
-			`"${query}" top hit is [${top.entry.key}] (${top.entry.question})`,
-			`Expected one of: ${acceptableTopHits.join(', ')}. ` +
-				`Adjust SYNONYMS_EN in apps/web/src/lib/utils/faqIndex.ts so this query routes correctly.`
+			`branded "${TOPICAL}": "${query}" top hit is [${top?.entry.key ?? 'none'}]`,
+			`Expected ${want}.`
 		);
-	}
+}
+
+// A brand made of everyday words must not bury the answers about those words:
+// the FAQ names the site in ~120 answers, so "escrow" on "Escrow Shop" used to
+// rank every answer that names the site above the one about escrow. Searching
+// on a branded site finds what an unbranded site finds.
+for (const [brand, query] of [
+	['Escrow Shop', 'escrow'],
+	['Escrow Shop', 'what is escrow'],
+	['Monero Market', 'what is monero'],
+	['Bitcoin Exchange', 'what is bitcoin'],
+	['Wallet Swap', 'what is a wallet']
+] as const) {
+	const want = searchEntries(entries, query, 1)[0]?.entry.key ?? 'none';
+	const got = searchEntries(entriesFor(brand), query, 1, brand)[0]?.entry.key ?? 'none';
+	if (got === want) pass(`branded "${brand}": "${query}" → [${got}] (as unbranded)`);
+	else fail(`branded "${brand}": "${query}" top hit is [${got}]`, `Unbranded finds ${want}.`);
+}
+
+// The site runs Morphit and says so, so a visitor may type "Morphit" on a
+// branded site: that query must still find its entry there. And "what is this
+// platform about" is the introduction, branded or not.
+for (const [list, name, query, want] of [
+	[entries, undefined, 'what is this platform about', 'what_is_morphit'],
+	[brandedEntries, BRANDED, 'what is this platform about', 'what_is_morphit'],
+	[entriesFor('Escrow Shop'), 'Escrow Shop', 'what is escrow shop', 'what_is_morphit'],
+	[brandedEntries, BRANDED, 'how does morphit stop fake reviews', 'sybil_protection'],
+	[brandedEntries, BRANDED, 'how much activity is there on morphit right now', 'activity_level'],
+	[
+		brandedEntries,
+		BRANDED,
+		'how do i build a high reputation score on morphit',
+		'how_to_build_high_reputation'
+	],
+	[brandedEntries, BRANDED, 'does morphit chat have forward secrecy', 'forward_secrecy']
+] as const) {
+	const top = searchEntries(list as FaqEntry[], query, 1, name)[0];
+	const site = name === undefined ? 'unbranded' : `branded "${name}"`;
+	if (top?.entry.key === want) pass(`${site}: "${query}" → [${want}]`);
+	else fail(`${site}: "${query}" top hit is [${top?.entry.key ?? 'none'}]`, `Expected ${want}.`);
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

@@ -8,8 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { EndpointState } from '@morphit/rpc-pool';
-import { rpcEndpointsRoute, publishedRpcEndpoints } from '$api/rpcHealth';
+import { rpcEndpointsRoute, publishedRpcEndpoints, RpcHealthProber } from '$api/rpcHealth';
 import {
 	DEFAULT_BLURT_RPC_ENDPOINTS,
 	DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS
@@ -22,31 +21,29 @@ const DIRECTORY_ONION = `http://${'d'.repeat(56)}.onion:8091`;
 const CANON_HIDDEN = DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS[0]!;
 const CANON_CLEARNET = DEFAULT_BLURT_RPC_ENDPOINTS[0]!;
 
-/** What a node with that configuration has in its pool. */
-const POOL = [CANON_CLEARNET, CANON_HIDDEN, PRIVATE_ONION, PRIVATE_I2P, LOCAL, DIRECTORY_ONION];
-const state = (url: string): EndpointState =>
-	({
-		url,
-		ewmaLatencyMs: 50,
-		consecutiveFailures: 0,
-		cooldownUntil: 0,
-		lastSuccessAt: Date.now()
-	}) as EndpointState;
-
 describe('/v1/rpc-endpoints', () => {
-	it('publishes the canon and the signed directory, never the operator’s own nodes', async () => {
-		const app = rpcEndpointsRoute(
-			() => POOL.map(state),
-			() =>
-				publishedRpcEndpoints({
-					usesClearnet: true,
-					clearnetCanon: DEFAULT_BLURT_RPC_ENDPOINTS,
-					hiddenCanon: DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS,
-					configuredHidden: [CANON_HIDDEN, PRIVATE_ONION, PRIVATE_I2P],
-					directoryHidden: [DIRECTORY_ONION]
-				})
-		);
+	it('publishes and probes the canon and the signed directory, never the operator’s own nodes', async () => {
+		const published = (): string[] =>
+			publishedRpcEndpoints({
+				usesClearnet: true,
+				clearnetCanon: DEFAULT_BLURT_RPC_ENDPOINTS,
+				hiddenCanon: DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS,
+				configuredHidden: [CANON_HIDDEN, PRIVATE_ONION, PRIVATE_I2P],
+				directoryHidden: [DIRECTORY_ONION]
+			});
+		const probed: string[] = [];
+		const prober = new RpcHealthProber(published, {
+			probe: async (url) => {
+				probed.push(url);
+				return { ok: true, latencyMs: 50, reason: null, httpStatus: null };
+			}
+		});
+		await prober.tick();
+		const app = rpcEndpointsRoute(prober, published);
 		const body = await (await app.request('/')).text();
+		for (const hidden of [PRIVATE_ONION, PRIVATE_I2P, LOCAL]) {
+			expect(probed.includes(hidden), `${hidden} was probed`).toBe(false);
+		}
 		for (const hidden of [PRIVATE_ONION, PRIVATE_I2P, LOCAL]) {
 			expect(body.includes(hidden), `${hidden} was published`).toBe(false);
 		}

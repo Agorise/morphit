@@ -120,6 +120,7 @@ import { activityRoute } from '$api/activity';
 import { statsRoute } from '$api/stats';
 import {
 	rpcEndpointsRoute,
+	RpcHealthProber,
 	publishedRpcEndpoints,
 	directoryHiddenEndpoints,
 	directoryNodeNames
@@ -1051,39 +1052,36 @@ async function main(): Promise<void> {
 	statsApp.route('/', statsRoute(apiDb, config));
 	app.route('/v1/stats', statsApp);
 
-	// per-node health for the canonical Blurt RPC pool, so the browser
-	// Settings card can show why a server-only (CORS-blocked) node is/isn't
-	// used. Canonical-only (operator-custom upstreams filtered out); reads the
-	// poller's live in-memory pool snapshot. Public, resource-tier rate-limited.
+	// Per-node health of the PUBLIC Blurt RPC nodes for the stats page's RPC
+	// card. A background prober (v1.21.6) measures every node continuously, so
+	// the card opens on real, current figures; ?probe=1 re-measures now.
+	// Allow-list = the PUBLIC lists only (publishedRpcEndpoints): the clearnet
+	// canon, the built-in hidden canon this instance uses, and the signed
+	// directory's hidden nodes. The operator's own onion/I2P/local endpoints are
+	// neither published nor probed. The clearnet canon is included ONLY if this
+	// instance actually uses clearnet: on a tor-only node (clearnet pool
+	// emptied) it's excluded, so the prober never fetches a clearnet RPC (which
+	// would leak the box's IP) and the card matches the real hidden-only pool.
+	// Live getter (re-derived per call, ~60s dir cache): a newly-pinned hidden
+	// node is measured and shown network-wide without an indexer restart or a
+	// Morphit release; a removed one drops off (rpc_directory is latest-wins).
+	const publishedRpcUrls = async (): Promise<readonly string[]> =>
+		publishedRpcEndpoints({
+			usesClearnet: config.blurtRpcEndpoints.length > 0,
+			clearnetCanon: DEFAULT_BLURT_RPC_ENDPOINTS,
+			hiddenCanon: DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS,
+			configuredHidden: config.hiddenRpcEndpoints,
+			directoryHidden: await directoryHiddenEndpoints(db)
+		});
+	const rpcProber = new RpcHealthProber(publishedRpcUrls);
+	rpcProber.start();
 	const rpcEndpointsApp = new Hono();
 	rpcEndpointsApp.use('*', rateLimit('resource', config.resourceRatePerMin));
 	rpcEndpointsApp.route(
 		'/',
-		// Allow-list = the PUBLIC lists only (publishedRpcEndpoints): the
-		// clearnet canon, the built-in hidden canon this instance uses, and the
-		// signed directory's hidden nodes. The operator's own onion/I2P/local
-		// endpoints are neither published nor probe-triggerable by visitors.
-		// The clearnet canon is included ONLY if this instance
-		// actually uses clearnet. On a tor-only node (clearnet pool
-		// emptied) it's excluded, so the active ?probe=1 never fetches a clearnet
-		// RPC (which would leak the box's IP) and the widget matches the real
-		// hidden-only pool instead of listing 10 phantom endpoints.
 		rpcEndpointsRoute(
-			() => poller.rpcEndpointSnapshot,
-			// Live getter (re-derived per request, ~60s dir cache): the canonical
-			// hidden list is the operator's configured seed UNION the on-chain
-			// rpc_directory. So a newly-pinned hidden node shows on the stats card
-			// network-wide without an indexer restart or a Morphit release; a
-			// removed one drops off (rpc_directory is latest-wins). Clearnet stays
-			// hardcoded + excluded on tor-only boxes exactly as before.
-			async () =>
-				publishedRpcEndpoints({
-					usesClearnet: config.blurtRpcEndpoints.length > 0,
-					clearnetCanon: DEFAULT_BLURT_RPC_ENDPOINTS,
-					hiddenCanon: DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS,
-					configuredHidden: config.hiddenRpcEndpoints,
-					directoryHidden: await directoryHiddenEndpoints(db)
-				}),
+			rpcProber,
+			publishedRpcUrls,
 			// Optional per-node operator handles from the on-chain directory.
 			async () => directoryNodeNames(db)
 		)
@@ -1177,6 +1175,9 @@ async function main(): Promise<void> {
 		// transaction (read-only + in-process emits), so it stops cleanly
 		// at its next loop boundary; no timeout race needed.
 		headTailer.stop();
+		// The RPC card's background prober: no more rounds (one already in
+		// flight ends on its own timeout).
+		rpcProber.stop();
 		stopPostingKeyRetry?.();
 		// The federation fast path's sender side: stop the warm-up interval and
 		// close the pooled hidden-service connections. Both are deliberately

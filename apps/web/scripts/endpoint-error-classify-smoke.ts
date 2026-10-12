@@ -56,9 +56,9 @@ check(
 	!/\bfetch\s*\(/.test(list) && !/EndpointRotator/.test(list)
 );
 check(
-	'EndpointList shows node health from the INDEXER (getRpcEndpoints → loadHealth)',
+	'EndpointList shows node health from the INDEXER (getRpcEndpoints → fetchHealth)',
 	/import \{ getRpcEndpoints \}/.test(list) &&
-		/function loadHealth/.test(list) &&
+		/function fetchHealth/.test(list) &&
 		/getRpcEndpoints\(\{ probe \}\)/.test(list)
 );
 check(
@@ -83,7 +83,7 @@ check(
 );
 check(
 	'the refresh button re-fetches the indexer via an active probe (not a browser probe)',
-	/onclick=\{onRefreshClick\}/.test(list) && /\bloadHealth\(true\)/.test(list)
+	/onclick=\{onRefreshClick\}/.test(list) && /\bfetchHealth\(true\)/.test(list)
 );
 
 // ─── 2. The rotator still classifies REAL-call failures ─────────────────────

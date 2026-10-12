@@ -127,20 +127,33 @@ const SCENARIOS: readonly Scenario[] = [
 		name: '8 — SAFETY: twin dedup happens BEFORE decode/record, so a durable twin never re-records a money-flow payload',
 		check: () => {
 			// The incoming twin-collapse block must appear (and `continue`)
-			// strictly before the recordAddressShared/recordFundsSent side
-			// effects, so an upgraded twin skips them entirely.
+			// strictly before the merge's call of the trade side effects
+			// (applyIncomingTradePayload, which holds recordAddressShared /
+			// recordFundsSent since v1.21.6), so an upgraded twin skips them.
 			const twinIdx = body.indexOf('const twin = messages.find(');
-			const recordIdx = body.indexOf('recordAddressShared({');
+			const callIdx = body.indexOf('else applyIncomingTradePayload(d.text, rec.sender);');
 			if (twinIdx < 0) return 'twin-find not present';
-			if (recordIdx < 0) return 'recordAddressShared not present';
-			if (twinIdx >= recordIdx) {
-				return `twin-find (idx ${twinIdx}) must come before recordAddressShared (idx ${recordIdx})`;
+			if (callIdx < 0) return 'the merge no longer calls applyIncomingTradePayload';
+			if (!/function applyIncomingTradePayload[\s\S]*?recordAddressShared\(\{[\s\S]*?recordFundsSent\(\{/.test(body)) {
+				return 'applyIncomingTradePayload no longer records the address / funds-sent payloads';
+			}
+			if (twinIdx >= callIdx) {
+				return `twin-find (idx ${twinIdx}) must come before the side-effect call (idx ${callIdx})`;
 			}
 			// And the twin block must end in a `continue;` between the two,
 			// so control never falls through to the decode/record path.
-			const between = body.slice(twinIdx, recordIdx);
+			const between = body.slice(twinIdx, callIdx);
 			if (!/added = true;\s*continue;/.test(between)) {
 				return 'twin block does not dedup-continue before the decode/record side effects';
+			}
+			// v1.21.6: the only side effects a twin may run are ones a history
+			// page deferred (effectsDue) — once: the flag is cleared first.
+			const twinBlock = between.slice(0, between.search(/added = true;\s*continue;/));
+			if (/applyIncomingTradePayload\(/.test(twinBlock)) {
+				return 'the twin block calls the side effects directly';
+			}
+			if (!/function runDueEffects[\s\S]*?if \(m\?\.effectsDue !== true\) return;\s*delete m\.effectsDue;\s*applyIncomingTradePayload/.test(body)) {
+				return 'runDueEffects must run deferred side effects at most once (clear effectsDue first)';
 			}
 			return null;
 		}

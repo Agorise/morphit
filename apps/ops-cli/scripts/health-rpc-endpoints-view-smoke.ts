@@ -25,16 +25,17 @@ function check(name: string, cond: boolean): void {
 // ── parseRpcEndpointRows ─────────────────────────────────────────────
 const body = {
 	endpoints: [
-		{ url: 'http://127.0.0.1:8091', transport: 'local', healthy: true, latencyMs: 2 },
-		{ url: 'https://rpc.drakernoise.com', transport: 'clearnet', healthy: true, latencyMs: 42 },
-		{ url: 'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091', transport: 'tor', healthy: true, latencyMs: 187 },
-		{ url: 'http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091', transport: 'i2p', healthy: false, latencyMs: null }
+		{ url: 'http://127.0.0.1:8091', transport: 'local', healthy: true, latency_ms: 2 },
+		{ url: 'https://rpc.drakernoise.com', transport: 'clearnet', healthy: true, latency_ms: 42 },
+		{ url: 'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091', transport: 'tor', healthy: true, latency_ms: 187 },
+		{ url: 'http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091', transport: 'i2p', healthy: false, latency_ms: null }
 	]
 };
 const rows = parseRpcEndpointRows(body);
 check('parses all 4 rows', rows.length === 4);
 check('keeps transport buckets', rows.map((r) => r.transport).join() === 'local,clearnet,tor,i2p');
 check('marks the i2p row unhealthy with null latency', rows[3]!.healthy === false && rows[3]!.latencyMs === null);
+check('reads the latency the indexer sends (latency_ms)', rows[1]!.latencyMs === 42 && rows[2]!.latencyMs === 187);
 check('unknown transport → clearnet', parseRpcEndpointRows({ endpoints: [{ url: 'https://x', transport: 'weird', healthy: true }] })[0]!.transport === 'clearnet');
 check('tolerates a non-object body', parseRpcEndpointRows(null).length === 0 && parseRpcEndpointRows('nope').length === 0);
 check('tolerates a missing endpoints array', parseRpcEndpointRows({}).length === 0);

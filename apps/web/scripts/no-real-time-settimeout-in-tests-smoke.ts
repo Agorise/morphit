@@ -156,6 +156,46 @@ function setTimeoutIsInComment(line: string): boolean {
 // Allows whitespace and inline arrow-fn bodies.
 const setTimeoutRe = /\bsetTimeout\s*\(\s*[^,]*,\s*(\d+)\s*\)/;
 
+/** True when the setTimeout on line `i` runs on a fake clock that does not
+ *  follow real time: it sits INSIDE an `it(`/`test(` body that earlier called
+ *  `vi.useFakeTimers(...)` with setTimeout faked (no `toFake` list, or one that
+ *  names setTimeout) and without `shouldAdvanceTime`, and no
+ *  `vi.useRealTimers()` came after it. A helper or hook outside that test body,
+ *  or a fake clock that leaves setTimeout real, is not exempt. */
+function underFakeTimers(lines: readonly string[], i: number): boolean {
+	let start = -1;
+	for (let j = i; j >= 0; j--) {
+		if (/^\s*(it|test)(\.\w+)?\s*\(/.test(lines[j]!)) {
+			start = j;
+			break;
+		}
+	}
+	if (start === -1) return false;
+	// Still inside that test's body at line i: its brackets never closed.
+	let depth = 0;
+	for (let j = start; j < i; j++) {
+		for (const ch of lines[j]!) {
+			if (ch === '(' || ch === '{' || ch === '[') depth++;
+			else if (ch === ')' || ch === '}' || ch === ']') depth--;
+		}
+		if (depth <= 0) return false;
+	}
+	const body = lines.slice(start, i).join('\n');
+	const fake = body.lastIndexOf('vi.useFakeTimers(');
+	if (fake === -1 || body.lastIndexOf('vi.useRealTimers(') > fake) return false;
+	// The call's own arguments, up to its matching parenthesis.
+	let d = 0;
+	let k = fake + 'vi.useFakeTimers'.length;
+	const from = k;
+	for (; k < body.length; k++) {
+		if (body[k] === '(') d++;
+		else if (body[k] === ')' && --d === 0) break;
+	}
+	const args = body.slice(from + 1, k);
+	if (/shouldAdvanceTime\s*:\s*true/.test(args)) return false;
+	return !/toFake/.test(args) || /['"`]setTimeout['"`]/.test(args);
+}
+
 for (const tf of testFiles) {
 	const src = readFileSync(tf.path, 'utf-8');
 	const lines = src.split('\n');
@@ -163,6 +203,7 @@ for (const tf of testFiles) {
 		const line = lines[i]!;
 		if (!line.includes('setTimeout')) continue;
 		if (setTimeoutIsInComment(line)) continue;
+		if (underFakeTimers(lines, i)) continue;
 		const m = line.match(setTimeoutRe);
 		if (!m) continue;
 		const ms = parseInt(m[1]!, 10);

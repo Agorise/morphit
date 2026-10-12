@@ -1,9 +1,9 @@
 /**
  * Morphit indexer — /v1/rpc-endpoints endpoint.
  *
- * Per-node health for the Blurt RPC pool the indexer reads/writes through, so
- * the browser's Settings → RPC endpoints card can show WHY a server-only node
- * (one the browser can't probe directly, for privacy) is or isn't being used.
+ * Per-node health of the PUBLIC Blurt RPC nodes, as this indexer measures them,
+ * so the stats page's RPC endpoints card can show how each one is doing and WHY
+ * a failing one fails (the browser never contacts a node itself, for privacy).
  *
  * Privacy-first by construction:
  *   - It reports ONLY already-public nodes (publishedRpcEndpoints): the
@@ -12,24 +12,40 @@
  *     hidden nodes of the signed on-chain RPC directory. Anything the operator
  *     configured beyond those — a private upstream, their own onion or I2P
  *     node, a local or auto-detected loopback node — is neither listed nor
- *     probed on a visitor's request.
- *   - Per node it exposes only coarse health: reachable-or-not, smoothed
- *     latency, consecutive-failure count, remaining cooldown. Nothing
- *     per-account, nothing that correlates traders.
+ *     probed.
+ *   - Per node it exposes only coarse health: reachable-or-not, the latest
+ *     round-trip, misses in a row, a closed-vocabulary failure reason (never an
+ *     error text). Nothing per-account, nothing that correlates traders.
  *
- * Public, no auth, same rate-limit tier as the other read endpoints. Reads a
- * live in-memory snapshot from the poller's RPC pool — no DB, no I/O.
+ * Public, no auth, same rate-limit tier as the other read endpoints.
+ *
+ * v1.21.6 — WHERE THE NUMBERS COME FROM. The card used to open on the RPC
+ * pool's passive state and then wait for one on-demand probe of every node:
+ *   - the pool calls the hidden nodes seldom, so on page load they read as
+ *     failed or "probing" with no latency, and clearnet figures were whatever
+ *     the pool last smoothed (minutes old);
+ *   - the probe answered only when the slowest node had answered or timed out
+ *     (up to ~42 s), so the real figures arrived ~20 s after the page opened;
+ *   - a refresh first repainted the passive state (red rows) and then waited
+ *     for the probe again.
+ * Now a background prober (RpcHealthProber) measures EVERY published node on
+ * its own clock — each node every PROBE_EVERY_MS, independently, with one
+ * retry before a miss counts — from the moment the indexer starts. A plain GET
+ * answers at once from those measurements (each row carries `checked_at`); a
+ * node not measured yet says so (no latency, no failures) instead of being
+ * called down. `?probe=1` re-measures every node now (5 s global limit,
+ * coalesced) and answers when that round is done. A GET probes nothing; its only
+ * I/O is the node list's and the node names' directory reads (each cached 60 s).
  */
 
 import { Hono } from 'hono';
 import net from 'node:net';
 
-import type { EndpointState } from '@morphit/rpc-pool';
 import { morphitUserAgent } from '$blurt/userAgent';
 import { INDEXER_VERSION } from './health';
 import { hiddenNetworkOf, hiddenServiceProxyConfigFromEnv } from '$indexer/hiddenServiceFetch';
-import { isHiddenRpcUrl } from '$blurt/rpcDirectoryOp';
-import { readCappedBytes } from '@morphit/hidden-transport/rpc-fetch';
+import { isHiddenRpcUrl, RPC_DIRECTORY_MAX_NODES } from '$blurt/rpcDirectoryOp';
+import { readCappedBytes, RpcReplyTooLargeError } from '@morphit/hidden-transport/rpc-fetch';
 
 /** A get_dynamic_global_properties reply is a few KB. */
 const PROBE_REPLY_MAX_BYTES = 1024 * 1024;
@@ -101,24 +117,29 @@ export interface RpcEndpointHealth {
 	 *  censorship-resistant transports — the browser never reaches these itself;
 	 *  the indexer probes them server-side and reports what it sees. */
 	readonly transport: 'clearnet' | 'tor' | 'i2p' | 'local';
-	/** Currently usable: no consecutive failures AND not parked in cooldown. */
+	/** The node answered its most recent measurement. */
 	readonly healthy: boolean;
-	/** Smoothed successful-call latency in ms, or null if never observed. */
+	/** Round-trip of that measurement in ms; null when it failed or the node has
+	 *  not been measured yet. */
 	readonly latency_ms: number | null;
-	/** Consecutive transport failures since the last success (0 when healthy). */
+	/** Misses in a row since the last success (each failed round is two, since a
+	 *  round retries once); 0 when healthy or not measured yet. */
 	readonly consecutive_failures: number;
-	/** Remaining cooldown in ms before the node is retried (0 when available). */
+	/** Always 0 since v1.21.6 (the pool's backoff is not this card's business);
+	 *  kept so older clients keep parsing. */
 	readonly cooldown_ms: number;
-	/** WHY the most recent ACTIVE probe failed, so the card
-	 *  can show a one-line reason instead of a flat "unreachable". Null/absent
-	 *  when healthy, or on the passive pool snapshot (the pool doesn't retain a
-	 *  reason — the card falls back to the generic label there). */
+	/** WHY the node's most recent measurement failed, so the card can show a
+	 *  one-line reason instead of a flat "unreachable". Null when healthy or not
+	 *  measured yet. */
 	readonly failure_reason?: RpcProbeFailure | null;
 	/** HTTP status when `failure_reason === 'http'`, else null/absent. */
 	readonly http_status?: number | null;
 	/** Optional operator handle from the on-chain directory (morphit_rpc_v1 name).
 	 *  Cosmetic + untrusted; absent when the node's operator published no name. */
 	readonly name?: string;
+	/** When this row was measured (ISO), or null when the node has not been
+	 *  measured yet (v1.21.6; absent on the pool view). */
+	readonly checked_at?: string | null;
 }
 
 export interface RpcEndpointsResponse {
@@ -128,74 +149,12 @@ export interface RpcEndpointsResponse {
 }
 
 /**
- * Shape the /v1/rpc-endpoints response from a pool snapshot. Pure + total —
- * exported so the privacy filter (canonical-only) and the health derivation
- * can be unit-tested from tsx without a running poller.
+ * ACTIVE per-node probe: one lightweight, universal Blurt read per node.
  *
- * `canonicalUrls` is the allow-list of already-public nodes
- * (`DEFAULT_BLURT_RPC_ENDPOINTS`). Snapshot rows for any other URL are dropped.
- * Output is ordered by the canonical list so the response is stable.
- */
-export function buildRpcEndpointsResponse(
-	snapshot: readonly EndpointState[],
-	canonicalUrls: readonly string[],
-	now: number = Date.now(),
-	transportsOff: ReadonlySet<'tor' | 'i2p'> = new Set()
-): RpcEndpointsResponse {
-	const byUrl = new Map(snapshot.map((s) => [s.url, s]));
-	const endpoints: RpcEndpointHealth[] = [];
-	for (const url of canonicalUrls) {
-		const s = byUrl.get(url);
-		if (!s) continue; // canonical node not in THIS indexer's pool → omit
-		const cooldownMs = Math.max(0, s.cooldownUntil - now);
-		const transport = rpcTransportOf(url);
-		const healthy = s.consecutiveFailures === 0 && cooldownMs === 0;
-		// A hidden node that's failing while THIS instance's transport proxy is
-		// down → calm "requires Tor/I2P", not a red error.
-		const transportOff =
-			!healthy && (transport === 'tor' || transport === 'i2p') && transportsOff.has(transport);
-		endpoints.push({
-			url,
-			transport,
-			healthy,
-			latency_ms: s.ewmaLatencyMs,
-			consecutive_failures: s.consecutiveFailures,
-			cooldown_ms: cooldownMs,
-			...(transportOff ? { failure_reason: 'transport_off' as const } : {})
-		});
-	}
-	return {
-		network: 'morphit',
-		generated_at: new Date(now).toISOString(),
-		endpoints
-	};
-}
-
-/** Which hidden transports are UNREACHABLE from this instance right now (their
- *  Tor SOCKS / i2pd HTTP proxy isn't listening). Used to render hidden nodes as
- *  a calm "requires Tor/I2P" instead of a red error. */
-export async function unreachableTransports(): Promise<Set<'tor' | 'i2p'>> {
-	const off = new Set<'tor' | 'i2p'>();
-	const [tor, i2p] = await Promise.all([
-		transportProxyReachable('tor'),
-		transportProxyReachable('i2p')
-	]);
-	if (!tor) off.add('tor');
-	if (!i2p) off.add('i2p');
-	return off;
-}
-
-/**
- * ACTIVE per-node probe. The passive snapshot above only
- * reflects the pool's own traffic and barely moves; the Settings "refresh"
- * button wants FRESH latency for every canonical node on demand. This pings each
- * node once, in parallel, and reports the round-trip.
- *
- * DDoS guard: a GLOBAL 5s cache (`PROBE_MIN_INTERVAL_MS`) shared across every
- * caller and IP — no volume of clicks can make the indexer ping the Blurt nodes
- * more than once per 5s (a concurrent burst is coalesced onto ONE in-flight
- * probe). So a kid mashing refresh gets cached bytes, and the upstream nodes see
- * at most one probe every 5s regardless.
+ * DDoS guard for the card's refresh (`?probe=1`): at most one forced round per
+ * `PROBE_MIN_INTERVAL_MS` across every caller and IP, a concurrent burst
+ * sharing ONE round (RpcHealthProber.checkAllNow) — no volume of clicks makes
+ * the indexer ping the Blurt nodes faster than that.
  */
 const PROBE_MIN_INTERVAL_MS = 5_000;
 const PROBE_TIMEOUT_MS = 6_000;
@@ -282,7 +241,7 @@ export function classifyProbeError(err: unknown): RpcProbeFailure {
 }
 
 /** Result of one active probe: latency on success, or WHY it failed. */
-interface ProbeResult {
+export interface ProbeResult {
 	latencyMs: number | null;
 	ok: boolean;
 	reason: RpcProbeFailure | null;
@@ -318,7 +277,8 @@ const PROXY_CHECK_TTL_MS = 20_000;
  *  failure means "this instance has no Tor/I2P", not "the node is down". */
 async function transportProxyReachable(transport: 'tor' | 'i2p'): Promise<boolean> {
 	const cached = proxyUpCache.get(transport);
-	if (cached && Date.now() - cached.at < PROXY_CHECK_TTL_MS) return cached.up;
+	// Steady clock: a wall clock stepped back must not freeze the cache.
+	if (cached && performance.now() - cached.at < PROXY_CHECK_TTL_MS) return cached.up;
 	const cfg = hiddenServiceProxyConfigFromEnv(process.env);
 	const addr = transport === 'tor' ? cfg.torSocks : cfg.i2pHttpProxy;
 	let up = false;
@@ -328,14 +288,16 @@ async function transportProxyReachable(transport: 'tor' | 'i2p'): Promise<boolea
 		const port = lastColon > 0 ? Number(addr.slice(lastColon + 1)) : NaN;
 		up = await tcpConnectable(host || '127.0.0.1', Number.isFinite(port) ? port : transport === 'tor' ? 9050 : 4444, PROXY_CHECK_TIMEOUT_MS);
 	}
-	proxyUpCache.set(transport, { up, at: Date.now() });
+	proxyUpCache.set(transport, { up, at: performance.now() });
 	return up;
 }
 
 async function probeOne(url: string): Promise<ProbeResult> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), probeTimeoutMs(url));
-	const started = Date.now();
+	// Steady clock: a wall clock stepped mid-probe must not give a negative
+	// or hour-long round trip.
+	const started = performance.now();
 	try {
 		const res = await fetch(url, {
 			method: 'POST',
@@ -368,19 +330,43 @@ async function probeOne(url: string): Promise<ProbeResult> {
 			await res.body?.cancel().catch(() => {});
 			return { latencyMs: null, ok: false, reason: 'http', httpStatus: res.status };
 		}
-		let body: { result?: unknown; error?: unknown };
+		let bytes: Uint8Array;
 		try {
-			// Capped: `res.json()` read whatever the node
-			// chose to send. Past the cap the read throws → 'bad_body'.
-			const bytes = await readCappedBytes(res, PROBE_REPLY_MAX_BYTES, url);
-			body = JSON.parse(Buffer.from(bytes).toString('utf8')) as { result?: unknown; error?: unknown };
+			// Capped: `res.json()` read whatever the node chose to send.
+			bytes = await readCappedBytes(res, PROBE_REPLY_MAX_BYTES, url);
+		} catch (err) {
+			// The deadline cut the body off (headers, then a stall or a drip):
+			// the node timed out, it did not send a bad body.
+			if (controller.signal.aborted) {
+				return { latencyMs: null, ok: false, reason: 'timeout', httpStatus: null };
+			}
+			// Past the cap: an answer no honest node sends.
+			if (err instanceof RpcReplyTooLargeError) {
+				return { latencyMs: null, ok: false, reason: 'bad_body', httpStatus: res.status };
+			}
+			// The connection failed in the middle of the answer (a Tor circuit
+			// collapsing): a network failure, not an unreadable answer.
+			return { latencyMs: null, ok: false, reason: classifyProbeError(err), httpStatus: null };
+		}
+		let body: { result?: unknown; error?: unknown } | null;
+		try {
+			body = JSON.parse(Buffer.from(bytes).toString('utf8')) as { result?: unknown; error?: unknown } | null;
 		} catch {
 			return { latencyMs: null, ok: false, reason: 'bad_body', httpStatus: res.status };
 		}
-		if (body.error !== undefined || body.result === undefined) {
+		// `null` (or any non-object) parses but is no JSON-RPC envelope (reading
+		// `.error` off null threw into the transport catch below → 'network'),
+		// and a node whose chain state is `null` did not answer the read.
+		if (
+			body === null ||
+			typeof body !== 'object' ||
+			body.error !== undefined ||
+			body.result === undefined ||
+			body.result === null
+		) {
 			return { latencyMs: null, ok: false, reason: 'rpc_error', httpStatus: res.status };
 		}
-		return { latencyMs: Date.now() - started, ok: true, reason: null, httpStatus: null };
+		return { latencyMs: Math.round(performance.now() - started), ok: true, reason: null, httpStatus: null };
 	} catch (err) {
 		// A hidden node that failed AND whose transport proxy isn't reachable on
 		// this instance → "no Tor/I2P here", not "node down". Surface it calmly.
@@ -394,72 +380,249 @@ async function probeOne(url: string): Promise<ProbeResult> {
 	}
 }
 
-/** Fresh, on-demand health for every canonical node (parallel probes). Pure of
- *  the pool's passive state — this is a live measurement. */
+/** One measurement round for one node: probe it, and on a miss probe once
+ *  more before believing it. A single jittery Tor/I2P miss on a node that is up
+ *  must not read as an outage; two misses in a row are a real signal. */
+export async function probeNodeRound(url: string): Promise<ProbeResult> {
+	const first = await probeOne(url);
+	return first.ok ? first : await probeOne(url);
+}
+
+/** Fresh, on-demand health for every given node (parallel rounds). A live
+ *  measurement — used by the tests; the route serves RpcHealthProber's. */
 export async function probeEndpoints(
 	canonicalUrls: readonly string[],
 	now: number = Date.now()
 ): Promise<RpcEndpointsResponse> {
 	const endpoints = await Promise.all(
 		canonicalUrls.map(async (url): Promise<RpcEndpointHealth> => {
-			// Probe once. On a MISS, retry ONCE before believing it's down: a single
-			// jittery Tor/I2P miss on a node that's actually up shouldn't read as an
-			// outage. But TWO fresh misses in a row is a real signal, not a blip — so
-			// we report consecutive_failures: 2, which lifts it past the card's
-			// transient-miss suppression (<=1). That's what lets an explicit refresh
-			// show a node the operator just shut down as DOWN, instead of keeping its
-			// stale last-known latency. (Requirement: a refresh shows the real status of that
-			// address)
-			let r = await probeOne(url);
-			let consecutiveFailures = 0;
-			if (!r.ok) {
-				const retry = await probeOne(url);
-				r = retry; // report the most recent attempt's latency/reason/status
-				consecutiveFailures = retry.ok ? 0 : 2;
-			}
+			const r = await probeNodeRound(url);
 			return {
 				url,
 				transport: rpcTransportOf(url),
 				healthy: r.ok,
 				latency_ms: r.latencyMs,
-				consecutive_failures: consecutiveFailures,
+				// A failed round is two misses in a row.
+				consecutive_failures: r.ok ? 0 : 2,
 				cooldown_ms: 0,
 				failure_reason: r.reason,
-				http_status: r.httpStatus
+				http_status: r.httpStatus,
+				checked_at: new Date(now).toISOString()
 			};
 		})
 	);
 	return { network: 'morphit', generated_at: new Date(now).toISOString(), endpoints };
 }
 
-// Global 5s probe cache (shared across all requests/IPs).
-let probeInFlight: Promise<RpcEndpointsResponse> | null = null;
-let probeCache: { at: number; data: RpcEndpointsResponse } | null = null;
+/** How often the background prober re-measures each node. */
+export const PROBE_EVERY_MS = 20_000;
+/** How often it looks for nodes that are due (and for a changed node list). */
+const PROBER_TICK_MS = 2_000;
 
-/** Rate-limited active probe: returns the cached result if the last real probe
- *  was <5s ago, coalesces concurrent callers onto one probe, else probes fresh. */
-export async function cachedProbeEndpoints(
-	canonicalUrls: readonly string[]
-): Promise<RpcEndpointsResponse> {
-	const now = Date.now();
-	if (probeCache && now - probeCache.at < PROBE_MIN_INTERVAL_MS) return probeCache.data;
-	if (probeInFlight) return probeInFlight;
-	probeInFlight = (async () => {
-		try {
-			const data = await probeEndpoints(canonicalUrls, Date.now());
-			probeCache = { at: Date.now(), data };
-			return data;
-		} finally {
-			probeInFlight = null;
-		}
-	})();
-	return probeInFlight;
+/** The latest measurement of one node. */
+interface NodeCheck {
+	readonly result: ProbeResult;
+	/** Wall-clock end of the round (published as `checked_at`). */
+	readonly checkedAt: number;
+	/** Failed rounds in a row (0 after a success). */
+	readonly failedRounds: number;
 }
 
-/** Test-only: reset the module-level probe cache between unit runs. */
-export function __resetProbeCacheForTests(): void {
-	probeInFlight = null;
-	probeCache = null;
+/** A clock that never steps back (the schedule and the refresh limit). */
+const monotonicMs = (): number => performance.now();
+
+/**
+ * Measures every published RPC node continuously, so /v1/rpc-endpoints can
+ * answer at once with real, current figures (see the module doc).
+ *
+ *  - Each node is re-measured `everyMs` after the START of its last round, on
+ *    its own: one slow or dead node never delays the others' figures. A round
+ *    that takes longer than that (a dead hidden node: two full timeouts) is
+ *    followed by the next one at the next tick.
+ *  - The schedule and the refresh limit run on a monotonic clock: a wall clock
+ *    stepped back (NTP, a restored VM) must not freeze every figure until it
+ *    catches up. `checked_at` is wall-clock time.
+ *  - A node is never measured twice at once (a round still running is shared).
+ *  - `checkAllNow()` (the card's refresh) re-measures every node now — at most
+ *    once per PROBE_MIN_INTERVAL_MS across all callers, concurrent callers
+ *    sharing one round — so no number of clicks makes the indexer ping the
+ *    nodes faster than that.
+ *  - The node list is re-read every tick (it follows the on-chain directory);
+ *    a node that leaves the list is forgotten, and its last round, if one was
+ *    running, is not recorded. A tick never starts while the previous one is
+ *    still reading the list.
+ *  - stop() ends it: nothing more is probed, not even by a tick already
+ *    under way.
+ */
+export class RpcHealthProber {
+	private readonly checks = new Map<string, NodeCheck>();
+	private readonly running = new Map<string, Promise<void>>();
+	/** Monotonic start of each node's latest round (the schedule). */
+	private readonly startedAt = new Map<string, number>();
+	/** The last node list read successfully, as read and as a set. */
+	private lastList: readonly string[] = [];
+	private listed: ReadonlySet<string> | null = null;
+	private timer: ReturnType<typeof setInterval> | null = null;
+	private ticking: Promise<void> | null = null;
+	private stopped = false;
+	private lastForcedAt = -Infinity;
+	private forced: Promise<void> | null = null;
+	private readonly everyMs: number;
+	private readonly tickMs: number;
+	private readonly probe: (url: string) => Promise<ProbeResult>;
+	/** Wall clock: `checked_at`, `generated_at`. */
+	private readonly now: () => number;
+	/** Monotonic clock: the schedule and the refresh limit. */
+	private readonly clock: () => number;
+
+	constructor(
+		private readonly urlsFn: () => readonly string[] | Promise<readonly string[]>,
+		opts: {
+			everyMs?: number;
+			tickMs?: number;
+			probe?: (url: string) => Promise<ProbeResult>;
+			/** Wall clock; when given without `clock`, it drives the schedule too (tests). */
+			now?: () => number;
+			clock?: () => number;
+		} = {}
+	) {
+		this.everyMs = opts.everyMs ?? PROBE_EVERY_MS;
+		this.tickMs = opts.tickMs ?? PROBER_TICK_MS;
+		this.probe = opts.probe ?? probeNodeRound;
+		this.now = opts.now ?? Date.now;
+		this.clock = opts.clock ?? opts.now ?? monotonicMs;
+	}
+
+	/** Start measuring (the first round starts at once). Idempotent. */
+	start(): void {
+		if (this.timer !== null) return;
+		this.stopped = false;
+		void this.tick();
+		this.timer = setInterval(() => void this.tick(), this.tickMs);
+		this.timer.unref?.();
+	}
+
+	/** Stop measuring. A round already running ends on its own timeout. */
+	stop(): void {
+		this.stopped = true;
+		if (this.timer !== null) clearInterval(this.timer);
+		this.timer = null;
+	}
+
+	/** The node list, never throwing (a failed read keeps the last good list). */
+	async urls(): Promise<readonly string[]> {
+		try {
+			const urls = [...(await this.urlsFn())];
+			this.lastList = urls;
+			this.listed = new Set(urls);
+			return urls;
+		} catch {
+			return this.lastList;
+		}
+	}
+
+	/** Measure every node that is due (joins a tick still reading the list).
+	 *  Exposed for tests. */
+	tick(): Promise<void> {
+		if (this.ticking !== null) return this.ticking;
+		this.ticking = this.runTick().finally(() => {
+			this.ticking = null;
+		});
+		return this.ticking;
+	}
+
+	private async runTick(): Promise<void> {
+		const urls = await this.urls();
+		if (this.stopped) return;
+		const listed = new Set(urls);
+		for (const url of this.checks.keys()) if (!listed.has(url)) this.checks.delete(url);
+		for (const url of this.startedAt.keys()) if (!listed.has(url)) this.startedAt.delete(url);
+		const now = this.clock();
+		// Half a tick of slack: a round that started a few ms after its tick
+		// (the list read) is due at the tick 20 s later, not the one after.
+		const due = this.everyMs - this.tickMs / 2;
+		for (const url of urls) {
+			const started = this.startedAt.get(url);
+			if (started === undefined || now - started >= due) void this.check(url);
+		}
+	}
+
+	/** Measure one node now (or join the round already running for it). */
+	private check(url: string): Promise<void> {
+		const already = this.running.get(url);
+		if (already !== undefined) return already;
+		this.startedAt.set(url, this.clock());
+		const round = this.probe(url)
+			.then((result) => {
+				// A node that left the list while this round ran stays forgotten.
+				if (this.listed !== null && !this.listed.has(url)) return;
+				const prev = this.checks.get(url);
+				this.checks.set(url, {
+					result,
+					checkedAt: this.now(),
+					failedRounds: result.ok ? 0 : (prev?.failedRounds ?? 0) + 1
+				});
+			})
+			.catch(() => {
+				// probeOne never throws; nothing to record if a custom probe did.
+			})
+			.finally(() => this.running.delete(url));
+		this.running.set(url, round);
+		return round;
+	}
+
+	/** Re-measure every node now and wait for the round (the card's refresh).
+	 *  Rate-limited globally; see the class doc. */
+	async checkAllNow(): Promise<void> {
+		if (this.stopped) return;
+		if (this.forced !== null) return this.forced;
+		if (this.clock() - this.lastForcedAt < PROBE_MIN_INTERVAL_MS) return;
+		this.lastForcedAt = this.clock();
+		const run = (async () => {
+			const urls = await this.urls();
+			if (this.stopped) return;
+			await Promise.all(urls.map((u) => this.check(u)));
+		})();
+		this.forced = run.finally(() => {
+			this.forced = null;
+		});
+		return this.forced;
+	}
+
+	/** The latest figures for `urls`, in that order. A node not measured yet has
+	 *  no latency and no failures (the card says "checking"), never "down". */
+	snapshot(urls: readonly string[], now: number = this.now()): RpcEndpointsResponse {
+		const endpoints = urls.map((url): RpcEndpointHealth => {
+			const c = this.checks.get(url);
+			const transport = rpcTransportOf(url);
+			if (c === undefined) {
+				return {
+					url,
+					transport,
+					healthy: false,
+					latency_ms: null,
+					consecutive_failures: 0,
+					cooldown_ms: 0,
+					failure_reason: null,
+					http_status: null,
+					checked_at: null
+				};
+			}
+			return {
+				url,
+				transport,
+				healthy: c.result.ok,
+				latency_ms: c.result.ok ? c.result.latencyMs : null,
+				// Every failed round is two misses in a row.
+				consecutive_failures: c.result.ok ? 0 : c.failedRounds * 2,
+				cooldown_ms: 0,
+				failure_reason: c.result.reason,
+				http_status: c.result.httpStatus,
+				checked_at: new Date(c.checkedAt).toISOString()
+			};
+		});
+		return { network: 'morphit', generated_at: new Date(now).toISOString(), endpoints };
+	}
 }
 
 /**
@@ -524,16 +687,21 @@ let _dirHiddenCache: { at: number; urls: readonly string[] } | null = null;
 const DIRECTORY_HIDDEN_TTL_MS = 60_000;
 export async function directoryHiddenEndpoints(
 	db: { query(sql: string): Promise<{ rows: Array<{ endpoints: string[] }> }> },
-	now: number = Date.now()
+	// Steady clock (a wall clock stepped back would freeze the cache).
+	now: number = performance.now()
 ): Promise<readonly string[]> {
 	if (_dirHiddenCache && now - _dirHiddenCache.at < DIRECTORY_HIDDEN_TTL_MS) {
 		return _dirHiddenCache.urls;
 	}
 	try {
 		const r = await db.query('SELECT endpoints FROM rpc_directory WHERE id = 1');
-		const urls = (r.rows[0]?.endpoints ?? []).filter(
-			(u) => isHiddenRpcUrl(u, 'onion') || isHiddenRpcUrl(u, 'i2p')
-		);
+		// At most what a valid signed directory can hold (an onion and an I2P
+		// address per node): the row is read before the boot-time proof
+		// (rpcDirectoryReload) and the prober measures every URL it returns,
+		// all at once, every PROBE_EVERY_MS.
+		const urls = (r.rows[0]?.endpoints ?? [])
+			.filter((u) => isHiddenRpcUrl(u, 'onion') || isHiddenRpcUrl(u, 'i2p'))
+			.slice(0, 2 * RPC_DIRECTORY_MAX_NODES);
 		_dirHiddenCache = { at: now, urls };
 		return urls;
 	} catch {
@@ -559,7 +727,7 @@ export function unionHidden(
 let _dirNamesCache: { at: number; names: ReadonlyMap<string, string> } | null = null;
 export async function directoryNodeNames(
 	db: { query(sql: string): Promise<{ rows: Array<{ node_names: Record<string, unknown> }> }> },
-	now: number = Date.now()
+	now: number = performance.now()
 ): Promise<ReadonlyMap<string, string>> {
 	if (_dirNamesCache && now - _dirNamesCache.at < DIRECTORY_HIDDEN_TTL_MS) {
 		return _dirNamesCache.names;
@@ -587,9 +755,9 @@ function byLatencyAsc(a: number | null, b: number | null): number {
 }
 
 /** Decorate an endpoints response with optional operator names (by URL) and sort
- *  it by smoothed latency ascending — clearnet + hidden together, fastest first,
- *  unmeasured last. Applied to BOTH the passive and ?probe=1 responses so the
- *  public JSON always carries names and a stable latency order. PURE. */
+ *  it by measured latency ascending — clearnet + hidden together, fastest first,
+ *  unmeasured last. Applied to every /v1/rpc-endpoints response so the public
+ *  JSON always carries names and a stable latency order. PURE. */
 export function withNamesSorted(
 	resp: RpcEndpointsResponse,
 	names: ReadonlyMap<string, string>
@@ -610,7 +778,8 @@ export function __resetDirectoryHiddenCacheForTest(): void {
 }
 
 export function rpcEndpointsRoute(
-	snapshotFn: () => readonly EndpointState[],
+	// The background prober (started by main.ts) — the source of every figure.
+	prober: Pick<RpcHealthProber, 'snapshot' | 'checkAllNow'>,
 	// A getter (not a fixed array) so the canonical list re-derives per request:
 	// newly-pinned on-chain hidden-RPC nodes appear WITHOUT an indexer restart or
 	// a Morphit release. May be async (it can read the persisted rpc_directory).
@@ -623,24 +792,12 @@ export function rpcEndpointsRoute(
 ): Hono {
 	const app = new Hono();
 	app.get('/', async (c) => {
+		// `?probe=1` → re-measure every node now (5 s global limit, coalesced),
+		// then answer. Anything else → the prober's latest figures, at once.
+		if (c.req.query('probe') === '1') await prober.checkAllNow();
 		const canonicalUrls = await canonicalUrlsFn();
 		const names = await namesFn();
-		// `?probe=1` → fresh active ping of every node (5s-rate-limited
-		// server-side). Anything else → the cheap passive pool snapshot. Both get names
-		// attached and are sorted by latency ascending.
-		if (c.req.query('probe') === '1') {
-			return c.json(withNamesSorted(await cachedProbeEndpoints(canonicalUrls), names));
-		}
-		// Passive snapshot: also fold in "which hidden transports can't be reached
-		// from here" so a node whose Tor/i2pd isn't running reads as a calm
-		// "requires Tor/I2P" rather than a red error on page load.
-		const transportsOff = await unreachableTransports();
-		return c.json(
-			withNamesSorted(
-				buildRpcEndpointsResponse(snapshotFn(), canonicalUrls, Date.now(), transportsOff),
-				names
-			)
-		);
+		return c.json(withNamesSorted(prober.snapshot(canonicalUrls), names));
 	});
 	return app;
 }

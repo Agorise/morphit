@@ -13390,7 +13390,7 @@ By default your indexer reads the Blurt chain from the canonical clearnet RPC po
 
 ### What it does
 
-The indexer probes and reads from hidden endpoints server-side (the browser never touches them). A `.onion` endpoint is routed through your local **Tor SOCKS proxy** (default `127.0.0.1:9050`); a `.b32.i2p` endpoint through your local **i2pd HTTP proxy** (default `127.0.0.1:4444`). Clearnet endpoints are completely unaffected — they keep going out directly, exactly as before. Hidden endpoints join the same pool: the quorum chain-consistency cross-check runs across them, and they appear on the Settings → RPC endpoints card with a **Tor** / **I2P** badge. If a hidden node (or the local proxy) is unreachable, the pool simply uses a clearnet node — reads never block on the hidden tier.
+The indexer probes and reads from hidden endpoints server-side (the browser never touches them). A `.onion` endpoint is routed through your local **Tor SOCKS proxy** (default `127.0.0.1:9050`); a `.b32.i2p` endpoint through your local **i2pd HTTP proxy** (default `127.0.0.1:4444`). Clearnet endpoints are completely unaffected — they keep going out directly, exactly as before. Hidden endpoints join the same pool: the quorum chain-consistency cross-check runs across them, and they appear on the stats page's RPC endpoints card with a **Tor** / **I2P** badge. If a hidden node (or the local proxy) is unreachable, the pool simply uses a clearnet node — reads never block on the hidden tier.
 
 ### Enabling it
 

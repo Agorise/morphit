@@ -1050,6 +1050,10 @@ export interface RpcEndpointRow {
 	readonly transport: 'clearnet' | 'tor' | 'i2p' | 'local';
 	readonly healthy: boolean;
 	readonly latencyMs: number | null;
+	/** The indexer has measured this node at least once (v1.21.6 rows carry
+	 *  `checked_at`, null until the first measurement; an older indexer's rows
+	 *  have no such field and count as measured). */
+	readonly measured: boolean;
 	/** Operator-published node name (hidden-RPC nodes only); lets us tell a
 	 *  re-establishing transport apart from a dead node — a down transport whose
 	 *  same-named sibling answers means the box is up, not gone. */
@@ -1072,16 +1076,20 @@ export function parseRpcEndpointRows(body: unknown): RpcEndpointRow[] {
 			url: o.url,
 			transport,
 			healthy: o.healthy === true,
-			latencyMs: typeof o.latencyMs === 'number' ? o.latencyMs : null,
+			// The indexer's field is latency_ms (packages/indexer-client RpcEndpointHealth).
+			latencyMs: typeof o.latency_ms === 'number' ? o.latency_ms : null,
+			measured: o.checked_at !== null,
 			name: typeof o.name === 'string' ? o.name : null
 		});
 	}
 	return rows;
 }
 
-/** Fetch the indexer's per-endpoint RPC health. Derives /v1/rpc-endpoints?probe=1
- *  from the health URL. Best-effort: returns null on any failure (the summary
- *  count from /v1/health still renders). */
+/** Fetch the indexer's per-endpoint RPC health. Derives /v1/rpc-endpoints from
+ *  the health URL: a plain GET answers at once from the indexer's background
+ *  measurements (each node every 20 s); `?probe=1` would wait for a fresh round,
+ *  up to ~43 s. Best-effort: returns null on any failure (the summary count from
+ *  /v1/health still renders). */
 async function fetchRpcEndpoints(
 	healthUrl: string,
 	timeoutMs = 22000
@@ -1091,7 +1099,7 @@ async function fetchRpcEndpoints(
 		const u = new URL(healthUrl);
 		u.pathname = u.pathname.replace(/\/v1\/health$/, '/v1/rpc-endpoints');
 		if (!u.pathname.endsWith('/v1/rpc-endpoints')) u.pathname = '/v1/rpc-endpoints';
-		u.search = '?probe=1';
+		u.search = '';
 		url = u.toString();
 	} catch {
 		return null;
@@ -1983,20 +1991,26 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		);
 		if (s.lagNote !== null && !s.rpcAllDown)
 			console.log(`                     ${c.dim(s.lagNote)}`);
-		// Count reachable from the per-endpoint rows the operator actually sees (a
-		// fresh active probe), not the pool's passive health count — otherwise the
-		// header ("7/10") can disagree with the ✓/✗ rows below it ("8 green").
+		// Count reachable from the per-endpoint rows the operator actually sees (the
+		// indexer's background measurements), not the pool's passive health count —
+		// otherwise the header ("7/10") can disagree with the ✓/✗ rows below it
+		// ("8 green"). A node the indexer has not measured yet (just after it
+		// started) is neither up nor down: it is left out of the count.
+		const measuredRows = (rpcEndpointRows ?? []).filter((r) => r.measured);
+		const unmeasured = (rpcEndpointRows?.length ?? 0) - measuredRows.length;
 		const rowsHealthy =
-			rpcEndpointRows !== null && rpcEndpointRows.length > 0
+			measuredRows.length > 0
 				? {
-						healthy: rpcEndpointRows.filter((r) => r.healthy).length,
-						total: rpcEndpointRows.length
+						healthy: measuredRows.filter((r) => r.healthy).length,
+						total: measuredRows.length
 					}
 				: null;
 		const rpcHealthy = rowsHealthy?.healthy ?? s.rpcHealthy;
 		const rpcTotal = rowsHealthy?.total ?? s.rpcTotal;
 		const rpcStr =
-			rpcHealthy !== null && rpcTotal !== null ? `${rpcHealthy}/${rpcTotal} reachable` : 'unknown';
+			rpcHealthy !== null && rpcTotal !== null
+				? `${rpcHealthy}/${rpcTotal} reachable${unmeasured > 0 ? `, ${unmeasured} being measured` : ''}`
+				: 'unknown';
 		console.log(`      Blurt RPC:     ${rpcHealthy === 0 ? c.red(rpcStr) : rpcStr}`);
 		// Per-endpoint breakdown (transport · host · latency · reachable) so the
 		// operator sees WHICH nodes are up — including the Tor/I2P/local ones, not
@@ -2023,11 +2037,13 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 								: c.green(lat)
 						: c.dim(lat);
 				const reestablishing = !r.healthy && r.name != null && healthyRpcNames.has(r.name);
-				const mark = r.healthy
-					? c.green('\u2713')
-					: reestablishing
-						? c.yellow('\u21BB re-establishing (node up on another transport)')
-						: c.dim('\u2717 warming up / unreachable');
+				const mark = !r.measured
+					? c.dim('\u2026 being measured')
+					: r.healthy
+						? c.green('\u2713')
+						: reestablishing
+							? c.yellow('\u21BB re-establishing (node up on another transport)')
+							: c.dim('\u2717 warming up / unreachable');
 				const line = `${c.dim(badge)} ${host} ${latOut}  ${mark}`;
 				console.log(`                     ${line}`);
 			}

@@ -96,12 +96,15 @@ The whitelist array in the script **must stay in sync with
 
 ## No-JavaScript notice (`<noscript>`)
 
-A styled banner explaining that browsing (orders, profiles, feedback)
-works without JavaScript by design, but trading (creating orders,
-chatting, signing feedback) needs JS because all cryptography happens
-in the browser — Morphit never sees user keys, and running JS on the
-server would mean holding them. This is intentional UX, kept inline so
-it renders with zero JS.
+A styled banner explaining what works without JavaScript (pages with
+fixed text such as security, glossary and run-a-node, the list of FAQ
+questions, and the RSS feeds) and what does not (FAQ answers, privacy
+guides, orderbook, profiles, reviews, chat), and that trading (creating
+orders, chatting, signing feedback) needs JS because all cryptography
+happens in the browser — Morphit never sees user keys, and running JS on
+the server would mean holding them. It also carries a small `<style>`
+that hides the homepage's first-trades placeholder (`.ftc-slot`), whose
+card only JavaScript loads. Kept inline so it renders with zero JS.
 
 ## Service-worker registration
 

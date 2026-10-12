@@ -362,7 +362,6 @@ apps/web/scripts/disabled-payment-methods-ui-coverage-smoke.ts
 apps/web/scripts/display-name-cap-smoke.ts
 apps/web/scripts/economics-canonical-smoke.ts
 apps/web/scripts/endpoint-error-classify-smoke.ts
-apps/web/scripts/endpoint-list-throttle-smoke.ts
 apps/web/scripts/env-example-schema-parity-smoke.ts
 apps/web/scripts/explorer-account-card-smoke.ts
 apps/web/scripts/explorer-download-polish-smoke.ts
@@ -378,7 +377,6 @@ apps/web/scripts/faq-jsonld-no-markdown-smoke.ts
 apps/web/scripts/faq-keys-themed-section-smoke.ts
 apps/web/scripts/faq-per-tradable-asset-parity-smoke.ts
 apps/web/scripts/faq-scroll-block-start-smoke.ts
-apps/web/scripts/faq-search-grandma-coverage-smoke.ts
 apps/web/scripts/feature-pills-fiat-smoke.ts
 apps/web/scripts/featured-bid-history-modal-smoke.ts
 apps/web/scripts/featured-card-reputation-smoke.ts
@@ -461,7 +459,6 @@ apps/web/scripts/profile-account-change-reload-smoke.ts
 apps/web/scripts/profile-freshness-smoke.ts
 apps/web/scripts/public-key-display-smoke.ts
 apps/web/scripts/push-privacy-honesty-smoke.ts
-apps/web/scripts/rpc-health-merge-smoke.ts
 apps/web/scripts/rss-dynamic-title-smoke.ts
 apps/web/scripts/rtl-handle-and-footer-tasks-smoke.ts
 apps/web/scripts/seed-normalize-smoke.ts
@@ -594,7 +591,6 @@ apps/web/src/lib/stores/selfProfile.ts
 apps/web/src/lib/ui/pinToBottom.test.ts
 apps/web/src/lib/updates/tamperBannerGate.ts
 apps/web/src/lib/utils/faqIndex.test.ts
-apps/web/src/lib/utils/faqIndex.ts
 apps/web/src/lib/utils/orderTitle.ts
 apps/web/src/libsodium-wrappers-sumo.d.ts
 apps/web/src/routes/+page.svelte

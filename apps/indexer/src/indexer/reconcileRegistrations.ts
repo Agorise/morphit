@@ -328,7 +328,7 @@ export async function backfillFeeRecipientHistory(
 			        SELECT 1 FROM operator_fee_recipients f
 			         WHERE f.account = ops.signer AND f.effective_block = ops.block_num
 			           AND f.effective_trx = ops.trx_id)
-			  ORDER BY block_num ASC, trx_in_block ASC, op_in_trx ASC
+			  ORDER BY ops.block_num ASC, trx_in_block ASC, op_in_trx ASC
 			  LIMIT $2`,
 			[OP_IDS.operatorRegister, pageSize, cursor[0], cursor[1], cursor[2]]
 		);

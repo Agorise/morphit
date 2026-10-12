@@ -236,7 +236,7 @@ export class BlurtFeeReverifier {
 			          FROM ops
 			         WHERE ops.signer = o.account AND ops.op_id = $1 AND ops.status = 'applied'
 			           AND ops.payload->>'permlink' = o.permlink
-			         ORDER BY block_num ASC, trx_in_block ASC, op_in_trx ASC
+			         ORDER BY ops.block_num ASC, trx_in_block ASC, op_in_trx ASC
 			         LIMIT 1) op ON TRUE
 			  WHERE o.status = 'live' AND o.fee_method = 'blurt' AND o.fee_status = 'underpaid'
 			    AND (o.expires_at IS NULL OR o.expires_at > NOW())

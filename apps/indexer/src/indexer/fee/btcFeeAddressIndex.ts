@@ -215,7 +215,7 @@ async function extendLog(client: pg.PoolClient, upTo: OpPosition): Promise<void>
 	if (firstXpubEpoch === undefined) return;
 	const last = await client.query<{ block_num: string; trx_in_block: number; op_in_trx: number }>(
 		`SELECT block_num::text, trx_in_block, op_in_trx FROM btc_fee_address_log
-		  ORDER BY block_num DESC, trx_in_block DESC, op_in_trx DESC LIMIT 1`
+		  ORDER BY btc_fee_address_log.block_num DESC, trx_in_block DESC, op_in_trx DESC LIMIT 1`
 	);
 	const from = last.rows[0];
 	const fromBlock = from ? Number(from.block_num) : firstXpubEpoch.fromBlock;
@@ -236,7 +236,7 @@ async function extendLog(client: pg.PoolClient, upTo: OpPosition): Promise<void>
 		    AND (block_num, trx_in_block, op_in_trx) > ($1, $2, $3)
 		    AND (block_num, trx_in_block, op_in_trx) < ($4, $5, $6)
 		    AND payload->>'fee_method' = 'btc'
-		  ORDER BY block_num ASC, trx_in_block ASC, op_in_trx ASC`,
+		  ORDER BY ops.block_num ASC, trx_in_block ASC, op_in_trx ASC`,
 		[fromBlock, fromTrx, fromOp, upTo.blockNum, upTo.trxInBlock, upTo.opInTrx]
 	);
 	for (const r of pending.rows) {

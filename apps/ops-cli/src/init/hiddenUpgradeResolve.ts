@@ -26,8 +26,15 @@ import { hiddenServiceProxyConfigFromEnv } from '@morphit/hidden-transport';
 import {
 	fetchHiddenUpgrade,
 	resolvePeerGateways,
+	HiddenFetchError,
 	type PeerDirectoryRow
 } from './hiddenUpgradeFetch.js';
+import {
+	HiddenUpgradeWaitError,
+	classifyPeerFailure,
+	formatDuration,
+	type PeerOutcome
+} from './hiddenUpgradeWait.ts';
 import { makeHiddenTarballFetcher } from './hiddenUpgradeTransport.js';
 import { localCondenser } from '../lib/hiddenOnly.ts';
 import {
@@ -142,6 +149,10 @@ interface ReleaseTargetResponse {
 }
 interface DirectoryResponse {
 	instances?: Array<{
+		name?: string | null;
+		operator_display_name?: string | null;
+		operator_tag?: string | null;
+		origin?: string | null;
 		alt_networks?: { tor?: string | null; i2p_b32?: string | null } | null;
 		reg_alt_networks?: unknown;
 		tor?: string | null;
@@ -241,20 +252,51 @@ export async function readOnchainReleaseTag(
 	}
 }
 
+/** How an instance is named to the operator: its site name, else its
+ *  operator's, else its tag, else its address. Terminal-safe (printable,
+ *  short). */
+export function peerDisplayName(row: {
+	name?: unknown;
+	operator_display_name?: unknown;
+	operator_tag?: unknown;
+	origin?: unknown;
+}): string | null {
+	for (const v of [row.name, row.operator_display_name, row.operator_tag, row.origin]) {
+		if (typeof v !== 'string') continue;
+		const clean = v
+			.replace(/^https?:\/\//, '')
+			// Letters with their marks (Devanagari vowel signs, Arabic harakat) and
+			// the joiners Persian needs; never controls, bidi or escape sequences.
+			.replace(/[^\p{L}\p{M}\p{N} ._@\u200c\u200d-]/gu, '')
+			.trim();
+		// Cut by whole characters: a UTF-16 slice can split one in two.
+		const chars = [...clean];
+		if (clean !== '') return chars.length > 40 ? `${chars.slice(0, 39).join('')}…` : clean;
+	}
+	return null;
+}
+
 /**
  * If this node is hidden-only, fetch + verify the release tarball over Tor/I2P
  * from a federation peer and return its local path + version. Returns null when
  * NOT hidden-only (caller proceeds on its normal clearnet path). Throws
- * (fail-closed) when hidden-only but the release can't be privately obtained.
+ * (fail-closed) when hidden-only but the release can't be privately obtained —
+ * since v1.21.6 a {@link HiddenUpgradeWaitError} when the release is simply not
+ * reachable over Tor/I2P YET (the record could not be read in time, no instance
+ * to ask, or none had a matching copy), so the operator is told it is a wait.
  */
 export async function tryResolveHiddenUpgrade(
 	opts: HiddenOnlyOptions & {
+		/** A line for the operator (printed above the spinner). */
 		onProgress?: (msg: string) => void;
+		/** v1.21.6: the spinner's label for what it is doing right now. */
+		onStatus?: (label: string) => void;
 		/** Tests only: the pinned posting key and the chain reader. */
 		postingPubkey?: string;
 		chainRead?: CondenserRead;
-		/** How long to keep asking the indexer for a record its first answer
-		 *  lacked, and the clock that wait runs on (tests). */
+		/** How long to keep asking the indexer for the record when its answer
+		 *  lacked it OR no answer came (over Tor/I2P one answer can take a
+		 *  minute), and the clock that wait runs on (tests). */
 		anchorWait?: {
 			readonly waitMs?: number;
 			readonly now?: () => number;
@@ -266,9 +308,12 @@ export async function tryResolveHiddenUpgrade(
 	// every answer below comes from ONE authenticated
 	// listener — the indexer's own process, found at its configured address.
 	const base = locateLocalIndexer(opts);
+	const clockNow = opts.anchorWait?.now ?? (() => performance.now());
+	const started = clockNow();
 
 	opts.onProgress?.(
-		'hidden-only node — resolving the release from the federation over Tor/I2P (zero clearnet)…'
+		'This server uses no clearnet (zero clearnet): it gets the release from the other Morphit ' +
+			"instances over Tor and I2P, and checks it against @morphit's signed record. This can take a few minutes."
 	);
 
 	// 1. Target. The local indexer says which version is current; the hashes and
@@ -280,8 +325,8 @@ export async function tryResolveHiddenUpgrade(
 		);
 	}
 	const version = rel.version.trim().replace(/^v/, '');
-	opts.onProgress?.(
-		`checking @${MORPHIT_RELEASE_ACCOUNT}'s signed release record for v${version} (through this node's own indexer)…`
+	opts.onStatus?.(
+		`Reading @${MORPHIT_RELEASE_ACCOUNT}'s signed record for v${version} over Tor/I2P`
 	);
 	const read: CondenserRead =
 		opts.chainRead ??
@@ -297,25 +342,56 @@ export async function tryResolveHiddenUpgrade(
 		...(opts.anchorWait?.sleep !== undefined ? { sleep: opts.anchorWait.sleep } : {})
 	};
 	let verified = await findSignedReleaseAnchor({ sources: [read], ...clock }, anchorArgs);
-	// The indexer relays the read to whichever node answers first; one answer
-	// without the record proves nothing (the indexer's own /v1/release just
-	// named this version), so it is asked again for a while.
+	// One answer without the record proves nothing (the indexer relays the read
+	// to whichever node answers first, and its own /v1/release just named this
+	// version), and over Tor/I2P one read can simply take longer than a minute
+	// (v1.21.6: morphitlat, 2026-10-10). Either way it is asked again for a while.
 	const waitMs = opts.anchorWait?.waitMs ?? 0;
-	if (!verified.ok && 'notListed' in verified && verified.notListed === true && waitMs > 0) {
+	const retryable =
+		!verified.ok &&
+		(('notListed' in verified && verified.notListed === true) ||
+			('unreadable' in verified && verified.unreadable === true));
+	if (retryable && waitMs > 0) {
+		const notListed = 'notListed' in verified && verified.notListed === true;
 		opts.onProgress?.(
-			`the record for v${version} is not in the history the indexer's node served; asking again (up to ${Math.round(waitMs / 60_000)} minutes)…`
+			notListed
+				? `The history this server's indexer got does not list the record for v${version} yet; it keeps asking (up to ${Math.round(waitMs / 60_000)} minutes).`
+				: `This server's indexer had no answer from its Blurt nodes in time (over Tor/I2P that happens); it keeps asking (up to ${Math.round(waitMs / 60_000)} minutes).`
+		);
+		opts.onStatus?.(
+			`Still asking for @${MORPHIT_RELEASE_ACCOUNT}'s signed record for v${version} over Tor/I2P (try 2)`
 		);
 		verified = await findSignedReleaseAnchor(
-			{ sources: [read], waitMs, intervalMs: 10_000, ...clock },
+			{
+				sources: [read],
+				waitMs,
+				intervalMs: 10_000,
+				onRetry: (round) =>
+					opts.onStatus?.(
+						`Still asking for @${MORPHIT_RELEASE_ACCOUNT}'s signed record for v${version} over Tor/I2P (try ${round + 2})`
+					),
+				...clock
+			},
 			{ ...anchorArgs, maxPages: 1 }
 		);
 	}
 	if (!verified.ok) {
 		// (`in`, not the ok flag: the smoke typecheck runs without strictNullChecks.)
 		const why = 'reason' in verified ? verified.reason : 'unknown';
-		throw new Error(
-			`hidden upgrade: no signed release record for v${version} could be verified (${why}) — staying put (fail-closed)`
-		);
+		const message = `hidden upgrade: no signed release record for v${version} could be verified (${why}) — staying put (fail-closed)`;
+		// A forged/invalid record is not a wait — also when another read of the
+		// wait had no answer (v1.21.6 review).
+		const waitable =
+			!('invalid' in verified && verified.invalid === true) &&
+			(('notListed' in verified && verified.notListed === true) ||
+				('unreadable' in verified && verified.unreadable === true));
+		if (!waitable) throw new Error(message);
+		throw new HiddenUpgradeWaitError(message, {
+			stage: 'record',
+			version,
+			recordNotListed: 'notListed' in verified && verified.notListed === true,
+			searchedMs: clockNow() - started
+		});
 	}
 	const anchor = verified.anchor;
 	const sha = anchor.sourceSha256;
@@ -324,11 +400,14 @@ export async function tryResolveHiddenUpgrade(
 	const problem = hiddenReleaseTargetProblem(sha, ipns, cid);
 	if (problem !== null) throw new Error(problem);
 	opts.onProgress?.(
-		`target v${version}, ${CID_RE.test(cid) ? `CID ${cid}` : `IPNS ${ipns}`} — verifying against the on-chain SHA-256 (no clearnet)`
+		`✓ Found @${MORPHIT_RELEASE_ACCOUNT}'s signed record for v${version} (block ${anchor.blockNum}): ` +
+			`the release must match its SHA-256 (${CID_RE.test(cid) ? `CID ${cid}` : `IPNS ${ipns}`}).`
 	);
+	opts.onStatus?.("Reading this server's federation directory");
 
 	// 2. Peers: federation directory → hidden gateway bases (auto-discovered).
 	const dir = await getLocalIndexerJson<DirectoryResponse>(base, '/v1/instances');
+	const names = new Map<string, string>();
 	const rows: PeerDirectoryRow[] = (dir.instances ?? []).map((i) => {
 		// /v1/instances nests the hidden addresses under `alt_networks` (v1.16.8
 		// fix — the v1.16.6 resolver read `i.tor`/`i.reg_alt_networks`, which don't
@@ -340,38 +419,96 @@ export async function tryResolveHiddenUpgrade(
 			for (const v of vals) if (typeof v === 'string' && v.trim() !== '') return v.trim();
 			return null;
 		};
-		return {
+		const row = {
 			tor: pick(an.tor, ra.tor, i.tor),
 			i2p_b32: pick(an.i2p_b32, ra.i2p_b32, i.i2p_b32)
 		};
+		const name = peerDisplayName(i);
+		if (name !== null) {
+			for (const host of [row.tor, row.i2p_b32])
+				if (host !== null) names.set(`http://${host}`, name);
+		}
+		return row;
 	});
 	const peerGateways = resolvePeerGateways(rows);
 	if (peerGateways.length === 0) {
-		throw new Error(
-			'hidden upgrade: no federation peer advertises a Tor/I2P address in the directory yet — staying put (fail-closed)'
+		throw new HiddenUpgradeWaitError(
+			'hidden upgrade: no federation peer advertises a Tor/I2P address in the directory yet — staying put (fail-closed)',
+			{ stage: 'peers', version, searchedMs: clockNow() - started }
 		);
 	}
-	// Tell the operator EXACTLY which hidden services are in play — a zero-clearnet
-	// node should never be left guessing where its bytes came from.
-	const shown = peerGateways
-		.slice(0, 4)
-		.map((g) => hiddenGatewayLabel(g))
-		.join(', ');
+	const networkOf = (g: string): 'Tor' | 'I2P' => (g.includes('.i2p') ? 'I2P' : 'Tor');
+	const labelOf = (g: string): string => {
+		const n = names.get(g.replace(/\/+$/, ''));
+		return n !== undefined ? `${n} (${networkOf(g)})` : hiddenGatewayLabel(g);
+	};
+	const instances = new Set(peerGateways.map((g) => names.get(g) ?? g)).size;
+	const i2pCount = peerGateways.filter((g) => networkOf(g) === 'I2P').length;
 	opts.onProgress?.(
-		`fetching over ${peerGateways.length} hidden gateway${peerGateways.length === 1 ? '' : 's'} (Tor/I2P): ${shown}${peerGateways.length > 4 ? ', …' : ''}`
+		`Searching the federation for v${version}: ${instances} instance${instances === 1 ? '' : 's'}, ` +
+			`${peerGateways.length} address${peerGateways.length === 1 ? '' : 'es'} ` +
+			`(${i2pCount} over I2P, ${peerGateways.length - i2pCount} over Tor). ` +
+			'Each answers through its own Tor circuit or I2P tunnel, so this can take a few minutes; ' +
+			'the first copy that matches the signed SHA-256 is used.'
 	);
 
 	// 3. Fetch + verify (raced, SHA-checked, fail-closed) over Tor/I2P.
 	const fetchTarball = makeHiddenTarballFetcher({ proxy: hiddenServiceProxyConfigFromEnv() });
-	const result = await fetchHiddenUpgrade(
-		{ ipnsName: ipns, ipfsCid: cid, expectedSha256: sha, version, path: 'morphit-latest.tar.gz' },
-		{
-			peerGateways,
-			fetchTarball,
-			sha256: (b) => createHash('sha256').update(b).digest('hex'),
-			onProgress: opts.onProgress
+	const asked = new Set<string>();
+	// What the addresses asked so far answered, in the words of the panel: only
+	// an instance that answered without the release is "without a copy"; one
+	// that could not be reached may well have it (v1.21.6 review).
+	let without = 0;
+	let silent = 0;
+	let unusable = 0;
+	let current = '';
+	const status = (): void =>
+		opts.onStatus?.(
+			`Searching the federation (Tor + I2P): asking ${current} · ${asked.size}/${peerGateways.length} asked` +
+				(without > 0 ? `, ${without} without a copy` : '') +
+				(silent > 0 ? `, ${silent} not answering` : '') +
+				(unusable > 0 ? `, ${unusable} with no usable copy` : '')
+		);
+	let result: Awaited<ReturnType<typeof fetchHiddenUpgrade>>;
+	try {
+		result = await fetchHiddenUpgrade(
+			{ ipnsName: ipns, ipfsCid: cid, expectedSha256: sha, version, path: 'morphit-latest.tar.gz' },
+			{
+				peerGateways,
+				fetchTarball,
+				sha256: (b) => createHash('sha256').update(b).digest('hex'),
+				onAttempt: (gw) => {
+					asked.add(gw);
+					current = labelOf(gw);
+					status();
+				},
+				onPeerFailed: (_gw, reason) => {
+					const r = classifyPeerFailure(reason);
+					if (r === 'missing') without += 1;
+					else if (r === 'no_answer' || r === 'unreachable') silent += 1;
+					else unusable += 1;
+					status();
+				}
+			}
+		);
+	} catch (err) {
+		if (err instanceof HiddenFetchError) {
+			const peers: PeerOutcome[] = err.perPeer.map((p) => ({
+				name:
+					names.get(p.peer.replace(/\/+$/, '')) ??
+					hiddenGatewayLabel(p.peer).replace(/ \((Tor|I2P|hidden)\)$/, ''),
+				network: networkOf(p.peer),
+				result: classifyPeerFailure(p.reason)
+			}));
+			throw new HiddenUpgradeWaitError(err.message, {
+				stage: 'fetch',
+				version,
+				peers,
+				searchedMs: clockNow() - started
+			});
 		}
-	);
+		throw err;
+	}
 
 	// 4. Write to a resolver-owned temp dir + a sibling .sha256, so the existing
 	//    offline apply path can treat it like any local tarball. (Already verified.)
@@ -380,8 +517,11 @@ export async function tryResolveHiddenUpgrade(
 	const tarballPath = join(tdir, name);
 	writeFileSync(tarballPath, result.bytes);
 	writeFileSync(`${tarballPath}.sha256`, `${sha}  ${name}\n`);
+	const winner = names.get(result.peer.replace(/\/+$/, ''));
 	opts.onProgress?.(
-		`verified release fetched over Tor/I2P from ${hiddenGatewayLabel(result.peer)} — applying (zero clearnet, no git.agorise.net / mirrors touched)`
+		`✓ Got v${version} from ${winner !== undefined ? `${winner}, ` : ''}${hiddenGatewayLabel(result.peer)} after ` +
+			`${formatDuration(clockNow() - started)}: it matches the signed SHA-256 — applying ` +
+			'(zero clearnet, no git.agorise.net / mirrors touched)'
 	);
 	return { tarballPath, version, servedBy: result.peer, anchor };
 }

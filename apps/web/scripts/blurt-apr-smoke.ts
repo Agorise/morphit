@@ -91,6 +91,28 @@ const nanCase = (label: string, inp: Parameters<typeof computeBlurtVestingApr>[0
 	if (Number.isNaN(computeBlurtVestingApr(inp))) ok(label);
 	else bad(`${label}: expected NaN`);
 };
+// A rate no real chain state gives (a lying RPC node behind the indexer) is
+// not a number: the vesting fund has to collapse below 7.5% of the supply for
+// 20%, and the live rate is about 1.7%.
+nanCase('APR NaN for a near-empty vesting fund (≈99%, from a lying node)', {
+	head_block_number: 60_378_641,
+	current_supply: '600000000.000 BLURT',
+	total_vesting_fund_blurt: '6754000.000 BLURT'
+});
+nanCase('APR NaN for a vesting fund of 0.001 BLURT (billions of %)', {
+	head_block_number: 60_378_641,
+	current_supply: '600000000.000 BLURT',
+	total_vesting_fund_blurt: '0.001 BLURT'
+});
+{
+	const apr = computeBlurtVestingApr({
+		head_block_number: 60_378_641,
+		current_supply: '592400000.000 BLURT',
+		total_vesting_fund_blurt: '34000000.000 BLURT'
+	});
+	if (Number.isFinite(apr) && apr > 19 && apr < 20) ok(`APR just under the bound is still shown: ${apr.toFixed(2)}%`);
+	else bad(`APR just under the 20% bound should be finite, got ${apr}`);
+}
 nanCase('APR NaN for malformed supply', {
 	head_block_number: 60_378_641,
 	current_supply: 'not-a-number',

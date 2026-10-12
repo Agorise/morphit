@@ -2,92 +2,114 @@
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import { getRpcEndpoints } from '$lib/indexer/client';
-	import { mergeFreshOverPassive, passiveIndex } from '$lib/net/rpcHealthMerge';
 	import type { RpcEndpointHealth } from '@morphit/indexer-client';
 
-	/** The canonical Blurt RPC pool + per-node health, fetched from the operator's
-	 *  indexer. this card is purely INFORMATIONAL — there is nothing for
-	 *  the user to configure. The browser talks ONLY to the operator's indexer,
-	 *  which relays every chain read/write and measures these nodes server-side,
-	 *  so the browser NEVER contacts a Blurt node directly (the sole exception is
-	 *  a boot-time release-integrity check, which uses this same canonical pool).
-	 *  Opening settings therefore never exposes the user's IP to a node operator.
-	 *  PRIVACY (#1): the indexer is the ONLY source of the health shown here. */
+	/** The public Blurt RPC nodes and how each one is doing, as this site's
+	 *  indexer measures them. Purely INFORMATIONAL — nothing to configure. The
+	 *  browser talks ONLY to the operator's indexer, which measures these nodes
+	 *  server-side, so the browser NEVER contacts a Blurt node here and opening
+	 *  the page never exposes the visitor's IP to a node operator.
+	 *
+	 *  v1.21.6 — ACCURATE FROM THE FIRST PAINT. The indexer measures every node
+	 *  continuously in the background (each one every ~20 s, independently), so
+	 *  the first answer already carries real latencies and real failures. The
+	 *  card then re-reads those figures every POLL_MS while the page is visible,
+	 *  so nothing goes stale. The refresh button asks the indexer to re-measure
+	 *  every node now; the rows on screen stay as they are until the new figures
+	 *  arrive (they are never swapped for older or guessed ones). A node the
+	 *  indexer has not measured yet (it just started) says "probing…", never
+	 *  "offline". Each row shows how long ago it was measured. */
 	let endpoints = $state<RpcEndpointHealth[]>([]);
-	/** True while the indexer health fetch is in flight (initial load or a click
-	 *  on refresh) — drives the refresh icon's spin. */
+	/** True while a refresh (or the first load) is in flight — spins the icon. */
 	let loading = $state(false);
-	/** Unix-ms of the last fetch START. the button stays clickable
-	 *  as fast as the user likes, but we never re-ping the indexer more than once
-	 *  per THROTTLE_MS so nobody can pound the pool. */
+	/** Unix-ms of the last refresh START. The button stays clickable as fast as
+	 *  the user likes, but we never ask for a re-measure more than once per
+	 *  THROTTLE_MS so nobody can pound the nodes. */
 	let lastFetchAt = $state(0);
-	/** Briefly true after a completed refresh — shows a ✓ so a click always reads as
-	 *  "did something", even when the stable health snapshot is unchanged). */
+	/** Briefly true after a completed refresh — shows a ✓ so a click always reads
+	 *  as "did something". */
 	let justRefreshed = $state(false);
 	/** Briefly true when a click is rate-limited (a quick pulse ack instead of
 	 *  silently doing nothing). */
 	let justThrottled = $state(false);
 	let refreshedTimer: ReturnType<typeof setTimeout> | null = null;
+	/** The clock the "measured N s ago" labels count from (ticks every second). */
+	let nowMs = $state(Date.now());
+	/** `generated_at` of the answer on screen: an answer generated earlier (a
+	 *  poll that was slow to arrive) is dropped, so the rows never go back in
+	 *  time. */
+	let shownGeneratedAt = 0;
+	/** Request order, on a counter (no clock): when each request was sent and
+	 *  when the answer on screen arrived. An answer to a request sent AFTER the
+	 *  one on screen arrived is newer whatever its `generated_at` says — so a
+	 *  step back of the indexer's clock (an NTP correction) cannot freeze the
+	 *  card. */
+	let tick = 0;
+	let shownArrivedTick = 0;
+	/** The indexer's clock minus the browser's, from the answer on screen:
+	 *  "measured N s ago" counts on the indexer's clock, which also stamped
+	 *  `checked_at` (the visitor's clock may be off by any amount). */
+	let clockOffsetMs = $state(0);
 
-	/** Last PASSIVE (smoothed pool) health, keyed by URL — the up/down authority.
-	 *  A single ?probe=1 miss is one sample; we don't let it override this. */
-	let passiveByUrl = new Map<string, RpcEndpointHealth>();
-
-	/** Never re-ping the indexer faster than this. */
+	/** Never ask for a re-measure faster than this. */
 	const THROTTLE_MS = 5000;
 	/** Keep the spinner up at least this long so a fast fetch is still visible. */
 	const MIN_SPIN_MS = 550;
+	/** Re-read the indexer's latest figures this often while the page is visible. */
+	const POLL_MS = 10_000;
+
+	/** Read the indexer's figures. `probe` asks it to re-measure every node now
+	 *  (the refresh button). On failure, or on an answer that is not the
+	 *  expected shape, the rows on screen stay as they are. */
+	async function fetchHealth(probe: boolean): Promise<void> {
+		const sentTick = ++tick;
+		const res = await getRpcEndpoints({ probe });
+		if (!res.ok) return;
+		const data: unknown = res.data;
+		if (typeof data !== 'object' || data === null) return;
+		const { endpoints: list, generated_at: g } = data as Record<string, unknown>;
+		if (!Array.isArray(list)) return;
+		const generated = typeof g === 'string' ? Date.parse(g) : NaN;
+		if (sentTick < shownArrivedTick && Number.isFinite(generated) && generated < shownGeneratedAt)
+			return;
+		// One row per URL (the list is keyed by it); a row without one is dropped.
+		const seen = new Set<string>();
+		const rows = list.filter((e: unknown): e is RpcEndpointHealth => {
+			const url = typeof e === 'object' && e !== null ? (e as { url?: unknown }).url : undefined;
+			if (typeof url !== 'string' || seen.has(url)) return false;
+			seen.add(url);
+			return true;
+		});
+		if (rows.length === 0 && list.length > 0) return; // rows, but none usable
+		shownArrivedTick = ++tick;
+		nowMs = Date.now();
+		shownGeneratedAt = Number.isFinite(generated) ? generated : 0;
+		clockOffsetMs = Number.isFinite(generated) ? generated - nowMs : 0;
+		endpoints = rows;
+	}
 
 	$effect(() => {
 		if (!browser) return;
-		// Passive snapshot first (instant render), then ONE quiet active probe so
-		// per-node latency — including the Tor/I2P hidden nodes, which the pool
-		// rarely calls on its own — fills in without the operator clicking refresh.
-		void (async () => {
-			await loadHealth(false);
-			await loadHealth(true, true);
-		})();
+		loading = true;
+		void fetchHealth(false).finally(() => (loading = false));
+		const poll = setInterval(() => {
+			if (document.visibilityState === 'visible') void fetchHealth(false);
+		}, POLL_MS);
+		const clock = setInterval(() => (nowMs = Date.now()), 1000);
+		const onVisible = (): void => {
+			if (document.visibilityState === 'visible') void fetchHealth(false);
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		return () => {
+			clearInterval(poll);
+			clearInterval(clock);
+			document.removeEventListener('visibilitychange', onVisible);
+		};
 	});
 
-	/** Fetch per-node health. `probe=false` → the indexer's cheap passive pool
-	 *  snapshot (used on mount). `probe=true` → ask the indexer to actively ping
-	 *  every node NOW for fresh latency (the refresh button; server-side that's
-	 *  rate-limited to once per 5s). `quiet` suppresses the spinner/ack (used for
-	 *  the background mount probe). Best-effort: on failure the list stays. */
-	async function loadHealth(probe: boolean, quiet = false): Promise<void> {
-		if (!browser) return;
-		if (!quiet) loading = true;
-		lastFetchAt = Date.now();
-		const started = Date.now();
-		try {
-			const res = await getRpcEndpoints({ probe });
-			if (res.ok) {
-				if (probe) {
-					// Fresh active probe: reconcile with the passive baseline so a
-					// lone transient miss (flaky WiFi / jittery i2p) doesn't flip a
-					// smoothed-healthy node to a false "unreachable".
-					endpoints = mergeFreshOverPassive(res.data.endpoints, passiveByUrl);
-				} else {
-					// Passive smoothed snapshot: the up/down authority.
-					endpoints = [...res.data.endpoints];
-					passiveByUrl = passiveIndex(res.data.endpoints);
-				}
-			}
-		} finally {
-			if (!quiet) {
-				const wait = MIN_SPIN_MS - (Date.now() - started);
-				if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-				loading = false;
-				justRefreshed = true;
-				if (refreshedTimer) clearTimeout(refreshedTimer);
-				refreshedTimer = setTimeout(() => (justRefreshed = false), 1200);
-			}
-		}
-	}
-
-	/** The refresh button handler. Always clickable; a click re-pings the indexer
-	 *  at most once per THROTTLE_MS. A rate-limited click gives a quick visual ack
-	 *  rather than silently doing nothing. */
+	/** The refresh button handler. Always clickable; a click asks for a
+	 *  re-measure at most once per THROTTLE_MS. A rate-limited click gives a
+	 *  quick visual ack rather than silently doing nothing. */
 	function onRefreshClick(): void {
 		if (loading) return;
 		if (Date.now() - lastFetchAt < THROTTLE_MS) {
@@ -95,10 +117,30 @@
 			setTimeout(() => (justThrottled = false), 320);
 			return;
 		}
+		lastFetchAt = Date.now();
+		loading = true;
+		const started = Date.now();
 		void (async () => {
-			await loadHealth(false, true); // refresh the up/down baseline (quiet)
-			await loadHealth(true); // then the visible fresh probe + merge
+			try {
+				await fetchHealth(true);
+			} finally {
+				const wait = MIN_SPIN_MS - (Date.now() - started);
+				if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+				loading = false;
+				justRefreshed = true;
+				if (refreshedTimer) clearTimeout(refreshedTimer);
+				refreshedTimer = setTimeout(() => (justRefreshed = false), 1200);
+			}
 		})();
+	}
+
+	/** "8 s" / "2 min" since a row was measured, or null when it never was. */
+	function age(h: RpcEndpointHealth): string | null {
+		if (h.checked_at == null) return null;
+		const t = Date.parse(h.checked_at);
+		if (!Number.isFinite(t)) return null;
+		const s = Math.max(0, Math.round((nowMs + clockOffsetMs - t) / 1000));
+		return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min`;
 	}
 
 	/** a ONE-LINE reason a node is red, instead of a flat
@@ -111,7 +153,7 @@
 	 *  a server-side probe cannot hit CORS, so naming it would be a lie.
 	 *
 	 *  Falls back to the plain "Unreachable" label when the indexer sent no
-	 *  reason (older indexer, or the passive pool snapshot) or when the node is
+	 *  reason (an older indexer) or when the node is
 	 *  genuinely not pingable — as requested, "Unreachable" suffices for that. */
 	function failureText(h: RpcEndpointHealth): string {
 		switch (h.failure_reason) {
@@ -146,18 +188,16 @@
 	}
 
 	/** Names of nodes that are healthy on AT LEAST ONE transport. A named node
-	 *  (e.g. an operator's "oldpc" published on both Tor and I2P) that answers on
-	 *  one transport proves the box is UP — so a sibling transport that's down is
-	 *  merely re-establishing (a Tor onion re-publishing its descriptor, an i2p
-	 *  tunnel rebuilding), not a dead node. Drives the amber "re-establishing"
-	 *  label below instead of a red "unreachable". */
+	 *  (an operator's "oldpc" published on both Tor and I2P) that answers on one
+	 *  transport proves the box is UP, so a sibling transport that fails is shown
+	 *  in amber rather than red — with its real reason, not a guess. */
 	const healthyNames = $derived(
 		new Set(endpoints.filter((e) => e.healthy && e.name != null).map((e) => e.name))
 	);
 
-	/** Status line for a node, derived ENTIRELY from the indexer's health
-	 *  snapshot: latency when healthy, a cooling-down / unreachable reason
-	 *  otherwise, or "probing" before the first measurement lands. */
+	/** Status line for a node, derived ENTIRELY from the indexer's latest
+	 *  measurement: its latency when it answered, the reason when it did not, or
+	 *  "probing" before the first measurement lands. */
 	function healthStatus(h: RpcEndpointHealth): { text: string; cls: string } {
 		// A hidden node this instance can't reach because it has no Tor/I2P
 		// running is NOT a failure — show a calm, muted "requires Tor/I2P" note
@@ -169,21 +209,12 @@
 			};
 		}
 		// A failing node shows WHY it's failing (timed out / TLS / refused …) —
-		// the reason is the actionable signal. This takes precedence over
-		// the cooldown label: "cooling down" is an internal backoff detail, and a
-		// node in cooldown is always there BECAUSE it failed, so surfacing the
-		// reason instead avoids the passive-snapshot ("cooling down") → live-probe
-		// ("unreachable") flip that made one node read two contradictory ways.
+		// the reason is the actionable signal.
 		if (h.consecutive_failures > 0) {
 			// If this node answers on ANOTHER transport (same name), the box is UP
-			// and this transport is merely re-establishing — a Tor onion re-
-			// publishing its descriptor, an i2p tunnel rebuilding — not dead. Say
-			// so in amber, instead of a red failure that reads as "node gone".
+			// and only this transport failed: amber, with the real reason.
 			if (h.name != null && healthyNames.has(h.name)) {
-				return {
-					text: $_('settings.endpoints.reestablishing'),
-					cls: 'text-amber-600 dark:text-amber-400'
-				};
+				return { text: failureText(h), cls: 'text-amber-600 dark:text-amber-400' };
 			}
 			return { text: failureText(h), cls: 'text-red-600 dark:text-red-400' };
 		}
@@ -208,7 +239,7 @@
 	}
 
 	/** Rank a node "best first": 0 = healthy (by latency, fastest first), 1 = not
-	 *  yet measured, 2 = failing / cooling down (bottom). */
+	 *  yet measured, 2 = failing (bottom). */
 	function sortKey(h: RpcEndpointHealth): [number, number] {
 		if (h.cooldown_ms > 0 || h.consecutive_failures > 0) return [2, h.consecutive_failures];
 		if (h.latency_ms != null) return [0, h.latency_ms];
@@ -302,7 +333,13 @@
 							</span>
 						{/if}{h.url}
 					</p>
-					<p class="mt-0.5 text-xs {status.cls}">{status.text}</p>
+					<p class="mt-0.5 text-xs">
+						<span class={status.cls}>{status.text}</span>{#if age(h) !== null}<span
+								class="text-ink-500 dark:text-ink-400"
+							>
+								{' · '}{$_('settings.endpoints.checked_ago', { values: { age: age(h) } })}</span
+							>{/if}
+					</p>
 				</div>
 			</li>
 		{/each}

@@ -245,7 +245,7 @@ export async function reapplyObsoleteRejections(
 		        op_id, payload, reject_reason
 		   FROM ops
 		  WHERE op_id = $1 AND status = 'rejected' AND reject_reason = ANY($2::text[])
-		  ORDER BY block_num ASC, trx_in_block ASC, op_in_trx ASC
+		  ORDER BY ops.block_num ASC, trx_in_block ASC, op_in_trx ASC
 		  LIMIT $3`,
 		[OP_IDS.order, REAPPLY_ORDER_REASONS, deps.maxRows ?? REAPPLY_MAX_ROWS]
 	);
@@ -264,7 +264,7 @@ export async function reapplyObsoleteRejections(
 			    AND (block_num, trx_in_block, op_in_trx) > ($1::bigint, $2::int, $3::int)
 			    AND ((op_id = ANY($4::text[]) AND signer = $5 AND payload->>'permlink' = $6)
 			         OR (op_id = $7 AND payload->>'order_account' = $5 AND payload->>'order_permlink' = $6))
-			  ORDER BY block_num ASC, trx_in_block ASC, op_in_trx ASC`,
+			  ORDER BY ops.block_num ASC, trx_in_block ASC, op_in_trx ASC`,
 			[
 				row.block_num,
 				row.trx_in_block,

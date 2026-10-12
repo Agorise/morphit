@@ -221,11 +221,11 @@ export function getStats(signal?: AbortSignal): Promise<Result<StatsResponse>> {
 	return request<StatsResponse>('/v1/stats', { signal });
 }
 
-/** GET /v1/rpc-endpoints — per-node health of the canonical Blurt RPC pool the
- *  indexer uses (for the Settings RPC card's server-only rows). `probe: true`
- *  asks the indexer to ACTIVELY ping every node right now (fresh latency);
- *  server-side it's rate-limited to once per 5s. Omitted → the cheap
- *  passive pool snapshot. */
+/** GET /v1/rpc-endpoints — how each public Blurt RPC node is doing, as this
+ *  site's indexer measures it (the stats page's RPC card). Omitted `probe` →
+ *  the indexer's latest background measurements (each node every 20 s),
+ *  answered at once. `probe: true` waits for a fresh round of every node;
+ *  server-side at most once per 5 s for all callers together. */
 export function getRpcEndpoints(opts?: {
 	probe?: boolean;
 	signal?: AbortSignal;
@@ -515,15 +515,19 @@ export function getFeedbackGiven(
 	);
 }
 
-/** GET /v1/chat/:a/:b — ciphertext between two accounts. */
+/** GET /v1/chat/:a/:b — ciphertext between two accounts, newest first, a page
+ *  at a time (`cursor` = the previous page's next_cursor). `order` reads one
+ *  thread: an order permlink, or null for the thread that cites no order
+ *  (sent as an empty `order=`). */
 export function getChatHistory(
 	a: string,
 	b: string,
-	opts: { limit?: number; cursor?: string; signal?: AbortSignal } = {}
+	opts: { limit?: number; cursor?: string; signal?: AbortSignal; order?: string | null } = {}
 ): Promise<Result<ChatHistoryResponse>> {
 	const params = new URLSearchParams();
 	if (opts.limit !== undefined) params.set('limit', String(opts.limit));
 	if (opts.cursor) params.set('cursor', opts.cursor);
+	if (opts.order !== undefined) params.set('order', opts.order ?? '');
 	return request<ChatHistoryResponse>(
 		`/v1/chat/${encodeURIComponent(a)}/${encodeURIComponent(b)}`,
 		{ signal: opts.signal, query: params }

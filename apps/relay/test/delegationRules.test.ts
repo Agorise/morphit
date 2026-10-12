@@ -1,6 +1,6 @@
 /**
  * BlurtClient.delegationRules: the chain's minimum delegation and minimum
- * change, and what is delegated now, in BLURT Power (Blurt's
+ * change, and what is delegated now, in Blurt Power (Blurt's
  * delegate_vesting_shares evaluator: new ≥ fee / 3, change ≥ fee / 30).
  * Figures from morphit.io's chain reads on 2026-10-08.
  */
@@ -30,10 +30,10 @@ describe('delegationRules', () => {
 		expect(r.currentBp).toBe(0);
 	});
 
-	it('an existing delegation is read back in BLURT Power', async () => {
+	it('an existing delegation is read back in Blurt Power', async () => {
 		const r = await client([
-			{ delegator: 'morphit-relay', delegatee: 'kentest3', vesting_shares: '228.062220 VESTS' }
-		]).delegationRules('morphit-relay', 'kentest3');
+			{ delegator: 'morphit-relay', delegatee: 'alice', vesting_shares: '228.062220 VESTS' }
+		]).delegationRules('morphit-relay', 'alice');
 		expect(r.currentBp).toBeCloseTo(261.95, 1);
 	});
 
@@ -41,7 +41,7 @@ describe('delegationRules', () => {
 		const r = await client([
 			{
 				delegator: 'morphit-relay',
-				delegatee: 'mariuszkarowski',
+				delegatee: 'mallory',
 				vesting_shares: '53.288127 VESTS'
 			}
 		]).delegationRules('morphit-relay', 'khrom');

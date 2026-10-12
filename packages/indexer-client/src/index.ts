@@ -909,10 +909,12 @@ export interface StatsResponse {
 }
 
 /**
- * GET /v1/rpc-endpoints — per-node health of the canonical Blurt RPC pool the
- * indexer reads/writes through. Canonical-only (operator-custom upstreams are
- * filtered out server-side). Kept in sync with the indexer's
- * buildRpcEndpointsResponse (apps/indexer/src/api/rpcHealth.ts).
+ * GET /v1/rpc-endpoints — per-node health of the PUBLIC Blurt RPC nodes (the
+ * clearnet canon when the instance uses clearnet, the built-in hidden canon it
+ * uses, the signed directory's hidden nodes; never the operator's own
+ * upstreams). Answered from the indexer's RpcHealthProber, which measures every
+ * listed node every 20 s; `?probe=1` waits for a fresh round
+ * (apps/indexer/src/api/rpcHealth.ts).
  */
 /** WHY the indexer's active probe of a node failed. Closed
  *  vocabulary; mirrors `RpcProbeFailure` in the indexer's api/rpcHealth.ts.
@@ -942,9 +944,9 @@ export interface RpcEndpointHealth {
 	readonly latency_ms: number | null;
 	readonly consecutive_failures: number;
 	readonly cooldown_ms: number;
-	/** why the most recent ACTIVE probe failed, so the card
-	 *  shows a one-line reason instead of a flat "unreachable". Absent/null when
-	 *  healthy or on the passive pool snapshot (no reason retained there). */
+	/** why the node's most recent measurement failed, so the card shows a
+	 *  one-line reason instead of a flat "unreachable". Absent/null when healthy
+	 *  or not measured yet. */
 	readonly failure_reason?: RpcProbeFailure | null;
 	/** HTTP status when `failure_reason === 'http'` (e.g. 403 = blocked by a
 	 *  security policy in front of the node), else absent/null. */
@@ -952,6 +954,9 @@ export interface RpcEndpointHealth {
 	/** Optional operator handle from the on-chain RPC directory (morphit_rpc_v1
 	 *  `name`). Cosmetic + untrusted; absent when the operator published no name. */
 	readonly name?: string;
+	/** When the indexer last measured this node (ISO); null when it has not
+	 *  measured it yet. Absent from indexers before v1.21.6. */
+	readonly checked_at?: string | null;
 }
 export interface RpcEndpointsResponse {
 	readonly network: 'morphit';

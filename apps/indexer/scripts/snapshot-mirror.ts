@@ -469,8 +469,38 @@ async function main(): Promise<void> {
 	});
 
 	say('\u2713 this instance now mirrors the federation snapshot.');
-	say('  Served over this instance\u2019s clearnet origin, .onion and .b32.i2p alike,');
-	say('  so a new node \u2014 including a zero-clearnet one \u2014 can fast-sync from you.');
+	// v1.21.6: name only the addresses this instance has (a hidden-only node has
+	// no clearnet origin; not every node has both hidden addresses).
+	const hidden = [
+		...(config.instanceTorAddress ? ['.onion'] : []),
+		...(config.instanceI2pB32Address ? ['.b32.i2p'] : [])
+	];
+	// A clearnet origin: the instance's own address when it is set (a site that
+	// reads only a co-located node still has one), else a clearnet RPC pool.
+	const originHost = (() => {
+		try {
+			return config.instanceOrigin ? new URL(config.instanceOrigin).hostname : null;
+		} catch {
+			return null;
+		}
+	})();
+	const clearnet =
+		originHost !== null ? !/\.(onion|i2p)$/i.test(originHost) : config.blurtRpcEndpoints.length > 0;
+	const where = [...(clearnet ? ['clearnet origin'] : []), ...hidden];
+	if (where.length === 0) {
+		say('  Pinned on this instance\u2019s IPFS node, so a new node can fast-sync from it.');
+	} else {
+		const list =
+			where.length === 1
+				? where[0]
+				: `${where.slice(0, -1).join(', ')} and ${where[where.length - 1]}`;
+		say(`  Served over this instance\u2019s ${list},`);
+		say(
+			hidden.length > 0
+				? '  so a new node \u2014 including a zero-clearnet one \u2014 can fast-sync from you.'
+				: '  so a new node can fast-sync from you.'
+		);
+	}
 }
 
 // Exit as soon as the work is done. The chain

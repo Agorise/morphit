@@ -118,6 +118,18 @@ Each poll uses the **latest `created_at` cursor** we've seen, so
 we only fetch the delta since last poll. A fresh page load does
 one full fetch of the most recent 50 messages to populate history.
 
+**Older history (v1.21.6).** The live paths (stream snapshot, fallback
+poll) only ever carry the pair's newest 50 messages. Scrolling up past
+what is loaded reads the thread further back from `/v1/chat/:a/:b`
+with `order=<permlink>` (empty for the thread about no order), 100 a
+page, until the first message — automatically when the thread does not
+fill the screen. The PDF export reads every thread of the pair to the
+first message (all or nothing). Pages read this way never run the trade
+side effects (address shared, payment claimed); those run only when the
+live path delivers a message, so an old claim can't overwrite a newer
+one. See `loadOlder` / `loadWholeConversation` in
+`apps/web/src/lib/chat/chatService.ts`.
+
 **Block-align trick**: a Blurt block lands roughly on the integer
 3-second second. Aligning our polls to `(Date.now() % 3000)`
 boundaries with jitter maximizes the chance a freshly-mined

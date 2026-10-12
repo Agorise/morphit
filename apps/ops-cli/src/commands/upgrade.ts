@@ -111,6 +111,15 @@ import {
 	RELEASE_VERSION_RE
 } from '../init/hiddenUpgradeResolve.js';
 import {
+	HiddenUpgradeWaitError,
+	renderHiddenWait,
+	parseWaitChoice,
+	formatDuration,
+	KEEP_TRYING_EVERY_MS,
+	KEEP_TRYING_FOR_MS,
+	type HiddenWaitChoice
+} from '../init/hiddenUpgradeWait.ts';
+import {
 	indexerUnitEnvFiles,
 	locateLocalIndexer,
 	getLocalIndexerJson,
@@ -360,6 +369,14 @@ interface RunUpgradeOptions {
 		readonly now?: () => number;
 		readonly sleep?: (ms: number) => Promise<void>;
 	};
+	/** v1.21.6: a zero-clearnet wait — whether it may ask, how it asks, and the
+	 *  pause between "keep trying" tries. Tests only. */
+	readonly hiddenWait?: {
+		readonly interactive?: boolean;
+		readonly ask?: () => Promise<HiddenWaitChoice>;
+		readonly sleep?: (ms: number) => Promise<void>;
+		readonly now?: () => number;
+	};
 }
 
 interface ReleaseInfo {
@@ -393,6 +410,13 @@ const DEFAULT_BACKUP_KEEP = 3;
  *  (a record broadcast moments ago, or nodes behind the chain) before it
  *  refuses an unsigned release. */
 export const RELEASE_RECORD_WAIT_MS = 180_000;
+
+/** v1.21.6: how long a ZERO-CLEARNET upgrade keeps asking its own indexer for
+ *  the signed release record when no answer comes in time (each read may take
+ *  a minute over Tor/I2P) or the answer lacks the record. morphitlat,
+ *  2026-10-10: two upgrades stopped after one 60-second read; the third went
+ *  through a minute later. */
+export const HIDDEN_RELEASE_RECORD_WAIT_MS = 8 * 60_000;
 
 // Services to restart UNCONDITIONALLY on upgrade.  Listed in dependency
 // order (deps before consumers).  If a service unit doesn't exist on
@@ -2425,30 +2449,133 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	}
 	if (offline === null && hiddenCheckTag !== null && !checkOnly) {
 		// Over Tor/I2P this takes minutes and reports each step: the spinner
-		// turns between the progress lines (taken off the line for each one).
-		const hiddenSpin = startPausableSpinner(
-			'Fetching the release privately (over Tor/I2P)…',
-			spinOut
-		);
-		try {
-			hiddenResolution = await tryResolveHiddenUpgrade({
-				...hiddenOpts,
-				onProgress: (m) => hiddenSpin.say(() => info(m)),
-				...(opts.trust?.postingPubkey !== undefined
-					? { postingPubkey: opts.trust.postingPubkey }
-					: {}),
-				...(opts.trust?.chainRead !== undefined ? { chainRead: opts.trust.chainRead } : {}),
-				anchorWait: { waitMs: RELEASE_RECORD_WAIT_MS, ...(opts.anchorWait ?? {}) }
-			});
-		} catch (err) {
-			hiddenSpin.stop();
-			printError(
-				`Hidden-only upgrade could not be completed privately (staying on the current version): ` +
-					`${err instanceof Error ? err.message : String(err)}`
+		// turns between the progress lines (taken off the line for each one),
+		// says what it is doing right now, and counts the time.
+		//
+		// v1.21.6: when the release is not reachable over Tor/I2P YET, that is a
+		// wait, not an error — the operator is told what was searched, what each
+		// instance answered and that nothing changed, and (at a terminal) may try
+		// again now, let it keep trying, or come back once more trusted instances
+		// have upgraded and can share the release (src/init/hiddenUpgradeWait.ts).
+		const interactive =
+			opts.hiddenWait?.interactive ??
+			(!forceYes && !jsonOutput && process.stdin.isTTY === true && process.stdout.isTTY === true);
+		const askChoice = opts.hiddenWait?.ask ?? askHiddenWaitChoice;
+		// The hour of "keep trying" runs on a steady clock (a Tor time sync may
+		// step the wall clock meanwhile); the wall clock only names the time of
+		// the next try.
+		const steadyMs = opts.hiddenWait?.now ?? ((): number => performance.now());
+		const wallMs = opts.hiddenWait?.now ?? Date.now;
+		const pause = (ms: number): Promise<void> =>
+			opts.hiddenWait?.sleep !== undefined
+				? opts.hiddenWait.sleep(ms)
+				: waitWithSpinner(ms, spinOut);
+		let keepTryingUntil: number | null = null;
+		let keepTryingSince = 0;
+		let attempt = 0;
+		for (;;) {
+			attempt += 1;
+			if (attempt > 1 && localInfo !== null) {
+				// A try after a wait (up to an hour) looks again at what this server
+				// runs: another session may have upgraded it meanwhile, and this run
+				// must not offer "upgrade from <the old version>" (v1.21.6 review).
+				const nowInfo = readLocalReleaseInfo(installDir);
+				if (nowInfo === null || nowInfo.tag !== localInfo.tag) {
+					info(
+						nowInfo !== null
+							? `This server now runs ${sanitizeForTerm(nowInfo.tag)}: another upgrade changed it while this one waited, so this one stops here (it changed nothing). Run \`sudo morphit-ops upgrade\` again to check for a newer release.`
+							: `This server's release-info.json changed while this upgrade waited, so it stops here (it changed nothing). Run \`sudo morphit-ops upgrade\` again.`
+					);
+					return 5;
+				}
+			}
+			const hiddenSpin = startPausableSpinner(
+				'Fetching the release privately (over Tor/I2P)…',
+				spinOut,
+				{ elapsed: true }
 			);
-			return 5; // fail-closed — never fall back to a clearnet mirror
+			let waitErr: HiddenUpgradeWaitError | null = null;
+			try {
+				hiddenResolution = await tryResolveHiddenUpgrade({
+					...hiddenOpts,
+					onProgress: (m) => hiddenSpin.say(() => info(m)),
+					onStatus: (l) => hiddenSpin.relabel(l),
+					...(opts.trust?.postingPubkey !== undefined
+						? { postingPubkey: opts.trust.postingPubkey }
+						: {}),
+					...(opts.trust?.chainRead !== undefined ? { chainRead: opts.trust.chainRead } : {}),
+					anchorWait: { waitMs: HIDDEN_RELEASE_RECORD_WAIT_MS, ...(opts.anchorWait ?? {}) }
+				});
+			} catch (err) {
+				hiddenSpin.stop();
+				if (!(err instanceof HiddenUpgradeWaitError)) {
+					printError(
+						`Hidden-only upgrade could not be completed privately (staying on the current version): ` +
+							`${err instanceof Error ? err.message : String(err)}`
+					);
+					return 5; // fail-closed — never fall back to a clearnet mirror
+				}
+				waitErr = err;
+			}
+			hiddenSpin.stop();
+			// A try can itself take minutes (the record wait alone up to
+			// HIDDEN_RELEASE_RECORD_WAIT_MS): look again at what this server runs
+			// after every try too, not only before the next one.
+			if (localInfo !== null) {
+				const nowInfo = readLocalReleaseInfo(installDir);
+				if (nowInfo === null || nowInfo.tag !== localInfo.tag) {
+					info(
+						nowInfo !== null
+							? `This server now runs ${sanitizeForTerm(nowInfo.tag)}: another upgrade changed it while this one waited, so this one stops here (it changed nothing). Run \`sudo morphit-ops upgrade\` again to check for a newer release.`
+							: `This server's release-info.json changed while this upgrade waited, so it stops here (it changed nothing). Run \`sudo morphit-ops upgrade\` again.`
+					);
+					return 5;
+				}
+			}
+			if (waitErr === null) break;
+
+			const current = localInfo !== null ? sanitizeForTerm(localInfo.tag) : null;
+			if (keepTryingUntil !== null && steadyMs() + KEEP_TRYING_EVERY_MS <= keepTryingUntil) {
+				// Keeping at it: one calm line per try, not the whole explanation.
+				const next = new Date(wallMs() + KEEP_TRYING_EVERY_MS);
+				info(
+					`⏳ Try ${attempt}: not reachable over Tor/I2P yet (${hiddenWaitSummary(waitErr)}). ` +
+						`Next try at ${next.toTimeString().slice(0, 5)} — Ctrl-C stops; nothing has changed.`
+				);
+				await pause(KEEP_TRYING_EVERY_MS);
+				continue;
+			}
+			if (keepTryingUntil !== null) {
+				// The time it really took: a try can itself take minutes (v1.21.6 review).
+				info(
+					`Kept trying for ${formatDuration(steadyMs() - keepTryingSince)} (${attempt} tries in all); the release is still not reachable over Tor/I2P.`
+				);
+				keepTryingUntil = null;
+			}
+			for (const l of renderHiddenWait(waitErr, { current, interactive })) info(l);
+			info(`  (For support: ${sanitizeForTerm(waitErr.message)})`);
+			info('');
+			if (!interactive) return 5; // fail-closed: nothing was changed
+			const choice = await askChoice();
+			if (choice === 'later') {
+				info(
+					'OK — nothing was changed. When more trusted instances have upgraded, run `sudo morphit-ops upgrade` again ' +
+						'(or menu option 2): it searches them all over Tor and I2P.'
+				);
+				return 5;
+			}
+			if (choice === 'keep-trying') {
+				keepTryingSince = steadyMs();
+				keepTryingUntil = keepTryingSince + KEEP_TRYING_FOR_MS;
+				const next = new Date(wallMs() + KEEP_TRYING_EVERY_MS);
+				info(
+					`It will try again ${KEEP_TRYING_EVERY_MS / 60_000} minutes after each try, for up to ${KEEP_TRYING_FOR_MS / 60_000} minutes ` +
+						`(next at ${next.toTimeString().slice(0, 5)}), and ask you before installing. Ctrl-C stops it; nothing has changed.`
+				);
+				await pause(KEEP_TRYING_EVERY_MS);
+			}
+			// 'retry', or the first wait of 'keep-trying' is over: search again.
 		}
-		hiddenSpin.stop();
 		if (hiddenResolution === null) {
 			// The node was hidden-only a moment ago; never fall back to clearnet.
 			printError(
@@ -7969,6 +8096,69 @@ function pruneOldBackups(installDir: string): void {
 		} catch {
 			// best-effort
 		}
+	}
+}
+
+/** v1.21.6: a few words on why a zero-clearnet try had to wait (one line per
+ *  try while it keeps trying by itself). */
+function hiddenWaitSummary(e: HiddenUpgradeWaitError): string {
+	if (e.stage === 'record') {
+		return e.recordNotListed
+			? 'the signed record is not listed yet'
+			: 'the signed record could not be read in time';
+	}
+	if (e.stage === 'peers') return 'no instance with a Tor/I2P address listed yet';
+	const missing = e.peers.filter((p) => p.result === 'missing').length;
+	const silent = e.peers.filter(
+		(p) => p.result === 'no_answer' || p.result === 'unreachable'
+	).length;
+	const unusable = e.peers.length - missing - silent;
+	const parts: string[] = [];
+	if (missing > 0) parts.push(`${missing} address${missing === 1 ? '' : 'es'} without a copy yet`);
+	if (silent > 0) parts.push(`${silent} not answering`);
+	if (unusable > 0) parts.push(`${unusable} with no usable copy`);
+	return parts.length > 0 ? parts.join(', ') : 'no copy found';
+}
+
+/** v1.21.6: wait `ms` with the spinner counting down (Ctrl-C stops the whole
+ *  upgrade; nothing has been changed at this point). */
+async function waitWithSpinner(ms: number, out: NodeJS.WriteStream): Promise<void> {
+	// A steady clock, like the wait itself (setTimeout): a step of the wall
+	// clock does not make the countdown jump.
+	const until = performance.now() + ms;
+	const stop = startDotsSpinner(() => {
+		const left = Math.max(0, Math.ceil((until - performance.now()) / 1000));
+		return `Next try in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} — Ctrl-C stops (nothing has changed)`;
+	}, out);
+	try {
+		await new Promise<void>((r) => setTimeout(r, ms));
+	} finally {
+		stop();
+	}
+}
+
+/** v1.21.6: ask what to do after a zero-clearnet wait (terminal only; Enter =
+ *  try again now). Asks again on an answer it does not understand. */
+async function askHiddenWaitChoice(): Promise<HiddenWaitChoice> {
+	const readline = await import('node:readline/promises');
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	try {
+		for (;;) {
+			let answer: string;
+			try {
+				answer = await rl.question('Enter 1, 2 or 3 [1]: ');
+			} catch {
+				// stdin closed (Ctrl-D) or Ctrl-C: leave the box as it is, and end
+				// the prompt line so the next message starts on its own line.
+				process.stdout.write('\n');
+				return 'later';
+			}
+			const c = parseWaitChoice(answer);
+			if (c !== null) return c;
+			info('Please enter 1 (try again now), 2 (keep trying by itself) or 3 (stop for now).');
+		}
+	} finally {
+		rl.close();
 	}
 }
 

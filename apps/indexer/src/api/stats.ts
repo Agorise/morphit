@@ -16,10 +16,12 @@
  *   - orders.active  — orders currently live + fee-verified + not expired (the
  *                      exact visibility rule the public orderbook uses).
  *   - orders.total   — all order rows ever indexed (lifetime).
- *   - trades.completed_total / _30d — unique completed orders that received
- *                      feedback (DISTINCT (subject, order_permlink)), lifetime
- *                      and over the last 30 days. Same "a trade happened"
- *                      signal the activity page uses. Deliberately NOT a volume
+ *   - trades.completed_total / _30d — completed trades: distinct (the two
+ *                      traders, order_permlink) among reviews citing an order,
+ *                      lifetime and over the last 30 days — a trade reviewed by
+ *                      both sides counts once, the same order traded with
+ *                      another person counts again (/v1/activity/volume counts
+ *                      orders instead). Deliberately NOT a volume
  *                      figure: fiat amounts across mixed currencies aren't
  *                      meaningfully summable without USD normalization, so we
  *                      report counts only and leave a USD-normalized volume to
@@ -129,14 +131,15 @@ export function statsRoute(db: Database, config: Config): Hono {
 				(SELECT COUNT(DISTINCT fiat_currency) FROM live)::text AS fiats_active
 		`;
 
-		// Completed trades = distinct (subject, order_permlink) feedback rows
-		// (both-party feedback on one order counts once). Lifetime + last 30d in
-		// one scan via FILTER.
+		// Completed trades = distinct (the two traders, order_permlink) among the
+		// reviews that cite an order: a trade reviewed by both sides counts once,
+		// the same order traded with another person is another trade. Lifetime +
+		// last 30d in one scan via FILTER.
 		const tradesSql = `
 			SELECT
-				(COUNT(DISTINCT (subject, order_permlink))
+				(COUNT(DISTINCT (LEAST(reviewer, subject), GREATEST(reviewer, subject), order_permlink))
 					FILTER (WHERE order_permlink IS NOT NULL))::text AS completed_total,
-				(COUNT(DISTINCT (subject, order_permlink))
+				(COUNT(DISTINCT (LEAST(reviewer, subject), GREATEST(reviewer, subject), order_permlink))
 					FILTER (WHERE order_permlink IS NOT NULL
 					              AND created_at > NOW() - '30 days'::interval))::text
 					AS completed_30d

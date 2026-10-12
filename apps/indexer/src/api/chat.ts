@@ -19,13 +19,20 @@ import { z } from 'zod';
 
 import type { Database } from '$db/pool';
 import { decodeCursor, encodeCursor, errorBody, isAccountName } from '$api/shared';
+import { validateChatOrderPermlink } from '$indexer/permlink';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
 
 const querySchema = z.object({
 	limit: z.coerce.number().int().min(1).max(MAX_LIMIT).optional(),
-	cursor: z.string().min(1).max(512).optional()
+	cursor: z.string().min(1).max(512).optional(),
+	/** One thread only: the order its messages are about, or empty for the
+	 *  thread that cites no order. Absent: every message of the pair. */
+	order: z
+		.string()
+		.refine((p) => p === '' || validateChatOrderPermlink(p) === null, 'invalid order')
+		.optional()
 });
 
 interface Cursor {
@@ -90,16 +97,36 @@ export function chatRoute(db: Database): Hono {
 				return c.json(errorBody('bad_request', 'invalid cursor'), 400);
 			}
 			params.push(new Date(cur.c), cur.i);
-			cursorClause = ` AND (created_at < $3 OR (created_at = $3 AND id > $4))`;
+			// `created_at <= $3` is implied by the OR, but said on its own it bounds
+			// the index range: a page far back reads that page, not every newer
+			// message of the pair first.
+			cursorClause = ` AND created_at <= $3 AND (created_at < $3 OR (created_at = $3 AND id > $4))`;
+		}
+		// v1.21.6 — one thread (the conversation view pages back through its
+		// own thread; without this it had to read every other thread's
+		// messages to get there). Served by chat_pair_idx; the filter only
+		// narrows the pair's rows.
+		let orderClause = '';
+		if (q.order !== undefined) {
+			if (q.order === '') {
+				orderClause = ' AND order_permlink IS NULL';
+			} else {
+				params.push(q.order);
+				orderClause = ` AND order_permlink = $${params.length}`;
+			}
 		}
 		params.push(limit + 1);
 		const limitParam = `$${params.length}`;
 
+		// ORDER BY names the table's columns: a bare `id` there is the SELECT's
+		// id::text, which sorted a block's messages as text ("100" before "99")
+		// while the cursor compares numbers, so a page boundary inside a block
+		// skipped messages (v1.21.6).
 		const sql = `SELECT id::text, sender, recipient, ciphertext, header, created_at, order_permlink
 			 FROM chat_messages
 			 WHERE LEAST(sender, recipient) = $1
-			   AND GREATEST(sender, recipient) = $2${cursorClause}
-			 ORDER BY created_at DESC, id ASC
+			   AND GREATEST(sender, recipient) = $2${cursorClause}${orderClause}
+			 ORDER BY chat_messages.created_at DESC, chat_messages.id ASC
 			 LIMIT ${limitParam}`;
 
 		const result = await db.query<MsgRow>(sql, params);

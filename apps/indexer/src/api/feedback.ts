@@ -302,7 +302,10 @@ export function feedbackByAccountRoute(db: Database): Hono {
 			          LIMIT 1) AS order_account
 			 FROM feedback
 			 WHERE subject = $1${cursorClause}
-			 ORDER BY created_at DESC, id ASC
+			 -- The table's columns: a bare id here is the SELECT's id::text,
+			 -- which sorted one block's reviews as text while the cursor
+			 -- compares numbers, and a page boundary skipped some (v1.21.6).
+			 ORDER BY feedback.created_at DESC, feedback.id ASC
 			 LIMIT ${limitParam}`;
 
 		const fbResult = await db.query<FeedbackRow>(fbSql, params);
@@ -512,7 +515,7 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 			          LIMIT 1) AS order_account
 			 FROM feedback
 			 WHERE reviewer = $1${cursorClause}
-			 ORDER BY created_at DESC, id ASC
+			 ORDER BY feedback.created_at DESC, feedback.id ASC
 			 LIMIT ${limitParam}`;
 
 		const fbResult = await db.query<FeedbackRow>(fbSql, params);

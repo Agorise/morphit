@@ -34,7 +34,7 @@ export function operatorRegistrationRoute(db: Pick<Database, 'query'>): Hono {
 			   FROM ops
 			  WHERE signer = $1 AND op_id = 'morphit_operator_register_v1' AND status = 'applied'
 			    AND jsonb_typeof(payload) = 'object'
-			  ORDER BY block_num DESC, trx_in_block DESC, op_in_trx DESC
+			  ORDER BY ops.block_num DESC, trx_in_block DESC, op_in_trx DESC
 			  LIMIT 1`,
 			[account]
 		);

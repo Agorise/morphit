@@ -237,6 +237,47 @@ export interface LocalMessage {
 	 *  decrypted from (ciphertext, ephemeral key, nonce). Two copies are the
 	 *  same message only if these match — see `wireOf`. */
 	wire?: string;
+	/** v1.21.6 — loaded by scrolling back (`loadOlder`), older than what was
+	 *  already shown. Not news: the view does not count it as a new message. */
+	backfilled?: true;
+	/** v1.21.6 — added by a history page with its trade side effects not run
+	 *  yet; they run if the live path delivers it (see mergeNow). */
+	effectsDue?: true;
+}
+
+/** Where scrolling back through a thread stands (`loadOlder`). */
+export interface HistoryState {
+	/** The first live answer (stream snapshot or poll) has been merged, so the
+	 *  view knows what the newest messages are. */
+	ready: boolean;
+	/** An older page is being read. */
+	loading: boolean;
+	/** The thread's first message is loaded: there is nothing older. */
+	complete: boolean;
+	/** The last attempt to read an older page failed (after retries). */
+	failed: boolean;
+}
+
+/** One message of a whole-conversation read (`loadWholeConversation`). */
+export type ConversationRecordMessage = Pick<
+	LocalMessage,
+	| 'sender'
+	| 'text'
+	| 'createdAt'
+	| 'orderPermlink'
+	| 'trxId'
+	| 'decryptFailed'
+	| 'unrecorded'
+	| 'state'
+>;
+
+/** The whole conversation could not be read (a page failed after retries, the
+ *  session locked, or the view closed). Nothing partial is returned. */
+export class ConversationIncompleteError extends Error {
+	constructor(reason: string) {
+		super(`conversation history incomplete: ${reason}`);
+		this.name = 'ConversationIncompleteError';
+	}
 }
 
 /**
@@ -258,6 +299,37 @@ export function wireOf(rec: { ciphertext: string; header: unknown }): string {
 	const h = (rec.header ?? {}) as { ephemeral_pub?: unknown; nonce?: unknown };
 	const part = (v: unknown): string => (typeof v === 'string' ? v : '');
 	return `${rec.ciphertext}|${part(h.ephemeral_pub)}|${part(h.nonce)}`;
+}
+
+/** A message's durable id, or null (sending, failed, provisional). */
+function durableId(m: { id: number | null }): number | null {
+	return m.id !== null && m.id !== 0 ? m.id : null;
+}
+
+/**
+ * Transcript order: chain time; within one second, copies with no durable id
+ * yet (in the order this client saw them) before durable ones, and durable
+ * ones in the order the indexer recorded them (id). Messages with no chain
+ * time yet go last. Every message has one key (time, group, id/localSeq), so
+ * the order is total and every sort agrees.
+ *
+ * v1.21.6: the id step is new. A block's messages had been shown in the order
+ * their copies happened to arrive — backwards, for a page (pages list a
+ * block's rows in id order and are merged reversed), and in any order for
+ * copies pushed by the federation.
+ */
+export function chronological(
+	a: { createdAt: Date | null; id: number | null; localSeq: number },
+	b: { createdAt: Date | null; id: number | null; localSeq: number }
+): number {
+	const aT = a.createdAt ? a.createdAt.getTime() : Number.POSITIVE_INFINITY;
+	const bT = b.createdAt ? b.createdAt.getTime() : Number.POSITIVE_INFINITY;
+	if (aT !== bT) return aT < bT ? -1 : 1;
+	const aId = durableId(a);
+	const bId = durableId(b);
+	if ((aId === null) !== (bId === null)) return aId === null ? -1 : 1;
+	if (aId !== null && bId !== null && aId !== bId) return aId - bId;
+	return a.localSeq - b.localSeq;
 }
 
 /** Dependencies the controller takes. Exposed as an interface
@@ -300,7 +372,16 @@ export interface ChatControllerDeps {
 	fetchHistory(
 		a: string,
 		b: string,
-		opts: { cursor?: string; limit?: number; signal?: AbortSignal }
+		opts: {
+			cursor?: string;
+			limit?: number;
+			signal?: AbortSignal;
+			/** v1.21.6 — one thread only: an order permlink, or null for the
+			 *  thread that cites no order. Absent: every thread of the pair. An
+			 *  indexer that predates the filter ignores it; the thread filter in
+			 *  mergePollResponse still applies. */
+			order?: string | null;
+		}
 	): Promise<
 		| { ok: true; items: readonly ChatMessageRecord[]; nextCursor: string | null }
 		| { ok: false; message: string }
@@ -407,6 +488,12 @@ export interface ChatControllerDeps {
 	/** Called on EVERY state change. The component subscribes via
 	 *  its own $effect so Svelte re-renders automatically. */
 	onChange(messages: readonly LocalMessage[]): void;
+	/** v1.21.6 — called when scrolling back changes state (see HistoryState).
+	 *  Optional: absent, nobody is told. */
+	onHistoryChange?(state: HistoryState): void;
+	/** Wait before retrying a history page. Injected for tests; absent, a
+	 *  real timer. */
+	sleep?(ms: number): Promise<void>;
 	/** Called when the SSE stream's connected/disconnected state
 	 *  flips.  Used to render a "Live" pip in the conversation
 	 *  header.  No-op default — runtime callers wire this up if
@@ -447,6 +534,22 @@ export interface ChatController {
 	retryMessage(localSeq: number): Promise<void>;
 	/** Debug / test hook — read current messages without mutating. */
 	snapshot(): readonly LocalMessage[];
+	/** v1.21.6 — read this thread further back, page by page, until at least
+	 *  one older message is added or its first message is reached. One read at
+	 *  a time: a second call while one runs joins it. Progress is reported
+	 *  through `onHistoryChange`. Never throws. */
+	loadOlder(): Promise<void>;
+	/** v1.21.6 — every message ever exchanged with the peer, in every thread,
+	 *  oldest first, decrypted where this session can: for the PDF export.
+	 *  Reads the indexer from the newest message to the first; the view's own
+	 *  messages are not changed and no trade side effects run. Messages of
+	 *  this thread that have no durable copy yet (sending, failed, or a copy
+	 *  not yet irreversible) are included as the view shows them. Throws
+	 *  ConversationIncompleteError rather than return part of it. */
+	loadWholeConversation(): Promise<readonly ConversationRecordMessage[]>;
+	/** Changes on every session lock. A caller holding plaintext it got from
+	 *  this controller (the export) checks it is unchanged before using it. */
+	lockGeneration(): number;
 }
 
 /** Fallback poll cadence. SSE is the primary delivery path (appends
@@ -462,6 +565,18 @@ const FALLBACK_POLL_INTERVAL_MS = 4_000;
 /** Initial history page size — the newest 50 messages on first
  *  load. Matches the design-doc recommendation. */
 const HISTORY_PAGE_SIZE = 50;
+/** v1.21.6 — a page read when scrolling back or exporting: the indexer's
+ *  maximum, so a long history takes as few round trips as it can. */
+const OLDER_PAGE_SIZE = 100;
+/** Waits before the second and third try of a page read by scrolling back. A
+ *  page lost to a slow Tor/I2P circuit usually comes on the next try; after
+ *  that the reader can try again. */
+const HISTORY_RETRY_WAITS_MS = [2_000, 5_000] as const;
+/** Waits between tries of a page of the export, which reads on from where it
+ *  stopped. Long enough together (112 s) to outlast the indexer's one-minute
+ *  rate-limit window, which a long conversation — or one a peer flooded —
+ *  can use up on its own. */
+const EXPORT_RETRY_WAITS_MS = [2_000, 5_000, 15_000, 30_000, 60_000] as const;
 /** Random jitter added to the fallback poll so clients don't all ping on
  *  the same block boundary. Kept small (≤2s) so base + jitter stays within
  *  the ≤6s fastchat target. */
@@ -682,6 +797,20 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 *  the delta. Starts null (no pages yet); the first fetch
 	 *  pulls the full history page. */
 	let latestSeenAt: string | null = null;
+	/** v1.21.6 — scrolling back. `olderCursor`: undefined until the first older
+	 *  page (that read starts at the thread's newest message); then the
+	 *  indexer's next_cursor. */
+	let olderCursor: string | undefined = undefined;
+	let olderComplete = false;
+	let olderFailed = false;
+	let olderRun: Promise<void> | null = null;
+	let liveReady = false;
+	/** Aborts history reads (scrolling back, export) on destroy. */
+	const historyAbort = new AbortController();
+	/** Merges run one at a time: each reads the list, awaits decrypts, then
+	 *  adds — two at once could each add the same record (a live append and a
+	 *  history page overlap, and so do the stream snapshot and the poll). */
+	let mergeChain: Promise<unknown> = Promise.resolve();
 	let pollHandle: ReturnType<typeof setTimeout> | null = null;
 	let currentAbort: AbortController | null = null;
 	let visibilityCleanup: (() => void) | null = null;
@@ -1026,6 +1155,71 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 	}
 
+	/**
+	 * Phase F.5 — populate the trade-status store from an incoming structured
+	 * payload. If the decrypted plaintext is a recognized address/funds-sent
+	 * payload with an orderPermlink, route it. Plain chat messages decode to
+	 * 'plaintext' and are no-ops. The caller checks that the sender is proved.
+	 */
+	function applyIncomingTradePayload(text: string, sender: string): void {
+		try {
+			const decoded = decodePayload(text);
+			if (decoded.kind === 'address' && decoded.payload.orderPermlink) {
+				recordAddressShared({
+					orderPermlink: decoded.payload.orderPermlink,
+					peer: sender,
+					method: decoded.payload.method,
+					address: decoded.payload.address,
+					expectedAmount: decoded.payload.amount ? Number(decoded.payload.amount) : undefined,
+					expectedMemo: decoded.payload.memo,
+					direction: 'incoming'
+				});
+			} else if (decoded.kind === 'funds_sent' && decoded.payload.orderPermlink) {
+				recordFundsSent({
+					orderPermlink: decoded.payload.orderPermlink,
+					peer: sender,
+					method: decoded.payload.method,
+					txid: decoded.payload.txid,
+					claimedMemo: decoded.payload.memo,
+					amount: decoded.payload.amount ? Number(decoded.payload.amount) : undefined,
+					direction: 'incoming'
+				});
+
+				// Phase F.5 audit fix (F-41) — trigger
+				// chain verification immediately on
+				// receipt.  Idempotent with the listener's
+				// trigger (cache hit on duplicate).
+				if (decoded.payload.method === 'blurt') {
+					const amountStr = decoded.payload.amount;
+					if (amountStr !== undefined) {
+						const amountNum = Number(amountStr);
+						if (Number.isFinite(amountNum) && amountNum > 0) {
+							triggerBlurtVerification({
+								recipient: deps.me,
+								sender,
+								amountBlurt: amountNum,
+								echoedMemo: decoded.payload.memo ?? '',
+								orderPermlink: decoded.payload.orderPermlink,
+								txid: decoded.payload.txid,
+								direction: 'incoming'
+							});
+						}
+					}
+				}
+			}
+		} catch {
+			// decode never throws; defensive swallow.
+		}
+	}
+
+	/** A message a history page added before the live path delivered it: the
+	 *  live path has now delivered it, so its trade side effects run (once). */
+	function runDueEffects(m: LocalMessage | undefined): void {
+		if (m?.effectsDue !== true) return;
+		delete m.effectsDue;
+		applyIncomingTradePayload(m.text, m.sender);
+	}
+
 	/** Process one poll response: merge new messages into the
 	 *  local list, advance the cursor. The template then renders
 	 *  sorted oldest-first.
@@ -1039,20 +1233,58 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 *  can avoid re-fetching the whole window every 3s. For now
 	 *  it's 50 records × small-payload every 3s — small enough
 	 *  that the wasted bandwidth isn't worth a server change. */
-	async function mergePollResponse(items: readonly ChatMessageRecord[]): Promise<void> {
-		if (items.length === 0) return;
+	function mergePollResponse(
+		items: readonly ChatMessageRecord[],
+		mode: 'live' | 'history' = 'live'
+	): Promise<number> {
+		const run = mergeChain.then(() => mergeNow(items, mode));
+		mergeChain = run.catch(() => undefined);
+		return run;
+	}
+
+	/** One merge (see mergePollResponse, which runs them one at a time).
+	 *  Resolves to how many messages it added to the list (a copy folded into
+	 *  one already there changes the list but adds none).
+	 *
+	 *  `mode` 'history' is a page read by scrolling back. Two differences:
+	 *
+	 *  - The trade side effects (applyIncomingTradePayload) do not run for what
+	 *    it adds. They record the latest address and payment claim of an order;
+	 *    run for an old message after a newer one, they would put the old
+	 *    address or transaction back. The message is marked `effectsDue`
+	 *    instead, and they run when — if — the live path (stream, poll) delivers
+	 *    it too: exactly the messages they ran for before v1.21.6, including a
+	 *    genuinely new one a history page happened to read first.
+	 *  - A record older than the newest message already shown is marked
+	 *    `backfilled`, so the view does not count it as a new message. */
+	async function mergeNow(
+		items: readonly ChatMessageRecord[],
+		mode: 'live' | 'history'
+	): Promise<number> {
+		if (items.length === 0) return 0;
 		const epoch = lockEpoch;
 		/** A lock landed while this merge was awaiting a decrypt: stop here. */
 		const lockedSince = (): boolean => epoch !== lockEpoch || destroyed;
+		let newestBefore: number | null = null;
+		if (mode === 'history') {
+			for (const m of messages) {
+				const at = m.createdAt?.getTime();
+				if (at !== undefined && (newestBefore === null || at > newestBefore)) newestBefore = at;
+			}
+		}
+		const isBackfill = (rec: ChatMessageRecord): boolean =>
+			newestBefore !== null && new Date(rec.created_at).getTime() < newestBefore;
 
 		// Build a set of ids already in local state as 'confirmed'.
 		// Pending / broadcast / failed don't have ids yet, so they
 		// aren't in this set (their reconciliation happens via
 		// client_tag below).
 		const seenIds = new Set<number>();
+		const byId = new Map<number, LocalMessage>();
 		for (const m of messages) {
 			if (m.state === 'confirmed' && m.id !== null) {
 				seenIds.add(m.id);
+				byId.set(m.id, m);
 			}
 		}
 
@@ -1060,6 +1292,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// we add oldest-first to preserve chronological order.
 		const oldestFirst = [...items].reverse();
 		let added = false;
+		const before = messages.length;
 
 		for (const rec of oldestFirst) {
 			// A durable copy of our own send, in ANY thread
@@ -1109,7 +1342,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// shows the placeholder, exactly like incoming messages.
 				const ownTag = clientTagFromHeader(rec.header);
 				const ownFromChain = await decryptOwnFromChain(rec);
-				if (lockedSince()) return;
+				if (lockedSince()) return 0;
 				const ownCached =
 					ownFromChain === null && deps.getLiveIdentity() !== null && ownTag !== null
 						? ownSentPlaintext.get(ownSentKey(deps.me, ownTag))
@@ -1148,7 +1381,8 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					decryptFailed: false,
 					localSeq: ++localSeqCounter,
 					...(ownDeclared.length > 0 ? { priorTags: ownDeclared } : {}),
-					...(isDurable ? {} : { provisionalSinceMs: Date.now() })
+					...(isDurable ? {} : { provisionalSinceMs: Date.now() }),
+					...(isBackfill(rec) ? { backfilled: true as const } : {})
 				});
 				added = true;
 			} else {
@@ -1175,6 +1409,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 						if (isDurable && (twin.id === null || twin.id === 0)) {
 							adoptDurable(twin, rec);
 						}
+						if (mode === 'live') runDueEffects(twin);
 						added = true;
 						continue;
 					}
@@ -1183,10 +1418,11 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// No twin yet. Durable copies dedup by id; a provisional
 				// (id 0) is stored with a null id and never enters seenIds.
 				if (isDurable && seenIds.has(rec.id)) {
+					if (mode === 'live') runDueEffects(byId.get(rec.id));
 					continue;
 				}
 				const d = await decryptOrPlaceholder(rec);
-				if (lockedSince()) return;
+				if (lockedSince()) return 0;
 				const declared = priorTagsFromHeader(rec.header, incomingTag);
 
 				// A RETRY of a message already here — typically one whose first
@@ -1209,7 +1445,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					}
 				}
 
-				messages.push({
+				const entry: LocalMessage = {
 					id: isDurable ? rec.id : null,
 					orderPermlink: rec.order_permlink ?? null,
 					clientTag: incomingTag,
@@ -1227,67 +1463,20 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					// AFTER it, is recognised too. Unverified until then: the
 					// link still has to pass the identical-text test.
 					...(declared.length > 0 ? { priorTags: declared } : {}),
-					...(isDurable ? {} : { provisionalSinceMs: Date.now() })
-				});
+					...(isDurable ? {} : { provisionalSinceMs: Date.now() }),
+					...(isBackfill(rec) ? { backfilled: true as const } : {})
+				};
+				messages.push(entry);
 				added = true;
 
-				// Phase F.5 — populate the trade-status store from
-				// incoming structured payloads.  If the decrypted
-				// plaintext is a recognized address/funds-sent
-				// payload with an orderPermlink, route it.  Plain
-				// chat messages decode to 'plaintext' and are no-ops.
-				// Only for a message whose sender is PROVED (v2): a v1 message
-				// could have been written by anyone who knows our public chat
-				// key, so it never moves a trade forward.
+				// Trade side effects (see applyIncomingTradePayload). Only for a
+				// message whose sender is PROVED (v2): a v1 message could have been
+				// written by anyone who knows our public chat key, so it never moves
+				// a trade forward. A page read by scrolling back defers them to the
+				// live path (see mergeNow).
 				if (!d.decryptFailed && !d.senderUnverified) {
-					try {
-						const decoded = decodePayload(d.text);
-						if (decoded.kind === 'address' && decoded.payload.orderPermlink) {
-							recordAddressShared({
-								orderPermlink: decoded.payload.orderPermlink,
-								peer: rec.sender,
-								method: decoded.payload.method,
-								address: decoded.payload.address,
-								expectedAmount: decoded.payload.amount ? Number(decoded.payload.amount) : undefined,
-								expectedMemo: decoded.payload.memo,
-								direction: 'incoming'
-							});
-						} else if (decoded.kind === 'funds_sent' && decoded.payload.orderPermlink) {
-							recordFundsSent({
-								orderPermlink: decoded.payload.orderPermlink,
-								peer: rec.sender,
-								method: decoded.payload.method,
-								txid: decoded.payload.txid,
-								claimedMemo: decoded.payload.memo,
-								amount: decoded.payload.amount ? Number(decoded.payload.amount) : undefined,
-								direction: 'incoming'
-							});
-
-							// Phase F.5 audit fix (F-41) — trigger
-							// chain verification immediately on
-							// receipt.  Idempotent with the listener's
-							// trigger (cache hit on duplicate).
-							if (decoded.payload.method === 'blurt') {
-								const amountStr = decoded.payload.amount;
-								if (amountStr !== undefined) {
-									const amountNum = Number(amountStr);
-									if (Number.isFinite(amountNum) && amountNum > 0) {
-										triggerBlurtVerification({
-											recipient: deps.me,
-											sender: rec.sender,
-											amountBlurt: amountNum,
-											echoedMemo: decoded.payload.memo ?? '',
-											orderPermlink: decoded.payload.orderPermlink,
-											txid: decoded.payload.txid,
-											direction: 'incoming'
-										});
-									}
-								}
-							}
-						}
-					} catch {
-						// decode never throws; defensive swallow.
-					}
+					if (mode === 'history') entry.effectsDue = true;
+					else applyIncomingTradePayload(d.text, rec.sender);
 				}
 			}
 		}
@@ -1302,16 +1491,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 
 		// Sort the local list by createdAt ASC, putting pending /
 		// broadcast / failed messages (no createdAt) at the end.
-		// Secondary sort by localSeq so ordering is stable within
-		// a timestamp.
-		messages.sort((a, b) => {
-			const aT = a.createdAt ? a.createdAt.getTime() : Number.POSITIVE_INFINITY;
-			const bT = b.createdAt ? b.createdAt.getTime() : Number.POSITIVE_INFINITY;
-			if (aT !== bT) return aT - bT;
-			return a.localSeq - b.localSeq;
-		});
+		messages.sort(chronological);
 
 		if (added) emit();
+		return messages.length - before;
 	}
 
 	/** Fetch the latest page and merge. Caller handles the poll
@@ -1336,6 +1519,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// in principle escape to the browser console in prod.
 		if (r && r.ok) {
 			await mergePollResponse(r.items);
+			markLiveReady();
 		}
 		// On error, silently skip — next poll will try again. The
 		// user doesn't need to see every transient network error.
@@ -1902,6 +2086,232 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 	}
 
+	// ─── Scrolling back, and the whole conversation (v1.21.6) ─────────
+	//
+	// The live paths (stream snapshot, fallback poll) only ever read the pair's
+	// newest 50 messages. A thread's older messages — or all of a thread whose
+	// messages are older than the newest 50 of the pair — were never loaded, so
+	// they could not be reread or exported. These read the rest, page by page.
+
+	function historyState(loading: boolean): HistoryState {
+		return { ready: liveReady, loading, complete: olderComplete, failed: olderFailed };
+	}
+
+	function emitHistory(): void {
+		if (destroyed) return;
+		deps.onHistoryChange?.(historyState(olderRun !== null));
+	}
+
+	/** The first live answer is in (even one with nothing for this thread). */
+	function markLiveReady(): void {
+		if (liveReady || destroyed) return;
+		liveReady = true;
+		emitHistory();
+	}
+
+	/** One history page, tried up to three times. Null when every try failed
+	 *  or the view closed. */
+	async function fetchHistoryPage(opts: {
+		cursor: string | undefined;
+		order?: string | null;
+		waits: readonly number[];
+	}): Promise<{ items: readonly ChatMessageRecord[]; nextCursor: string | null } | null> {
+		const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+		for (let attempt = 0; ; attempt++) {
+			if (destroyed) return null;
+			let r: Awaited<ReturnType<ChatControllerDeps['fetchHistory']>> | undefined;
+			try {
+				r = await deps.fetchHistory(deps.me, deps.peer, {
+					limit: OLDER_PAGE_SIZE,
+					signal: historyAbort.signal,
+					...(opts.cursor !== undefined ? { cursor: opts.cursor } : {}),
+					...(opts.order !== undefined ? { order: opts.order } : {})
+				});
+			} catch {
+				r = undefined;
+			}
+			if (destroyed) return null;
+			if (r && r.ok) return { items: r.items, nextCursor: r.nextCursor };
+			const wait = opts.waits[attempt];
+			if (wait === undefined) return null;
+			await sleep(wait);
+		}
+	}
+
+	/**
+	 * Does this page take the read further back? An indexer answers each page
+	 * with rows it has not given before in this read, and a cursor it has not
+	 * given before, and never an empty page that says there is more. Anything
+	 * else — a buggy or hostile one — would keep the read asking forever.
+	 * Records the page's cursor and ids in `followed` / `ids`.
+	 */
+	function progresses(
+		page: { items: readonly ChatMessageRecord[]; nextCursor: string | null },
+		followed: Set<string>,
+		ids: Set<number>
+	): boolean {
+		if (page.nextCursor !== null) {
+			// `every` of an empty page is true: an empty page that says there
+			// is more fails too.
+			if (followed.has(page.nextCursor) || page.items.every((r) => ids.has(r.id))) return false;
+			followed.add(page.nextCursor);
+		}
+		for (const r of page.items) ids.add(r.id);
+		return true;
+	}
+
+	function loadOlder(): Promise<void> {
+		if (destroyed || olderComplete) return Promise.resolve();
+		if (olderRun !== null) return olderRun;
+		const epoch = lockEpoch;
+		const stale = (): boolean => destroyed || epoch !== lockEpoch;
+		olderFailed = false;
+		olderRun = (async () => {
+			/** Cursors this read has followed: one coming back means the
+			 *  indexer is going round in circles, not further back. */
+			const followed = new Set<string>();
+			const runIds = new Set<number>();
+			try {
+				for (;;) {
+					const page = await fetchHistoryPage({
+						cursor: olderCursor,
+						order: deps.orderPermlink ?? null,
+						waits: HISTORY_RETRY_WAITS_MS
+					});
+					if (stale()) return;
+					if (page === null || !progresses(page, followed, runIds)) {
+						olderFailed = true;
+						return;
+					}
+					const added = (await mergePollResponse(page.items, 'history')) > 0;
+					if (stale()) return;
+					if (page.nextCursor === null) {
+						olderComplete = true;
+						return;
+					}
+					olderCursor = page.nextCursor;
+					// Something older is on screen: stop until the reader asks
+					// again. Otherwise (a page of other threads, from an indexer
+					// that ignores the thread filter, or one we already had) read on.
+					if (added) return;
+				}
+			} catch {
+				// A merge that threw: say so, never reject (the view awaits this).
+				if (!stale()) olderFailed = true;
+			} finally {
+				olderRun = null;
+				emitHistory();
+			}
+		})();
+		emitHistory();
+		return olderRun;
+	}
+
+	async function loadWholeConversation(): Promise<readonly ConversationRecordMessage[]> {
+		if (destroyed) throw new ConversationIncompleteError('closed');
+		const epoch = lockEpoch;
+		const stale = (): boolean => destroyed || epoch !== lockEpoch;
+		const records: ChatMessageRecord[] = [];
+		const seen = new Set<number>();
+		let cursor: string | undefined = undefined;
+		const followed = new Set<string>();
+		const pageIds = new Set<number>();
+		for (;;) {
+			const page = await fetchHistoryPage({ cursor, waits: EXPORT_RETRY_WAITS_MS });
+			if (stale()) throw new ConversationIncompleteError('locked or closed');
+			if (page === null) throw new ConversationIncompleteError('a page could not be read');
+			if (!progresses(page, followed, pageIds)) {
+				throw new ConversationIncompleteError('the indexer went round in circles');
+			}
+			for (const rec of page.items) {
+				if (seen.has(rec.id)) continue;
+				seen.add(rec.id);
+				records.push(rec);
+			}
+			if (page.nextCursor === null) break;
+			cursor = page.nextCursor;
+		}
+
+		// What this view already decrypted is reused: the same words it shows.
+		const shown = new Map<number, LocalMessage>();
+		for (const m of messages) if (m.id !== null && m.id !== 0) shown.set(m.id, m);
+
+		const out: (ConversationRecordMessage & { id: number | null; localSeq: number })[] = [];
+		for (const rec of records) {
+			const orderPermlink = rec.order_permlink ?? null;
+			const base = {
+				id: rec.id,
+				localSeq: 0,
+				sender: rec.sender,
+				createdAt: new Date(rec.created_at),
+				orderPermlink,
+				trxId: rec.source_trx_id || null,
+				state: 'confirmed' as const
+			};
+			const known = shown.get(rec.id);
+			if (known) {
+				out.push({ ...base, text: known.text, decryptFailed: known.decryptFailed });
+				continue;
+			}
+			if (rec.sender === deps.me) {
+				const tag = clientTagFromHeader(rec.header);
+				const fromChain = await decryptOwnFromChain(rec);
+				if (stale()) throw new ConversationIncompleteError('locked or closed');
+				const cached =
+					fromChain === null && deps.getLiveIdentity() !== null && tag !== null
+						? ownSentPlaintext.get(ownSentKey(deps.me, tag))
+						: undefined;
+				out.push({
+					...base,
+					text: fromChain ?? cached ?? ENCRYPTED_PLACEHOLDER,
+					decryptFailed: false
+				});
+			} else {
+				const d = await decryptOrPlaceholder(rec);
+				if (stale()) throw new ConversationIncompleteError('locked or closed');
+				out.push({ ...base, text: d.text, decryptFailed: d.decryptFailed });
+			}
+		}
+		// What this view shows that the pages did not hold: messages with no
+		// durable copy yet (sending, failed, or a copy the chain has not made
+		// irreversible), and any whose durable copy landed while the pages were
+		// being read. A message whose durable copy IS among the records is
+		// listed once, as that record: matched by id, or by sender and tag (for
+		// the peer's, the same encrypted bytes too).
+		const durable = new Set<string>();
+		for (const rec of records) {
+			const tag = clientTagFromHeader(rec.header);
+			if (tag === null) continue;
+			durable.add(rec.sender === deps.me ? `me\u0000${tag}` : `${tag}\u0000${wireOf(rec)}`);
+		}
+		for (const m of messages) {
+			const id = durableId(m);
+			const listed =
+				id !== null
+					? seen.has(id)
+					: m.sender === deps.me
+						? [m.clientTag, ...(m.priorTags ?? [])].some(
+								(t) => t !== null && durable.has(`me\u0000${t}`)
+							)
+						: m.clientTag !== null && durable.has(`${m.clientTag}\u0000${m.wire ?? ''}`);
+			if (listed) continue;
+			out.push({
+				id,
+				localSeq: m.localSeq,
+				sender: m.sender,
+				text: m.text,
+				createdAt: m.createdAt,
+				orderPermlink: m.orderPermlink,
+				trxId: m.trxId,
+				decryptFailed: m.decryptFailed,
+				state: m.state,
+				...(m.unrecorded === true ? { unrecorded: true } : {})
+			});
+		}
+		// Oldest first; anything without a chain time last, in the view's order.
+		return out.sort(chronological).map(({ id: _id, localSeq: _seq, ...m }) => m);
+	}
+
 	/**
 	 * The session was locked (idle auto-lock, Lock, sign-out) while this view is
 	 * open. Before, the view kept the whole decrypted
@@ -1917,7 +2327,13 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		myChatIdentity = null;
 		if (id) id.priv.fill(0);
 		messages = [];
+		// Scrolling back starts again from the newest message: what it had
+		// loaded was just dropped.
+		olderCursor = undefined;
+		olderComplete = false;
+		olderFailed = false;
 		emit();
+		emitHistory();
 	}
 
 	return {
@@ -1944,7 +2360,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 						// might have history loaded, the connection
 						// drops + reconnects, and the new snapshot lands
 						// on top of existing state without duplication.
-						void mergePollResponse(items);
+						void mergePollResponse(items).then(markLiveReady, () => undefined);
 					},
 					onAppend: (rec) => {
 						void mergePollResponse([rec]);
@@ -1991,6 +2407,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			if (destroyed) return;
 			destroyed = true;
 			controllerLockHooks.delete(onSessionLocked);
+			historyAbort.abort();
 			if (streamUnsubscribe !== null) {
 				streamUnsubscribe();
 				streamUnsubscribe = null;
@@ -2044,7 +2461,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		retryMessage,
 		snapshot() {
 			return [...messages];
-		}
+		},
+		loadOlder,
+		loadWholeConversation,
+		lockGeneration: () => lockEpoch
 	};
 }
 
@@ -2092,7 +2512,8 @@ export function runtimeDeps(
 			const r = await getChatHistory(a, b, {
 				limit: opts.limit,
 				cursor: opts.cursor,
-				signal: opts.signal
+				signal: opts.signal,
+				...(opts.order !== undefined ? { order: opts.order } : {})
 			});
 			if (r.ok) {
 				return {

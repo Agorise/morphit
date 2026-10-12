@@ -550,6 +550,20 @@ body {
 	}
 }
 
+/* v1.21.6 — every primary-style button (the solid brand face: .btn-primary,
+ * .btn-primary-sm, and the hand-rolled `bg-morphit-btn` /
+ * `bg-[var(--morphit-btn-face)]` buttons) lights a 1px edge in the brand
+ * accent on hover. An outline drawn inside the edge (offset -1px) needs no
+ * border and moves nothing, follows the rounded corners, and leaves the
+ * focus ring (a box-shadow) alone. A disabled button does not light up. */
+:is(.btn-primary, .btn-primary-sm, .bg-morphit-btn, .bg-\[var\(--morphit-btn-face\)\]):not(
+		:disabled,
+		[aria-disabled='true']
+	):hover {
+	outline: 1px solid rgb(var(--brand-primary-rgb) / 0.9);
+	outline-offset: -1px;
+}
+
 /* Respect the user's reduced-motion preference. */
 @media (prefers-reduced-motion: reduce) {
 	.btn-primary,
