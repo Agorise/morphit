@@ -9040,14 +9040,19 @@ support for two protections, both set in
 **Backups are plain text unless you give an age key.** The
 install wizard has a step "Encrypt your daily backups
 (recommended)": paste an age PUBLIC key made on your own
-computer (`age-keygen -o morphit-backup-key.txt`); pressing
+computer — the wizard gives the exact command, which saves the key
+in your home folder under a name that includes your instance, e.g.
+`age-keygen -o ~/morphit-backup-key-trade.example.org.txt`; pressing
 Enter keeps plain-text backups (kept 30 days). `morphit-ops
 upgrade` leaves the backups alone and asks nothing about them
 (since v1.21.3: it used to offer to encrypt or delete them and
 named that question after every upgrade until answered). To
 encrypt later, set `AGE_RECIPIENT` in `backup.env` (below). To
 restore an encrypted backup you need the secret key file:
-`age -d -i morphit-backup-key.txt morphit-<time>.sql.gz.age | gunzip | psql …`.
+`age -d -i ~/morphit-backup-key-<your instance>.txt morphit-<time>.sql.gz.age | gunzip | psql …`.
+`morphit-ops health` counts an encrypted dump (`.sql.gz.age`) as a backup like a
+plain one (before v1.21.7 it showed "Backups ✗ missing" on every node with
+encrypted backups).
 Push subscription rows are not in the dumps.
 
 1. **Per-backup age encryption.**  Set `AGE_RECIPIENT=age1...`
@@ -9059,10 +9064,11 @@ Push subscription rows are not in the dumps.
    Generate the keypair OFF this host (laptop, vault host,
    hardware token):
    ```sh
-   age-keygen -o ~/.age/morphit-backup.key
+   age-keygen -o ~/morphit-backup-key-<your domain>.txt
    ```
-   The first line of `morphit-backup.key` is the public key
-   (`age1...`); copy it into `/etc/morphit/backup.env`.  The
+   (the name the setup wizard suggests). The line it prints
+   after "Public key:" (`age1...`) is the public key; copy it into
+   `/etc/morphit/backup.env`.  The
    matching PRIVATE key MUST stay off the morphit host — an
    attacker who roots the box should not be able to decrypt
    your offsite backups.
@@ -9092,7 +9098,7 @@ zcat /home/morphit/backups/morphit-20260523-040000.sql.gz.age 2>&1 | head
 # Expected: gzip: stdin: not in gzip format
 #   (because the bytes are age-encrypted, not gzipped)
 
-age --decrypt -i ~/.age/morphit-backup.key \
+age --decrypt -i ~/morphit-backup-key-<your domain>.txt \
     /home/morphit/backups/morphit-20260523-040000.sql.gz.age \
   | zcat | head
 # Expected: real SQL dump content.
@@ -13792,7 +13798,7 @@ The mirror job:
 
 1. reads the newest signed `indexer_snapshot_v1` op from chain, over whatever transport your node already uses (hidden RPC included — no clearnet required). Since v1.18.0 it only accepts an op that **two RPC operators agree on** (a node's `.onion` and `.b32.i2p` count as one operator; the default hidden nodes are all run by the project, so on a hidden-only node the signature is the real check) and whose signature comes from the pinned `MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY` — the same key the release and RPC-directory checks use. If the nodes it can reach do not agree yet, it pins nothing and tries again next run;
 2. refuses outright if the snapshot is for a different chain;
-3. pins the CID to your Kubo. When Kubo's own swarm cannot fetch it — a Tor/I2P-only box often has only two or three swarm peers, so with fewer than five the swarm gets 3 minutes — it asks the federation peers' `.onion` and `.b32.i2p` addresses (the publisher's own from the signed record first, then this node's federation directory with the publisher's instance leading, then any registration in the history it read) for the snapshot as a CAR (`/ipfs/<cid>?format=car`; up to 64 MB, no redirects) and imports that, pinning only the anchored CID, whatever roots the CAR names. Fetching stops 18 minutes into the run, which leaves the steps after it the time they may take within the run's 30 minutes;
+3. pins the CID to your Kubo. When Kubo's own swarm cannot fetch it — a Tor/I2P-only box often has only two or three swarm peers, so with fewer than five the swarm gets 3 minutes — it asks the federation peers' `.onion` and `.b32.i2p` addresses (the publisher's own from the signed record first, then this node's federation directory with the publisher's instance leading, then any registration in the history it read), and then the hidden Blurt RPC nodes in its settings (since v1.21.7; most do not mirror yet, see [HIDDEN-RPC-SNAPSHOT-MIRROR.md](HIDDEN-RPC-SNAPSHOT-MIRROR.md)), for the snapshot as a CAR (`/ipfs/<cid>?format=car`; up to 64 MB, no redirects) and imports that, pinning only the anchored CID, whatever roots the CAR names. Fetching stops 18 minutes into the run, which leaves the steps after it the time they may take within the run's 30 minutes;
 4. reads the pinned content back and **verifies it against the on-chain SHA-256** — if it does not match, the pin is removed and your box serves nothing rather than serving something a newcomer will reject;
 5. unpins the snapshot it was serving before and runs a repo GC. One live snapshot per box, never a growing pile — nobody wants last month's copy when this month's exists.
 
@@ -13823,7 +13829,11 @@ A healthy run ends with a line confirming the SHA-256 matched and that this inst
 
 ### Fast-syncing a new node
 
-On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order: your own gateway if you run one, then federation peers over Tor and I2P (the publisher's own addresses from the signed record first), then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. Whatever answers first is verified against the on-chain hash before anything is restored, so which mirror served you affects only your wait, never your safety.
+On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order (v1.21.7): your own gateway if you run one (it serves only what it already holds), then federation peers over Tor and I2P (the publisher's own addresses from the signed record first), then — on a node in the public IPFS network, never a Tor/I2P-only one — your own IPFS node asking the network for it, then the hidden Blurt RPC nodes in your settings (most do not mirror yet; what their operators can run is in [HIDDEN-RPC-SNAPSHOT-MIRROR.md](HIDDEN-RPC-SNAPSHOT-MIRROR.md)), then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. A hidden source is never allowed to redirect the download. Whatever answers first is verified against the on-chain record before anything is restored, so which mirror served you affects only your wait, never your safety.
+
+**What every downloaded copy must pass before it is unpacked (v1.21.7).** It must be exactly the size the signed record gives (a longer download is cut off there); the archive is read by fast-sync itself, not by `tar`, and only `manifest.json` and `indexer.sql.gz`, as plain files of bounded size, are accepted; the dump inside must match the signed SHA-256. A copy that fails any of these is thrown away and the next source is tried — one bad source can no longer stop the run or fill the disk.
+
+**If the restore went through but its checks did not (v1.21.7).** When the op-log spot-check quarantines the restored database, its clean-up fails, or the run is stopped (Ctrl+C) after the restore, fast-sync exits with code 4 and leaves the indexer **stopped**: the database was replaced, and must not be served. Run `sudo morphit-ops fast-sync` again to restore a fresh copy over it. If the spot-check says again that the snapshot does not match the chain, wait for the next snapshot (one is published daily) and tell the Morphit maintainers.
 
 **What fast-sync checks before it restores anything (v1.18.0).**
 

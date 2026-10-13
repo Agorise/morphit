@@ -9,9 +9,11 @@
  *   - askPassword:   masked input (no echo)
  *   - askChoice:     numbered single-select
  *
- * All prompts honor Ctrl+C → exit 130 (SIGINT convention) so
- * the operator can bail out of any step without a confusing
- * stack trace.
+ * Ctrl+C at any prompt rejects with an AbortError (readline's own, or
+ * {@link abortError} for the masked reader), so each command's caller can
+ * say what was stopped and what to run next — never a stack trace, and never
+ * a silent exit that skips the caller's clean-up (v1.21.7: the masked reader
+ * used to exit the process on the spot).
  */
 
 import { createInterface } from 'node:readline/promises';
@@ -40,6 +42,19 @@ export const RELAY_KEY_UNLOCK_PROMPT =
 export function stripTerminalControlSequences(s: string): string {
 	// eslint-disable-next-line no-control-regex
 	return s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
+/** The error a prompt rejects with when the operator presses Ctrl+C (the same
+ *  shape as readline's). */
+export function abortError(): Error {
+	return Object.assign(new Error('Aborted with Ctrl+C'), { name: 'AbortError', code: 'ABORT_ERR' });
+}
+
+/** True for a Ctrl+C at a prompt (readline's AbortError or {@link abortError}). */
+export function isAbortError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	const code = (err as { code?: unknown }).code;
+	return err.name === 'AbortError' || code === 'ABORT_ERR';
 }
 
 /** Ask a free-form string question.  Returns the trimmed response.
@@ -195,7 +210,7 @@ export async function askChoice(
  *  because some flows want one-shot entry, not confirmation). */
 export async function askPassword(prompt: string): Promise<string> {
 	stdout.write(`${prompt}\n> `);
-	return new Promise<string>((resolve) => {
+	return new Promise<string>((resolve, reject) => {
 		const wasRaw = stdin.isRaw;
 		const wasPaused = stdin.isPaused();
 		// readable-mode handler reads the stream as a sequence of
@@ -216,10 +231,12 @@ export async function askPassword(prompt: string): Promise<string> {
 			for (const ch of chunk) {
 				const code = ch.charCodeAt(0);
 				if (code === 0x03) {
-					// Ctrl+C: clean exit.
+					// Ctrl+C: the caller says what was stopped (it used to exit
+					// here, silently, skipping every clean-up).
 					stdout.write('\n');
 					cleanup();
-					process.exit(130);
+					reject(abortError());
+					return;
 				}
 				if (code === 0x04) {
 					// Ctrl+D / EOT — treat as cancel; return empty.

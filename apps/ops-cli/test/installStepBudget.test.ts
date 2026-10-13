@@ -44,11 +44,12 @@ async function coreSteps(torOnly: boolean): Promise<number> {
 }
 
 describe('the announced step total', () => {
-	// 3 account steps before and 3 after the core questions on a VPS.
+	// 3 account steps before and 6 after the core questions on a VPS (save the
+	// database password, fast-sync, warrant canary, list, brand, review).
 	it('clearnet VPS', async () => {
-		expect(installStepTotal('vps', false)).toBe(3 + (await coreSteps(false)) + 3);
+		expect(installStepTotal('vps', false)).toBe(3 + (await coreSteps(false)) + 6);
 	});
 	it('tor-only VPS', async () => {
-		expect(installStepTotal('vps', true)).toBe(3 + (await coreSteps(true)) + 3);
+		expect(installStepTotal('vps', true)).toBe(3 + (await coreSteps(true)) + 6);
 	});
 });

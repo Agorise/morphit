@@ -41,6 +41,13 @@ import { join } from 'node:path';
 import { classifySeeding, resolveHealthDiskPath, type SeedingProblem } from '@morphit/node-health';
 
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
+import { hostTorDaemonUnit } from '../lib/torUnit.ts';
+import {
+	REHARDEN_SSH_COMMAND,
+	REVERTED_MARKER,
+	SSH_HARDENED_DIR,
+	sshClosedPortsNow
+} from '../init/reachabilityRevert.ts';
 import { parseCanaryTimestamp } from '../canaryTime.ts';
 import { startDotsSpinner } from '../init/spinner.ts';
 
@@ -170,7 +177,9 @@ export type ServiceState =
  *  (one call; exits 0 even for a missing unit → LoadState=not-found).
  *  Works for any user.  Returns 'unknown' if systemctl isn't on PATH
  *  or the call times out. */
-export function checkService(unit: string): ServiceState {
+export function checkService(name: string): ServiceState {
+	// "tor" means the Tor daemon, which is tor@default on Ubuntu (lib/torUnit.ts).
+	const unit = name === 'tor' ? hostTorDaemonUnit() : name;
 	let out: string;
 	try {
 		out = execFileSync(
@@ -403,18 +412,34 @@ const CANARY_STALE_WINDOW_MS = 5 * 24 * 60 * 60 * 1000;
  *  (the file in `apps/web/build/`, the nginx web root).  Parses the
  *  `Valid through:` line and compares it to `now`.  PURE given the
  *  path and clock (the only I/O is reading the file). */
-export function checkCanary(filePath: string, now: Date): CanaryStatus {
+/** Where the canary's refresh script lives when the canary is signed on THIS
+ *  server: setup.sh puts it in the home of the account that ran it, root's for
+ *  the install wizard and `sudo` (so `~/.morphit/…` was wrong for the operator
+ *  typing it — review, 2026-10-12). */
+export const SERVER_CANARY_REFRESH = '/root/.morphit/update-canary.sh';
+
+/** How to publish a canary now, for the place it is signed. */
+export function canaryRefreshCommand(signedHere: boolean): string {
+	return signedHere
+		? `sudo bash ${SERVER_CANARY_REFRESH}`
+		: 'on the computer that signs it: bash ~/.morphit/update-canary.sh';
+}
+
+export function checkCanary(
+	filePath: string,
+	now: Date,
+	signedHere: boolean = existsSync(SERVER_CANARY_REFRESH)
+): CanaryStatus {
 	if (!existsSync(filePath)) {
 		return {
 			state: 'missing',
 			generatedAt: null,
 			validThrough: null,
 			detail:
-				'not published yet — this is pending, not a failure. The canary embeds live ' +
-				'freshness proofs (a recent Blurt chain-head, a BTC price, a news headline), so ' +
-				'it publishes once this box is online. If you already ran harden, the weekly timer ' +
-				'is armed — publish one right now with:  bash ~/.morphit/update-canary.sh  — or ' +
-				're-run sudo morphit-ops harden.'
+				'not published yet. Set it up once — signed on this server, every week: ' +
+				'cd /opt/morphit && sudo bash scripts/canary/setup.sh  (choose "On THIS computer"); ' +
+				'or signed on your own computer, which uploads it: RUN-A-MORPHIT-NODE.md §9. ' +
+				`Already set up? Publish one now: ${canaryRefreshCommand(signedHere)}`
 		};
 	}
 	let txt: string;
@@ -472,7 +497,7 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 			validThrough,
 			detail:
 				`expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} — your weekly ` +
-				'refresh may have stalled; re-run it (bash ~/.morphit/update-canary.sh)'
+				`refresh may have stalled; re-run it: ${canaryRefreshCommand(signedHere)}`
 		};
 	}
 	return { state: 'fresh', generatedAt, validThrough, detail: 'current' };
@@ -1050,9 +1075,12 @@ export interface RpcEndpointRow {
 	readonly transport: 'clearnet' | 'tor' | 'i2p' | 'local';
 	readonly healthy: boolean;
 	readonly latencyMs: number | null;
-	/** The indexer has measured this node at least once (v1.21.6 rows carry
-	 *  `checked_at`, null until the first measurement; an older indexer's rows
-	 *  have no such field and count as measured). */
+	/** The indexer measured this node lately (v1.21.6 rows carry `checked_at`,
+	 *  null until the first measurement; an older indexer's rows have no such
+	 *  field and count as measured). A figure older than
+	 *  {@link RPC_FIGURE_STALE_MS} is not current: since v1.21.7 the indexer
+	 *  measures only while its figures are read, so an old one may be from hours
+	 *  ago (review, 2026-10-12: a dead node showed ✓). */
 	readonly measured: boolean;
 	/** Operator-published node name (hidden-RPC nodes only); lets us tell a
 	 *  re-establishing transport apart from a dead node — a down transport whose
@@ -1060,11 +1088,24 @@ export interface RpcEndpointRow {
 	readonly name: string | null;
 }
 
+/** A node's figure older than this (by the indexer's own clock) is not shown
+ *  as its current state. */
+export const RPC_FIGURE_STALE_MS = 120_000;
+
 /** Parse a /v1/rpc-endpoints body into rows. PURE + tolerant of shape drift. */
 export function parseRpcEndpointRows(body: unknown): RpcEndpointRow[] {
 	if (body === null || typeof body !== 'object') return [];
 	const arr = (body as { endpoints?: unknown }).endpoints;
 	if (!Array.isArray(arr)) return [];
+	const g = (body as { generated_at?: unknown }).generated_at;
+	const generated = typeof g === 'string' ? Date.parse(g) : NaN;
+	const current = (checkedAt: unknown): boolean => {
+		if (checkedAt === undefined) return true; // an older indexer
+		if (typeof checkedAt !== 'string') return false;
+		const t = Date.parse(checkedAt);
+		if (!Number.isFinite(t)) return false;
+		return !Number.isFinite(generated) || generated - t <= RPC_FIGURE_STALE_MS;
+	};
 	const rows: RpcEndpointRow[] = [];
 	for (const e of arr) {
 		if (e === null || typeof e !== 'object') continue;
@@ -1078,7 +1119,7 @@ export function parseRpcEndpointRows(body: unknown): RpcEndpointRow[] {
 			healthy: o.healthy === true,
 			// The indexer's field is latency_ms (packages/indexer-client RpcEndpointHealth).
 			latencyMs: typeof o.latency_ms === 'number' ? o.latency_ms : null,
-			measured: o.checked_at !== null,
+			measured: current(o.checked_at),
 			name: typeof o.name === 'string' ? o.name : null
 		});
 	}
@@ -1086,20 +1127,22 @@ export function parseRpcEndpointRows(body: unknown): RpcEndpointRow[] {
 }
 
 /** Fetch the indexer's per-endpoint RPC health. Derives /v1/rpc-endpoints from
- *  the health URL: a plain GET answers at once from the indexer's background
- *  measurements (each node every 20 s); `?probe=1` would wait for a fresh round,
- *  up to ~43 s. Best-effort: returns null on any failure (the summary count from
- *  /v1/health still renders). */
+ *  the health URL and asks for a fresh round (`?probe=1`): since v1.21.7 the
+ *  indexer measures the nodes only while their figures are read, so a plain
+ *  read could answer with figures from hours ago. It answers within ~8 s with
+ *  what it has measured by then (a node still being measured says so).
+ *  Best-effort: returns null on any failure (the summary count from /v1/health
+ *  still renders). */
 async function fetchRpcEndpoints(
 	healthUrl: string,
-	timeoutMs = 22000
+	timeoutMs = 15000
 ): Promise<RpcEndpointRow[] | null> {
 	let url: string;
 	try {
 		const u = new URL(healthUrl);
 		u.pathname = u.pathname.replace(/\/v1\/health$/, '/v1/rpc-endpoints');
 		if (!u.pathname.endsWith('/v1/rpc-endpoints')) u.pathname = '/v1/rpc-endpoints';
-		u.search = '';
+		u.search = '?probe=1';
 		url = u.toString();
 	} catch {
 		return null;
@@ -1507,7 +1550,9 @@ export function readBackupFacts(envPath = '/etc/morphit/backup.env'): BackupFact
 	let newest: BackupFacts['newest'] = null;
 	try {
 		for (const name of readdirSync(dir)) {
-			if (!name.endsWith('.sql.gz')) continue; // ignore .partial and anything else
+			// morphit-backup.sh writes …sql.gz, or …sql.gz.age with an age key set;
+			// a half-written one is …partial and never counts.
+			if (!name.endsWith('.sql.gz') && !name.endsWith('.sql.gz.age')) continue;
 			const st = statSync(`${dir}/${name}`);
 			if (newest === null || st.mtimeMs > newest.atMs) {
 				newest = { name, atMs: st.mtimeMs, bytes: st.size };
@@ -1659,9 +1704,14 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 				detail: cls.problems.map((p) => opsProblemText(p, f)).join('; ')
 			};
 		case 'ok': {
-			const pinAge = f.pinRanMs !== null ? formatBackupAge(f.pinRanMs) : 'pending first run';
-			const rebAge =
-				f.rebroadcastRanMs !== null ? formatBackupAge(f.rebroadcastRanMs) : 'pending first run';
+			const copied =
+				f.pinRanMs !== null
+					? `copied ${formatBackupAge(f.pinRanMs)}`
+					: 'its first copy is still to come';
+			const named =
+				f.rebroadcastRanMs !== null
+					? `its IPFS name record refreshed ${formatBackupAge(f.rebroadcastRanMs)}`
+					: 'its IPFS name record not refreshed yet';
 			// Say ONLY what these facts prove. They are systemd timer outcomes: the
 			// release is pinned locally and the IPNS record was rebroadcast. They do
 			// NOT prove a peer can fetch it — on morphit.io both ran happily for weeks
@@ -1672,8 +1722,9 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 			return {
 				state: 'ok',
 				detail:
-					`pinned to IPFS locally (last ${pinAge}) + IPNS record rebroadcast to the DHT (last ${rebAge}); ` +
-					'this confirms the local jobs ran, not that peers can fetch \u2014 the upgrade\u2019s seed step verifies reachability per transport'
+					`This node keeps a copy of the Morphit release for other nodes to download: ${copied}, ` +
+					`${named}. (That the jobs ran here; ` +
+					'`sudo morphit-ops upgrade` checks other nodes can really fetch it.)'
 			};
 		}
 	}
@@ -1845,6 +1896,109 @@ export async function readSystemResources(): Promise<SystemResources> {
 export function pctColored(c: ReturnType<typeof color>, pct: number | null, s: string): string {
 	if (pct === null) return s;
 	return pct >= 90 ? c.red(s) : pct >= 80 ? c.yellow(s) : s;
+}
+
+/** When the install's SSH safety revert fired (its notice), or null — also
+ *  null once the hardened settings it kept aside are back in /etc/ssh (the
+ *  operator ran the command it gave), so the warning does not stay forever
+ *  (review, 2026-10-12). */
+export function readRevertNotice(
+	path: string = REVERTED_MARKER,
+	hardened: string = SSH_HARDENED_DIR,
+	etcSsh: string = '/etc/ssh'
+): string | null {
+	let t: string;
+	try {
+		t = readFileSync(path, 'utf8').trim();
+	} catch {
+		return null;
+	}
+	if (hardenedSettingsBack(hardened, etcSsh)) return null;
+	return t === '' ? 'at an unknown time' : t;
+}
+
+/** What health says when the firewall lets no one reach SSH, or null. PURE. */
+export function sshFirewallWarning(closed: readonly number[]): string | null {
+	if (closed.length === 0) return null;
+	const cmd = closed.map((p) => `sudo ufw limit ${p}/tcp`).join(' && ');
+	return (
+		`the firewall lets no one in on SSH (port ${closed.join(', ')}): a NEW login over the ` +
+		`internet will fail. Unless that is on purpose (SSH over Tor only, a console), allow it: ${cmd}`
+	);
+}
+
+/** Every file the revert kept aside is in `etcSsh` again, byte for byte. */
+function hardenedSettingsBack(hardened: string, etcSsh: string): boolean {
+	const same = (rel: string): boolean => {
+		try {
+			return readFileSync(join(hardened, rel)).equals(readFileSync(join(etcSsh, rel)));
+		} catch {
+			return false;
+		}
+	};
+	let dropIns: string[] = [];
+	try {
+		dropIns = readdirSync(join(hardened, 'sshd_config.d')).map((n) => join('sshd_config.d', n));
+	} catch {
+		/* none kept */
+	}
+	const kept = [...(existsSync(join(hardened, 'sshd_config')) ? ['sshd_config'] : []), ...dropIns];
+	return kept.length > 0 && kept.every(same);
+}
+
+/** One of this instance's addresses for the health report. */
+export interface InstanceAddress {
+	readonly label: string;
+	readonly address: string | null;
+	/** ok: set, and (Tor/I2P) its daemon is running; down: set, daemon not
+	 *  running; starting: its daemon is starting; unknown: systemd could not be
+	 *  asked; none: never created. */
+	readonly state: 'ok' | 'down' | 'starting' | 'unknown' | 'none';
+}
+
+function addressState(svc: string): InstanceAddress['state'] {
+	if (svc === 'active') return 'ok';
+	if (svc === 'activating') return 'starting';
+	if (svc === 'unknown') return 'unknown';
+	return 'down';
+}
+
+/** This instance's addresses from its loaded settings. Tor and I2P are always
+ *  listed (as "none" when never created); the clearnet origin and the optional
+ *  others only when set. PURE given `service`. */
+export function instanceAddresses(
+	env: NodeJS.ProcessEnv,
+	service: (unit: string) => string
+): InstanceAddress[] {
+	const v = (k: string): string | null => {
+		const x = (env[k] ?? '').trim();
+		return x === '' ? null : x;
+	};
+	const out: InstanceAddress[] = [];
+	// A Tor-only node's origin is its own onion (http://<onion>): not clearnet.
+	const origin = v('MORPHIT_INSTANCE_ORIGIN');
+	if (origin !== null && !/^https?:\/\/[^/]*\.(onion|i2p)(?:[:/]|$)/i.test(origin))
+		out.push({ label: 'Clearnet', address: origin, state: 'ok' });
+	for (const [label, key, unit] of [
+		['Tor', 'MORPHIT_INSTANCE_TOR_ADDRESS', 'tor'],
+		['I2P', 'MORPHIT_INSTANCE_I2P_B32_ADDRESS', 'i2pd']
+	] as const) {
+		const a = v(key);
+		out.push({
+			label,
+			address: a,
+			state: a === null ? 'none' : addressState(service(unit))
+		});
+	}
+	for (const [label, key] of [
+		['I2P name', 'MORPHIT_INSTANCE_I2P_NAME_ADDRESS'],
+		['Lokinet', 'MORPHIT_INSTANCE_LOKINET_ADDRESS'],
+		['ENS', 'MORPHIT_INSTANCE_ENS_NAME']
+	] as const) {
+		const a = v(key);
+		if (a !== null) out.push({ label, address: a, state: 'ok' });
+	}
+	return out;
 }
 
 export async function runHealth(ctx: HealthCtx): Promise<number> {
@@ -2025,11 +2179,13 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 			for (const r of rpcEndpointRows) {
 				const badge = transportLabel(r.transport).padEnd(8);
 				const host = shortEndpoint(r.url).padEnd(30);
-				const lat = r.healthy && r.latencyMs !== null ? `${r.latencyMs} ms`.padStart(7) : '   —   ';
+				// No latency from a figure that is not current.
+				const showLat = r.measured && r.healthy && r.latencyMs !== null;
+				const lat = showLat ? `${r.latencyMs} ms`.padStart(7) : '   —   ';
 				// Latency colour by threshold (matches the web card): under 5 s green,
 				// 5–10 s yellow, 10 s+ red. Tor/I2P run a few seconds legitimately.
 				const latOut =
-					r.healthy && r.latencyMs !== null
+					showLat && r.latencyMs !== null
 						? r.latencyMs >= 10_000
 							? c.red(lat)
 							: r.latencyMs >= 5_000
@@ -2421,6 +2577,27 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						: c.dim('–');
 		console.log(`      ${aideTag} ${'AIDE baseline'.padEnd(22)} ${c.dim(aide.detail)}`);
 	}
+	// The install's SSH safety revert fired (its question went unanswered): say
+	// so, or nobody knows the SSH settings went back (2026-10-12).
+	const reverted = readRevertNotice();
+	if (reverted !== null) {
+		console.log(
+			`      ${c.yellow('⚠')} ${'SSH safety revert'.padEnd(22)} ${c.dim(
+				`ran ${safe(reverted)}: SSH's settings went back to how they were before the install ` +
+					'(the firewall was left as the install made it). To put the install\u2019s SSH hardening ' +
+					`back, once you log in with an SSH key: ${REHARDEN_SSH_COMMAND}`
+			)}`
+		);
+	}
+
+	// SSH shut out by the firewall (the v1.21.6 revert did this on fresh VPSes:
+	// no rule left, firewall on — the next login fails). Only as root: ufw's
+	// rule files are root's.
+	if (typeof process.getuid === 'function' && process.getuid() === 0) {
+		const w = sshFirewallWarning(sshClosedPortsNow());
+		if (w !== null)
+			console.log(`      ${c.yellow('⚠')} ${'SSH and the firewall'.padEnd(22)} ${c.dim(w)}`);
+	}
 
 	// ── Backups block ──
 	// Deliberately sits next to Services and Canary: all three answer "is the
@@ -2462,6 +2639,59 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		console.log(`      Valid through: ${safe(canary.validThrough)}`);
 	console.log(`      ${c.dim(canary.detail)}`);
 
+	// This instance's own addresses (clearnet + each hidden service it
+	// advertises), and whether the service behind each is running — the
+	// release and the site are served on all of them. Read from the loaded
+	// operator config (main.ts loads it before health, v1.21.7).
+	const addresses = instanceAddresses(process.env, checkService);
+	const hasHidden = addresses.some(
+		(a) => (a.label === 'Tor' || a.label === 'I2P') && a.address !== null
+	);
+	console.log('');
+	console.log(
+		`  ${c.bold('Addresses')}  ${c.dim('(the site and the release are served on each)')}`
+	);
+	// Without sudo the settings file (root-only) can't be read: every address
+	// would read "none yet", and the advice to set one up would be wrong.
+	const settingsUnreadable = ((): boolean => {
+		const f = join(defaultRepoRoot(), 'morphit.config.env');
+		if (!existsSync(f)) return false;
+		try {
+			readFileSync(f);
+			return false;
+		} catch {
+			return true;
+		}
+	})();
+	if (settingsUnreadable) {
+		console.log(
+			`      ${c.dim('Your settings can only be read as root: sudo morphit-ops health')}`
+		);
+	}
+	for (const a of settingsUnreadable ? [] : addresses) {
+		const mark =
+			a.state === 'ok'
+				? c.green('✓')
+				: a.state === 'down'
+					? c.red('✗')
+					: a.state === 'unknown' || a.state === 'starting'
+						? c.dim('?')
+						: c.dim('○');
+		const shown =
+			a.address !== null
+				? safe(a.address)
+				: c.dim('none yet — sudo morphit-ops → Set up a Tor / Lokinet / I2P address');
+		const why =
+			a.state === 'starting'
+				? c.dim(`  (${a.label === 'Tor' ? 'tor' : 'i2pd'} is starting)`)
+				: a.state === 'down'
+					? c.dim(
+							`  (${a.label === 'Tor' ? 'tor' : 'i2pd'} is not running — sudo systemctl restart ${a.label === 'Tor' ? 'tor' : 'i2pd'})`
+						)
+					: '';
+		console.log(`      ${mark} ${a.label.padEnd(9)} ${shown}${why}`);
+	}
+
 	// ── IPFS / IPNS release seeding block ──
 	// Is this node doing its share of hosting the release + keeping the IPNS
 	// name alive? (Decentralization #2 — the network survives on it.)
@@ -2476,34 +2706,14 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 					: ipfsSeeding.state === 'unknown'
 						? c.dim('?')
 						: c.yellow('⚠');
-	console.log(`  ${c.bold('IPFS/IPNS release seeding')}  ${seedTag} ${ipfsSeeding.state}`);
+	console.log(`  ${c.bold('Release sharing (IPFS)')}  ${seedTag} ${ipfsSeeding.state}`);
 	console.log(`      ${c.dim(ipfsSeeding.detail)}`);
-	// v1.16.14 — show this instance's OWN reachable addresses (clearnet + every
-	// hidden service it advertises), so the operator sees concretely that the
-	// release + site are served over clearnet, Tor and I2P — not just a generic
-	// "if you run Tor/I2P" nudge. Read from the loaded operator config.
-	const addrRows: Array<[string, string | undefined]> = [
-		['Clearnet', process.env.MORPHIT_INSTANCE_ORIGIN],
-		['Tor', process.env.MORPHIT_INSTANCE_TOR_ADDRESS],
-		['I2P', process.env.MORPHIT_INSTANCE_I2P_B32_ADDRESS],
-		['I2P name', process.env.MORPHIT_INSTANCE_I2P_NAME_ADDRESS],
-		['Lokinet', process.env.MORPHIT_INSTANCE_LOKINET_ADDRESS],
-		['ENS', process.env.MORPHIT_INSTANCE_ENS_NAME]
-	];
-	const addrsPresent = addrRows.filter(([, v]) => (v ?? '').trim() !== '');
-	const hasHidden = addrsPresent.some(([label]) => label === 'Tor' || label === 'I2P');
-	if (addrsPresent.length > 0) {
-		console.log(`      ${c.dim('Reachable at (release + site served on all of these):')}`);
-		for (const [label, v] of addrsPresent) {
-			console.log(`        ${c.dim(`${label.padEnd(9)}`)}${v}`);
-		}
-	}
-	if (ipfsSeeding.state === 'ok' && !hasHidden) {
+	if (ipfsSeeding.state === 'ok' && !hasHidden && !settingsUnreadable) {
 		console.log(
-			`      ${c.dim('No hidden address yet — run  morphit-ops → Set up a Tor/I2P address,  then')}`
+			`      ${c.dim('Tor/I2P-only nodes can download it from you once this node has a Tor or I2P')}`
 		);
 		console.log(
-			`      ${c.dim('`morphit-ops register`, so hidden-only nodes can fetch the release over Tor/I2P.')}`
+			`      ${c.dim('address: sudo morphit-ops \u2192 Set up a Tor / Lokinet / I2P address, then sudo morphit-ops register.')}`
 		);
 	}
 

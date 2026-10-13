@@ -31,7 +31,13 @@ check('sources morphit.config.env too (operator settings)', /morphit\.config\.en
 check('has a --from-file peer-import mode', /from-file/.test(src) && /fastSyncFromFile/.test(src));
 check('file import uses the bootstrap positional file + --i-trust-this-source', /--i-trust-this-source/.test(src));
 check('runFastSync branches to file import when --from-file is set', /fromFile !== null[\s\S]{0,80}fastSyncFromFile/.test(src));
-check('both spawns exec via bash -c so the sourced env reaches the bootstrap', (src.match(/spawnSync\('bash', \['-c'/g) || []).length >= 2);
+check(
+	'both spawns exec via bash -c so the sourced env reaches the bootstrap',
+	// (v1.21.7: runRestore also sets up the restore's marker first — the window
+	// is wider; the spawn itself is exercised by test/fastSyncSigint.test.ts.)
+	/function runRestore\([\s\S]{0,1200}spawnSync\('bash', \['-c', sourceCmd\]/.test(src) &&
+		(src.match(/const run = runRestore\(sourceCmd, repo,/g) || []).length >= 2
+);
 check('checks the ACTUAL indexer service state (systemctl is-active), not just cursor-recency', /systemctl.*is-active.*morphit-indexer/.test(src) && /indexerServiceActive/.test(src));
 check('OFFERS to stop a running indexer (askYesNo), does not just refuse', /askYesNo\([^)]*stop it now/.test(src));
 check('waits for the indexer to ACTUALLY stop before restoring', /stopIndexerAndWait/.test(src) && /for \(let i = 0; i < 20/.test(src));

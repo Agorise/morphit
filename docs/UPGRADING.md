@@ -382,7 +382,7 @@ names it, with the command to answer it, in the upgrade's last lines
 `sudo morphit-ops upgrade` fetches the release from other instances over
 Tor/I2P and checks it against @morphit's signed on-chain release record.
 When no instance can serve it, use the offline bundle: every release
-carries `morphit-<ver>-offline.tar.gz` (about 250 MB; its SHA-256 is in the
+carries `morphit-<ver>-offline.tar.gz` (the larger download; its SHA-256 is in the
 on-chain record as `offline_sha256`, and a `.asc` is attached when the
 release is signed). Download it on another computer, copy it over
 (`scp -O`, not plain `scp`), and run
@@ -738,3 +738,19 @@ both upgrade AND rollback failed. Don't restart services. Inspect
 most-recent backup into place and restart. This case is rare and
 indicates a filesystem-level issue (full disk, permission drift,
 ...).
+
+**`morphit-ops health` says "SSH and the firewall: the firewall lets no
+one in on SSH"** — on a fresh VPS installed with v1.21.6 or earlier, an
+unanswered "a NEW SSH login still works?" question could make the safety
+revert empty the firewall while leaving it on. The session open at the
+time kept working; the next SSH login does not. Until you fix it, keep
+an SSH session open (or use your provider's web console). Run the
+command `health` prints, for example:
+
+```
+sudo ufw limit 22/tcp
+```
+
+Use your own SSH port if it is not 22. Then check from a NEW session
+that you can log in. If you reach SSH only through Tor or a console,
+on purpose, ignore the warning.

@@ -11,6 +11,10 @@
  *    not brought back by its last round; stop() stops.
  *  - A node that sends headers and then stalls timed out — it did not send a
  *    bad body; a `null` reply is an RPC error, not a network failure.
+ *
+ * Since v1.21.7 it measures only while the card is read (`noteViewer()`), so
+ * these cases keep a reader on the page; rpcHealthProberDemand.test.ts covers
+ * the quiet spells and the refresh ceiling.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
@@ -51,7 +55,10 @@ describe('RpcHealthProber — schedule', () => {
 				})
 		});
 		p.start();
+		p.noteViewer();
+		const reader = setInterval(() => p.noteViewer(), 10_000);
 		await vi.advanceTimersByTimeAsync(100_000);
+		clearInterval(reader);
 		p.stop();
 		const gaps = starts.slice(1).map((s, i) => s - starts[i]!);
 		expect(gaps.length).toBeGreaterThanOrEqual(4);
@@ -70,14 +77,18 @@ describe('RpcHealthProber — schedule', () => {
 			}
 		});
 		p.start();
-		await vi.advanceTimersByTimeAsync(1_000);
+		p.noteViewer();
+		const reader = setInterval(() => p.noteViewer(), 10_000);
+		await vi.advanceTimersByTimeAsync(11_000);
 		await p.checkAllNow();
 		expect(probes).toBe(2);
 		vi.setSystemTime(Date.now() - 3_600_000); // NTP steps the clock back an hour
 		await vi.advanceTimersByTimeAsync(25_000);
 		expect(probes, 'no background measurement after the step').toBe(3);
+		await vi.advanceTimersByTimeAsync(10_000);
 		await p.checkAllNow();
 		expect(probes, 'the refresh was refused after the step').toBe(4);
+		clearInterval(reader);
 		p.stop();
 	});
 
@@ -94,6 +105,7 @@ describe('RpcHealthProber — schedule', () => {
 			{ probe: async () => OK }
 		);
 		p.start();
+		p.noteViewer();
 		await vi.advanceTimersByTimeAsync(60_000);
 		p.stop();
 		expect(reads).toBe(1);
@@ -120,6 +132,7 @@ describe('RpcHealthProber — the node list and stop()', () => {
 				}
 			}
 		);
+		p.noteViewer();
 		await p.tick();
 		list = ['a'];
 		await p.tick(); // b leaves the directory while its round runs
@@ -129,6 +142,7 @@ describe('RpcHealthProber — the node list and stop()', () => {
 		listFails = true;
 		now += 60_000;
 		probed.length = 0;
+		p.noteViewer();
 		await p.tick();
 		await flush();
 		expect(probed, 'a read failure fell back to a list that includes b').toEqual(['a']);
@@ -147,6 +161,7 @@ describe('RpcHealthProber — the node list and stop()', () => {
 			}
 		);
 		p.start();
+		p.noteViewer();
 		p.stop();
 		release!(['x', 'y']);
 		await flush();
@@ -164,6 +179,7 @@ describe('RpcHealthProber — the node list and stop()', () => {
 				return new Promise<ProbeResult>((r) => (finish = r));
 			}
 		});
+		p.noteViewer();
 		await p.tick();
 		const forced = p.checkAllNow();
 		const forced2 = p.checkAllNow();
@@ -392,7 +408,10 @@ describe('RpcHealthProber — schedule under real-world timing', () => {
 			}
 		);
 		p.start();
+		p.noteViewer();
+		const reader = setInterval(() => p.noteViewer(), 10_000);
 		await vi.advanceTimersByTimeAsync(130_000);
+		clearInterval(reader);
 		p.stop();
 		const gaps = starts.slice(1).map((st, i) => st - starts[i]!);
 		expect(gaps.length).toBeGreaterThanOrEqual(5);

@@ -29,26 +29,15 @@ check(
 	/process\.getuid/.test(mod) && /systemd-run', \['--version'/.test(mod)
 );
 check(
-	'arm snapshots sshd_config (+ drop-ins) before the run',
-	/cpSync\('\/etc\/ssh\/sshd_config'/.test(mod) && /sshd_config\.d/.test(mod)
-);
-check(
 	'arm does NOT schedule (only snapshots) — a failed run never reverts',
 	/Does NOT schedule/.test(mod)
 );
 check(
-	'revert restores the EXACT pre-run firewall rules (no hardcoded clearnet opens — hidden-only safe)',
-	/ufw-user\.rules/.test(mod) &&
-		/ufw reload/.test(mod) &&
-		!/ufw allow 80\/tcp/.test(mod) &&
-		!/ufw allow 443\/tcp/.test(mod)
+	'revert never replaces the firewall rule set (it emptied it on a fresh box) — behaviour: test/reachabilityRevertScript.test.ts',
+	!/ufw reload/.test(mod) && !/ufw-user\.rules/.test(mod) && /ufw limit \$\{p\}\/tcp/.test(mod)
 );
-check(
-	'arm snapshots the ufw rule files + revert restores SSH + Docker',
-	/cpSync\('\/etc\/ufw\/user\.rules'/.test(mod) &&
-		/restart ssh/.test(mod) &&
-		/restart docker/.test(mod)
-);
+// What arm snapshots and what the revert restores are exercised, not matched:
+// test/reachabilityRevert.test.ts and test/reachabilityRevertScript.test.ts.
 check(
 	'schedules via a transient systemd timer (survives a dropped SSH session)',
 	/systemd-run/.test(mod) && /--on-active=\$\{/.test(mod)
@@ -77,15 +66,10 @@ check(
 );
 check('confirm is SSH-focused (immediate/binary), not site-focused', /NEW SSH login/.test(mod));
 
-// ── the wiring ──
-check(
-	'install arms the guard BEFORE the playbook run',
-	/armReachabilityRevert\(\)[\s\S]{0,200}assembleInstall\(/.test(wire)
-);
-check(
-	'install confirms-or-reverts AFTER a successful run',
-	/res\.ok[\s\S]{0,400}confirmReachabilityOrRevert\(reachabilityGuard\)/.test(wire)
-);
+// ── the wiring ── is exercised, not matched: test/installWizardRun.test.ts runs
+// the real wizard and checks the guard is armed before the playbook and the
+// question asked only after a playbook that succeeded (v1.21.7: a regex here
+// broke when the confirm moved into afterInstall, with the behaviour intact).
 
 if (fail === 0) {
 	console.log(`\u2713 all ${pass} reachability-revert checks passed`);

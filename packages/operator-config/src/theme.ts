@@ -751,6 +751,76 @@ export function deriveTheme(input: ThemeInput = {}): ThemeResult {
 	};
 }
 
+/** OKLab distance between two colours (0 = the same). */
+function oklabDistance(a: Hex, b: Hex): number {
+	const A = rgbToOklab(hexToRgb(a));
+	const B = rgbToOklab(hexToRgb(b));
+	return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]);
+}
+
+/**
+ * A whole theme from the operator's main colour(s) — "just my colour, work out
+ * the rest" — or from the colours of their logo. PURE.
+ *
+ * `colours` is in order of importance (what the operator typed, or a logo's
+ * colours, most used first). Greys, near-black and near-white are skipped: they
+ * say nothing about a brand's colour, and an accent must show on a dark page.
+ *   - One colour: the gradient runs from a lighter, softer tint of it to a
+ *     deeper shade, the way champagne → gold does.
+ *   - Two distinct colours: the lighter starts the gradient, the deeper ends it.
+ * The page background is a near-black with a trace of the main colour's hue;
+ * the buttons are "bright" (the colour, dark text) for a light main colour and
+ * "deep" otherwise. Each stop is lifted until it reads on the page, and the
+ * result is checked with deriveTheme: a suggestion is always a theme that is
+ * accepted as it is. null when there is no usable colour.
+ */
+export function suggestTheme(
+	colours: readonly string[]
+): { from: Hex; to: Hex; background: Hex; button: ThemeButtonStyle } | null {
+	const usable: Hex[] = [];
+	for (const c of colours) {
+		const h = normalizeHex(c);
+		if (h === null) continue;
+		const { L, C } = hexToLch(h);
+		if (C < 0.04 || L < 0.25 || L > 0.97) continue;
+		if (usable.every((u) => oklabDistance(u, h) > 0.08)) usable.push(h);
+	}
+	const main = usable[0];
+	if (main === undefined) return null;
+	const P = hexToLch(main);
+	let from: Hex;
+	let to: Hex;
+	const second = usable[1];
+	if (second !== undefined) {
+		const lighterFirst = P.L >= hexToLch(second).L;
+		from = lighterFirst ? main : second;
+		to = lighterFirst ? second : main;
+	} else {
+		from = main;
+		to = main;
+	}
+	const background = lchToHex({ L: 0.19, C: Math.min(0.012, P.C * 0.15), h: P.h });
+	// Each stop must read on the page (the heading needs 3:1); a margin keeps
+	// it clear of the page's own slightly lighter surfaces.
+	const readable = (stop: Hex): Hex =>
+		walkLightness(hexToLch(stop), 1, (x) => contrastRatio(x, background) >= 3.5) ?? stop;
+	if (second === undefined) {
+		// The deeper end first (as deep as still reads), then a lighter, softer
+		// tint above it, so a dark main colour still gets a real gradient.
+		const T = hexToLch(readable(lchToHex({ L: Math.max(0.5, P.L - 0.1), C: P.C, h: P.h })));
+		to = lchToHex(T);
+		from = lchToHex({ L: Math.min(0.94, Math.max(P.L, T.L) + 0.14), C: P.C * 0.7, h: P.h });
+	}
+	from = readable(from);
+	to = readable(to);
+	const midLum = relativeLuminance(oklchMid(from, to));
+	const order: ThemeButtonStyle[] = midLum >= 0.3 ? ['bright', 'deep'] : ['deep', 'bright'];
+	for (const button of order) {
+		if (deriveTheme({ from, to, background, button }).ok) return { from, to, background, button };
+	}
+	return null;
+}
+
 /** The reference (Morphit) palette — equal to deriveTheme({preset:'morphit'}). */
 export function referenceTokens(): Record<string, Hex> {
 	return Object.fromEntries(THEME_TOKENS.map((t) => [t.name, t.ref]));

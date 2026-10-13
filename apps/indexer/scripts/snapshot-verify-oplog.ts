@@ -31,6 +31,12 @@ import { createDatabase } from '../src/db/pool.ts';
 import { MIN_VERIFIED_FRACTION } from '../src/db/snapshotOplogVerify.ts';
 import { bootChainClient } from '../src/indexer/bootChainClient.ts';
 import { checkSnapshotAgainstChain } from '../src/indexer/snapshotChainCheck.ts';
+import { startPausableSpinner } from '../../ops-cli/src/init/spinner.ts';
+import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
+
+// The RPC library's failover chatter ("Didn't failover for error …") is noise
+// here: the pool fails over, and an unreachable block is reported by the check.
+suppressDblurtConsoleNoise();
 
 function flag(name: string): string | undefined {
 	const i = process.argv.indexOf(`--${name}`);
@@ -45,16 +51,37 @@ async function main(): Promise<void> {
 	const config = loadConfig();
 	const db = createDatabase(config);
 	const chain = bootChainClient(config);
+	// The reads take minutes over a pool with slow or dead nodes: a turning
+	// spinner with the count and the time taken, so it never looks frozen
+	// (2026-10-12: minutes with nothing moving). Lines printed meanwhile —
+	// ours, and the chain library's own console notes — go above it.
+	const label = (where: string): string => `Checking the snapshot against the chain: ${where}`;
+	const spin = startPausableSpinner(label('reading the sample…'), process.stderr, {
+		elapsed: true
+	});
+	const print = (line: string): void => spin.say(() => void process.stderr.write(`${line}\n`));
+	const consoleWas = { log: console.log, warn: console.warn, error: console.error };
+	for (const k of ['log', 'warn', 'error'] as const) {
+		// Through the (noise-filtering) console, with the spinner off its line.
+		console[k] = (...a: unknown[]): void => spin.say(() => consoleWas[k](...a));
+	}
+	let r: Awaited<ReturnType<typeof checkSnapshotAgainstChain>>;
 	try {
-		const r = await checkSnapshotAgainstChain({
+		r = await checkSnapshotAgainstChain({
 			db,
 			chain,
 			startBlock: config.startBlock,
 			...(upTo !== undefined ? { upTo } : {}),
 			samples,
 			randomInt,
-			say: (line) => process.stderr.write(`${line}\n`)
+			say: print,
+			progress: (where) => spin.relabel(label(where))
 		});
+	} finally {
+		spin.stop();
+		Object.assign(console, consoleWas);
+	}
+	try {
 		if (r.verdict === 'quarantine') {
 			process.stderr.write(`\n  ✗ ${r.failures.length} sampled row(s) do NOT match the chain:\n`);
 			for (const f of r.failures.slice(0, 20)) process.stderr.write(`      ${f}\n`);

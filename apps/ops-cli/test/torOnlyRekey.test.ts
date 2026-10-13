@@ -72,12 +72,4 @@ describe('tor-only over a former clearnet node', () => {
 		expect(r).toBe('not-needed');
 		expect(asked).toBe(false);
 	});
-
-	it('the install wizard offers it right after the tor-only choice', async () => {
-		const { readFileSync } = await import('node:fs');
-		const src = readFileSync(new URL('../src/init/runAnsibleInstall.ts', import.meta.url), 'utf8');
-		expect(src).toMatch(
-			/const torOnly = await askTorOnly\(\);\s*(?:\/\/[^\n]*\n\s*)*if \(torOnly\)\s*await offerTorOnlyRekey\(readPriorIdentity\(\)/
-		);
-	});
 });

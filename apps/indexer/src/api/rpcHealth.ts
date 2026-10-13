@@ -36,10 +36,24 @@
  * called down. `?probe=1` re-measures every node now (5 s global limit,
  * coalesced) and answers when that round is done. A GET probes nothing; its only
  * I/O is the node list's and the node names' directory reads (each cached 60 s).
+ *
+ * v1.21.7 — ONLY WHILE SOMEONE IS LOOKING, AND NEVER FASTER THAN A CEILING.
+ *   - The prober measures nothing until the card is read, and goes quiet
+ *     WATCHED_FOR_MS after the last read (the card re-reads every 10 s while a
+ *     visitor is active, and stops when they leave or go idle). With nobody on
+ *     the page this indexer contacts no node for the card at all; it was one
+ *     request a second, Tor and I2P circuits included, forever.
+ *   - A refresh re-measures only nodes not measured in the last
+ *     FORCE_MIN_AGE_MS. Whatever the number of visitors, clicks or scripted
+ *     `?probe=1` requests, each node is contacted at most once per
+ *     FORCE_MIN_AGE_MS (one retry on a miss). It was every 5 s per refresh
+ *     loop, four times the schedule, for as long as anyone kept asking.
  */
 
 import { Hono } from 'hono';
 import net from 'node:net';
+
+import { rateLimit } from '$api/middleware/ratelimit';
 
 import { morphitUserAgent } from '$blurt/userAgent';
 import { INDEXER_VERSION } from './health';
@@ -414,8 +428,18 @@ export async function probeEndpoints(
 	return { network: 'morphit', generated_at: new Date(now).toISOString(), endpoints };
 }
 
-/** How often the background prober re-measures each node. */
+/** How often the background prober re-measures each node (while watched). */
 export const PROBE_EVERY_MS = 20_000;
+/** The prober keeps measuring this long after the card was last read. */
+export const WATCHED_FOR_MS = 60_000;
+/** A refresh re-measures only a node not measured for at least this long. */
+export const FORCE_MIN_AGE_MS = 10_000;
+/** A refresh (`?probe=1`) answers after at most this long, with what has been
+ *  measured by then; a slow node's figure follows on the card's next read. It
+ *  used to hold the request open for the whole round (up to PROBE_WORST_CASE_MS,
+ *  ~42 s), so a crowd of refreshes held as many connections open (review,
+ *  2026-10-12). */
+export const PROBE_ANSWER_WITHIN_MS = 8_000;
 /** How often it looks for nodes that are due (and for a changed node list). */
 const PROBER_TICK_MS = 2_000;
 
@@ -442,11 +466,16 @@ const monotonicMs = (): number => performance.now();
  *  - The schedule and the refresh limit run on a monotonic clock: a wall clock
  *    stepped back (NTP, a restored VM) must not freeze every figure until it
  *    catches up. `checked_at` is wall-clock time.
+ *  - It measures only while the card is being read (`noteViewer()`, called on
+ *    every read): nothing from boot until the first read, a round at once on
+ *    a read after a quiet spell, nothing once `watchMs` has passed since the
+ *    last read — not even the node list is read then.
  *  - A node is never measured twice at once (a round still running is shared).
- *  - `checkAllNow()` (the card's refresh) re-measures every node now — at most
- *    once per PROBE_MIN_INTERVAL_MS across all callers, concurrent callers
- *    sharing one round — so no number of clicks makes the indexer ping the
- *    nodes faster than that.
+ *  - `checkAllNow()` (the card's refresh) re-measures every node not measured
+ *    in the last `forceMinAgeMs` and waits for any round still running — at
+ *    most once per PROBE_MIN_INTERVAL_MS across all callers, concurrent
+ *    callers sharing one round — so no number of clicks or scripted requests
+ *    makes the indexer contact a node more than once per `forceMinAgeMs`.
  *  - The node list is re-read every tick (it follows the on-chain directory);
  *    a node that leaves the list is forgotten, and its last round, if one was
  *    running, is not recorded. A tick never starts while the previous one is
@@ -467,8 +496,12 @@ export class RpcHealthProber {
 	private stopped = false;
 	private lastForcedAt = -Infinity;
 	private forced: Promise<void> | null = null;
+	/** Monotonic time of the latest read of the card. */
+	private lastViewedAt = -Infinity;
 	private readonly everyMs: number;
 	private readonly tickMs: number;
+	private readonly watchMs: number;
+	private readonly forceMinAgeMs: number;
 	private readonly probe: (url: string) => Promise<ProbeResult>;
 	/** Wall clock: `checked_at`, `generated_at`. */
 	private readonly now: () => number;
@@ -480,6 +513,8 @@ export class RpcHealthProber {
 		opts: {
 			everyMs?: number;
 			tickMs?: number;
+			watchMs?: number;
+			forceMinAgeMs?: number;
 			probe?: (url: string) => Promise<ProbeResult>;
 			/** Wall clock; when given without `clock`, it drives the schedule too (tests). */
 			now?: () => number;
@@ -488,12 +523,27 @@ export class RpcHealthProber {
 	) {
 		this.everyMs = opts.everyMs ?? PROBE_EVERY_MS;
 		this.tickMs = opts.tickMs ?? PROBER_TICK_MS;
+		this.watchMs = opts.watchMs ?? WATCHED_FOR_MS;
+		this.forceMinAgeMs = opts.forceMinAgeMs ?? FORCE_MIN_AGE_MS;
 		this.probe = opts.probe ?? probeNodeRound;
 		this.now = opts.now ?? Date.now;
 		this.clock = opts.clock ?? opts.now ?? monotonicMs;
 	}
 
-	/** Start measuring (the first round starts at once). Idempotent. */
+	/** Someone read the card: keep measuring for `watchMs` from now. After a
+	 *  quiet spell, the nodes that are due are measured at once. */
+	noteViewer(): void {
+		const wasWatched = this.watched();
+		this.lastViewedAt = this.clock();
+		if (!wasWatched && !this.stopped) void this.tick();
+	}
+
+	/** The card was read within the last `watchMs`. */
+	private watched(): boolean {
+		return this.clock() - this.lastViewedAt < this.watchMs;
+	}
+
+	/** Start the schedule (it measures only while the card is read). Idempotent. */
 	start(): void {
 		if (this.timer !== null) return;
 		this.stopped = false;
@@ -525,6 +575,9 @@ export class RpcHealthProber {
 	 *  Exposed for tests. */
 	tick(): Promise<void> {
 		if (this.ticking !== null) return this.ticking;
+		// Unwatched: nothing at all, not even the list (and no tick to join, so a
+		// read right after wakes the prober at once).
+		if (!this.watched()) return Promise.resolve();
 		this.ticking = this.runTick().finally(() => {
 			this.ticking = null;
 		});
@@ -571,17 +624,29 @@ export class RpcHealthProber {
 		return round;
 	}
 
-	/** Re-measure every node now and wait for the round (the card's refresh).
-	 *  Rate-limited globally; see the class doc. */
+	/** Re-measure every node not measured lately and wait for the round (the
+	 *  card's refresh; a refresh is a read too). Rate-limited; see the class doc. */
 	async checkAllNow(): Promise<void> {
 		if (this.stopped) return;
+		this.noteViewer();
 		if (this.forced !== null) return this.forced;
 		if (this.clock() - this.lastForcedAt < PROBE_MIN_INTERVAL_MS) return;
 		this.lastForcedAt = this.clock();
 		const run = (async () => {
 			const urls = await this.urls();
 			if (this.stopped) return;
-			await Promise.all(urls.map((u) => this.check(u)));
+			const now = this.clock();
+			await Promise.all(
+				urls.map((u) => {
+					// A round still running is waited for; a node measured lately is not
+					// contacted again (its figure is that fresh already).
+					const running = this.running.get(u);
+					if (running !== undefined) return running;
+					const started = this.startedAt.get(u);
+					if (started !== undefined && now - started < this.forceMinAgeMs) return undefined;
+					return this.check(u);
+				})
+			);
 		})();
 		this.forced = run.finally(() => {
 			this.forced = null;
@@ -684,6 +749,9 @@ export function canonicalProbeUrls(opts: {
  *  This is what makes a newly-pinned hidden node appear on the stats card
  *  network-wide WITHOUT an indexer restart or a Morphit release. */
 let _dirHiddenCache: { at: number; urls: readonly string[] } | null = null;
+/** The read under way, shared: when the cache is cold or expires, every
+ *  request at that moment used to query the database (review, 2026-10-12). */
+let _dirHiddenInflight: Promise<readonly string[]> | null = null;
 const DIRECTORY_HIDDEN_TTL_MS = 60_000;
 export async function directoryHiddenEndpoints(
 	db: { query(sql: string): Promise<{ rows: Array<{ endpoints: string[] }> }> },
@@ -693,6 +761,17 @@ export async function directoryHiddenEndpoints(
 	if (_dirHiddenCache && now - _dirHiddenCache.at < DIRECTORY_HIDDEN_TTL_MS) {
 		return _dirHiddenCache.urls;
 	}
+	if (_dirHiddenInflight !== null) return _dirHiddenInflight;
+	_dirHiddenInflight = readDirectoryHidden(db, now).finally(() => {
+		_dirHiddenInflight = null;
+	});
+	return _dirHiddenInflight;
+}
+
+async function readDirectoryHidden(
+	db: { query(sql: string): Promise<{ rows: Array<{ endpoints: string[] }> }> },
+	now: number
+): Promise<readonly string[]> {
 	try {
 		const r = await db.query('SELECT endpoints FROM rpc_directory WHERE id = 1');
 		// At most what a valid signed directory can hold (an onion and an I2P
@@ -725,6 +804,7 @@ export function unionHidden(
  *  a newly-pinned/renamed node surfaces on /v1/rpc-endpoints within the TTL and
  *  a restart isn't needed. Cosmetic + untrusted. */
 let _dirNamesCache: { at: number; names: ReadonlyMap<string, string> } | null = null;
+let _dirNamesInflight: Promise<ReadonlyMap<string, string>> | null = null;
 export async function directoryNodeNames(
 	db: { query(sql: string): Promise<{ rows: Array<{ node_names: Record<string, unknown> }> }> },
 	now: number = performance.now()
@@ -732,6 +812,17 @@ export async function directoryNodeNames(
 	if (_dirNamesCache && now - _dirNamesCache.at < DIRECTORY_HIDDEN_TTL_MS) {
 		return _dirNamesCache.names;
 	}
+	if (_dirNamesInflight !== null) return _dirNamesInflight;
+	_dirNamesInflight = readDirectoryNames(db, now).finally(() => {
+		_dirNamesInflight = null;
+	});
+	return _dirNamesInflight;
+}
+
+async function readDirectoryNames(
+	db: { query(sql: string): Promise<{ rows: Array<{ node_names: Record<string, unknown> }> }> },
+	now: number
+): Promise<ReadonlyMap<string, string>> {
 	try {
 		const r = await db.query('SELECT node_names FROM rpc_directory WHERE id = 1');
 		const raw = r.rows[0]?.node_names ?? {};
@@ -775,11 +866,31 @@ export function withNamesSorted(
 export function __resetDirectoryHiddenCacheForTest(): void {
 	_dirHiddenCache = null;
 	_dirNamesCache = null;
+	_dirHiddenInflight = null;
+	_dirNamesInflight = null;
+}
+
+/**
+ * /v1/rpc-endpoints with its own rate limit. Its own bucket: on the "resource"
+ * tier it shared one with /v1/broadcast, so a flood of this cheap read —
+ * from Tor or I2P, where every visitor shares one address — locked every
+ * hidden-service user out of broadcasting (review, 2026-10-12).
+ */
+export function rpcEndpointsApp(
+	prober: Pick<RpcHealthProber, 'snapshot' | 'checkAllNow' | 'noteViewer'>,
+	canonicalUrlsFn: () => readonly string[] | Promise<readonly string[]>,
+	namesFn: () => ReadonlyMap<string, string> | Promise<ReadonlyMap<string, string>>,
+	perMin: number
+): Hono {
+	const app = new Hono();
+	app.use('*', rateLimit('rpc-endpoints', perMin));
+	app.route('/', rpcEndpointsRoute(prober, canonicalUrlsFn, namesFn));
+	return app;
 }
 
 export function rpcEndpointsRoute(
 	// The background prober (started by main.ts) — the source of every figure.
-	prober: Pick<RpcHealthProber, 'snapshot' | 'checkAllNow'>,
+	prober: Pick<RpcHealthProber, 'snapshot' | 'checkAllNow' | 'noteViewer'>,
 	// A getter (not a fixed array) so the canonical list re-derives per request:
 	// newly-pinned on-chain hidden-RPC nodes appear WITHOUT an indexer restart or
 	// a Morphit release. May be async (it can read the persisted rpc_directory).
@@ -792,9 +903,20 @@ export function rpcEndpointsRoute(
 ): Hono {
 	const app = new Hono();
 	app.get('/', async (c) => {
-		// `?probe=1` → re-measure every node now (5 s global limit, coalesced),
-		// then answer. Anything else → the prober's latest figures, at once.
-		if (c.req.query('probe') === '1') await prober.checkAllNow();
+		// `?probe=1` → re-measure every node not measured lately (5 s global
+		// limit, coalesced), then answer. Anything else → the prober's latest
+		// figures, at once. Either way someone is looking: the prober measures
+		// only while the card is read.
+		if (c.req.query('probe') === '1') {
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			await Promise.race([
+				prober.checkAllNow(),
+				new Promise<void>((r) => {
+					timer = setTimeout(r, PROBE_ANSWER_WITHIN_MS);
+				})
+			]);
+			clearTimeout(timer);
+		} else prober.noteViewer();
 		const canonicalUrls = await canonicalUrlsFn();
 		const names = await namesFn();
 		return c.json(withNamesSorted(prober.snapshot(canonicalUrls), names));

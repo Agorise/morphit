@@ -72,15 +72,15 @@ check(
 		/\$\{LE_LIVE\}\/\$\{MORPHIT_DOMAIN\}\/fullchain\.pem/.test(src)
 );
 check(
-	'RPC step restarts the indexer + relay to connect promptly',
-	/systemctl restart morphit-indexer\.service/.test(src) &&
-		/systemctl restart morphit-relay\.service/.test(src)
+	'RPC step restarts the indexer + relay to connect promptly (only if running: a restore may have stopped one)',
+	/systemctl try-restart morphit-indexer\.service/.test(src) &&
+		/systemctl try-restart morphit-relay\.service/.test(src)
 );
 // v1.12.3 — an OFFLINE-installed box starts i2pd + tor with no network; they must
 // be restarted on first-online or i2pd sits with an empty netDb forever.
 check(
 	'RPC step ALSO restarts i2pd + tor so the hidden transports reseed/bootstrap on first online',
-	/systemctl restart i2pd\.service/.test(src) && /systemctl restart tor\.service/.test(src)
+	/systemctl try-restart i2pd\.service/.test(src) && /systemctl try-restart tor\.service/.test(src)
 );
 // v1.12.3 — the canary refresh script is bash (set -o pipefail); invoking it with
 // sh (dash) aborts before publishing. This regressed once — lock it out for good.

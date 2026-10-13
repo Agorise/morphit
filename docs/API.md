@@ -287,15 +287,18 @@ default page metadata for their instance.
 
 #### `GET /v1/rpc-endpoints`
 
-Tier: `resource`
+Tier: `rpc-endpoints` (its own bucket, at the `resource` rate)
 
 How each public Blurt RPC node is doing, as this indexer measures it: the clearnet
 nodes (only when the instance reads the chain over clearnet), the built-in hidden nodes
 it uses, and the hidden nodes of the signed on-chain RPC directory — never an
-operator's own upstreams. Each node is measured every 20 s (one retry before a miss
-counts); the reply comes at once from those measurements, fastest first. `?probe=1`
-re-measures every node first (at most once per 5 s for all callers together) and can
-take up to ~43 s.
+operator's own upstreams. The indexer measures the nodes only while this endpoint is
+read: each node every 20 s (one retry before a miss counts), from the first read after
+a quiet spell until a minute after the last read; with nobody reading, it contacts no
+node. The reply comes at once from those measurements, fastest first — after a quiet
+spell some may be old (see `checked_at`). `?probe=1` re-measures every node not
+measured in the last 10 s (each node at most once per 10 s, whatever the number of
+callers) and answers within ~8 s with what has been measured by then.
 
 Each `endpoints[]` row: `url`, `transport` (`clearnet`|`tor`|`i2p`|`local`), `healthy`,
 `latency_ms` (null when the last measurement failed or none yet), `consecutive_failures`

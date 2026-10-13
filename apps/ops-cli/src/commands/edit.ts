@@ -48,8 +48,8 @@ import {
 	fsyncSync,
 	closeSync
 } from 'node:fs';
-import { ask, askYesNo, askChoice, step, explain } from '../init/prompt.ts';
-import { runRegister } from './register.ts';
+import { ask, askYesNo, askChoice, step, explain, isAbortError } from '../init/prompt.ts';
+import { REGISTER_DECLINED, runRegister } from './register.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { offerRestart } from '../lib/restartServices.ts';
 import { syncInstanceOrigin } from '../lib/instanceOrigin.ts';
@@ -578,42 +578,77 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		// Offer to re-publish right now — the env + Active key are already
 		// resolvable in this context (runRegister loads the same instance env
 		// this edit just read), so the operator never has to know the command.
-		const broadcastNow = await askYesNo(
-			'Broadcast this change to the chain now so the federation sees it?',
-			true
-		);
-		if (broadcastNow) {
-			console.log('');
-			const rc = await runRegister({ flags: {}, positional: [] });
-			if (rc === 0) {
-				console.log('');
-				console.log('  ✓ Registration re-published. Other instances will show the');
-				console.log('    new value once their indexers pick it up (usually minutes).');
-			} else {
-				console.log('');
-				console.log('  The broadcast did not complete. You can retry any time with:');
-				console.log('');
-				console.log('      morphit-ops register');
-			}
-		} else {
-			console.log('');
-			console.log('  No problem — re-publish it whenever you like with:');
-			console.log('');
-			console.log('      morphit-ops register');
-			console.log('');
-			console.log('  (Until you do, other instances keep showing your old value.');
-			if (restarted) {
-				console.log('  Your own instance already uses the new value — the service');
-				console.log('  restart above applied it locally.)');
-			} else {
-				console.log('  Your own instance picks up the new value once the service');
-				console.log('  restart above runs.)');
-			}
-		}
+		await offerRepublish({
+			askYesNo,
+			register: (flags) => runRegister({ flags, positional: [] }),
+			print: (l) => console.log(l),
+			restarted
+		});
 	}
 	console.log('');
 
 	return 0;
+}
+
+/** After an edit of an on-chain field: offer to re-publish the registration,
+ *  and say what happened. Declined at register's own question or stopped with
+ *  Ctrl+C there is "not published" (both used to read as published). */
+export async function offerRepublish(d: {
+	askYesNo: (q: string, defaultYes: boolean) => Promise<boolean>;
+	register: (flags: Record<string, string>) => Promise<number>;
+	print: (s: string) => void;
+	restarted: boolean;
+}): Promise<'published' | 'not-published' | 'failed' | 'later'> {
+	const broadcastNow = await d.askYesNo(
+		'Broadcast this change to the chain now so the federation sees it?',
+		true
+	);
+	if (broadcastNow) {
+		d.print('');
+		// Ctrl+C at one of register's questions: nothing was published.
+		let rc: number;
+		try {
+			// Just answered yes: register's own "Publish this registration?"
+			// defaults to yes too (it defaulted to No, so Enter, Enter was "Not
+			// published" — review, 2026-10-12).
+			rc = await d.register({ 'default-yes': 'true' });
+		} catch (err) {
+			if (!isAbortError(err)) throw err;
+			rc = REGISTER_DECLINED;
+		}
+		if (rc === REGISTER_DECLINED) {
+			d.print('');
+			d.print('  Not published. Re-publish it whenever you like with:');
+			d.print('');
+			d.print('      sudo morphit-ops register');
+			return 'not-published';
+		}
+		if (rc === 0) {
+			d.print('');
+			d.print('  ✓ Registration re-published. Other instances will show the');
+			d.print('    new value once their indexers pick it up (usually minutes).');
+			return 'published';
+		}
+		d.print('');
+		d.print('  The broadcast did not complete. You can retry any time with:');
+		d.print('');
+		d.print('      sudo morphit-ops register');
+		return 'failed';
+	}
+	d.print('');
+	d.print('  No problem — re-publish it whenever you like with:');
+	d.print('');
+	d.print('      sudo morphit-ops register');
+	d.print('');
+	d.print('  (Until you do, other instances keep showing your old value.');
+	if (d.restarted) {
+		d.print('  Your own instance already uses the new value — the service');
+		d.print('  restart above applied it locally.)');
+	} else {
+		d.print('  Your own instance picks up the new value once the service');
+		d.print('  restart above runs.)');
+	}
+	return 'later';
 }
 
 /** Atomic env-file write helper.  Backs up the original to a

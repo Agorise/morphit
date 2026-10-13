@@ -21,6 +21,8 @@
  *        cleartext block access yet).
  */
 import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { runAsync, sleepMs, systemctlSpinning } from '../lib/spinRun.ts';
@@ -154,22 +156,59 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 	blank();
 	const code =
 		fromFile !== null
-			? fastSyncFromFile({ repoRoot: defaultRepoRoot(), filePath: fromFile, force: forceEffective })
+			? fastSyncFromFile({
+					repoRoot: defaultRepoRoot(),
+					filePath: fromFile,
+					force: forceEffective,
+					indexerStartedByCaller: wasRunning
+				})
 			: fastSyncFromChain({
 					repoRoot: defaultRepoRoot(),
 					signer: ctx.flags.signer,
 					signerPubkey: ctx.flags['signer-pubkey'],
 					force: forceEffective,
-					skipVerify: ctx.flags['skip-verify'] === 'true'
+					skipVerify: ctx.flags['skip-verify'] === 'true',
+					indexerStartedByCaller: wasRunning
 				});
-	// If WE stopped the indexer, restart it so the operator doesn't have to — the
-	// tail catch-up + re-verify happens automatically on start (Requirement: finish and check
-	// things automatically).
-	if (code === 0 && wasRunning) {
+	// If WE stopped the indexer, start it again, so the operator doesn't have
+	// to — after a restore it catches up + re-verifies the short tail; after a
+	// failed one it simply goes on from its own data (a failed restore leaves
+	// that untouched). It used to be restarted only after a success, so a failed
+	// download left a node's indexer stopped (2026-10-12). NEVER on a database
+	// that was replaced but did not pass its checks (exit 4): serving from it is
+	// exactly what the checks are there to prevent (review, 2026-10-12).
+	if (wasRunning && code !== FAST_SYNC_REPLACED_UNUSABLE) {
 		blank();
-		await startIndexer('Restarting the indexer to catch up the short tail…');
+		await startIndexer(
+			code === 0
+				? 'Restarting the indexer to catch up the short tail…'
+				: 'Starting the indexer again (it goes on from its own data)…'
+		);
 	}
 	return code;
+}
+
+/** snapshot-bootstrap's exit code when the database was replaced but must not
+ *  be served: quarantined by the op-log check, not tidied, or stopped after the
+ *  restore. The indexer stays stopped. */
+export const FAST_SYNC_REPLACED_UNUSABLE = 4;
+
+/** What to tell the operator after exit 4 (the bootstrap said why, above), or
+ *  when the restore was cut off once it had started writing the database. */
+function printReplacedUnusable(cutOff = false): void {
+	blank();
+	if (cutOff) {
+		info('✗ The restore was stopped after it had started replacing the indexer\u2019s database,');
+		info('  before its checks were done, so the indexer is left STOPPED: it must not serve');
+		info('  from this database.');
+	} else {
+		info('✗ The snapshot was restored, but it did not pass its checks (see above), so the');
+		info('  indexer is left STOPPED: it must not serve from this database.');
+	}
+	info('  Run fast-sync again (it restores a fresh copy over this one):');
+	info('      sudo morphit-ops fast-sync');
+	info('  If it says again that the snapshot does not match the chain, wait for the next');
+	info('  snapshot (one is published daily) and tell the Morphit maintainers.');
 }
 
 /** `systemctl is-active morphit-indexer` → true (active) / false (stopped) / null
@@ -221,6 +260,101 @@ async function startIndexer(label = 'Starting the indexer again…'): Promise<vo
 }
 
 /**
+ * Run the restore child. Ctrl+C reaches the child (same terminal) and stops
+ * it; this process ignores it meanwhile, so its caller still starts the
+ * indexer it stopped. Without the listener an installed node (the bundle under
+ * plain node) dies on the signal and leaves the indexer stopped; under tsx a
+ * hidden handler happened to keep it alive, which is why a first check passed
+ * (review, 2026-10-12). `callerStartsIndexer` tells the child not to say
+ * "start the indexer" when its caller is about to.
+ */
+function runRestore(
+	sourceCmd: string,
+	repo: string,
+	callerStartsIndexer: boolean
+): { status: number | null; cutOff: boolean } {
+	const ignore = (): void => undefined;
+	// SIGHUP too: a closed terminal must not end this process before it has
+	// started the indexer again (the restore child decides for itself).
+	process.on('SIGINT', ignore);
+	process.on('SIGHUP', ignore);
+	// The child writes this file just before the restore begins and removes it
+	// once the database is known to be untouched or restored and checked. Still
+	// there after the child is gone, it means the database may be replaced and
+	// unchecked, whatever exit code the child managed (it can be killed outright).
+	const markerDir = mkdtempSync(join(tmpdir(), 'morphit-fast-sync-'));
+	const marker = join(markerDir, 'restore-started');
+	const pidFile = join(markerDir, 'restore-pid');
+	try {
+		const r = spawnSync('bash', ['-c', sourceCmd], {
+			cwd: repo,
+			stdio: 'inherit',
+			env: {
+				...process.env,
+				MORPHIT_SNAPSHOT_RESTORE_MARKER: marker,
+				MORPHIT_SNAPSHOT_PID_FILE: pidFile,
+				...(callerStartsIndexer ? { MORPHIT_SNAPSHOT_CALLER_STARTS_INDEXER: '1' } : {})
+			}
+		});
+		// Its tsx wrapper can end before the restore itself (a closed terminal
+		// ends tsx at once): wait for the restore, or its marker is read too
+		// early (review, 2026-10-13).
+		waitWhileRunning(pidFile);
+		return { status: r.status, cutOff: r.status !== 0 && existsSync(marker) };
+	} finally {
+		process.removeListener('SIGINT', ignore);
+		process.removeListener('SIGHUP', ignore);
+		rmSync(markerDir, { recursive: true, force: true });
+	}
+}
+
+/** The process named in `pidFile` ("<pid> <start time>", written by
+ *  snapshot-bootstrap) is still that process and still running. */
+function stillRunning(pidFile: string): boolean {
+	let pid = 0;
+	let start = '';
+	try {
+		[pid, start] = ((): [number, string] => {
+			const [p, s] = readFileSync(pidFile, 'utf8').trim().split(/\s+/);
+			return [Number(p), s ?? ''];
+		})();
+	} catch {
+		return false; // gone: it removes the file as it exits
+	}
+	if (!Number.isInteger(pid) || pid <= 1) return false;
+	try {
+		process.kill(pid, 0);
+	} catch {
+		return false;
+	}
+	// The same process, not a later one given the same number.
+	return start === '' || processStartTime(pid) === start;
+}
+
+/** A process's start time (/proc/<pid>/stat, field 22), or '' when unknown. */
+export function processStartTime(pid: number): string {
+	try {
+		const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+		return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? '';
+	} catch {
+		return '';
+	}
+}
+
+/** Wait (at most 6 hours) until the restore named in `pidFile` has ended. */
+function waitWhileRunning(pidFile: string): void {
+	if (!stillRunning(pidFile)) return;
+	try {
+		info('  Waiting for the restore to finish\u2026');
+	} catch {
+		/* the terminal may be gone */
+	}
+	const sleeper = new Int32Array(new SharedArrayBuffer(4));
+	for (const end = Date.now() + 6 * 3600_000; Date.now() < end && stillRunning(pidFile); )
+		Atomics.wait(sleeper, 0, 0, 500);
+}
+
+/**
  * Shared bootstrap driver: spawn snapshot-bootstrap.ts --from-chain and report.
  * Used by both the standalone `fast-sync` command (after its guards) and the
  * install wizard (fresh box, no guards needed). Returns the child's exit code.
@@ -239,6 +373,9 @@ export function fastSyncFromChain(opts: {
 	 *  operator was ever going to do, so the one claim that most needed testing
 	 *  went untested until it failed on a live box. */
 	verifyOnly?: boolean;
+	/** The caller starts the indexer itself (the install wizard): don't tell the
+	 *  operator to. */
+	indexerStartedByCaller?: boolean;
 }): number {
 	const repo = opts.repoRoot;
 	const tsx = join(repo, 'node_modules', '.bin', 'tsx');
@@ -270,15 +407,24 @@ export function fastSyncFromChain(opts: {
 	const shellQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 	const sourceCmd = `set -a; for f in ${envFiles.map(shellQuote).join(' ')}; do [ -f "$f" ] && . "$f"; done; set +a; exec ${shellQuote(tsx)} ${bootstrapArgs.map(shellQuote).join(' ')}`;
 
-	const run = spawnSync('bash', ['-c', sourceCmd], { cwd: repo, stdio: 'inherit' });
+	const run = runRestore(sourceCmd, repo, opts.indexerStartedByCaller === true);
+	if (run.status === FAST_SYNC_REPLACED_UNUSABLE || run.cutOff) {
+		printReplacedUnusable(run.status !== FAST_SYNC_REPLACED_UNUSABLE);
+		return FAST_SYNC_REPLACED_UNUSABLE;
+	}
 	if (run.status !== 0) {
 		blank();
-		info('✗ Fast-sync did not complete. You can retry, or do a full replay instead.');
-		return run.status ?? 1;
+		info('✗ Fast-sync did not complete; the indexer\u2019s database is as it was.');
+		info('  You can retry, or do a full replay instead.');
+		return run.status === null ? 1 : run.status;
 	}
 
 	blank();
 	section('Fast-sync complete');
+	if (opts.indexerStartedByCaller) {
+		info('The indexer now catches up and re-checks the short recent part against the chain.');
+		return 0;
+	}
 	info('Start the indexer; it will catch up + re-verify the short tail to chain head:');
 	info('    sudo systemctl start morphit-indexer');
 	return 0;
@@ -294,6 +440,8 @@ export function fastSyncFromFile(opts: {
 	repoRoot: string;
 	filePath: string;
 	force?: boolean;
+	/** The caller starts the indexer itself: don't tell the operator to. */
+	indexerStartedByCaller?: boolean;
 }): number {
 	const repo = opts.repoRoot;
 	const tsx = join(repo, 'node_modules', '.bin', 'tsx');
@@ -314,16 +462,21 @@ export function fastSyncFromFile(opts: {
 	const shellQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 	const sourceCmd = `set -a; for f in ${envFiles.map(shellQuote).join(' ')}; do [ -f "$f" ] && . "$f"; done; set +a; exec ${shellQuote(tsx)} ${bootstrapArgs.map(shellQuote).join(' ')}`;
 
-	const run = spawnSync('bash', ['-c', sourceCmd], { cwd: repo, stdio: 'inherit' });
+	const run = runRestore(sourceCmd, repo, opts.indexerStartedByCaller === true);
+	if (run.status === FAST_SYNC_REPLACED_UNUSABLE || run.cutOff) {
+		printReplacedUnusable(run.status !== FAST_SYNC_REPLACED_UNUSABLE);
+		return FAST_SYNC_REPLACED_UNUSABLE;
+	}
 	if (run.status !== 0) {
 		blank();
 		info(
 			'✗ Snapshot import did not complete. Check the path + that it is a snapshot-export .tar.gz.'
 		);
-		return run.status ?? 1;
+		return run.status === null ? 1 : run.status;
 	}
 	blank();
 	section('Snapshot import complete');
+	if (opts.indexerStartedByCaller) return 0;
 	info('Start the indexer; it will catch up + re-verify the short tail to chain head:');
 	info('    sudo systemctl start morphit-indexer');
 	return 0;

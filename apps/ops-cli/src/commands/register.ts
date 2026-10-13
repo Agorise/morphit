@@ -45,7 +45,13 @@ import { readFileSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { withSpinner } from '../init/spinner.ts';
 import { spawnSync } from 'node:child_process';
-import { ask, askPassword, askYesNo, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
+import {
+	ask,
+	askPassword,
+	askYesNo,
+	isAbortError,
+	RELAY_KEY_UNLOCK_PROMPT
+} from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import {
 	printChainErrorHelp,
@@ -71,6 +77,11 @@ export interface RegisterCtx {
 	readonly positional: readonly string[];
 }
 
+/** Exit code when the operator declines the confirmation: nothing was
+ *  broadcast. Distinct from 0, so a caller never reports a listing that did
+ *  not happen (the install wizard and `edit` did, 2026-10-12). */
+export const REGISTER_DECLINED = 5;
+
 export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	// --non-interactive (alias --yes) runs unattended: it skips the confirm and
 	// unlocks an encrypted relay key from the relay's passphrase file the same way
@@ -78,6 +89,11 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	// human present the moment the box comes online.
 	const nonInteractive =
 		ctx.flags['non-interactive'] !== undefined || ctx.flags['yes'] !== undefined;
+	// --default-yes: the confirmation's default (Enter) is yes. The install
+	// wizard passes it after the operator has just answered "list it" there, so
+	// a second Enter publishes instead of quietly leaving the node unlisted
+	// (review, 2026-10-12). The question is still asked, after the details.
+	const defaultYes = ctx.flags['default-yes'] !== undefined;
 	// Load the instance env so MORPHIT_RELAY_ACCOUNT / posting-key file are
 	// available on a systemd deploy (the unit sources morphit.env, the
 	// operator's interactive shell does not). OS env wins; best-effort.
@@ -236,11 +252,11 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	if (!nonInteractive) {
 		const ok = await askYesNo(
 			'Publish this registration on-chain now? Your TAG is permanent once claimed; the other fields you can change later by running register again',
-			false
+			defaultYes
 		);
 		if (!ok) {
 			console.log('Aborted.  Re-run when ready.');
-			return 0;
+			return REGISTER_DECLINED;
 		}
 	}
 
@@ -266,6 +282,9 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		try {
 			wif = nonInteractive ? await loadRelayKeyUnattended(keyFile) : await loadKeyWif(keyFile);
 		} catch (err) {
+			// Ctrl+C at the passphrase: stopped, nothing published (the caller
+			// maps it to REGISTER_DECLINED) — not a key fault.
+			if (isAbortError(err)) throw err;
 			console.log(`✗ Failed to load relay account key: ${sanitizeForTerm(errMsg(err))}`);
 			return 1;
 		}
@@ -529,11 +548,24 @@ export function readRegisterEnv(): ValidEnv | { error: string } {
 	return readEnv();
 }
 
+/** The origin to register: MORPHIT_INSTANCE_ORIGIN, or — when it is empty —
+ *  a Tor-only node's onion as http://<onion>. A Tor-only install leaves the
+ *  origin empty until its playbook writes the onion in; when that step did not
+ *  happen, the onion set later (the menu's "Set up a Tor / Lokinet / I2P
+ *  address") was never enough to register, by hand or automatically
+ *  (review, 2026-10-12). PURE. */
+export function registerOrigin(env: NodeJS.ProcessEnv): string | undefined {
+	const o = (env.MORPHIT_INSTANCE_ORIGIN ?? '').trim();
+	if (o !== '') return o;
+	const onion = (env.MORPHIT_INSTANCE_TOR_ADDRESS ?? '').trim().toLowerCase();
+	return /^[a-z2-7]{56}\.onion$/.test(onion) ? `http://${onion}` : undefined;
+}
+
 function readEnv(): ValidEnv | { error: string } {
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
 	const keyFile = process.env.MORPHIT_RELAY_ACTIVE_KEY_FILE;
 	const instanceName = process.env.MORPHIT_INSTANCE_NAME;
-	const origin = process.env.MORPHIT_INSTANCE_ORIGIN;
+	const origin = registerOrigin(process.env);
 	const contactUrl = process.env.MORPHIT_INSTANCE_CONTACT_URL;
 	const operatorTag = process.env.MORPHIT_INSTANCE_OPERATOR_TAG;
 	// Legacy single-var i2p address (pre b32/name split). edit.ts falls back to

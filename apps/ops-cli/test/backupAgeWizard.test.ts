@@ -99,3 +99,19 @@ describe('backup encryption in the install wizard', () => {
 		expect(validate(pub)).toBe(true);
 	});
 });
+
+describe('where the backup key file goes (2026-10-12)', () => {
+	// "it did not tell me where that file was saved on my local pc" — the command
+	// wrote it to whatever folder the terminal happened to be in.
+	it('the command saves it at a fixed place in the home folder, named for this instance, and says so', async () => {
+		const { out } = await wizard('');
+		const cmd = /age-keygen -o (\S+)/.exec(out);
+		expect(cmd).not.toBeNull();
+		expect(cmd![1]).toMatch(/^~\//);
+		// Named for the instance, so keys for several nodes never overwrite each other.
+		expect(cmd![1]).toContain('trade.example.org');
+		// The full place is spelled out.
+		expect(out).toContain(cmd![1]!.slice(2));
+		expect(out).toMatch(/home folder/i);
+	});
+});

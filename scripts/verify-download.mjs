@@ -3,7 +3,7 @@
  * Morphit — verify-download.mjs
  *
  * Verify a downloaded `morphit-vX.Y.Z.tar.gz` (or the offline bundle
- * `morphit-X.Y.Z-offline.tar.gz`) against the release anchor @morphit
+ * `morphit-vX.Y.Z-offline.tar.gz`) against the release anchor @morphit
  * published on the Blurt chain (`morphit_release_v1` → `distribution`).
  *
  *   node scripts/verify-download.mjs morphit-v1.8.15.tar.gz

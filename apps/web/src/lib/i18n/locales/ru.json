@@ -4180,7 +4180,8 @@
 			"transport_tor": "Tor",
 			"transport_i2p": "I2P",
 			"transport_local": "Локальный",
-			"checked_ago": "измерено {age} назад"
+			"checked_ago": "измерено {age} назад",
+			"paused": "Приостановлено, пока вас нет — пошевелите мышью, коснитесь экрана или нажмите клавишу, чтобы обновить."
 		},
 		"session": {
 			"autolock_changed": "Изменено на {label}",

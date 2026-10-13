@@ -287,10 +287,13 @@ fi
 # keys persist across a restart, so the .onion is unchanged. Best-effort: units
 # absent on this box are simply skipped.
 if [ ! -f "${DONE_RPC}" ]; then
-	systemctl restart morphit-indexer.service >/dev/null 2>&1 || true
-	systemctl restart morphit-relay.service   >/dev/null 2>&1 || true
-	systemctl restart i2pd.service            >/dev/null 2>&1 || true
-	systemctl restart tor.service             >/dev/null 2>&1 || true
+	# try-restart: restart only if running. A stopped indexer may be stopped on
+	# purpose — a fast-sync restore runs with it stopped, and `restart` would
+	# start it underneath the restore (review, 2026-10-12).
+	systemctl try-restart morphit-indexer.service >/dev/null 2>&1 || true
+	systemctl try-restart morphit-relay.service   >/dev/null 2>&1 || true
+	systemctl try-restart i2pd.service        >/dev/null 2>&1 || true
+	systemctl try-restart tor.service         >/dev/null 2>&1 || true
 	log 'nudged indexer + relay + i2pd + tor to connect on first online'
 	touch "${DONE_RPC}"
 fi
@@ -332,6 +335,11 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 		fi
 	fi
 	_reg_ok=no
+	# register's own output is kept for the log below: a listing that silently
+	# never happened, with nothing on the box saying why, is how a VPS stayed off
+	# /instances (2026-10-12). It prints no secret — never the key, never the
+	# passphrase — only the account, the public key and what went wrong.
+	_reg_out="$(mktemp 2>/dev/null || echo "${STATE_DIR}/register.out")"
 	if ( set +e
 		MORPHIT_RELAY_ACCOUNT="$(_get_env MORPHIT_RELAY_ACCOUNT "${_main_env}")"
 		MORPHIT_RELAY_ACTIVE_KEY_FILE="$(_get_env MORPHIT_RELAY_ACTIVE_KEY_FILE "${_main_env}")"
@@ -350,7 +358,7 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 			MORPHIT_INSTANCE_NAME MORPHIT_INSTANCE_ORIGIN MORPHIT_INSTANCE_OPERATOR_TAG \
 			MORPHIT_INSTANCE_CONTACT_URL MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE
 		cd "${MORPHIT_OPS_DIR}" && \
-		npm exec --offline --workspace apps/ops-cli morphit-ops -- register --non-interactive ) >/dev/null 2>&1; then
+		npm exec --offline --workspace apps/ops-cli morphit-ops -- register --non-interactive ) >"${_reg_out}" 2>&1; then
 		_reg_ok=yes
 	fi
 	# Scrub the decrypted passphrase from RAM immediately, whatever the outcome.
@@ -359,8 +367,30 @@ if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 		log 'on-chain registration complete'
 		touch "${DONE_REGISTER}"
 	else
-		log 'registration not complete yet (relay underfunded, key encrypted with no passphrase file, or a required value unset) — will retry; you can also register by hand with `morphit-ops register`'
+		log 'registration not complete yet — will retry in 5 minutes; you can also register by hand with `sudo morphit-ops register`. What register said:'
+		# Its ✗ lines, then its last few lines, once each, without terminal
+		# control codes (7-bit, and 8-bit ones as UTF-8: C2 80-9F), each cut to
+		# 300 bytes. Bytes that are not UTF-8 go first (a raw 8-bit CSI byte
+		# among them), and grep reads it all as text: a NUL or a bad byte made
+		# it call the output binary and drop the ✗ lines. `|| true` and `if`
+		# (not `&&`): under `set -e` a grep that finds nothing, or a false test
+		# as the loop's last command, ends the pipeline's subshell (or this
+		# script) early.
+		# iconv is part of libc-bin (always on Ubuntu); without it, plain ASCII
+		# only (safe, but a line loses its non-ASCII text, the ✗ mark too).
+		_utf8() {
+			if command -v iconv >/dev/null 2>&1; then iconv -c -f UTF-8 -t UTF-8 2>/dev/null || true
+			else LC_ALL=C tr -d '\200-\377'; fi
+		}
+		{ LC_ALL=C grep -a -m 3 '✗' "${_reg_out}" 2>/dev/null || true; tail -n 4 "${_reg_out}" 2>/dev/null || true; } \
+			| _utf8 \
+			| LC_ALL=C sed 's/\x1b\[[0-9;?]*[A-Za-z]//g; s/\xc2[\x80-\x9f]//g' | LC_ALL=C tr -d '\000-\010\013-\037\177' \
+			| LC_ALL=C cut -b 1-300 | _utf8 | awk '!seen[$0]++' \
+			| while IFS= read -r _l; do
+				if [ -n "${_l}" ]; then log "  register: ${_l}"; fi
+			done
 	fi
+	rm -f "${_reg_out}"
 fi
 
 # ── Step 4: warrant canary — publish it now that freshness proofs can be fetched. ──

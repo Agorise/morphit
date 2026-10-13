@@ -80,11 +80,18 @@ import { runFastSync } from './commands/fastSync.ts';
 import { runBlock, runUnblock } from './commands/block.ts';
 import { runModeration } from './commands/moderation.ts';
 import { runInit } from './commands/init.ts';
-import { describeInstallError, INSTALL_LOG_PATH } from './init/assembleInstall.ts';
+import {
+	describeInstallError,
+	installRestartCommand,
+	currentInstallRestartCommand,
+	INSTALL_LOG_PATH
+} from './init/assembleInstall.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { runRegister } from './commands/register.ts';
+import { runRegister, REGISTER_DECLINED } from './commands/register.ts';
+import { isAbortError } from './init/prompt.ts';
+import { commandFailed } from './lib/commandFailed.ts';
 import { runShowKey } from './commands/showKey.ts';
 import { runEdit } from './commands/edit.ts';
 import { runAltAddress } from './commands/altAddress.ts';
@@ -480,7 +487,13 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(describeInstallError(err, existsSync(INSTALL_LOG_PATH)));
+			printError(
+				describeInstallError(
+					err,
+					existsSync(INSTALL_LOG_PATH),
+					installRestartCommand('init', null, false)
+				)
+			);
 			return 3;
 		}
 	}
@@ -497,8 +510,10 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(describeInstallError(err, existsSync(INSTALL_LOG_PATH)));
-			return 3;
+			printError(
+				describeInstallError(err, existsSync(INSTALL_LOG_PATH), currentInstallRestartCommand())
+			);
+			return isAbortError(err) ? 130 : 3;
 		}
 	}
 
@@ -512,8 +527,13 @@ async function main(): Promise<number> {
 				positional: args.positional
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			// Ctrl+C at one of its questions: nothing was published, and a caller
+			// (the install wizard, `edit`) must not queue or report a listing.
+			if (isAbortError(err)) {
+				console.log('\n  Stopped \u2014 nothing was published.');
+				return REGISTER_DECLINED;
+			}
+			return commandFailed(err);
 		}
 	}
 
@@ -528,8 +548,7 @@ async function main(): Promise<number> {
 				positional: args.positional
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -548,8 +567,7 @@ async function main(): Promise<number> {
 				positional: args.positional
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -565,8 +583,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -582,8 +599,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -600,8 +616,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -620,8 +635,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -637,8 +651,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 	if (args.subcommand === 'export-altnet-key') {
@@ -650,8 +663,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -667,8 +679,7 @@ async function main(): Promise<number> {
 				positional: args.positional
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -685,8 +696,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -704,8 +714,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -720,8 +729,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -738,8 +746,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -751,6 +758,11 @@ async function main(): Promise<number> {
 	// group.
 	if (args.subcommand === 'health') {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		// The instance's own config (its public origin, .onion, .b32.i2p) — health
+		// shows them as "Reachable at". Without it every installed node printed no
+		// addresses and "No hidden address yet" (2026-10-12). Best-effort; OS env
+		// wins; a file this user can't read is simply skipped.
+		loadInstanceEnv(defaultRepoRoot());
 		try {
 			return await runHealth({
 				flags: args.flags,
@@ -758,8 +770,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -777,8 +788,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -795,8 +805,7 @@ async function main(): Promise<number> {
 				colorEnabled
 			});
 		} catch (err) {
-			printError(err instanceof Error ? err.message : String(err));
-			return 3;
+			return commandFailed(err);
 		}
 	}
 
@@ -864,12 +873,14 @@ async function main(): Promise<number> {
 				return 1;
 		}
 	} catch (err) {
-		printError(err instanceof Error ? err.message : String(err));
-		return 3;
+		return commandFailed(err);
 	} finally {
 		await db.close();
 	}
 }
+
+/** A command that threw: Ctrl+C at a prompt is the operator stopping it (exit
+ *  130, the SIGINT convention), anything else an error (exit 3). */
 
 // ─── Boot ────────────────────────────────────────────────────────
 

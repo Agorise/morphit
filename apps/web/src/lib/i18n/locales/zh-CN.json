@@ -4180,7 +4180,8 @@
 			"transport_tor": "Tor",
 			"transport_i2p": "I2P",
 			"transport_local": "本地",
-			"checked_ago": "{age}前测量"
+			"checked_ago": "{age}前测量",
+			"paused": "你离开期间已暂停 — 移动鼠标、轻触屏幕或按任意键即可更新。"
 		},
 		"session": {
 			"autolock_changed": "已改为 {label}",

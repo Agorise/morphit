@@ -77,7 +77,7 @@ informed decision.
 
 ## The offline bundles
 
-Every release ships `morphit-X.Y.Z-offline.tar.gz` (signed), built by the
+Every release ships `morphit-vX.Y.Z-offline.tar.gz` (signed), built by the
 release job: Morphit's source, its npm dependencies (above), the prebuilt
 frontend, and the Node.js runtime and Kubo where those are downloaded. The
 **appliance** bundle, built by anyone with `scripts/build-offline-bundle.sh` on

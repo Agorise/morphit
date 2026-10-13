@@ -4180,7 +4180,8 @@
 			"transport_tor": "Tor",
 			"transport_i2p": "I2P",
 			"transport_local": "本地",
-			"checked_ago": "{age}前量度"
+			"checked_ago": "{age}前量度",
+			"paused": "你離開期間已暫停 — 移動滑鼠、輕觸螢幕或按任何鍵即可更新。"
 		},
 		"session": {
 			"autolock_changed": "已改為 {label}",

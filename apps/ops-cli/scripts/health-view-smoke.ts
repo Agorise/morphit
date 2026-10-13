@@ -393,8 +393,8 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		/canary\.state === 'overdue'[\s\S]{0,40}c\.red\('✗'\)/.test(healthSrc)
 	);
 	expect(
-		'HV-5i missing-canary detail gives the direct publish command',
-		/update-canary\.sh/.test(healthSrc) && /pending, not a failure/.test(healthSrc)
+		'HV-5i missing-canary detail gives the set-up and the direct publish commands',
+		/update-canary\.sh/.test(healthSrc) && /scripts\/canary\/setup\.sh/.test(healthSrc)
 	);
 }
 

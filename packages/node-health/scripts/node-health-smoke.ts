@@ -125,7 +125,7 @@ for (const daemon of S) {
 	};
 	const ops = checkIpfsSeeding({ ...allInstalledOk, pinRanMs: 1000, rebroadcastRanMs: 2000 });
 	const idx = decideSeeding(allInstalledOk);
-	ok(ops.detail.includes('IPFS') && ops.detail.includes('last '), 'ops ok detail keeps ages/wording');
+	ok(ops.detail.includes('IPFS') && ops.detail.includes('copied '), 'ops ok detail keeps ages/wording');
 	ok(idx.detail === 'pinning the release + rebroadcasting the IPNS record', 'idx ok detail terse');
 	ok(ops.detail !== idx.detail, 'ok detail wording is surface-specific (not collapsed)');
 }

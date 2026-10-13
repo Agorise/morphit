@@ -56,11 +56,19 @@ const scheduled = (): string[] =>
 function arm(): { handle: Awaited<ReturnType<typeof mod.armReachabilityRevert>>; dir: string } {
 	const parent = mkdtempSync(join(S, 'root-'));
 	const want = join(parent, 'reachability-revert');
-	const arm = mod.armReachabilityRevert as (o?: { dir?: string }) => {
+	const arm = mod.armReachabilityRevert as (o?: { dir?: string; sshdConfig?: string }) => {
 		armed: boolean;
 		dir?: string;
 	};
-	const handle = arm({ dir: want });
+	// A box with an SSH server (one without is never armed).
+	const sshdConfig = join(parent, 'sshd_config');
+	writeFileSync(sshdConfig, 'Port 22\n');
+	mkdirSync(join(parent, 'sshd_config.d'));
+	writeFileSync(
+		join(parent, 'sshd_config.d', '50-cloud-init.conf'),
+		'PasswordAuthentication yes\n'
+	);
+	const handle = arm({ dir: want, sshdConfig });
 	const dir = handle.dir ?? '/var/lib/morphit/reachability-revert';
 	return { handle, dir };
 }
@@ -70,6 +78,16 @@ describe.skipIf(!asRoot)('reachability revert: what root runs stays root’s', (
 		expect(
 			(mod as { REVERT_DIR?: string }).REVERT_DIR ?? '/var/lib/morphit/reachability-revert'
 		).not.toMatch(/^\/var\/lib\/morphit\//);
+	});
+
+	it('arm snapshots sshd_config and its drop-ins, before the run changes them', () => {
+		const { handle, dir } = arm();
+		expect(handle.armed).toBe(true);
+		expect(readFileSync(join(dir, 'sshd_config'), 'utf8')).toBe('Port 22\n');
+		expect(readFileSync(join(dir, 'sshd_config.d', '50-cloud-init.conf'), 'utf8')).toBe(
+			'PasswordAuthentication yes\n'
+		);
+		expect(existsSync(join(dir, 'revert.sh'))).toBe(true);
 	});
 
 	it('an untouched snapshot is scheduled', async () => {
@@ -92,6 +110,16 @@ describe.skipIf(!asRoot)('reachability revert: what root runs stays root’s', (
 		chmodSync(join(dir, 'revert.sh'), 0o777);
 		await mod.confirmReachabilityOrRevert(handle, 1);
 		expect(scheduled(), 'root scheduled a world-writable script').toEqual([]);
+	});
+
+	it('a revert directory or script its group can write is not scheduled', async () => {
+		for (const at of ['', 'revert.sh']) {
+			rmSync(LOG, { force: true });
+			const { handle, dir } = arm();
+			chmodSync(join(dir, at), at === '' ? 0o770 : 0o720);
+			await mod.confirmReachabilityOrRevert(handle, 1);
+			expect(scheduled(), `group-writable ${at || 'directory'}`).toEqual([]);
+		}
 	});
 
 	it('a revert script swapped for a symlink is not scheduled', async () => {

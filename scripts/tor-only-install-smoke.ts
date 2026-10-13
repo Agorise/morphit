@@ -50,7 +50,7 @@ check(
 	'totalSteps formula accounts for torOnly',
 	// Two fewer core questions on tor-only (no domain, no cert email); the exact
 	// count is held by apps/ops-cli/test/installStepBudget.test.ts.
-	/3 \+ \(torOnly \? (\d+) : (\d+)\) \+ 3 \+ \(mode === 'home' \? \(torOnly \? 2 : 4\) : 0\)/.test(
+	/3 \+ \(torOnly \? (\d+) : (\d+)\) \+ 5 \+ \(mode === 'home' \? \(torOnly \? 2 : 4\) : 1\)/.test(
 		ra
 	) &&
 		(([, a, b]) => Number(b) - Number(a) === 2)(
@@ -103,7 +103,14 @@ check(
 	'install register step is gated on RPC reachability (no offline hang)',
 	/const rpcReachable = summaryRows\.some\([\s\S]{0,140}Blurt RPC connectivity[\s\S]{0,60}r\.ok === true/.test(
 		ra
-	) && /if \(everythingUp && rpcReachable\)/.test(ra)
+	) &&
+		/ready: readyToList\(summaryRows\) && listedOrigin !== null,\s*online: rpcReachable,/.test(
+			ra
+		) &&
+		// readyToList itself requires the RPC row ✓, so an offline box never registers now.
+		/const online = rows\.some\(\(r\) => r\.label === 'Blurt RPC connectivity' && r\.ok === true\)/.test(
+			read('apps/ops-cli/src/init/installSummary.ts')
+		)
 );
 check(
 	'install ARMS the deferred first-online register + has an explicit offline path',

@@ -31,6 +31,7 @@ import { ask, askYesNo, askChoice } from '../init/prompt.ts';
 import { runInit } from './init.ts';
 import { runHarden } from './harden.ts';
 import { fastSyncFromChain } from './fastSync.ts';
+import { insideTmux, TMUX_EXIT_HINT } from '../lib/insideTmux.ts';
 import { runAnsibleInstall } from '../init/runAnsibleInstall.ts';
 import { healNpmUpdateNotice } from '../lib/npmNotice.ts';
 import {
@@ -116,9 +117,15 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	]);
 	if (modeIdx === 0) {
 		const repoRoot = safeCwd() ?? defaultRepoRoot();
-		const code = await runAnsibleInstall({ repoRoot });
-		if (code === 0) finishInstall(repoRoot);
-		return code;
+		try {
+			const code = await runAnsibleInstall({ repoRoot });
+			if (code === 0) finishInstall(repoRoot);
+			return code;
+		} finally {
+			// The guide runs the install inside tmux; say how to leave it — also
+			// when it stopped (Ctrl+C at a question throws; review, 2026-10-12).
+			if (insideTmux()) console.log(`\n${TMUX_EXIT_HINT}\n`);
+		}
 	}
 
 	console.log('');

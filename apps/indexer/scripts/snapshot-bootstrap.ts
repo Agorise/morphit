@@ -20,10 +20,19 @@
  *   node_modules/.bin/tsx --tsconfig tsconfig.smoke.json \
  *     apps/indexer/scripts/snapshot-bootstrap.ts <snapshot.tar.gz> --i-trust-this-source
  *   sudo systemctl start morphit-indexer
+ *
+ * EXIT CODES (v1.21.7) — the caller decides from them whether the indexer may
+ * be started again:
+ *   0  restored and checked;
+ *   1  failed, and the database is exactly as it was (start it again);
+ *   4  the database WAS replaced, but must not be served: the op-log check
+ *      quarantined it, the clean-up after the restore failed, or the run was
+ *      stopped after the restore (Ctrl+C). Leave the indexer stopped.
+ * (Before, all of these were 1, and the callers restarted the indexer on a
+ * quarantined database — review, 2026-10-12.)
  */
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, readFileSync, existsSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,16 +68,154 @@ import {
 	hasUsableSource,
 	type SnapshotSource
 } from '../src/blurt/snapshotMirrors.ts';
+import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
+import {
+	defaultIpfsGateways,
+	fetchViaKubo,
+	KUBO_STALL_MS,
+	kuboGatewayFrom
+} from '../src/blurt/snapshotKuboFetch.ts';
+import {
+	acceptSnapshotDownload,
+	emptyWorkDir,
+	extractSnapshotArchive
+} from '../src/blurt/snapshotArchive.ts';
+import { startPausableSpinner } from '../../ops-cli/src/init/spinner.ts';
 
 const has = (name: string): boolean => process.argv.includes(`--${name}`);
+
+// The RPC library's failover chatter ("Didn't failover for error …") is noise
+// here: the pool fails over, and this script reports its own result.
+suppressDblurtConsoleNoise();
+
 function flag(name: string): string | undefined {
 	const i = process.argv.indexOf(`--${name}`);
 	return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-function die(msg: string): never {
-	console.error(`snapshot-bootstrap: ${msg}`);
-	process.exit(1);
+/** Failed, database exactly as it was. */
+const EXIT_UNCHANGED = 1;
+/** Stopped with Ctrl+C before the restore began: database exactly as it was. */
+const EXIT_STOPPED = 130;
+/** The database was replaced but must not be served (see the header). */
+const EXIT_REPLACED_UNUSABLE = 4;
+
+/** A stop with its exit code. Thrown (never process.exit here), so the work
+ *  directory — tarball, dump, the uncompressed restore.sql — is always removed
+ *  and the database pool closed (review, 2026-10-12: every failed run left them
+ *  in /tmp). */
+class Stop extends Error {
+	constructor(
+		message: string,
+		readonly code: number
+	) {
+		super(message);
+	}
+}
+
+function die(msg: string, code: number = EXIT_UNCHANGED): never {
+	throw new Stop(msg, code);
+}
+
+/** Set once the restore has committed: from then on the database is no longer
+ *  what it was, and a stop must say so (exit 4), not "nothing changed". */
+let replaced = false;
+/** Set just before psql starts the restore: from then a Ctrl+C is noted (psql
+ *  sees it too and rolls back if it had not committed), never acted on at once. */
+let restoreStarted = false;
+/** Ctrl+C once the restore had started. */
+let interruptedAfterRestore = false;
+
+/** The child running now (curl, kubo, psql, the op-log check), so a Ctrl+C
+ *  before the restore stops it with this process. */
+let currentChild: ChildProcess | null = null;
+
+interface ChildResult {
+	status: number | null;
+	signal: NodeJS.Signals | null;
+	/** Only when asked for (`captureStderr`). */
+	stderr: string;
+	error: NodeJS.ErrnoException | null;
+}
+
+/**
+ * Run a child WITHOUT blocking this process, and wait for it (v1.21.7).
+ *
+ * fast-sync runs this script under tsx, which relays a Ctrl+C to it and kills
+ * it outright unless it answers within about 60 ms. Blocked in spawnSync it
+ * could not answer, so on a busy box a Ctrl+C during the minutes-long op-log
+ * check ended it with 130 — read by fast-sync as "the database is as it was",
+ * and the indexer was started on a replaced, unchecked database (review,
+ * 2026-10-12: 6 of 6 runs on one busy CPU). The same Ctrl+C before the restore
+ * left the download and the dump in /tmp.
+ */
+function runChild(
+	cmd: string,
+	args: readonly string[],
+	opts: {
+		input?: string;
+		stdout?: 'inherit' | 'ignore';
+		captureStderr?: boolean;
+		timeoutMs?: number;
+		cwd?: string;
+	} = {}
+): Promise<ChildResult> {
+	return new Promise((resolve) => {
+		let child: ChildProcess;
+		try {
+			child = spawn(cmd, [...args], {
+				cwd: opts.cwd,
+				stdio: [
+					opts.input !== undefined ? 'pipe' : 'ignore',
+					opts.stdout ?? 'inherit',
+					opts.captureStderr === true ? 'pipe' : 'inherit'
+				]
+			});
+		} catch (e) {
+			resolve({ status: null, signal: null, stderr: '', error: e as NodeJS.ErrnoException });
+			return;
+		}
+		currentChild = child;
+		let stderr = '';
+		let error: NodeJS.ErrnoException | null = null;
+		child.stderr?.on('data', (b: Buffer) => {
+			if (stderr.length < 64 * 1024) stderr += b.toString('utf8');
+		});
+		if (opts.input !== undefined) {
+			child.stdin?.on('error', () => undefined);
+			child.stdin?.end(opts.input);
+		}
+		const timer =
+			opts.timeoutMs !== undefined ? setTimeout(() => child.kill('SIGTERM'), opts.timeoutMs) : null;
+		child.on('error', (e) => {
+			error = e as NodeJS.ErrnoException;
+		});
+		child.on('close', (status, signal) => {
+			if (timer !== null) clearTimeout(timer);
+			if (currentChild === child) currentChild = null;
+			resolve({ status, signal, stderr, error });
+		});
+	});
+}
+
+/** Where the caller (fast-sync) learns that the restore started, even if this
+ *  process is then killed outright: written before psql begins, removed when
+ *  the database is known to be either untouched or restored and checked. */
+const RESTORE_MARKER = process.env.MORPHIT_SNAPSHOT_RESTORE_MARKER ?? '';
+function markRestoreStarted(): void {
+	if (RESTORE_MARKER !== '')
+		writeFileSync(RESTORE_MARKER, `${new Date().toISOString()}\n`, { mode: 0o600 });
+}
+function clearRestoreMarker(): void {
+	if (RESTORE_MARKER !== '') rmSync(RESTORE_MARKER, { force: true });
+}
+function stopIfInterrupted(): void {
+	if (interruptedAfterRestore)
+		die(
+			'stopped after the database was replaced (Ctrl+C), before its checks were done. ' +
+				'Do not start the indexer on it: run fast-sync again.',
+			EXIT_REPLACED_UNUSABLE
+		);
 }
 
 /** Public IPFS gateways to try for the CID, after the (usually faster) forgejo
@@ -81,26 +228,66 @@ function ipfsGateways(): string[] {
 			.split(',')
 			.map((s) => s.trim().replace(/\/+$/, ''))
 			.filter(Boolean);
-	// cloudflare-ipfs.com is not listed: Cloudflare retired its public
-	// gateway, so it only ever added a failed request (and a third party).
-	return ['http://127.0.0.1:8080', 'https://ipfs.io', 'https://dweb.link'];
+	return defaultIpfsGateways();
 }
-
-const sha256File = (path: string): string =>
-	createHash('sha256').update(readFileSync(path)).digest('hex');
 
 /** This box's own kubo gateway, when it runs one. Read from kubo rather than
  *  assumed, and null when kubo is absent (a fresh node usually has none yet). */
 function localKuboGateway(): string | null {
 	const env = process.env.MORPHIT_LOCAL_IPFS_GATEWAY;
 	if (env && env.trim() !== '') return env.trim();
-	const r = spawnSync('ipfs', ['config', 'Addresses.Gateway'], { encoding: 'utf8', timeout: 8000 });
-	if (r.status !== 0 || typeof r.stdout !== 'string') return null;
-	const m = /\/ip4\/([0-9.]+)\/tcp\/(\d{1,5})/.exec(r.stdout);
-	if (!m) return null;
-	// A gateway bound to 0.0.0.0 is still reached over loopback from here.
-	const host = m[1] === '0.0.0.0' ? '127.0.0.1' : m[1];
-	return `http://${host}:${m[2]}`;
+	// The daemon's own repo config (fast-sync runs as root, which has no repo
+	// of its own, so `ipfs config` would not find it).
+	try {
+		return kuboGatewayFrom(readFileSync(join(KUBO_REPO, 'config'), 'utf8'));
+	} catch {
+		return null;
+	}
+}
+
+/** This box's IPFS (kubo) daemon: its user and repo, as the snapshot mirror
+ *  and the release seeder use them. */
+const KUBO_USER = process.env.MORPHIT_IPFS_USER ?? 'ipfs';
+const KUBO_REPO = process.env.IPFS_PATH ?? '/var/lib/ipfs/.ipfs';
+const HAS_RUNUSER = spawnSync('sh', ['-c', 'command -v runuser'], { stdio: 'ignore' }).status === 0;
+
+/** True when this box runs a kubo daemon that `ipfs cat` can ask. */
+function localKuboNode(): boolean {
+	if (process.env.MORPHIT_SNAPSHOT_NO_KUBO === '1') return false;
+	if (!existsSync(KUBO_REPO)) return false;
+	return spawnSync('systemctl', ['is-active', '--quiet', 'ipfs.service']).status === 0;
+}
+
+/** Fetch `cid` through this box's kubo daemon into `dest`, at most `maxBytes`,
+ *  under the spinner (it can take minutes, and kubo prints nothing meanwhile);
+ *  given up when no byte has arrived for 5 minutes. Never throws. */
+async function downloadViaKubo(cid: string, dest: string, maxBytes: number): Promise<boolean> {
+	const spin = startPausableSpinner(
+		'asking the IPFS network for it (this can take several minutes)',
+		process.stderr,
+		{ elapsed: true }
+	);
+	try {
+		return await fetchViaKubo(cid, dest, {
+			user: KUBO_USER,
+			repo: KUBO_REPO,
+			runuser: HAS_RUNUSER,
+			maxBytes,
+			onChild: (c) => {
+				currentChild = c;
+			},
+			onStall: () =>
+				spin.say(() =>
+					process.stderr.write(
+						`  nothing arrived for ${KUBO_STALL_MS / 60_000} minutes \u2014 giving up on this source.\n`
+					)
+				)
+		});
+	} catch {
+		return false;
+	} finally {
+		spin.stop();
+	}
 }
 
 /** Tor SOCKS + I2P HTTP proxy, overridable for non-default installs. */
@@ -117,9 +304,39 @@ const I2P_HTTP_PROXY = process.env.MORPHIT_I2P_HTTP_PROXY ?? 'http://127.0.0.1:4
  * tunnels are slow to warm up, and a too-tight timeout would report a working
  * private mirror as dead and push the node toward clearnet.
  */
-function download(url: string, dest: string, source?: SnapshotSource): boolean {
+async function download(
+	url: string,
+	dest: string,
+	source: SnapshotSource | undefined,
+	maxBytes: number
+): Promise<boolean> {
 	const transport = source?.transport ?? 'clearnet';
-	const args = ['-fSL', '--connect-timeout', '20', '-C', '-', '-o', dest];
+	if (transport === 'kubo') return downloadViaKubo(url.replace(/^kubo:/, ''), dest, maxBytes);
+	// Redirects only on clearnet (a public gateway sends ipfs.io/ipfs/<cid> on to
+	// a subdomain gateway). A hidden or local source must never send this box
+	// elsewhere: curl applies the proxy to a followed redirect too, so a hidden
+	// source could point a Tor/I2P-only node at a clearnet URL (review,
+	// 2026-10-12). And a source that stalls — accepts, then sends next to
+	// nothing — is dropped instead of holding the run for its whole time limit
+	// (the hidden RPC nodes are asked too, and most do not mirror yet).
+	const args = [
+		'-fS',
+		...(transport === 'clearnet' ? ['-L'] : ['--max-redirs', '0']),
+		// Never more than the signed size (a source that streams on forever
+		// filled /tmp before, review 2026-10-12).
+		'--max-filesize',
+		String(maxBytes),
+		'--connect-timeout',
+		'20',
+		'--speed-limit',
+		'512',
+		'--speed-time',
+		// An I2P tunnel can take minutes before the first byte: a mirror is
+		// given ten; a long shot (an RPC node) or a clearnet one two.
+		source?.longShot === true || transport === 'clearnet' || transport === 'local' ? '120' : '600',
+		'-o',
+		dest
+	];
 	if (transport === 'tor') {
 		args.push('--socks5-hostname', TOR_SOCKS, '--max-time', '600');
 	} else if (transport === 'i2p') {
@@ -128,7 +345,7 @@ function download(url: string, dest: string, source?: SnapshotSource): boolean {
 		args.push('--max-time', '600');
 	}
 	args.push(url);
-	const r = spawnSync('curl', args, { stdio: ['ignore', 'inherit', 'inherit'] });
+	const r = await runChild('curl', args);
 	return r.status === 0;
 }
 
@@ -216,7 +433,9 @@ async function acquireFromChain(
 		peers,
 		publicGateways: ipfsGateways(),
 		localGateway: localKuboGateway(),
-		hiddenOnly
+		hiddenOnly,
+		localNode: !hiddenOnly && localKuboNode(),
+		rpcMirrors: config.hiddenRpcEndpoints
 	});
 	if (!hasUsableSource(built)) {
 		die(
@@ -236,29 +455,29 @@ async function acquireFromChain(
 	const sourceByUrl = new Map(built.map((s) => [s.url, s]));
 
 	const tarPath = join(work, 'snapshot.tar.gz');
-	const manifestPath = join(work, MANIFEST_FILENAME);
-	const dumpPath = join(work, DUMP_FILENAME);
 	for (const url of sources) {
 		const src = sourceByUrl.get(url);
 		process.stderr.write(`\nsnapshot: fetching from ${src?.label ?? url} …\n`);
-		rmSync(tarPath, { force: true });
-		rmSync(manifestPath, { force: true });
-		rmSync(dumpPath, { force: true });
-		if (!download(url, tarPath, src)) {
-			process.stderr.write('  ✗ download failed — trying the next source.\n');
-			continue;
-		}
-		const untar = spawnSync('tar', ['-xzf', tarPath, '-C', work], {
-			stdio: ['ignore', 'inherit', 'inherit']
-		});
-		if (untar.status !== 0 || !existsSync(manifestPath) || !existsSync(dumpPath)) {
-			process.stderr.write('  ✗ archive did not unpack cleanly — trying the next source.\n');
-			continue;
-		}
-		const innerSha = sha256File(dumpPath);
-		if (innerSha !== op.sha256) {
+		// Each source starts from an empty directory, and nothing one source
+		// does — a hostile archive, a crash — stops the next from being tried
+		// (review, 2026-10-12: one bad source aborted the whole run).
+		try {
+			emptyWorkDir(work);
+			if (!(await download(url, tarPath, src, op.size_bytes))) {
+				process.stderr.write('  ✗ download failed — trying the next source.\n');
+				continue;
+			}
+			const accepted = await acceptSnapshotDownload(tarPath, work, {
+				sizeBytes: op.size_bytes,
+				sha256: op.sha256
+			});
+			if (!accepted.ok) {
+				process.stderr.write(`  ✗ ${accepted.reason} — discarding this source.\n`);
+				continue;
+			}
+		} catch (e) {
 			process.stderr.write(
-				`  ✗ sha256 MISMATCH: got ${innerSha}, on-chain op says ${op.sha256}. Discarding this source.\n`
+				`  ✗ this source failed (${e instanceof Error ? e.message : String(e)}) — trying the next one.\n`
 			);
 			continue;
 		}
@@ -266,7 +485,10 @@ async function acquireFromChain(
 		return sel;
 	}
 	die(
-		'every source failed to yield a snapshot matching the on-chain sha256. Try again later, set --gateway, or do a full replay.'
+		'every source failed to yield a snapshot matching the on-chain sha256. Nothing was changed. Try again later' +
+			(hiddenOnly
+				? ', or do a full replay.'
+				: ', point it at an IPFS gateway you trust (MORPHIT_IPFS_GATEWAYS=https://… sudo morphit-ops fast-sync), or do a full replay.')
 	);
 }
 
@@ -307,18 +529,13 @@ type PsqlReadiness =
 	| { ok: false; why: 'unreachable'; detail: string }
 	| { ok: false; why: 'too-old' };
 
-function psqlReadiness(dbUrl: string): PsqlReadiness {
-	const connect = spawnSync(
+async function psqlReadiness(dbUrl: string): Promise<PsqlReadiness> {
+	const connect = await runChild(
 		'psql',
 		['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-c', 'SELECT 1', dbUrl],
-		{
-			stdio: ['ignore', 'ignore', 'pipe'],
-			encoding: 'utf8',
-			timeout: 30_000
-		}
+		{ stdout: 'ignore', captureStderr: true, timeoutMs: 30_000 }
 	);
-	if ((connect.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT')
-		return { ok: false, why: 'missing' };
+	if (connect.error?.code === 'ENOENT') return { ok: false, why: 'missing' };
 	if (connect.status !== 0) {
 		// psql's own words, without the connection string (it can carry the password).
 		const detail =
@@ -330,10 +547,11 @@ function psqlReadiness(dbUrl: string): PsqlReadiness {
 				?.replace(/[\u0000-\u001f\u007f]/g, '') ?? '';
 		return { ok: false, why: 'unreachable', detail };
 	}
-	const probe = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', dbUrl], {
+	const probe = await runChild('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', dbUrl], {
 		input: '\\restrict k0\n\\unrestrict k0\n',
-		stdio: ['pipe', 'ignore', 'ignore'],
-		timeout: 30_000
+		stdout: 'ignore',
+		captureStderr: true,
+		timeoutMs: 30_000
 	});
 	return probe.status === 0 ? { ok: true } : { ok: false, why: 'too-old' };
 }
@@ -380,7 +598,46 @@ async function main(): Promise<void> {
 	// router cannot be installed: never read the chain unrouted.
 	installChainRouting(config);
 	const db = createDatabase(config);
+	// Who is running the restore, for fast-sync: its tsx wrapper can end first
+	// (a closed terminal), and fast-sync waits for this process, not the
+	// wrapper, before it reads the marker. "<pid> <start time>", removed at exit.
+	const pidFile = process.env.MORPHIT_SNAPSHOT_PID_FILE ?? '';
+	if (pidFile !== '') {
+		let start = '';
+		try {
+			const stat = readFileSync('/proc/self/stat', 'utf8');
+			start = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? '';
+		} catch {
+			/* not Linux: the pid alone */
+		}
+		writeFileSync(pidFile, `${process.pid} ${start}\n`, { mode: 0o600 });
+		process.on('exit', () => rmSync(pidFile, { force: true }));
+	}
 	const work = mkdtempSync(join(tmpdir(), 'morphit-snap-restore-'));
+	// Whatever ends this process, the download, the dump and restore.sql go.
+	process.on('exit', () => rmSync(work, { recursive: true, force: true }));
+	// Ctrl+C — or the terminal closing (SIGHUP), or a stop (SIGTERM). Before
+	// the restore nothing in the database has changed: stop at once, with
+	// whatever child is running. From the restore on it is only noted (psql
+	// sees it too), so the run can say which of the two happened.
+	const stopOn = (sig: 'SIGINT' | 'SIGHUP' | 'SIGTERM', code: number): void => {
+		process.on(sig, () => {
+			if (restoreStarted) {
+				interruptedAfterRestore = true;
+				return;
+			}
+			currentChild?.kill(sig);
+			try {
+				process.stderr.write('\nsnapshot-bootstrap: stopped. Nothing was changed.\n');
+			} catch {
+				/* the terminal may be gone */
+			}
+			process.exit(code);
+		});
+	};
+	stopOn('SIGINT', EXIT_STOPPED);
+	stopOn('SIGHUP', 129);
+	stopOn('SIGTERM', 143);
 
 	try {
 		// ── acquire: from chain (download+verify) or from a local tarball ──
@@ -388,10 +645,12 @@ async function main(): Promise<void> {
 		if (fromChain) {
 			chainOp = await acquireFromChain(config, work);
 		} else {
-			const untar = spawnSync('tar', ['-xzf', snapshotPath!, '-C', work], {
-				stdio: ['ignore', 'inherit', 'inherit']
+			// The same safe reader as a downloaded copy: a file handed over by a
+			// peer is no more trusted than a download.
+			const x = await extractSnapshotArchive(snapshotPath!, work, {
+				maxDumpBytes: statSync(snapshotPath!).size + 1024 * 1024
 			});
-			if (untar.status !== 0) die('could not extract the snapshot archive.');
+			if (!x.ok) die(`could not extract the snapshot archive: ${x.reason}.`);
 		}
 		const manifestPath = join(work, MANIFEST_FILENAME);
 		const dumpPath = join(work, DUMP_FILENAME);
@@ -532,7 +791,7 @@ async function main(): Promise<void> {
 		process.stderr.write(
 			`\nsnapshot: restoring into the indexer DB (this replaces existing objects)…\n`
 		);
-		const psql = psqlReadiness(config.databaseUrl);
+		const psql = await psqlReadiness(config.databaseUrl);
 		if (!psql.ok) {
 			if (psql.why === 'missing') {
 				die(
@@ -569,7 +828,12 @@ async function main(): Promise<void> {
 				`could not read the snapshot dump: ${e instanceof Error ? e.message : String(e)}. Nothing was changed.`
 			);
 		}
-		const restore = spawnSync(
+		// From here a Ctrl+C reaches psql too (same terminal): before the commit it
+		// rolls the transaction back; this process only notes it, so it can say
+		// which of the two happened instead of dying without a word.
+		restoreStarted = true;
+		markRestoreStarted();
+		const restore = await runChild(
 			'psql',
 			[
 				'-X',
@@ -581,24 +845,34 @@ async function main(): Promise<void> {
 				sqlPath,
 				config.databaseUrl
 			],
-			{ stdio: ['ignore', 'ignore', 'inherit'] }
+			{ stdout: 'ignore' }
 		);
 		if (restore.status !== 0) {
+			clearRestoreMarker();
 			die(
 				`restore failed (psql exit ${restore.status ?? 'signal'}). It ran as one transaction, so the ` +
 					`database is exactly as it was before. Nothing to clean up.`
 			);
 		}
+		replaced = true;
+		stopIfInterrupted();
 
 		// ── confirm ───────────────────────────────────────────────
 		const after = await db.query<{ chain_id: string; last_applied_block: string }>(
 			'SELECT chain_id, last_applied_block::text FROM indexer_state LIMIT 1'
 		);
-		if (after.rows.length === 0) die('post-restore indexer_state is empty — restore did not take.');
+		if (after.rows.length === 0)
+			die(
+				'post-restore indexer_state is empty — restore did not take. Do not start the indexer on this database: run fast-sync again.',
+				EXIT_REPLACED_UNUSABLE
+			);
 		const gotBlock = parseInt(after.rows[0]!.last_applied_block, 10);
 		const gotChain = after.rows[0]!.chain_id;
 		if (gotChain !== manifest.chainId)
-			die(`post-restore chain_id '${gotChain}' != manifest '${manifest.chainId}'.`);
+			die(
+				`post-restore chain_id '${gotChain}' != manifest '${manifest.chainId}'. Do not start the indexer on this database.`,
+				EXIT_REPLACED_UNUSABLE
+			);
 
 		process.stderr.write(
 			`\n✓ restored to block ${gotBlock.toLocaleString()} (chain ${gotChain}).\n`
@@ -635,7 +909,8 @@ async function main(): Promise<void> {
 		} catch (err) {
 			die(
 				`could not tidy the restored database: ${err instanceof Error ? err.message : String(err)}. ` +
-					`Do not start the indexer on this database until this succeeds — re-run the restore.`
+					`Do not start the indexer on this database until this succeeds — re-run the restore.`,
+				EXIT_REPLACED_UNUSABLE
 			);
 		}
 
@@ -656,9 +931,11 @@ async function main(): Promise<void> {
 			die(
 				`could not reset posting-key confirmations after restore: ` +
 					`${err instanceof Error ? err.message : String(err)}. Do not start the indexer on ` +
-					`this database until this succeeds — re-run the restore.`
+					`this database until this succeeds — re-run the restore.`,
+				EXIT_REPLACED_UNUSABLE
 			);
 		}
+		stopIfInterrupted();
 
 		// ── Tier-2 hardening: op-log spot-check (from-chain only) ──
 		// Prove the restored `ops` log matches the chain before we recommend
@@ -673,7 +950,7 @@ async function main(): Promise<void> {
 			// the way fast-sync runs this script: the repo's tsx with the tsconfig.
 			// And only its QUARANTINE code (3) means quarantine; a crash is
 			// inconclusive, never a verdict.
-			const verify = spawnSync(
+			const verify = await runChild(
 				join(REPO_ROOT, 'node_modules', '.bin', 'tsx'),
 				[
 					'--tsconfig',
@@ -684,12 +961,16 @@ async function main(): Promise<void> {
 					'--up-to',
 					String(gotBlock)
 				],
-				{ cwd: REPO_ROOT, stdio: ['ignore', 'inherit', 'inherit'] }
+				{ cwd: REPO_ROOT }
 			);
+			if (verify.signal === 'SIGINT' || verify.status === 130) interruptedAfterRestore = true;
+			stopIfInterrupted();
 			if (verify.status === 3) {
 				die(
 					'op-log spot-check QUARANTINED this snapshot (it does not match the chain). ' +
-						'Wipe the DB and full-replay (MORPHIT_INDEXER_START_BLOCK=genesis).'
+						'Do not start the indexer on this database: run fast-sync again, and if this snapshot is ' +
+						'quarantined again, wait for the next one (published daily).',
+					EXIT_REPLACED_UNUSABLE
 				);
 			}
 			if (verify.status !== 0 && verify.status !== 3) {
@@ -701,10 +982,16 @@ async function main(): Promise<void> {
 			}
 		}
 
-		process.stderr.write(
-			`  Start the indexer; it will catch up + re-verify the gap to head over its configured pool.\n` +
-				`      sudo systemctl start morphit-indexer\n`
-		);
+		stopIfInterrupted();
+		// The caller (morphit-ops fast-sync, the install wizard) starts the
+		// indexer itself: don't tell the operator to as well.
+		if (process.env.MORPHIT_SNAPSHOT_CALLER_STARTS_INDEXER !== '1') {
+			process.stderr.write(
+				`  Start the indexer; it will catch up + re-verify the gap to head over its configured pool.\n` +
+					`      sudo systemctl start morphit-indexer\n`
+			);
+		}
+		clearRestoreMarker();
 		console.log(String(gotBlock));
 	} finally {
 		rmSync(work, { recursive: true, force: true });
@@ -719,7 +1006,12 @@ async function main(): Promise<void> {
 main().then(
 	() => process.exit(0),
 	(err) => {
+		if (err instanceof Stop) {
+			console.error(`snapshot-bootstrap: ${err.message}`);
+			process.exit(err.code);
+		}
 		console.error('snapshot-bootstrap failed:', err instanceof Error ? err.message : err);
-		process.exit(1);
+		// After the restore committed, the database is not what it was.
+		process.exit(replaced ? EXIT_REPLACED_UNUSABLE : EXIT_UNCHANGED);
 	}
 );

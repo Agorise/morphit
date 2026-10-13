@@ -22,6 +22,7 @@
  * (systemctl / docker / ufw / filesystem / HTTP /v1/health / Blurt RPC) is
  * injected, so the same logic is unit-tested without a live box.
  */
+import { hostTorDaemonUnit } from '../lib/torUnit.ts';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { lookupBlurtAccount } from './chainCheck.ts';
@@ -263,20 +264,38 @@ export async function collectInstallSummary(
 	rows.push({ label: 'Intrusion protection (fail2ban)', ok: probe.serviceActive('fail2ban') });
 
 	// ── Privacy networks ─────────────────────────────────────────────
+	// Each address as created AND as the node advertises it (its settings,
+	// which register and the indexer read): an address that exists but is not
+	// in the settings is not reachable to anyone who looks the node up.
 	{
+		const config = probe.readText(`${inputs.repoPath}/morphit.config.env`) ?? '';
+		const setting = (key: string): string | null =>
+			new RegExp(`^\\s*${key}=["']?([^"'\\s]+)`, 'm').exec(config)?.[1] ?? null;
 		const onion = probe.readText('/var/lib/tor/morphit/hostname');
+		const advertisedOnion = setting('MORPHIT_INSTANCE_TOR_ADDRESS');
+		const torUp = probe.serviceActive('tor');
 		rows.push({
 			label: 'Tor onion address (.onion)',
-			ok: probe.serviceActive('tor') && !!onion,
+			ok: torUp && !!onion && advertisedOnion === onion,
 			value: onion ?? undefined,
-			detail: 'Tor is still bootstrapping — the .onion appears within a minute'
+			detail:
+				torUp && onion && advertisedOnion !== onion
+					? 'created, but not in your settings yet, so the node does not advertise it \u2014 sudo morphit-ops \u2192 Set up a Tor / Lokinet / I2P address'
+					: 'Tor is still bootstrapping \u2014 the .onion appears within a minute'
+		});
+		const b32 = setting('MORPHIT_INSTANCE_I2P_B32_ADDRESS');
+		const i2pKey = probe.pathExists('/var/lib/i2pd/morphit-web.dat');
+		const i2pUp = probe.serviceActive('i2pd');
+		rows.push({
+			label: 'I2P address (.b32.i2p)',
+			ok: i2pUp && i2pKey && b32 !== null && /\.b32\.i2p$/.test(b32),
+			value: b32 ?? undefined,
+			detail:
+				i2pUp && i2pKey && b32 === null
+					? 'created, but not in your settings yet, so the node does not advertise it \u2014 sudo morphit-ops \u2192 Set up a Tor / Lokinet / I2P address'
+					: 'i2pd is still building its tunnels \u2014 give it ~10 minutes'
 		});
 	}
-	rows.push({
-		label: 'I2P address (.b32.i2p)',
-		ok: probe.serviceActive('i2pd') && probe.pathExists('/var/lib/i2pd/morphit-web.dat'),
-		detail: 'i2pd is still building its tunnels — give it ~10 minutes'
-	});
 
 	// ── Distribution (IPFS / IPNS) ───────────────────────────────────
 	rows.push({
@@ -473,8 +492,11 @@ export async function readLocalIndexerHealth(
 	}
 }
 
-function realProbe(): SummaryProbe {
-	const isActive = (unit: string): boolean => {
+/** The probe on this box (exported for the Tor-daemon test). */
+export function realProbe(): SummaryProbe {
+	const isActive = (name: string): boolean => {
+		// "tor" means the Tor daemon, which is tor@default on Ubuntu (lib/torUnit.ts).
+		const unit = name === 'tor' ? hostTorDaemonUnit() : name;
 		const r = spawnSync('systemctl', ['is-active', unit], { encoding: 'utf8' });
 		return (r.stdout ?? '').trim() === 'active';
 	};
@@ -540,14 +562,30 @@ function realProbe(): SummaryProbe {
 	};
 }
 
-/** True when NOTHING has failed — no row is ✗ (ok === false). A '?' (still
- *  starting / couldn't tell — the indexer HTTP warming up, FX feeds connecting,
- *  RPC dialling) does NOT block: the announce offer only wants "no hard
- *  failure", matching the original intent that a catching-up indexer is fine.
- *  A DOWN service, missing cert, inactive firewall, or an unfunded relay is a
- *  ✗ and does block. */
-export function allComponentsUp(rows: readonly ComponentStatus[]): boolean {
-	return !rows.some((r) => r.ok === false);
+/** The rows a listing on the federated directory depends on: the broadcast
+ *  (relay key + liquid BLURT, a reachable chain) and what peers check when they
+ *  probe the new instance (database, relay, indexer, website). */
+const LISTING_NEEDS: readonly RegExp[] = [
+	/^Marketplace database/,
+	/^Signup relay/,
+	/^Marketplace indexer/,
+	/^Verified relay balance/,
+	/^Web firewall/,
+	/^Website/
+];
+
+/** True when this node can be listed on the federated directory right now: the
+ *  chain is reachable and nothing the listing depends on is ✗.
+ *
+ *  Not "every row ✓": on a fresh VPS some rows are always ✗ at install time —
+ *  the PGP contact key and the canary are signed later on the operator's own
+ *  computer, and i2pd takes minutes to build its tunnels. Gating the listing on
+ *  them meant no VPS install ever listed itself on the spot (2026-10-12). */
+export function readyToList(rows: readonly ComponentStatus[]): boolean {
+	const online = rows.some((r) => r.label === 'Blurt RPC connectivity' && r.ok === true);
+	return (
+		online && !rows.some((r) => r.ok === false && LISTING_NEEDS.some((re) => re.test(r.label)))
+	);
 }
 
 /** Print the summary block. Best-effort: an unknown probe shows '?', never throws. */

@@ -76,7 +76,7 @@ anchor CI recorded on-chain:
   when the release job holds the signing key. A release without it is
   checked by its SHA-256 in the on-chain anchor (Step 1), which is what
   `morphit-ops upgrade` does too.
-- `morphit-X.Y.Z-offline.tar.gz` (and its `.asc`, when signed) — the
+- `morphit-vX.Y.Z-offline.tar.gz` (and its `.asc`, when signed) — the
   offline bundle (prebuilt dependencies and frontend, for upgrades without
   internet); its SHA-256 is in the on-chain anchor (`offline_sha256`).
 
@@ -109,7 +109,7 @@ by finding that version's op):
 node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz --version X.Y.Z
 ```
 
-The offline bundle (`morphit-X.Y.Z-offline.tar.gz`) is checked the same
+The offline bundle (`morphit-vX.Y.Z-offline.tar.gz`) is checked the same
 way, against the anchored `offline_sha256`; when the release carries its
 `.asc`, verify that as in Step 2.
 

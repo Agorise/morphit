@@ -161,7 +161,7 @@ const COMPRESSIBLE = /\.(html|js|mjs|json|css|svg|xml|wasm|txt)$/;
  *  PGP keys, robots, llms) and the generated brand.json / manifest are NOT
  *  overridable. SVGs pass through the same sanitizer as the logos. */
 const STATIC_OVERLAY_EXT = /\.(png|jpe?g|webp|gif|ico|svg)$/i;
-const MAX_SVG_BYTES = 2 * 1024 * 1024;
+export const MAX_SVG_BYTES = 2 * 1024 * 1024;
 const MAX_STATIC_BYTES = 10 * 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 

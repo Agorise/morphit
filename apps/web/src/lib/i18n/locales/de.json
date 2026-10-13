@@ -4180,7 +4180,8 @@
 			"transport_tor": "Tor",
 			"transport_i2p": "I2P",
 			"transport_local": "Lokal",
-			"checked_ago": "vor {age} gemessen"
+			"checked_ago": "vor {age} gemessen",
+			"paused": "Pausiert, solange du weg bist — Maus bewegen, tippen oder eine Taste drücken, um zu aktualisieren."
 		},
 		"session": {
 			"autolock_changed": "Geändert auf {label}",

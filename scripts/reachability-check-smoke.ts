@@ -69,8 +69,8 @@ check(
 		li > 0 && rv > li
 	);
 	check(
-		'cp699/cp705 — the wizard pre-fills the canary instance origin (deriveInstanceOrigin: onion for Tor-only, else https://domain — no re-typing)',
-		/MORPHIT_CANARY_INSTANCE_ORIGIN:\s*\n?\s*deriveInstanceOrigin\(inputs\.torOnly, inputs\.domain, '\/opt\/morphit'\) \?\?\s*\n?\s*`https:\/\/\$\{inputs\.domain\}`/.test(
+		'cp699/cp705 — the wizard pre-fills the canary instance origin (deriveInstanceOrigin: onion for Tor-only, else https://domain — no re-typing; never a bare https:// — v1.21.7)',
+		/\.\.\.canaryOriginEnv\(\s*deriveInstanceOrigin\(inputs\.torOnly, inputs\.domain, '\/opt\/morphit'\)\s*\)/.test(
 			w
 		)
 	);

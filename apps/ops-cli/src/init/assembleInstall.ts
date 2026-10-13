@@ -22,6 +22,7 @@ import { spawnSync, spawn } from 'node:child_process';
 import { buildAnsiblePlaybookArgv, renderVarsFile } from './ansibleVars.ts';
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
 import { startDotsSpinner } from './spinner.ts';
+import { abortError } from './prompt.ts';
 import { runSpinning, showOutput } from '../lib/spinRun.ts';
 
 /**
@@ -394,10 +395,31 @@ function errnoHint(code: string): string | undefined {
  * signatures to a fix, points at the run log when present, and only when nothing
  * matches points at support. PURE + tested.
  */
-export function describeInstallError(err: unknown, logExists = false): string {
+export function describeInstallError(
+	err: unknown,
+	logExists = false,
+	restartCommand = 'sudo morphit-ops install'
+): string {
 	const msg = err instanceof Error ? err.message : String(err);
 	const code =
 		err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : '';
+	const again = `\nTo start it again, run:\n    ${restartCommand}`;
+	// Ctrl+C at a prompt (readline rejects with an AbortError) is the operator
+	// stopping it, not a fault: say so, and what to type next (2026-10-12: a
+	// reflex Ctrl+C on the "save your password" screen read as a crash, with a
+	// support address and no way back in).
+	const name = err instanceof Error ? err.name : '';
+	if (name === 'AbortError' || code === 'ABORT_ERR') {
+		return [
+			'Stopped \u2014 you pressed Ctrl+C.',
+			"Nothing is left half-installed that a re-run can't recover.",
+			again,
+			'\nIt offers to reuse the answers you already gave, and asks again only for',
+			'what is never saved to disk (your relay account\u2019s active key, the alerts',
+			'step, a home dynamic-DNS URL). If it shows you a database password, it is a',
+			'NEW one: save that one (the earlier one is no longer used).'
+		].join('\n');
+	}
 	const hint = errnoHint(code) ?? FAILURE_HINTS.find((h) => h.re.test(msg))?.hint;
 	const out: string[] = ['The install hit an unexpected problem and stopped.'];
 	out.push(`Details: ${msg.replace(/\s+/g, ' ').slice(0, 300)}`);
@@ -411,7 +433,41 @@ export function describeInstallError(err: unknown, logExists = false): string {
 	out.push(
 		"\nNothing is left half-installed that a re-run can't recover \u2014 you can safely run the installer again."
 	);
+	out.push(again);
 	return out.join('\n');
+}
+
+/**
+ * The command that starts the install again, for the messages above. From the
+ * folder the release was unpacked into (it holds morphit-setup.sh) that is the
+ * setup script, run from there; anywhere else, the installed command. PURE.
+ */
+export function installRestartCommand(
+	subcommand: 'install' | 'init',
+	cwd: string | null,
+	hasSetupScript: boolean
+): string {
+	if (subcommand === 'install' && cwd !== null && hasSetupScript) {
+		const dir = /^[A-Za-z0-9_./~-]+$/.test(cwd) ? cwd : `'${cwd.replace(/'/g, "'\\''")}'`;
+		return `cd ${dir} && sudo bash morphit-setup.sh`;
+	}
+	return `sudo morphit-ops ${subcommand}`;
+}
+
+/** {@link installRestartCommand} for this process: from the folder it runs in
+ *  when that holds morphit-setup.sh, else the installed command. */
+export function currentInstallRestartCommand(): string {
+	let cwd: string | null = null;
+	try {
+		cwd = process.cwd();
+	} catch {
+		/* the folder is gone — the installed command */
+	}
+	return installRestartCommand(
+		'install',
+		cwd,
+		cwd !== null && existsSync(join(cwd, 'morphit-setup.sh'))
+	);
 }
 
 function localAnsibleEnv(): NodeJS.ProcessEnv {
@@ -456,10 +512,22 @@ export function shouldRemindQuiet(
 	return now - lastOutput >= softMs;
 }
 
-async function realSpawn(argv: readonly string[]): Promise<number> {
+/** Run the playbook (or a step after it), its output mirrored here. Exported
+ *  for its test. */
+export async function realSpawn(argv: readonly string[]): Promise<number> {
 	const [cmd, ...args] = argv;
 	if (cmd === undefined) return 1;
-	return await new Promise<number>((resolve) => {
+	// Ctrl+C reaches Ansible itself (same terminal), which stops. This process
+	// waits for it, then reports the stop like one at a question — the vars file
+	// (with the database password) removed, the restart command shown. It used to
+	// die on the signal there and then, silently, leaving that file in /run
+	// (review, 2026-10-12).
+	let interrupted = false;
+	const onSigint = (): void => {
+		interrupted = true;
+	};
+	process.on('SIGINT', onSigint);
+	return await new Promise<number>((resolve, reject) => {
 		// Pipe stdout/stderr so we can (a) mirror them live to the terminal and
 		// (b) know when the run goes quiet — but keep stdin INHERITED so Ansible
 		// can still prompt for a sudo password if it ever needs one. Ansible also
@@ -495,12 +563,15 @@ async function realSpawn(argv: readonly string[]): Promise<number> {
 		child.on('error', () => {
 			clearInterval(watchdog);
 			quiet.end();
+			process.removeListener('SIGINT', onSigint);
 			resolve(1);
 		});
 		child.on('close', (code) => {
 			clearInterval(watchdog);
 			quiet.end();
-			resolve(code ?? 1);
+			process.removeListener('SIGINT', onSigint);
+			if (interrupted) reject(abortError());
+			else resolve(code ?? 1);
 		});
 	});
 }
@@ -678,13 +749,28 @@ export async function assembleInstall(
 
 	// 1. Write the vars file FIRST (0600 — it carries the DB secrets).
 	writeVarsFile(plan.varsFilePath, renderVarsFile(plan.vars));
+	// From here a Ctrl+C is a stop like any other: the vars file is removed and
+	// the wizard says so, with how to start again. Before, only the playbook run
+	// handled it; earlier, the process died without a word and left the file
+	// (review, 2026-10-12). The step that was running (an apt or ansible child)
+	// gets the Ctrl+C too and ends; each step is then checked.
+	let stopped = false;
+	const onSigint = (): void => {
+		stopped = true;
+	};
+	process.on('SIGINT', onSigint);
+	const checkStop = (): void => {
+		if (stopped) throw abortError();
+	};
 	try {
 		// 2. Make the operator save the generated secrets BEFORE we install —
 		//    if anything later fails, they already have their copy.
 		await promptSave(plan.secretsToSave);
+		checkStop();
 
 		// 3. Ansible must be runnable.
 		const haveAnsible = await ensureAnsible(dirname(plan.playbookPath));
+		checkStop();
 		if (!haveAnsible) {
 			return {
 				ok: false,
@@ -702,7 +788,9 @@ export async function assembleInstall(
 			varsFilePath: plan.varsFilePath,
 			listHosts: true
 		});
-		const probeVerdict = interpretProbeResult(await probeHosts(probeArgv));
+		const probeResult = await probeHosts(probeArgv);
+		checkStop();
+		const probeVerdict = interpretProbeResult(probeResult);
 		if (!probeVerdict.ok) {
 			return {
 				ok: false,
@@ -750,6 +838,7 @@ export async function assembleInstall(
 		}
 		return { ok: true };
 	} finally {
+		process.removeListener('SIGINT', onSigint);
 		// 5. NEVER leave the DB secrets sitting in a temp file.
 		removeVarsFile(plan.varsFilePath);
 	}

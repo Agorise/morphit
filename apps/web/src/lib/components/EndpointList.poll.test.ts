@@ -4,6 +4,8 @@
  * figures from the first paint, re-reads them every 10 s while the page is
  * visible (and on return to the tab), stops when it leaves the page, and a
  * refresh asks the indexer to re-measure while the rows stay on screen.
+ * v1.21.7: it also stops after 3 minutes without input (and resumes on input),
+ * and re-reads once soon after an answer whose figures predate a quiet spell.
  * Behaviour, not source text: the component is mounted against a fake indexer.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,6 +62,14 @@ function row(url: string, o: Row = {}): Row {
 		...o
 	};
 }
+
+/** An answer measured just now (no follow-up read is due). */
+const fresh = (): Promise<Answer> =>
+	Promise.resolve(
+		answer(Date.now(), [
+			row('https://a.example', { checked_at: new Date(Date.now()).toISOString() })
+		])
+	);
 
 let visibility: DocumentVisibilityState = 'visible';
 beforeEach(() => {
@@ -141,6 +151,138 @@ describe('EndpointList', () => {
 		await advance(60_000);
 		document.dispatchEvent(new Event('visibilitychange'));
 		expect(calls.length).toBe(3);
+	});
+
+	it('stops re-reading after 3 minutes without input, says so, and resumes at once on input (v1.21.7)', async () => {
+		next = fresh;
+		const { el, stop } = await render();
+		await advance(3 * 60_000);
+		const atIdle = calls.length;
+		expect(atIdle).toBeLessThanOrEqual(19);
+		await advance(30 * 60_000);
+		expect(calls.length, 'kept reading with nobody at the screen').toBe(atIdle);
+		expect(el.textContent).toContain('settings.endpoints.paused');
+		window.dispatchEvent(new Event('pointermove'));
+		await advance(0);
+		expect(calls.length, 'input did not resume at once').toBe(atIdle + 1);
+		expect(el.textContent).not.toContain('settings.endpoints.paused');
+		await advance(10_000);
+		expect(calls.length).toBe(atIdle + 2);
+		await advance(4 * 60_000); // idle again, paused
+		const atStop = calls.length;
+		stop();
+		await advance(0);
+		window.dispatchEvent(new Event('keydown'));
+		await advance(30_000);
+		expect(calls.length, 'input after unmount read again').toBe(atStop);
+	});
+
+	it('figures from before a quiet spell are re-read a few seconds later, once', async () => {
+		next = async () =>
+			answer(Date.now(), [
+				row('https://a.example', { checked_at: new Date(Date.now() - 25 * 60_000).toISOString() })
+			]);
+		const { stop } = await render();
+		await advance(3_000);
+		expect(calls.length, 'old figures were left on screen until the next 10 s read').toBe(2);
+		await advance(6_000);
+		expect(calls.length).toBe(2);
+		stop();
+	});
+
+	it('any kind of input counts: touch, key, wheel, scroll, focus', async () => {
+		next = fresh;
+		const { stop } = await render();
+		for (const kind of ['touchstart', 'keydown', 'wheel', 'scroll', 'focus', 'pointerdown']) {
+			await advance(4 * 60_000); // idle: paused
+			const before = calls.length;
+			window.dispatchEvent(new Event(kind));
+			await advance(0);
+			expect(calls.length, kind).toBe(before + 1);
+		}
+		stop();
+	});
+
+	it('coming back to the tab counts as input (the idle clock starts again)', async () => {
+		next = fresh;
+		const { stop } = await render();
+		await advance(150_000); // 2.5 min without input
+		visibility = 'hidden';
+		document.dispatchEvent(new Event('visibilitychange'));
+		await advance(10_000);
+		visibility = 'visible';
+		document.dispatchEvent(new Event('visibilitychange'));
+		await advance(0);
+		const back = calls.length;
+		await advance(60_000); // 3.7 min since the last input, 1 min since the return
+		expect(calls.length - back).toBe(6);
+		stop();
+	});
+
+	it('old figures after a pause are re-read soon after the return too', async () => {
+		const old = (): string => new Date(Date.now() - 10 * 60_000).toISOString();
+		next = async () => answer(Date.now(), [row('https://a.example', { checked_at: old() })]);
+		const { stop } = await render();
+		await advance(4 * 60_000); // paused
+		const before = calls.length;
+		window.dispatchEvent(new Event('pointermove'));
+		await advance(3_000);
+		expect(calls.length - before).toBe(2);
+		stop();
+	});
+
+	it('the follow-up read never happens after the card is gone', async () => {
+		next = async () =>
+			answer(Date.now(), [
+				row('https://a.example', { checked_at: new Date(Date.now() - 600_000).toISOString() })
+			]);
+		const { stop } = await render();
+		stop();
+		await advance(5_000);
+		expect(calls.length).toBe(1);
+	});
+
+	it('input while active reads nothing extra: a moving mouse never sends a request', async () => {
+		next = fresh;
+		const { stop } = await render();
+		const before = calls.length;
+		for (let i = 0; i < 50; i++) {
+			window.dispatchEvent(new Event(i % 2 ? 'pointermove' : 'scroll'));
+			await advance(10);
+		}
+		expect(calls.length).toBe(before);
+		stop();
+	});
+
+	it('hiding the tab reads nothing, and a follow-up due while it is hidden is not sent', async () => {
+		next = async () =>
+			answer(Date.now(), [
+				row('https://a.example', { checked_at: new Date(Date.now() - 600_000).toISOString() })
+			]);
+		const { stop } = await render();
+		expect(calls.length).toBe(1);
+		visibility = 'hidden';
+		document.dispatchEvent(new Event('visibilitychange'));
+		await advance(5_000);
+		expect(calls.length).toBe(1);
+		stop();
+	});
+
+	it('refresh asks for a re-measure at most once per 5 s, however often it is clicked', async () => {
+		next = fresh;
+		const { el, stop } = await render();
+		const probes = (): number => calls.filter((c) => c.probe).length;
+		for (let i = 0; i < 20; i++) {
+			el.querySelector('button')!.click();
+			await advance(200);
+		}
+		// 4 s of clicking (with the spinner's own minimum time between): one.
+		expect(probes()).toBe(1);
+		await advance(1_500);
+		el.querySelector('button')!.click();
+		await advance(0);
+		expect(probes()).toBe(2);
+		stop();
 	});
 
 	it('refresh asks for a re-measure and keeps the rows on screen until it arrives', async () => {

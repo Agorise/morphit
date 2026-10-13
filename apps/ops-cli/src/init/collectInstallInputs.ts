@@ -36,6 +36,8 @@ import {
 	type AnsibleInstallInputs,
 	type InstallMode
 } from './ansibleVars.ts';
+import type { InstallProgress } from './installProgress.ts';
+import { sanitizeForTerm } from '../render/term.ts';
 
 export interface CollectDeps {
 	readonly ask?: typeof realAsk;
@@ -46,6 +48,11 @@ export interface CollectDeps {
 	/** v1.15.x — the domain DNS pre-check. Injectable so tests stay hermetic
 	 *  (no network, no box-IP probe). Defaults to the real checkDomainPointsHere. */
 	readonly dnsCheck?: (domain: string) => Promise<{ ok: boolean; note: string }>;
+	/** Answers a previous, interrupted run saved (installProgress.ts): each one
+	 *  that still validates is reused instead of asked. */
+	readonly saved?: InstallProgress;
+	/** Called with each non-secret answer the moment it is given. */
+	readonly remember?: (answers: InstallProgress) => void;
 }
 
 /** Ask one free-form question with an example list + a validator, re-prompting
@@ -122,6 +129,10 @@ export async function collectInstallInputs(
 	const askSecret = deps.askSecret ?? realAskPassword;
 	const print = deps.print ?? ((s: string): void => console.log(s));
 	const req = { ask, examples, print };
+	const saved = deps.saved ?? {};
+	const remember = deps.remember ?? ((): void => {});
+	const usedSaved = (what: string, shown: string): void =>
+		print(`  \u2713 Using your saved ${what} from last time: ${sanitizeForTerm(shown)}\n`);
 
 	// Mode was chosen before the numbered steps began (askInstallMode), so the
 	// running "Step N of {total}" counter is accurate from the very first step.
@@ -133,12 +144,18 @@ export async function collectInstallInputs(
 	let domain = '';
 	if (!torOnly) {
 		step(0, 0, 'Your web address (domain)');
-		domain = await askValidated(
-			'What web address (domain) will people use to reach your marketplace?',
-			['trade.example.com', 'barter.yourbrand.org'],
-			validateDomain,
-			req
-		);
+		if (saved.domain !== undefined && validateDomain(saved.domain) === true) {
+			domain = saved.domain.trim();
+			usedSaved('web address', domain);
+		} else {
+			domain = await askValidated(
+				'What web address (domain) will people use to reach your marketplace?',
+				['trade.example.com', 'barter.yourbrand.org'],
+				validateDomain,
+				req
+			);
+			remember({ domain });
+		}
 		// Pre-check DNS BEFORE the install so the HTTPS cert doesn't fail at the
 		// end. Non-blocking: DNS may still be propagating, and the operator can
 		// point it during the install — but they should know now.
@@ -161,46 +178,67 @@ export async function collectInstallInputs(
 	// site title). Asked next to the domain, per the operator who noted these
 	// were never collected. The title is REQUIRED (register needs it too).
 	step(0, 0, 'Your marketplace name');
-	print(
-		'\n  Give your marketplace a name. It appears as the title at the top of your\n' +
-			'  site, and \u2014 once you register \u2014 as your instance\u2019s name on the shared\n' +
-			'  /instances directory that traders on other nodes browse.\n'
-	);
-	const instanceName = await askValidated(
-		'Instance title',
-		['Morphit Polska', 'Berlin Freimarkt', 'Morphit UK'],
-		validateInstanceTitle,
-		req
-	);
+	let instanceName: string;
+	if (saved.instanceName !== undefined && validateInstanceTitle(saved.instanceName) === true) {
+		instanceName = saved.instanceName.trim();
+		usedSaved('marketplace name', instanceName);
+	} else {
+		print(
+			'\n  Give your marketplace a name. It appears as the title at the top of your\n' +
+				'  site, and \u2014 once you register \u2014 as your instance\u2019s name on the shared\n' +
+				'  /instances directory that traders on other nodes browse.\n'
+		);
+		instanceName = await askValidated(
+			'Instance title',
+			['Morphit Polska', 'Berlin Freimarkt', 'Morphit UK'],
+			validateInstanceTitle,
+			req
+		);
+		remember({ instanceName });
+	}
 
 	step(0, 0, 'A one-line description (optional)');
-	print(
-		'\n  Optionally add a one-line description. It shows right under your title on\n' +
-			'  the shared /instances directory (and as your site\u2019s search-result blurb).\n' +
-			'  Press Enter to skip.\n'
-	);
-	examples([
-		'Nasza instancja, kt\u00f3ra s\u0142u\u017cy wszystkim osobom m\u00f3wi\u0105cym po polsku na ca\u0142ym \u015bwiecie.',
-		'P2P Bitcoin & Monero trading, no KYC.'
-	]);
-	let instanceTagline = (await ask('Instance description (optional)')).trim();
-	if (instanceTagline.length > 200) instanceTagline = instanceTagline.slice(0, 200);
+	let instanceTagline: string;
+	if (saved.instanceTagline !== undefined) {
+		instanceTagline = saved.instanceTagline.trim().slice(0, 200);
+		usedSaved('description', instanceTagline === '' ? '(none)' : instanceTagline);
+	} else {
+		print(
+			'\n  Optionally add a one-line description. It shows right under your title on\n' +
+				'  the shared /instances directory (and as your site\u2019s search-result blurb).\n' +
+				'  Press Enter to skip.\n'
+		);
+		examples([
+			'Nasza instancja, kt\u00f3ra s\u0142u\u017cy wszystkim osobom m\u00f3wi\u0105cym po polsku na ca\u0142ym \u015bwiecie.',
+			'P2P Bitcoin & Monero trading, no KYC.'
+		]);
+		instanceTagline = (await ask('Instance description (optional)')).trim();
+		if (instanceTagline.length > 200) instanceTagline = instanceTagline.slice(0, 200);
+		remember({ instanceTagline });
+	}
 
 	step(0, 0, 'A Matrix contact (optional)');
-	print(
-		'\n  Optionally, a Matrix contact \u2014 it powers the "Contact this operator"\n' +
-			'  link on your /instances card, so traders can reach you. Use EITHER your\n' +
-			'  account  @you:server  (e.g. @you:matrix.org) OR a room  #room:server\n' +
-			'  (e.g. #support:matrix.org) if you\u2019d rather send people to a channel than\n' +
-			'  a personal account. Press Enter to skip \u2014 the link is simply omitted\n' +
-			'  until you add one.\n'
-	);
-	const matrixAddress = await askValidated(
-		'Your Matrix account or room (optional \u2014 @you:matrix.org or #room:matrix.org)',
-		['@you:matrix.org', '#support:example.org'],
-		validateMatrixAddress,
-		req
-	);
+	let matrixAddress: string;
+	if (saved.matrixAddress !== undefined && validateMatrixAddress(saved.matrixAddress) === true) {
+		matrixAddress = saved.matrixAddress.trim();
+		usedSaved('Matrix contact', matrixAddress === '' ? '(none)' : matrixAddress);
+	} else {
+		print(
+			'\n  Optionally, a Matrix contact \u2014 it powers the "Contact this operator"\n' +
+				'  link on your /instances card, so traders can reach you. Use EITHER your\n' +
+				'  account  @you:server  (e.g. @you:matrix.org) OR a room  #room:server\n' +
+				'  (e.g. #support:matrix.org) if you\u2019d rather send people to a channel than\n' +
+				'  a personal account. Press Enter to skip \u2014 the link is simply omitted\n' +
+				'  until you add one.\n'
+		);
+		matrixAddress = await askValidated(
+			'Your Matrix account or room (optional \u2014 @you:matrix.org or #room:matrix.org)',
+			['@you:matrix.org', '#support:example.org'],
+			validateMatrixAddress,
+			req
+		);
+		remember({ matrixAddress });
+	}
 	const contactUrl = matrixAddress.length > 0 ? matrixToContactUrl(matrixAddress) : undefined;
 
 	// Operator alerts (optional). Asked right after the contact step: if the
@@ -296,12 +334,18 @@ export async function collectInstallInputs(
 	let acmeEmail = '';
 	if (!torOnly) {
 		step(0, 0, 'Email for your free HTTPS certificate');
-		acmeEmail = await askValidated(
-			'Your email address (only used to get + renew your free HTTPS certificate)',
-			['you@example.com'],
-			validateAcmeEmail,
-			req
-		);
+		if (saved.acmeEmail !== undefined && validateAcmeEmail(saved.acmeEmail) === true) {
+			acmeEmail = saved.acmeEmail.trim();
+			usedSaved('certificate email', acmeEmail);
+		} else {
+			acmeEmail = await askValidated(
+				'Your email address (only used to get + renew your free HTTPS certificate)',
+				['you@example.com'],
+				validateAcmeEmail,
+				req
+			);
+			remember({ acmeEmail });
+		}
 	}
 
 	let ddnsUpdateUrl: string | undefined;
@@ -327,30 +371,49 @@ export async function collectInstallInputs(
 	// Daily database backups: plain text unless encrypted to an
 	// age key whose secret half stays off this server.
 	step(0, 0, 'Encrypt your daily backups (recommended)');
-	print(
-		'\n  Every night this server saves a copy of its database, and keeps each copy\n' +
-			'  for 30 days. Without a key those copies are in plain text: anyone who gets\n' +
-			'  this disk, or a copy of it, can read them. With an age key they are\n' +
-			'  encrypted, and only the matching secret key (kept on YOUR computer, not\n' +
-			'  here) can open them.\n' +
-			'\n' +
-			'  To make one, on your own computer (not this server):\n' +
-			'      age-keygen -o morphit-backup-key.txt\n' +
-			'  Keep that file safe (you need it to restore), and paste the line it\n' +
-			'  prints after "Public key:" here. Press Enter to keep plain-text backups.\n'
-	);
 	let backupAgeRecipient: string | undefined;
-	for (let attempt = 0; attempt < 5; attempt++) {
-		const raw = (
-			await ask('Backup encryption: your age public key (age1\u2026; Enter to skip)')
-		).trim();
-		if (raw === '') break;
-		const verdict = validateAgeRecipient(raw);
-		if (verdict === true) {
-			backupAgeRecipient = raw;
-			break;
+	const savedRecipient = saved.backupAgeRecipient?.trim();
+	if (
+		savedRecipient !== undefined &&
+		(savedRecipient === '' || validateAgeRecipient(savedRecipient) === true)
+	) {
+		backupAgeRecipient = savedRecipient === '' ? undefined : savedRecipient;
+		usedSaved('backup choice', savedRecipient === '' ? 'plain-text backups' : savedRecipient);
+	} else {
+		// A fixed place in the home folder, named for this instance: the command
+		// used to write to whatever folder the terminal was in, and nothing said
+		// where (2026-10-12) — and an operator with several nodes needs one per node.
+		const keyName = `morphit-backup-key-${(domain || known.operatorTag).replace(/[^a-zA-Z0-9.-]/g, '-')}.txt`;
+		print(
+			'\n  Every night this server saves a copy of its database, and keeps each copy\n' +
+				'  for 30 days. Without a key those copies are in plain text: anyone who gets\n' +
+				'  this disk, or a copy of it, can read them. With an age key they are\n' +
+				'  encrypted, and only the matching secret key (kept on YOUR computer, not\n' +
+				'  here) can open them.\n' +
+				'\n' +
+				'  To make one, on your own computer (not this server; first install age:\n' +
+				'  sudo apt install age, or on a Mac: brew install age):\n' +
+				`      age-keygen -o ~/${keyName}\n` +
+				'  That saves the key in your home folder, as\n' +
+				`      ${keyName}\n` +
+				`  (on Linux /home/<you>/${keyName}, on a Mac /Users/<you>/${keyName}).\n` +
+				'  Keep that whole file safe — for example attached to an entry in your\n' +
+				'  password manager — you need it to restore a backup. Then paste the line\n' +
+				'  it printed after "Public key:" here. Press Enter to keep plain-text backups.\n'
+		);
+		for (let attempt = 0; attempt < 5; attempt++) {
+			const raw = (
+				await ask('Backup encryption: your age public key (age1\u2026; Enter to skip)')
+			).trim();
+			if (raw === '') break;
+			const verdict = validateAgeRecipient(raw);
+			if (verdict === true) {
+				backupAgeRecipient = raw;
+				break;
+			}
+			print(`  \u2717 That ${verdict}.  Try again.\n`);
 		}
-		print(`  \u2717 That ${verdict}.  Try again.\n`);
+		remember({ backupAgeRecipient: backupAgeRecipient ?? '' });
 	}
 
 	// Whether to list this instance on-chain is NOT asked here — it's offered

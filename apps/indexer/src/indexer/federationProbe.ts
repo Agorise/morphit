@@ -284,6 +284,9 @@ export interface KnownInstanceRow {
 	registered_at_time: Date;
 	last_probed_at: Date | null;
 	last_probe_status: string | null;
+	/** The reason the previous probe failed (null after a success). Optional:
+	 *  rows read by older queries lack it. */
+	last_probe_error?: string | null;
 	consecutive_failures: number;
 	/** indexed_block from the PREVIOUS probe (null on the first probe / after a
 	 *  block-less outcome). Used to tell a 'degraded' peer that is advancing
@@ -292,7 +295,13 @@ export interface KnownInstanceRow {
 	/** v1.15.3 — the operator's ON-CHAIN-published hidden-service addresses
 	 *  (from operators.reg_alt_networks). Lets the probe reach a clearnet-censored
 	 *  node over Tor. JSONB → parsed object or null. */
-	reg_alt_networks: { tor?: string | null; i2p_b32?: string | null; i2p_name?: string | null; lokinet?: string | null; ens?: string | null } | null;
+	reg_alt_networks: {
+		tor?: string | null;
+		i2p_b32?: string | null;
+		i2p_name?: string | null;
+		lokinet?: string | null;
+		ens?: string | null;
+	} | null;
 	/** v1.15.3 — the block of the operator's most recent on-chain action. Lets us
 	 *  tell a clearnet-blocked-but-alive node from a dead one. pg BIGINT → string. */
 	last_action_block_num: string | number | null;
@@ -409,7 +418,7 @@ export class FederationProbeScheduler {
 		const goodMs = PROBE_INTERVAL_MS.good;
 		const failMs = PROBE_INTERVAL_MS.unreachable;
 		const cols = `ki.origin, ki.operator_account, ki.registered_at_time,
-			        ki.last_probed_at, ki.last_probe_status, ki.consecutive_failures,
+			        ki.last_probed_at, ki.last_probe_status, ki.last_probe_error, ki.consecutive_failures,
 			        ki.cached_indexed_block,
 			        o.reg_alt_networks, o.last_action_block_num,
 			        ARRAY(SELECT o2.account FROM operators o2
@@ -467,7 +476,7 @@ export class FederationProbeScheduler {
 						selfRelayAccount: this.config.selfRelayAccount,
 						selfOrigin: this.config.selfOrigin,
 						onCollision: this.config.onSharedRelayAccount
-				  }
+					}
 				: null;
 
 		// Simple promise-pool: walks an index, each worker pulls the
@@ -514,8 +523,7 @@ export class FederationProbeScheduler {
 				// asserts the shape a real dead proxy produces so this cannot be
 				// rewritten the confident-looking way again.
 				if (isHiddenServiceOrigin(inst.origin)) {
-					const proxies =
-						this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
+					const proxies = this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
 					const hiddenFetch = <T>(url: string): Promise<T> =>
 						fetchJsonViaHiddenService<T>(url, proxies);
 					try {
@@ -558,7 +566,12 @@ export class FederationProbeScheduler {
 					const hiddenOnly = clearnetRefused();
 					let outcome: ProbeOutcome = hiddenOnly
 						? mkUnreachable('clearnet_not_contacted_hidden_only')
-						: await probeOne(inst, treasuryForProbe, this.config.clearnetFetch ?? fetchJson, selfCheck);
+						: await probeOne(
+								inst,
+								treasuryForProbe,
+								this.config.clearnetFetch ?? fetchJson,
+								selfCheck
+							);
 					// Whether anything that failed below failed on OUR side (no
 					// hidden address to try, or our proxy for it down) rather than
 					// the peer's. Only a peer-side failure may be recorded against it.
@@ -580,8 +593,7 @@ export class FederationProbeScheduler {
 					// Order matters only for cost: the first address that answers wins,
 					// and each is tried through the transport its network needs.
 					if (outcome.status === 'unreachable') {
-						const proxies =
-							this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
+						const proxies = this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
 						for (const hidden of publishedHiddenHosts(inst.reg_alt_networks)) {
 							try {
 								const hiddenOutcome = await probeOne(
@@ -628,9 +640,7 @@ export class FederationProbeScheduler {
 					if (outcome.status === 'unreachable') {
 						const head = this.config.currentBlock?.() ?? null;
 						const last =
-							inst.last_action_block_num === null
-								? null
-								: Number(inst.last_action_block_num);
+							inst.last_action_block_num === null ? null : Number(inst.last_action_block_num);
 						if (
 							head !== null &&
 							last !== null &&
@@ -726,8 +736,22 @@ export class FederationProbeScheduler {
 			// missed several probes in a row, so one flaky Tor/I2P circuit can't
 			// red-flag a healthy onion-only node. Clearnet peers, and any non-
 			// 'unreachable' failure status, are written immediately as before.
-			const softenHidden =
-				isHiddenServiceOrigin(inst.origin) && outcome.status === 'unreachable';
+			const softenHidden = isHiddenServiceOrigin(inst.origin) && outcome.status === 'unreachable';
+			const reason = storableProbeReason(outcome.error);
+			// Say why, once per change: the reason was only in the database, so an
+			// operator whose new instance showed "Clearnet blocked" had nothing to
+			// read (2026-10-12). Logged when the reason changes, not on every
+			// 10-minute re-probe. (The reason, not the status: a hidden peer in its
+			// grace period keeps its old status while the reason is stored each time.)
+			if ((inst.last_probe_error ?? null) !== reason) {
+				// Cut short: the reason can carry text the peer chose (its relay
+				// account, an error body) — one probe must not write a 200 KB line.
+				log.warn('peer_probe_failed', {
+					origin: inst.origin,
+					status: outcome.status,
+					reason: reason === null ? null : wellFormed(reason.slice(0, 200))
+				});
+			}
 			await this.db.query(
 				`UPDATE known_instances SET
 					last_probed_at = NOW(),
@@ -743,7 +767,7 @@ export class FederationProbeScheduler {
 					END,
 					last_probe_error = $3
 				 WHERE origin = $1`,
-				[inst.origin, outcome.status, outcome.error, softenHidden, HIDDEN_SERVICE_UNREACHABLE_AFTER]
+				[inst.origin, outcome.status, reason, softenHidden, HIDDEN_SERVICE_UNREACHABLE_AFTER]
 			);
 		}
 	}
@@ -860,6 +884,27 @@ export class FederationProbeScheduler {
 	}
 }
 
+/** Lone UTF-16 surrogates as U+FFFD — what Postgres stores for them anyway. */
+function wellFormed(s: string): string {
+	return s.replace(
+		/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g,
+		'\ufffd'
+	);
+}
+
+/** A probe's failure reason exactly as it will be stored (and so as it will be
+ *  read back to compare): control characters (a NUL among them, which Postgres
+ *  refuses in text) become spaces, it is cut to 1000 characters, and a lone
+ *  surrogate — sent by the peer, or half a character left by the cut — becomes
+ *  U+FFFD. It can carry text the peer chose (an error body, its relay account,
+ *  its treasury address): a NUL made every probe fail to store its reason, and
+ *  half a character made the stored reason differ from the new one, so either
+ *  was logged again on every probe (review, 2026-10-12). */
+export function storableProbeReason(error: string | null): string | null {
+	if (error === null) return null;
+	return wellFormed(error.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').slice(0, 1000));
+}
+
 // ─── Single-instance probe ───────────────────────────────────────
 
 /** Probe one instance.  Always resolves with a ProbeOutcome; never
@@ -962,8 +1007,9 @@ async function probeOneInner(
 	if (rival !== undefined) {
 		owner.confirmed = rival;
 	} else if (instanceData.relay_account !== operator_account && !bothReservedBrandAccounts) {
+		// The peer's value, bounded (a Blurt account name is at most 16 characters).
 		return mkMismatch(
-			`relay_account mismatch: chain=${operator_account} instance=${instanceData.relay_account}`
+			`relay_account mismatch: chain=${operator_account} instance=${JSON.stringify(String(instanceData.relay_account).slice(0, 32))}`
 		);
 	}
 	// treasury-address mismatch.  A peer advertising a DIFFERENT
@@ -1344,7 +1390,11 @@ export async function fetchJson<T>(
 	url: string,
 	/** (v1.20.2) Overrides for a caller that needs them (/compare fetches a
 	 *  peer's whole orderbook page, ~3 KB an order). Defaults: the probe's. */
-	opts: { readonly timeoutMs?: number; readonly maxBytes?: number; readonly userAgent?: string } = {}
+	opts: {
+		readonly timeoutMs?: number;
+		readonly maxBytes?: number;
+		readonly userAgent?: string;
+	} = {}
 ): Promise<T> {
 	// Audit 2026-05 finding 5-5: defense-in-depth re-validation
 	// of the origin host before firing.  Even if a malicious
@@ -1480,10 +1530,9 @@ function errMsg(err: unknown): string {
  *  See instanceCacheSanitize.ts: anything that fails its rule is dropped as
  *  null — never the whole probe — and a legacy single `i2p` field is routed by
  *  shape into i2p_b32 / i2p_name. */
-function cachedFieldsOf(inst: InstanceShape): Pick<
-	ProbeOutcome,
-	'cachedName' | 'cachedTagline' | 'cachedContactUrl' | 'cachedAltNetworks'
-> {
+function cachedFieldsOf(
+	inst: InstanceShape
+): Pick<ProbeOutcome, 'cachedName' | 'cachedTagline' | 'cachedContactUrl' | 'cachedAltNetworks'> {
 	return {
 		cachedName: textOrNull(inst.name, CACHED_NAME_MAX),
 		cachedTagline: textOrNull(inst.tagline, CACHED_TAGLINE_MAX),
@@ -1539,7 +1588,11 @@ function mkSyncing(inst: InstanceShape, health: HealthShape, chainLagSec: number
  *  indexed_block) so the instance stays listed with its info AND the next probe
  *  compares against the SAME frozen block — without this, mkStale would null the
  *  block and the peer would oscillate stale⇄syncing on every probe. */
-function mkStaleBehind(inst: InstanceShape, health: HealthShape, chainLagSec: number): ProbeOutcome {
+function mkStaleBehind(
+	inst: InstanceShape,
+	health: HealthShape,
+	chainLagSec: number
+): ProbeOutcome {
 	return {
 		status: 'stale',
 		error: 'health_degraded_not_advancing',

@@ -118,21 +118,74 @@ Name them after **your own** instance or domain so they're easy to recognise —
 
 ## 6. Set up the machine
 
-It's **one command**.
+It's **one command**, once Morphit's files are on the machine. Have your two Blurt accounts ready (§5), then follow these five steps. Every box below says where it runs.
 
 ### The easy way (recommended for everyone)
 
-With your two Blurt accounts ready (§5), download the latest release (a few tens of megabytes) from [morphit.io/en/download](https://morphit.io/en/download#source-code) onto the machine that will run Morphit, create a folder for it (for example `~/morphit`), extract it there, open a terminal **in that folder**, and run:
+**1. Open a terminal on the machine.** On a rented server (VPS), connect from your own computer with SSH, using the address and login your provider gave you (or your domain, once §4 points it at the server):
 
 ```sh
+# on your own computer
+ssh root@your-domain.com
+```
+
+On a computer at home, just open a terminal on it.
+
+**2. Bring it up to date, then restart it.** A fresh machine usually has updates waiting. The restart ends your SSH connection — that's expected:
+
+```sh
+# on the server
+sudo apt update && sudo apt -y full-upgrade && sudo apt -y install curl tmux
+sudo reboot
+```
+
+**3. Wait for the restart, connect again, and start a `tmux` session.** Give the server three minutes to come back, then reconnect:
+
+```sh
+# on your own computer — waits 3 minutes while the server restarts, then reconnects
+sleep 180
+ssh root@your-domain.com
+```
+
+Then start `tmux`. The install takes a while; inside `tmux` it keeps running even if your connection drops. If it does drop, connect again and run `tmux attach -t morphit` to be right back where you were.
+
+```sh
+# on the server
+tmux new -s morphit
+```
+
+**4. Download the release into a `morphit` folder and unpack it.** Set `V` to the newest version, the one shown at [git.agorise.net/agorise/morphit/releases/latest](https://git.agorise.net/agorise/morphit/releases/latest) (without the `v`). This downloads the **offline** release (the larger download): it carries Node.js and all of Morphit's libraries, so the installer fetches nothing from the npm registry or NodeSource.
+
+```sh
+# on the server
+V=1.21.7
+mkdir -p ~/morphit && cd ~/morphit
+curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz"
+curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz.sha256"
+sha256sum -c "morphit-v$V-offline.tar.gz.sha256"
+tar -xzf "morphit-v$V-offline.tar.gz"
+```
+
+`sha256sum -c` must print **OK**: the file arrived whole. (To also prove it is the genuine release — the same bytes `@morphit` signed on the Blurt chain — see `VERIFY-YOUR-DOWNLOAD.md`.) The archive has no top folder of its own, so it unpacks straight into `~/morphit`.
+
+The offline release's Node.js is for **x86-64** machines, which nearly every VPS and PC is (`uname -m` prints `x86_64`). On an **ARM** machine such as a Raspberry Pi (`uname -m` prints `aarch64`), use the normal release instead — the same four `curl`/`sha256sum`/`tar` lines without `-offline` in the file names (about 30 MB); the installer then fetches Node.js and the libraries itself. Either way, a first install still downloads Ubuntu packages and the BunkerWeb firewall's Docker images over the internet.
+
+**5. Run the installer**, in the same folder:
+
+```sh
+# on the server, in ~/morphit
 sudo bash morphit-setup.sh
 ```
+
+> **Copying from the terminal:** select the text and press **Ctrl+Shift+C** (on a Mac, Cmd+C). Ctrl+C on its own *stops* the installer. If it stops — or you stop it — run the same command again from the same folder (`cd ~/morphit && sudo bash morphit-setup.sh`). It offers to reuse the answers you already gave; you enter again only what is never saved to disk (your relay account's active key, the alerts step, and at home the dynamic-DNS URL). It makes a **new** database password, so save that one.
 
 When it asks, choose **"Full guided install."** That's the whole job: Morphit sets up *everything* on this computer for you — Node.js, PostgreSQL, the app and its background services, HTTPS with automatic renewal, the BunkerWeb firewall, your Tor `.onion` and I2P addresses, and full server hardening. A home computer gets the **exact same** hardened setup a rented server does — nothing is treated as "less". Along the way it asks a few plain-language questions — your domain, your Blurt account and its signing key, an email for your free HTTPS certificate, and, **only if you're at home**, your registrar's dynamic-DNS update URL — and it shows you the passwords it generated so you can save them somewhere safe first. If you're at home it also reminds you to forward ports 80 and 443 to this computer in your router before it turns on HTTPS.
 
 When it finishes, your node is installed and running — HTTPS, firewall, Tor/I2P and all. The installer puts the running copy in **`/opt/morphit`** and gives you the `morphit-ops` command, which you run as **`sudo morphit-ops …`** on the server from any folder (the folder you extracted into is only what the installer copied from). There's nothing more to switch on; skip straight to **§8 (register as an operator)**.
 
-You only need the release you downloaded — the guided installer deploys exactly those files, so "just the tarball" really is enough. What you download is Morphit's **source** (the code itself — a few tens of megabytes); it deliberately does **not** bundle the software libraries. The very first thing `morphit-setup.sh` does is fetch those with `npm install` — a few hundred megabytes. That step is normal (you'll see "Installing Morphit's libraries…") and can take a few minutes on a slow connection, so let it finish before the wizard appears.
+You're still inside `tmux` at that point (the installer reminds you): type `exit` to close it.
+
+You only need the release you downloaded — the guided installer deploys exactly those files, so "just the tarball" really is enough. With the offline release you'll see "Using the bundled libraries (offline — skipping the library install)". With the normal release (ARM), `morphit-setup.sh` first fetches the libraries with `npm ci` — a few hundred megabytes; you'll see "Installing Morphit's libraries…", and on a slow connection it can take a few minutes, so let it finish before the wizard appears.
 
 > **Prefer to do it by hand?** Two advanced install paths — running the Ansible playbook yourself, and building from source with "Configure only" (you install Node.js, PostgreSQL and nginx) — live in `OPERATIONS.md` (§49). This guide stays on the one-command path.
 
@@ -146,7 +199,17 @@ One of those questions is your **fees account** — the Blurt account your BLURT
 
 Another is **alerts** (optional, but worth it for an always-on node). If you'd like your node to message you on Matrix when something needs attention — low disk, a backup that didn't run, a service down, a TLS certificate nearing expiry — the wizard asks for a small "bot" Matrix account's access token (separate from your personal account) and the personal `@you:server` address the alerts should be DM'd to. **Enter a valid bot token and alerting switches on by default** — the Matrix bot plus the disk/backup/cert/service monitors all come up together. Don't have a bot token handy? Press Enter to skip; you can turn alerts on any time later with `sudo morphit-ops matrix` (on the server). (Alerts always go to a private `@user:server` — never a `#room`, which would broadcast them.)
 
-It also **remembers your answers as you go**, so if you ever get interrupted partway through, just start the installer again and it offers to pick up where you left off — re-asking only the two things it never writes to disk: your database connection and your relay account's active key.
+It also **remembers your answers as you go**. If you're interrupted partway through, run `sudo bash morphit-setup.sh` again from the folder you unpacked the release into: it offers to reuse them, and asks again only for what it never writes to disk — your relay account's active key, the alerts step (it holds a bot token) and, at home, your dynamic-DNS update URL. The database password it shows is a new one each run — save that one.
+
+**Encrypted backups.** The wizard offers to encrypt the nightly database backups with an [age](https://age-encryption.org) key that you make **on your own computer**. It gives you the exact command, for example `age-keygen -o ~/morphit-backup-key-trade.example.org.txt`, which saves the key in your home folder under a name that includes your instance (so the keys of several nodes never overwrite each other). Keep that whole file safe — for example attached to an entry in your password manager; you need it to restore a backup — and paste the line it prints after "Public key:" into the wizard.
+
+**After the install, a few more steps.**
+- **Fast-sync** (recommended, default yes): restores the newest signed federation snapshot so your marketplace is live in minutes instead of replaying the chain for days. It fetches the snapshot from other Morphit instances and the hidden Blurt RPC nodes over Tor/I2P, through your node's own IPFS, then from public IPFS gateways. Skipped or failed? Run `sudo morphit-ops fast-sync` any time; the indexer is always started again either way. Re-installing over a box that already ran a node? It defaults to no there, because a restore replaces that node's own data.
+- **Warrant canary** (on a VPS; a home node has its own step): sign it **here on the server, automatically every week** (simplest), or **on your own computer** (safest: the signing key never sits on the server; §9), or later.
+- **List your instance** on the federated directory: if the node is ready (it reaches the chain and the relay, indexer, database and website are up) it registers right away; otherwise it lists itself automatically within minutes, retrying every 5 minutes, and the reason it could not yet is in `journalctl -t morphit-first-online`. Your PGP key and warrant canary are signed later on your own computer (§9) and do not hold the listing back.
+- **Brand your instance** (optional): the same guided setup as `sudo morphit-ops branding setup` (§11). It first says exactly which files it needs.
+
+**Right after the automatic part, answer the SSH question.** The wizard asks you to open a *new* SSH login to the box from your own computer and confirm it works ("Confirmed — a NEW SSH login still works?"). It rings the terminal bell and waits 10 minutes. If nobody answers, it assumes the install may have cut off SSH and puts SSH's own settings back as they were before (the firewall stays as the install made it); `sudo morphit-ops health` then says so and how to re-apply the SSH hardening.
 
 Two things the wizard does **for you, by default**: it **generates privacy-network addresses** in the background — a **Tor `.onion`** (instant) and, when **i2pd** is installed on the host, a **`.b32.i2p`** too — so your site is reachable over Tor and I2P and shows those footer pills automatically (no waiting, no vanity grinding; any address you'd already set is kept), and it **hand-holds you through server hardening** — a short run of "yes" confirmations (SSH lockdown, firewall + fail2ban, the BunkerWeb web-application firewall, automatic updates, kernel hardening, intrusion detection). The guided install applies all of that for you automatically.
 
@@ -289,7 +352,7 @@ sudo morphit-ops branding apply --logo /home/you/my-logo.svg --logo-footer /home
 - `--theme-from '#…' --theme-to '#…'` (or a preset, `--theme champagne-gold`) — your colours; Morphit derives the rest and refuses colours that would not be readable. Details: docs/BRANDING.md "Colours".
 - **Your directory name is separate.** The name other instances show for you in the directory is `MORPHIT_INSTANCE_NAME` (`sudo morphit-ops` → *Edit settings*). Keep the two the same unless you have a reason not to, so people who find you in the directory recognise the site they land on.
 
-Prefer to be asked? `sudo morphit-ops branding setup` (or *Branding* in the `sudo morphit-ops` menu) asks for each file, the name and the colours. It is live on visitors' next page load; `sudo morphit-ops branding status` shows what's configured.
+Prefer to be asked? `sudo morphit-ops branding setup` (or *Branding* in the `sudo morphit-ops` menu, or the last step of the setup wizard) first lists exactly what it needs — three **SVG** files (`logo.svg`: header, 32 px tall, and homepage, 44–96 px tall; `logo-footer.svg`: footer, 40 px tall, optional; `icon.svg`: a square symbol that reads at 16 × 16 px), each at most 2 MB, with a `viewBox` — then asks for each file, the name and the colours. For the colours, type just **your main colour** (`#d4a017`) or **`logo`**, and every other colour is worked out from it and checked for readability; it shows the result and asks before using it. It is live on visitors' next page load; `sudo morphit-ops branding status` shows what's configured.
 
 Every `morphit-ops upgrade` re-applies it automatically — set it up once.
 

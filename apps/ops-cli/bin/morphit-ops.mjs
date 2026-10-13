@@ -43,6 +43,12 @@ const distEntry = resolve(pkgRoot, 'dist/main.js');
 const srcEntry = resolve(pkgRoot, 'src/main.ts');
 const args = process.argv.slice(2);
 
+// Ctrl+C reaches the CLI itself (same terminal), which decides what it means;
+// this launcher only waits for it and passes its exit code on. Dying here on
+// the signal would hand the shell back while the CLI still runs — and a
+// fast-sync would never get to start the indexer it stopped (2026-10-12).
+process.on('SIGINT', () => {});
+
 let child;
 if (existsSync(distEntry)) {
 	// Compiled path: run the bundle under plain node. No tsx.
@@ -69,5 +75,12 @@ if (existsSync(distEntry)) {
 if (child.error) {
 	console.error(`morphit-ops: failed to launch — ${child.error.message}`);
 	process.exit(1);
+}
+// The CLI died BY a signal (Ctrl+C where it does not handle it): die by the
+// same signal, so a shell script or `a; b` that ran this stops too, as it did
+// before this launcher waited (review, 2026-10-12: it went on with exit 1).
+if (child.signal) {
+	process.removeAllListeners(child.signal);
+	process.kill(process.pid, child.signal);
 }
 process.exit(child.status ?? 1);

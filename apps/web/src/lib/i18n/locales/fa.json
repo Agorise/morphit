@@ -4180,7 +4180,8 @@
 			"transport_tor": "Tor",
 			"transport_i2p": "I2P",
 			"transport_local": "محلی",
-			"checked_ago": "{age} پیش اندازه‌گیری شد"
+			"checked_ago": "{age} پیش اندازه‌گیری شد",
+			"paused": "تا وقتی نیستید متوقف است — برای به‌روزرسانی، ماوس را حرکت دهید، روی صفحه بزنید یا کلیدی را فشار دهید."
 		},
 		"session": {
 			"autolock_changed": "به {label} تغییر کرد",

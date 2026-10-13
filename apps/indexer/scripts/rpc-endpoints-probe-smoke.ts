@@ -2,17 +2,22 @@
  * rpc-endpoints-probe-smoke
  *
  * The stats page's "RPC endpoints" card shows how each public Blurt node is
- * doing, as this site's indexer measures it (v1.21.6: continuously, by
- * RpcHealthProber). Invariants:
+ * doing, as this site's indexer measures it (RpcHealthProber: v1.21.6
+ * continuously; v1.21.7 only while the card is read). Invariants:
  *
- *   ACCURATE AT ONCE — every node is measured on its own clock from boot, so a
- *   plain GET answers with real figures; one slow or dead node never delays
- *   the others; a node not measured yet is "not measured" (no latency, no
- *   failures), never "down"; a failure carries its reason and no stale latency.
+ *   ACCURATE AT ONCE — while the card is read, every node is measured on its
+ *   own clock, so a plain GET answers with real figures; one slow or dead node
+ *   never delays the others; a node not measured yet is "not measured" (no
+ *   latency, no failures), never "down"; a failure carries its reason and no
+ *   stale latency.
+ *
+ *   QUIET WHEN NOBODY LOOKS (v1.21.7) — nothing is measured until the card is
+ *   read, and nothing once WATCHED_FOR_MS has passed since the last read.
  *
  *   DDoS guard — a forced re-measure (the refresh button, ?probe=1) happens at
- *   most once per 5 s across every caller, a burst sharing one round, and a node
- *   is never measured twice at once.
+ *   most once per 5 s across every caller, a burst sharing one round, it skips
+ *   a node measured in the last FORCE_MIN_AGE_MS, and a node is never measured
+ *   twice at once.
  *
  *   PRIVACY #1 — the browser never touches a Blurt node; the INDEXER probes
  *   them, and only the PUBLIC nodes, never the operator's private upstreams.
@@ -25,6 +30,8 @@ import {
 	canonicalProbeUrls,
 	RpcHealthProber,
 	PROBE_EVERY_MS,
+	FORCE_MIN_AGE_MS,
+	WATCHED_FOR_MS,
 	type ProbeResult
 } from '../src/api/rpcHealth.ts';
 
@@ -66,7 +73,10 @@ const prober = new RpcHealthProber(() => list, {
 		})
 });
 await prober.tick();
-check('the first tick measures every listed node at once', calls.length === 3);
+check('with nobody reading the card, a tick measures nothing', calls.length === 0);
+prober.noteViewer();
+await prober.tick();
+check('the first read measures every listed node at once', calls.length === 3);
 let snap = prober.snapshot(nodes);
 check(
 	'before any answer: every node "not measured" (no latency, no failures, checked_at null), never down',
@@ -109,6 +119,7 @@ check('a node that answers again shows its new latency', prober.snapshot(nodes).
 
 // forced re-measure (refresh): rate-limited and coalesced
 calls.length = 0;
+now += FORCE_MIN_AGE_MS;
 const f1 = prober.checkAllNow();
 const f2 = prober.checkAllNow();
 await tick();
@@ -119,6 +130,15 @@ calls.length = 0;
 now += 1000;
 await prober.checkAllNow();
 check('another refresh within 5 s pings nothing', calls.length === 0);
+now += 5_000;
+await prober.checkAllNow();
+check('a refresh pings no node measured in the last 10 s', calls.length === 0);
+now += FORCE_MIN_AGE_MS - 5_000;
+const f3 = prober.checkAllNow();
+await tick();
+check('a refresh re-measures the nodes measured 10 s ago or more', calls.length === 3);
+for (const u of nodes) pending.get(u)!(OK(50));
+await f3;
 
 // the node list follows the directory
 list = ['https://fast.example'];
@@ -127,6 +147,10 @@ check(
 	'a node that leaves the list is forgotten',
 	prober.snapshot(['https://dead.example']).endpoints[0]!.checked_at === null
 );
+calls.length = 0;
+now += WATCHED_FOR_MS;
+await prober.tick();
+check('a minute after the last read, nothing is measured any more', calls.length === 0);
 
 // PRIVACY: main.ts must wire the CANONICAL public list to the route, never the
 // raw clearnet config (`config.blurtRpcEndpoints`, which may include the
@@ -147,7 +171,7 @@ check(
 const health = readFileSync(join(repo, 'apps/indexer/src/api/rpcHealth.ts'), 'utf8');
 check(
 	'the route serves the prober (?probe=1 re-measures first; 5 s forced-round limit)',
-	/query\('probe'\) === '1'\) await prober\.checkAllNow\(\)/.test(health) &&
+	/query\('probe'\) === '1'\)[\s\S]{0,200}?prober\.checkAllNow\(\)/.test(health) &&
 		/prober\.snapshot\(canonicalUrls\)/.test(health) &&
 		/PROBE_MIN_INTERVAL_MS = 5_000/.test(health)
 );
@@ -155,7 +179,7 @@ check(
 	'main.ts starts the prober on the same public list the route shows, and stops it on shutdown',
 	/new RpcHealthProber\(publishedRpcUrls\)/.test(main) &&
 		/rpcProber\.start\(\)/.test(main) &&
-		/rpcEndpointsRoute\(\s*rpcProber,\s*publishedRpcUrls/.test(main) &&
+		/rpcEndpointsApp\(\s*rpcProber,\s*publishedRpcUrls/.test(main) &&
 		/rpcProber\.stop\(\)/.test(main)
 );
 

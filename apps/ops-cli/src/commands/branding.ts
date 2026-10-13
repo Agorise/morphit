@@ -64,14 +64,17 @@ import {
 	THEME_PRESETS,
 	THEME_BUTTON_STYLES,
 	themePreset,
+	suggestTheme,
 	DEFAULT_THEME_PRESET,
 	type ThemeInput
 } from '@morphit/operator-config/theme';
+import { logoColours } from '../lib/brandColours.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import {
 	applyBranding,
 	brandingPaths,
 	BRANDING_FILE_FLAGS,
+	MAX_SVG_BYTES,
 	brandConfigFiles,
 	brandNameProblem,
 	installBrandingFile,
@@ -259,6 +262,118 @@ async function offerRasterizer(): Promise<boolean> {
 	return false;
 }
 
+/**
+ * What the three image files must be — shown before branding setup asks for
+ * them (and so by the install wizard's branding step). Sizes are what the site
+ * actually draws them at (apps/web: MorphitLogoBling in the header, footer and
+ * homepage); the byte limit is the one normalizeSvg enforces.
+ */
+export function brandingFilesGuide(): string[] {
+	const mb = MAX_SVG_BYTES / 1024 / 1024;
+	const f = BRANDING_FILE_FLAGS;
+	return [
+		'Your three images — SVG files only (a PNG or JPG is not accepted for these):',
+		'',
+		`  ${f.logo.padEnd(16)} header (top left) and homepage logo. Shown 32 px tall in the`,
+		'                   header and 44–96 px tall on the homepage; its width follows its own',
+		'                   shape (Morphit\u2019s wordmark is about 6 wide to 1 tall, ~187 × 32 px in',
+		'                   the header). A wide wordmark or a compact logo both work.',
+		`  ${f['logo-footer'].padEnd(16)} footer logo, shown 40 px tall. Optional: without it the footer`,
+		`                   uses ${f.logo}.`,
+		`  ${f.icon.padEnd(16)} the browser-tab and phone home-screen icon: a simple, square`,
+		'                   symbol (for example viewBox="0 0 512 512") that still reads at 16 × 16 px.',
+		'',
+		`  Each file: at most ${mb} MB, with a viewBox (or a width and height in px) so it`,
+		'  scales sharply. Nothing in it may be loaded from another file or the internet, and',
+		'  it may not contain scripts or links; a picture embedded inside the SVG is fine.',
+		'  Your files can have any names — they are saved under the names above, in',
+		'  /etc/morphit/branding/.',
+		'',
+		'  Copy them to this server first, from your own computer (capital -O):',
+		'    scp -O my-logo.svg my-footer-logo.svg my-icon.svg you@this-server:~/',
+		'',
+		'  Colours: your main colour is enough — or say "logo" and they are taken from your',
+		'  logo. Every other colour is worked out from it and checked for readability.'
+	];
+}
+
+/** The theme flags for a suggested theme. `theme: ''` first clears any preset
+ *  and middle stop, so the suggestion is applied exactly as shown. */
+function suggestedFlags(s: NonNullable<ReturnType<typeof suggestTheme>>): Record<string, string> {
+	return {
+		theme: '',
+		'theme-from': s.from,
+		'theme-to': s.to,
+		'theme-background': s.background,
+		'theme-button': s.button
+	};
+}
+
+/**
+ * The answer to branding setup's colour question, as `apply` flags. PURE.
+ *   logo              the colours of the operator's logo (`logos`: SVG texts)
+ *   #hex              their main colour; every other colour is worked out
+ *   #a #b [#bg]       the gradient's first and last colour (+ page background)
+ *   a preset name     morphit | champagne-gold
+ */
+export function colourAnswer(
+	raw: string,
+	logos: readonly string[]
+): { flags: Record<string, string> } | { error: string } {
+	const parts = raw
+		.trim()
+		.split(/[\s,]+/)
+		.filter((x) => x.length > 0);
+	const one = parts.length === 1 ? parts[0]!.toLowerCase() : null;
+	if (one === 'logo') {
+		if (logos.length === 0) {
+			return {
+				error:
+					'there is no logo to take colours from yet — give its file above, or type your main colour, e.g. #d4a017'
+			};
+		}
+		const s = suggestTheme(logos.flatMap((svg) => logoColours(svg)));
+		if (s === null) {
+			return {
+				error:
+					'your logo has no colour to take (only black, white or greys) — type your main colour instead, e.g. #d4a017'
+			};
+		}
+		return { flags: suggestedFlags(s) };
+	}
+	if (one !== null && themePreset(one) !== null) return { flags: { theme: one } };
+	if (one !== null) {
+		const hex = normalizeHex(one);
+		if (hex === null) {
+			return {
+				error: `"${sanitizeForTerm(parts[0]!)}" is not a colour — type it as hex, like #d4a017`
+			};
+		}
+		const s = suggestTheme([hex]);
+		if (s === null) {
+			return {
+				error: `${hex} is too grey, too dark or too light to be a main colour — pick a clearer colour, or type two: "#f3dca0 #bb872f"`
+			};
+		}
+		return { flags: suggestedFlags(s) };
+	}
+	if (parts.length >= 2 && parts.length <= 3) {
+		// `theme: ''` first: the answer is the whole theme, so a preset's or an
+		// earlier middle stop and button style are not left over (review, 2026-10-12).
+		const flags: Record<string, string> = {
+			theme: '',
+			'theme-from': parts[0]!,
+			'theme-to': parts[1]!
+		};
+		if (parts[2] !== undefined) flags['theme-background'] = parts[2];
+		return { flags };
+	}
+	return {
+		error:
+			'type "logo", your main colour (#d4a017), two or three colours (#f3dca0 #bb872f #181818), or a preset name'
+	};
+}
+
 /** Ask for an SVG file until it is valid, or Enter (keep what is there). */
 async function askSvg(
 	question: string,
@@ -303,7 +418,12 @@ async function runSetup(ctx: BrandingCtx, installDir: string): Promise<number> {
 	info('Per-instance branding (docs/BRANDING.md)');
 	describeSettings(settings);
 	info('');
-	if (!(await askYesNo('Change your branding now?', false))) return 0;
+	for (const line of brandingFilesGuide()) info(line);
+	info('');
+	if (!(await askYesNo('Change your branding now?', false))) {
+		info('Any time later: sudo morphit-ops branding setup');
+		return 0;
+	}
 	const has = (f: string): boolean => existsSync(join(settings.dir, f));
 	const flags: Record<string, string> = {};
 	info('');
@@ -325,32 +445,60 @@ async function runSetup(ctx: BrandingCtx, installDir: string): Promise<number> {
 		installDir
 	);
 	if (icon !== null) flags.icon = icon;
+	// The logos the colours can be taken from: the ones just given, else the ones
+	// already installed.
+	const logoTexts = (['logo', 'icon', 'logo-footer'] as const)
+		.map(
+			(k) =>
+				flags[k] ??
+				(has(BRANDING_FILE_FLAGS[k]) ? join(settings.dir, BRANDING_FILE_FLAGS[k]) : null)
+		)
+		.flatMap((p) => {
+			if (p === null) return [];
+			try {
+				return [readFileSync(p, 'utf8')];
+			} catch {
+				return [];
+			}
+		});
 	for (;;) {
 		const cur = resolveTheme(settings.theme);
 		const raw = (
 			await ask(
-				`Your colours? A preset (${Object.keys(THEME_PRESETS).join(', ')}), or your gradient's colours as ` +
-					`hex: "#f3dca0 #bb872f" (first and last), optionally a third for the page background.\n` +
+				'Your colours? Type one of:\n' +
+					(logoTexts.length > 0 ? '    logo             take them from your logo\n' : '') +
+					'    #d4a017          just your main colour — the rest is worked out from it\n' +
+					'    #f3dca0 #bb872f  your gradient\u2019s first and last colour (a third: the dark page background)\n' +
+					`    a preset         ${Object.keys(THEME_PRESETS).join(', ')}\n` +
 					`  (Enter keeps: ${describeTheme(settings.theme, cur.palette)})`
 			)
 		).trim();
 		if (raw === '') break;
-		const parts = raw.split(/[\s,]+/).filter((x) => x.length > 0);
-		const themeFlags: Record<string, string> = {};
-		if (parts.length === 1 && themePreset(parts[0]!.toLowerCase()) !== null) {
-			themeFlags.theme = parts[0]!.toLowerCase();
-		} else if (parts.length >= 2 && parts.length <= 3) {
-			themeFlags['theme-from'] = parts[0]!;
-			themeFlags['theme-to'] = parts[1]!;
-			if (parts[2] !== undefined) themeFlags['theme-background'] = parts[2];
-		} else {
-			warn('  Type a preset name, or two or three colours like: #f3dca0 #bb872f #121212');
+		const answer = colourAnswer(raw, logoTexts);
+		if ('error' in answer) {
+			warn(`  ${sanitizeForTerm(answer.error)}`);
 			continue;
 		}
+		const themeFlags = answer.flags;
 		const problem = themeUpdateProblem(themeFlags, settings.theme ?? null);
 		if (problem !== null) {
 			warn(`  ${sanitizeForTerm(problem)}. Try again.`);
 			continue;
+		}
+		if (themeFlags['theme-button'] !== undefined) {
+			// Worked out for them: show the result before it is used.
+			const u = themeUpdates(themeFlags);
+			const merged = 'updates' in u ? mergeTheme(settings.theme ?? null, u.updates) : null;
+			const shown = resolveTheme(merged);
+			info(`  Worked out: ${sanitizeForTerm(describeTheme(merged, shown.palette))}`);
+			if (shown.palette !== null) {
+				const t = shown.palette.tokens;
+				info(
+					`    accent ${t['brand-primary']}, button ${t['brand-btn-face']} with ${t['brand-btn-text'] === '#ffffff' ? 'white' : 'dark'} text, ` +
+						`page ${t['surface-950']}, cards ${t['surface-900']}, text ${t['surface-100']}`
+				);
+			}
+			if (!(await askYesNo('  Use these colours?', true))) continue;
 		}
 		Object.assign(flags, themeFlags);
 		break;

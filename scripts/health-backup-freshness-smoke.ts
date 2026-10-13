@@ -165,8 +165,8 @@ check(
 	'exported-but-uncalled logic reports nothing'
 );
 check(
-	"and RENDERS an 'IPFS/IPNS release seeding' block",
-	/console\.log\(`  \$\{c\.bold\('IPFS\/IPNS release seeding'\)\}/.test(health)
+	"and RENDERS a 'Release sharing (IPFS)' block",
+	/console\.log\(`  \$\{c\.bold\('Release sharing \(IPFS\)'\)\}/.test(health)
 );
 check(
 	'the detail line is always printed',

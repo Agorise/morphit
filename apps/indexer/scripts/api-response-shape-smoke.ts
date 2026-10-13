@@ -571,6 +571,7 @@ async function measured(answers: Record<string, ProbeResult>, urls = CANON): Pro
 		now: () => NOW,
 		probe: async (u) => answers[u] ?? down('network')
 	});
+	p.noteViewer(); // measured only while the card is read (v1.21.7)
 	await p.tick();
 	await new Promise((r) => setTimeout(r, 0));
 	return p;
@@ -585,6 +586,7 @@ await scenario('rpc-endpoints: PRIVACY — only the listed (published) URLs are 
 			return ok(120);
 		}
 	});
+	p.noteViewer();
 	await p.tick();
 	const r = p.snapshot(['https://a.example'], NOW);
 	assertEqual(probed, ['https://a.example'], 'nothing outside the published list is probed');
@@ -593,6 +595,7 @@ await scenario('rpc-endpoints: PRIVACY — only the listed (published) URLs are 
 
 await scenario('rpc-endpoints: order follows the list; a node not measured yet is "checking", not down', async () => {
 	const p = new RpcHealthProber(() => CANON, { now: () => NOW, probe: () => new Promise(() => {}) });
+	p.noteViewer();
 	await p.tick(); // probes never answer
 	const r = p.snapshot(CANON, NOW);
 	assertEqual(r.endpoints.map((e) => e.url), CANON, 'list order');

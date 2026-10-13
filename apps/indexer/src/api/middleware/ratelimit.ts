@@ -93,7 +93,7 @@ import { logger } from '$log';
 
 const log = logger('ratelimit');
 
-type Tier = 'list' | 'resource' | 'federation';
+type Tier = 'list' | 'resource' | 'federation' | 'rpc-endpoints';
 
 interface Bucket {
 	/** Unix-ms timestamps of requests still within the window. */

@@ -301,9 +301,11 @@
   # a not-yet-migrated (schemaless) DB rather than banking a useless fragment, so
   # a single early trigger writes nothing. Loop until a REAL dump lands (or give
   # up after ~5min — the daily timer is the final safety net). Idempotent.
+  # A dump is …sql.gz, or …sql.gz.age when backups are age-encrypted; looking
+  # only for the first made every encrypted install wait out all 20 tries.
   ansible.builtin.shell: |
     systemctl start morphit-backup.service
-    ls {{ morphit_service_home }}/backups/*.sql.gz >/dev/null 2>&1
+    compgen -G '{{ morphit_service_home }}/backups/*.sql.gz' >/dev/null || compgen -G '{{ morphit_service_home }}/backups/*.sql.gz.age' >/dev/null
   args:
     executable: /bin/bash
   register: morphit_first_backup

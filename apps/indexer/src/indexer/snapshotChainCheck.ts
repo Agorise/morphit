@@ -47,6 +47,10 @@ export interface SnapshotCheckDeps {
 	readonly randomInt: RandomInt;
 	/** Progress lines. */
 	readonly say: (line: string) => void;
+	/** Called before each chain read: "block 3 of 41", then "account 1 of 10".
+	 *  The reads take minutes over a pool with slow or dead nodes, and without
+	 *  this nothing moved on screen (2026-10-12). */
+	readonly progress?: (where: string) => void;
 }
 
 export interface SnapshotCheckResult {
@@ -83,6 +87,7 @@ export async function checkSnapshotAgainstChain(
 	deps: SnapshotCheckDeps
 ): Promise<SnapshotCheckResult> {
 	const { db, samples, upTo, randomInt, say } = deps;
+	const progress = deps.progress ?? ((): void => undefined);
 	const upper = upTo !== undefined ? 'AND block_num <= $2' : '';
 	const bounded = (lowest: number): unknown[] => [lowest, ...(upTo !== undefined ? [upTo] : [])];
 	const opsToCheck = new Map<string, StoredOpRef>();
@@ -170,8 +175,10 @@ export async function checkSnapshotAgainstChain(
 	// Group by block so each block is fetched once.
 	const byBlock = new Map<number, StoredOpRef[]>();
 	for (const r of sampledOps) byBlock.set(r.blockNum, [...(byBlock.get(r.blockNum) ?? []), r]);
+	let nth = 0;
 	for (const [blockNum, refs] of byBlock) {
 		sampled += refs.length;
+		progress(`block ${++nth} of ${byBlock.size}`);
 		const block = await fetchBlock(blockNum);
 		if (!block) {
 			unreachable += refs.length;
@@ -195,7 +202,9 @@ export async function checkSnapshotAgainstChain(
 			)
 		).rows[0]?.n ?? '0'
 	);
-	for (const i of randomDistinctIndices(accountCount, derivedSample, randomInt)) {
+	const accountPicks = randomDistinctIndices(accountCount, derivedSample, randomInt);
+	let nthAccount = 0;
+	for (const i of accountPicks) {
 		const a = (
 			await db.query<{ name: string; created_block_num: string; created_trx_id: string }>(
 				`SELECT name, created_block_num::text, created_trx_id FROM accounts
@@ -205,6 +214,7 @@ export async function checkSnapshotAgainstChain(
 		).rows[0];
 		if (!a) continue;
 		sampled++;
+		progress(`account ${++nthAccount} of ${accountPicks.length}`);
 		const block = await fetchBlock(Number(a.created_block_num));
 		if (!block) {
 			unreachable++;

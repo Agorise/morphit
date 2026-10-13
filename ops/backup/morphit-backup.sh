@@ -163,7 +163,7 @@ fi
 # unused rather than silently shipping a leak.
 if [ -n "$AGE_RECIPIENT" ] && [ -n "$(is_placeholder "$AGE_RECIPIENT")" ]; then
 	echo "morphit-backup: warning: AGE_RECIPIENT looks like a placeholder (\"$AGE_RECIPIENT\"); skipping age encryption" >&2
-	echo "  Hint: generate a real age key with \`age-keygen -o ~/.age/morphit-backup.key\` and put its public side in /etc/morphit/backup.env" >&2
+	echo "  Hint: generate a real age key on your own computer with \`age-keygen -o ~/morphit-backup-key-<your domain>.txt\` and put the line it prints after \"Public key:\" in /etc/morphit/backup.env" >&2
 	AGE_RECIPIENT=""
 fi
 if [ -n "$REMOTE_DESTINATION" ] && [ -n "$(is_placeholder "$REMOTE_DESTINATION")" ]; then
@@ -338,7 +338,10 @@ run_dump() {
 # check below reports the failure honestly rather than masking it as "no schema".
 # shellcheck disable=SC2086  # DUMP_CMD deliberately word-split
 schema_probe=$($DUMP_CMD --schema-only "$DB_NAME" 2>/dev/null) && schema_probe_ok=1 || schema_probe_ok=0
-if [ "$schema_probe_ok" = "1" ] && [ -n "$schema_probe" ] && ! printf '%s\n' "$schema_probe" | grep -qi 'CREATE TABLE'; then
+# `grep -c`, not `grep -q`: -q stops reading at the first match and closes the
+# pipe, and under systemd (SIGPIPE ignored) printf then fails on the rest of a
+# large schema and logs "printf: I/O error" on every backup (2026-10-12).
+if [ "$schema_probe_ok" = "1" ] && [ -n "$schema_probe" ] && ! printf '%s\n' "$schema_probe" | grep -ci 'CREATE TABLE' >/dev/null; then
 	echo "morphit-backup: indexer schema not migrated yet (no tables) — skipping this run; the timer will capture a real backup once the schema exists." >&2
 	exit 0
 fi

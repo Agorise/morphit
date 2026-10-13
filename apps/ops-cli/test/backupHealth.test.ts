@@ -28,7 +28,8 @@ import {
 	BACKUP_MIN_PLAUSIBLE_BYTES,
 	type BackupFacts
 } from '../src/commands/health.ts';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -152,7 +153,10 @@ describe('checkBackups', () => {
 		// only the size can tell the operator their restore point is worthless.
 		const atMs = NOW.getTime() - 13 * HOUR;
 		const s = checkBackups(
-			facts({ newest: { name: 'morphit-20260722-042219.sql.gz', atMs, bytes: 20 }, lastTriggerMs: atMs }),
+			facts({
+				newest: { name: 'morphit-20260722-042219.sql.gz', atMs, bytes: 20 },
+				lastTriggerMs: atMs
+			}),
 			NOW
 		);
 		expect(s.state).toBe('failing');
@@ -225,5 +229,77 @@ describe('backup formatting', () => {
 		expect(formatBackupSize(512)).toBe('512B');
 		expect(formatBackupSize(407487)).toBe('398K');
 		expect(formatBackupSize(5 * 1024 * 1024)).toBe('5.0M');
+	});
+});
+
+describe('readBackupFacts — age-encrypted backups (2026-10-12)', () => {
+	// With an age key set, morphit-backup.sh names its dumps …sql.gz.age. The
+	// check looked only for …sql.gz, so a node with good encrypted backups
+	// showed "Backups ✗ missing — no dump has ever been written".
+	function dirWith(files: Record<string, number>): { env: string; d: string } {
+		const d = mkdtempSync(join(tmpdir(), 'morphit-bk-age-'));
+		const dir = join(d, 'backups');
+		mkdirSync(dir);
+		for (const [name, ageH] of Object.entries(files)) {
+			const p = join(dir, name);
+			writeFileSync(p, 'x'.repeat(5000));
+			const t = (NOW.getTime() - ageH * HOUR) / 1000;
+			utimesSync(p, t, t);
+		}
+		const env = join(d, 'backup.env');
+		writeFileSync(env, `BACKUP_DIR=${dir}\nAGE_RECIPIENT=age1example\n`);
+		return { env, d };
+	}
+
+	it('an encrypted dump counts as a backup', () => {
+		const { env, d } = dirWith({ 'morphit-20261012-120000.sql.gz.age': 2 });
+		try {
+			expect(readBackupFacts(env).newest?.name).toBe('morphit-20261012-120000.sql.gz.age');
+		} finally {
+			rmSync(d, { recursive: true, force: true });
+		}
+	});
+
+	it('the newest of plain and encrypted dumps wins; half-written ones never count', () => {
+		const { env, d } = dirWith({
+			'morphit-20261010-120000.sql.gz': 50,
+			'morphit-20261012-120000.sql.gz.age': 2,
+			'morphit-20261012-130000.sql.gz.age.partial': 1,
+			'morphit-20261012-130000.sql.gz.partial': 1
+		});
+		try {
+			expect(readBackupFacts(env).newest?.name).toBe('morphit-20261012-120000.sql.gz.age');
+		} finally {
+			rmSync(d, { recursive: true, force: true });
+		}
+	});
+
+	it('the install waits for an encrypted first backup too', () => {
+		const tasks = readFileSync(
+			new URL('../../../ops/ansible/roles/morphit/tasks/main.yml', import.meta.url),
+			'utf8'
+		);
+		const task = tasks.slice(tasks.indexOf('- name: Take the first DB backup now'));
+		const cmd = task.slice(
+			task.indexOf('systemctl start morphit-backup.service'),
+			task.indexOf('args:')
+		);
+		// Run the task's own check against a directory holding only an encrypted dump.
+		const d = mkdtempSync(join(tmpdir(), 'morphit-bk-ans-'));
+		mkdirSync(join(d, 'backups'));
+		writeFileSync(join(d, 'backups', 'morphit-20261012-120000.sql.gz.age'), 'x');
+		try {
+			const check = cmd
+				.split('\n')
+				.slice(1)
+				.join('\n')
+				.replace(/\{\{ morphit_service_home \}\}/g, d);
+			expect(spawnSync('bash', ['-c', check]).status).toBe(0);
+			rmSync(join(d, 'backups', 'morphit-20261012-120000.sql.gz.age'));
+			writeFileSync(join(d, 'backups', 'morphit-20261012-120000.sql.gz.age.partial'), 'x');
+			expect(spawnSync('bash', ['-c', check]).status).not.toBe(0);
+		} finally {
+			rmSync(d, { recursive: true, force: true });
+		}
 	});
 });

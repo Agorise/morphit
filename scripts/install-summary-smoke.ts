@@ -5,13 +5,14 @@
  * summary COMPREHENSIVE + async (live indexer/relay /v1/health + on-chain relay
  * balance + FX feeds + IPFS/IPNS + MCP + system health + a roll-up over every
  * unit), so this exercises each new row's up/down/unknown logic without a live
- * box. allComponentsUp is the register gate: any DOWN (or still-unknown) piece
- * blocks it; a merely-catching-up indexer stays `active` and does NOT block.
+ * box. readyToList is the listing gate (v1.21.7): the chain reachable and
+ * nothing the listing needs ✗; a merely-catching-up indexer does NOT block, and
+ * neither do the rows a fresh VPS always has ✗ at install time (PGP key, canary).
  */
 import {
 	collectInstallSummary,
 	renderInstallSummary,
-	allComponentsUp,
+	readyToList,
 	expectedUnits,
 	type ComponentStatus,
 	type SummaryProbe,
@@ -46,7 +47,12 @@ function allUpProbe(): SummaryProbe {
 				? 'testonionaddressxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.onion'
 				: p.endsWith('canary.txt')
 					? 'Morphit warrant canary — valid_through 2099-12-31'
-					: 'x',
+					: p.endsWith('/morphit.config.env')
+						? // The node advertises the addresses it created (v1.21.7: the
+							// review checks the settings, not only Tor's own file).
+							'MORPHIT_INSTANCE_TOR_ADDRESS=testonionaddressxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.onion\n' +
+							`MORPHIT_INSTANCE_I2P_B32_ADDRESS=${'b'.repeat(52)}.b32.i2p`
+						: 'x',
 		indexerHealth: async () => HEALTHY_INDEXER,
 		relayReachable: async () => true,
 		relayBalanceBlurt: async () => 2500, // ~25 signups
@@ -220,8 +226,8 @@ async function main(): Promise<void> {
 	);
 	check('indexer-unreachable → FX row is ? (not ✗)', find(unreachRows, /FX price/i)?.ok === null);
 	check(
-		'warming indexer (HTTP not up yet) does NOT block announce',
-		allComponentsUp(unreachRows) === true
+		'warming indexer (HTTP not up yet): not listed this second (queued — the chain is not confirmed yet)',
+		readyToList(unreachRows) === false
 	);
 	const lowBal: SummaryProbe = { ...allUpProbe(), relayBalanceBlurt: async () => 50 }; // < 100 = under one signup
 	check(
@@ -299,20 +305,22 @@ async function main(): Promise<void> {
 		)?.ok === true
 	);
 
-	// ── allComponentsUp: the register gate ─────────────────────────
+	// ── readyToList: the listing gate ──────────────────────────────
+	check('readyToList: TRUE when every probe is up/healthy/funded', readyToList(vpsRows) === true);
+	check('contact configured does not block register', readyToList(withContact) === true);
 	check(
-		'allComponentsUp: TRUE when every probe is up/healthy/funded',
-		allComponentsUp(vpsRows) === true
+		'readyToList: the PGP key and the canary (signed later, elsewhere) do NOT block it',
+		readyToList(vpsRows.map((r) => (/PGP|canary/i.test(r.label) ? { ...r, ok: false } : r))) ===
+			true
 	);
-	check('contact configured does not block register', allComponentsUp(withContact) === true);
 	const idxSvcDown: SummaryProbe = {
 		...allUpProbe(),
 		serviceActive: (u) => !/morphit-indexer/.test(u)
 	};
 	const idxSvcDownRows = await collectInstallSummary(vpsInputs, idxSvcDown);
 	check(
-		'allComponentsUp: FALSE when the indexer service is down',
-		allComponentsUp(idxSvcDownRows) === false
+		'readyToList: FALSE when the indexer service is down',
+		readyToList(idxSvcDownRows) === false
 	);
 	const catchingUp = await collectInstallSummary(vpsInputs, {
 		...allUpProbe(),
@@ -320,31 +328,24 @@ async function main(): Promise<void> {
 	});
 	check(
 		'catching-up indexer (synced=false) does NOT block register',
-		allComponentsUp(catchingUp) === true
+		readyToList(catchingUp) === true
 	);
 	check(
 		'catching-up indexer shows the sync state as its value',
 		/catching up/i.test(find(catchingUp, /processing the chain/i)?.value ?? '')
 	);
 	check(
-		'allComponentsUp: FALSE when HTTPS cert missing',
-		allComponentsUp(
+		'readyToList: FALSE when the relay balance is under one signup',
+		readyToList(await collectInstallSummary(vpsInputs, lowBal)) === false
+	);
+	check(
+		'readyToList: FALSE when the chain is not reachable',
+		readyToList(
 			await collectInstallSummary(vpsInputs, {
 				...allUpProbe(),
-				pathExists: () => false,
-				readText: () => null
+				indexerHealth: async () => ({ ...HEALTHY_INDEXER, rpcOk: false })
 			})
 		) === false
-	);
-	check(
-		'allComponentsUp: FALSE when firewall inactive',
-		allComponentsUp(
-			await collectInstallSummary(vpsInputs, { ...allUpProbe(), firewallActive: () => false })
-		) === false
-	);
-	check(
-		'allComponentsUp: FALSE when relay balance is zero-ish',
-		allComponentsUp(await collectInstallSummary(vpsInputs, lowBal)) === false
 	);
 
 	// ── renderInstallSummary: pure formatting ──────────────────────

@@ -156,12 +156,15 @@ OUT_FC="$(cd "$REPO" && env \
 # printed from a config boolean, so it keeps appearing even if the omission
 # itself is broken — a mutation that let a hidden-only node use clearnet slipped
 # straight past an assertion on that string. The honest signal is the SOURCE
-# COUNT: with two hidden peers and a clearnet gateway on offer, a fail-closed
-# node must list exactly the two, and must never try the clearnet one.
+# COUNT: with two hidden peers (the registration's .onion and .b32.i2p), the two
+# hidden RPC nodes of the settings (v1.21.7: asked for the snapshot too; the
+# first is the peer's own .b32.i2p, listed once) and a clearnet gateway on offer,
+# a fail-closed node must list exactly the three hidden ones, and must never try
+# the clearnet one.
 SRC_LINE="$(printf '%s' "$OUT_FC" | grep -oE '[0-9]+ sources? to try' | head -1)"
 case "$SRC_LINE" in
-	"2 sources to try")
-		ok "a clearnet gateway on offer is EXCLUDED from the source list (2 hidden only)" ;;
+	"3 sources to try")
+		ok "a clearnet gateway on offer is EXCLUDED from the source list (3 hidden only)" ;;
 	*)
 		no "hidden-only source list was '$SRC_LINE' — a clearnet source leaked in"
 		printf '%s\n' "$OUT_FC" | sed 's/^/      /' | tail -4 ;;

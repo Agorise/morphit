@@ -24,6 +24,7 @@ import {
 	readFileSync,
 	readdirSync,
 	rmSync,
+	statSync,
 	symlinkSync,
 	writeFileSync
 } from 'node:fs';
@@ -276,8 +277,12 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			MORPHIT_INDEXER_START_BLOCK: '1',
 			MORPHIT_INDEXER_RPC_ENDPOINTS: '',
 			MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS: '',
-			MORPHIT_RPC_HEALTH_STATE: join(work, 'health.json')
+			MORPHIT_RPC_HEALTH_STATE: join(work, 'health.json'),
+			// fast-sync's "the restore began" marker (v1.21.7).
+			MORPHIT_SNAPSHOT_RESTORE_MARKER: join(work, 'restore-started')
 		});
+		/** The marker is gone: the database is untouched, or restored and checked. */
+		const markerCleared = (): boolean => !existsSync(join(work, 'restore-started'));
 
 		async function freshDst(): Promise<void> {
 			await admin(async (c) => {
@@ -448,6 +453,8 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			expect(existsSync(pwned)).toBe(false);
 			expect(r.code).not.toBe(0);
 			expect(await dstIntact()).toBe(true);
+			// psql rolled back: fast-sync must not read this as "replaced".
+			expect(markerCleared()).toBe(true);
 		}, 60_000);
 
 		it("this box's psql accepts \\restrict — without it every restore test here passes for the wrong reason", () => {
@@ -575,6 +582,29 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			).toBe(0);
 		}, 60_000);
 
+		it('a restore whose tidy-up fails exits 4: replaced, not to be served (v1.21.7)', async () => {
+			await freshDst();
+			// A constraint the tidy-up (which resets this node's probe opinions)
+			// cannot satisfy: the restore commits, the tidy-up then fails.
+			const t = tarball(
+				work,
+				baseTar,
+				(s) =>
+					s +
+					`\nUPDATE public.known_instances SET last_probed_at = now();\n` +
+					`ALTER TABLE public.known_instances ADD CONSTRAINT probed_always CHECK (last_probed_at IS NOT NULL);\n`
+			);
+			const r = await run(
+				'snapshot-bootstrap.ts',
+				[t.tar, '--i-trust-this-source', '--force'],
+				env(DST)
+			);
+			// Before v1.21.7: exit 1, read by every caller as "nothing changed".
+			expect(r.code, r.err).toBe(4);
+			expect(r.err).toMatch(/could not tidy the restored database/);
+			expect(markerCleared(), 'the marker fast-sync reads was removed').toBe(false);
+		}, 60_000);
+
 		describe('from chain', () => {
 			let gateway: Srv;
 			let served: Buffer = Buffer.alloc(0);
@@ -584,13 +614,15 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				MORPHIT_IPFS_GATEWAYS: gateway.url,
 				MORPHIT_LOCAL_IPFS_GATEWAY: gateway.url
 			});
-			const payloadFor = (sha: string): Record<string, unknown> => ({
+			// size_bytes is the tarball's exact size: fast-sync refuses a copy of
+			// any other size (v1.21.7).
+			const payloadFor = (t: { sha: string; tar: string }): Record<string, unknown> => ({
 				ipfs_cid: CID,
-				sha256: sha,
+				sha256: t.sha,
 				chain_id: CHAIN_ID,
 				schema_version: manifest.schemaVersion,
 				last_applied_block: manifest.lastAppliedBlock,
-				size_bytes: 1000,
+				size_bytes: statSync(t.tar).size,
 				indexer_version: '1.18.0'
 			});
 			beforeAll(async () => {
@@ -628,7 +660,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 
 			it('the mirror job will not pin a CID one hostile RPC node made up (rv2-1, snapshot-mirror)', async () => {
 				const t = tarball(work, baseTar, (s) => s);
-				const forged = publish(LEAKED, payloadFor(t.sha), 8_000_010);
+				const forged = publish(LEAKED, payloadFor(t), 8_000_010);
 				const hostile = await chainStub('127.0.0.1', forged);
 				const honest = await chainStub('localhost', { history: [], blocks: {} });
 				servers.push(hostile, honest);
@@ -639,7 +671,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 
 			it('the mirror job pins a genuinely signed, agreed snapshot (rv2-1 happy path)', async () => {
 				const t = tarball(work, baseTar, (s) => s);
-				const view = publish(OFFICIAL, payloadFor(t.sha), 8_000_011);
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_011);
 				const a = await chainStub('127.0.0.1', view);
 				const b = await chainStub('localhost', view);
 				servers.push(a, b);
@@ -654,7 +686,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				const t = tarball(work, baseTar, (s) => `\\! id > ${pwned}\n` + s);
 				served = readFileSync(t.tar);
 				// The forger has no @morphit key: it signs with its own.
-				const forged = publish(LEAKED, payloadFor(t.sha), 8_000_000);
+				const forged = publish(LEAKED, payloadFor(t), 8_000_000);
 				const hostile = await chainStub('127.0.0.1', forged);
 				const honest = await chainStub('localhost', { history: [], blocks: {} });
 				servers.push(hostile, honest);
@@ -674,7 +706,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				await freshDst();
 				const t = tarball(work, baseTar, (s) => s);
 				served = readFileSync(t.tar);
-				const view = publish(LEAKED, payloadFor(t.sha), 8_000_001);
+				const view = publish(LEAKED, payloadFor(t), 8_000_001);
 				const a = await chainStub('127.0.0.1', view);
 				const b = await chainStub('localhost', view);
 				servers.push(a, b);
@@ -693,7 +725,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				await freshDst();
 				const t = tarball(work, baseTar, (s) => s);
 				served = readFileSync(t.tar);
-				const view = publish(OFFICIAL, payloadFor(t.sha), 8_000_002);
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_002);
 				const a = await chainStub('127.0.0.1', view);
 				const b = await chainStub('localhost', view);
 				servers.push(a, b);
@@ -706,13 +738,14 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				expect(
 					(await q(DST, `SELECT last_applied_block::int AS b FROM indexer_state`)).rows[0].b
 				).toBe(manifest.lastAppliedBlock);
+				expect(markerCleared()).toBe(true);
 			}, 90_000);
 
 			it('the op-log spot-check runs and an empty ops log is INCONCLUSIVE, not a quarantine (rv2-6)', async () => {
 				await freshDst();
 				const t = tarball(work, baseTar, (s) => s);
 				served = readFileSync(t.tar);
-				const view = publish(OFFICIAL, payloadFor(t.sha), 8_000_003);
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_003);
 				const a = await chainStub('127.0.0.1', view);
 				const b = await chainStub('localhost', view);
 				servers.push(a, b);
@@ -728,6 +761,309 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 					(await q(DST, `SELECT last_applied_block::int AS b FROM indexer_state`)).rows[0].b
 				).toBe(manifest.lastAppliedBlock);
 			}, 90_000);
+
+			it('a restore the op-log check QUARANTINES exits 4: replaced, not to be served (v1.21.7)', async () => {
+				await freshDst();
+				// A live order with no op behind it: not what the chain says.
+				const t = tarball(
+					work,
+					baseTar,
+					(s) =>
+						s +
+						`\nINSERT INTO public.orders (account, permlink, side, asset, fiat_currency, price_model, payment_methods, status, created_at, updated_at, fee_status, fee_method) VALUES ('mallory', 'free-1', 'sell', 'BTC', 'USD', '{}'::jsonb, ARRAY['cash'], 'live', now(), now(), 'verified', 'blurt');\n`
+				);
+				served = readFileSync(t.tar);
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_004);
+				const a = await chainStub('127.0.0.1', view);
+				const b = await chainStub('localhost', view);
+				servers.push(a, b);
+				const r = await run(
+					'snapshot-bootstrap.ts',
+					['--from-chain', '--i-trust-signer', '--force'],
+					chainEnv([a, b])
+				);
+				// Before: exit 1, which every caller read as "nothing changed" and
+				// started the indexer on the forged order (review, 2026-10-12).
+				expect(r.code, r.err).toBe(4);
+				expect(r.err).toMatch(/QUARANTINED/);
+			}, 120_000);
+
+			it('a copy of another size than the signed one is never unpacked (v1.21.7)', async () => {
+				await freshDst();
+				const t = tarball(work, baseTar, (s) => s);
+				// Larger: curl stops at the signed size (--max-filesize). Smaller (a
+				// copy cut short) gets as far as the size check, before any unpacking.
+				const whole = readFileSync(t.tar);
+				served = Buffer.concat([whole, Buffer.alloc(4096)]);
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_005);
+				const a = await chainStub('127.0.0.1', view);
+				const b = await chainStub('localhost', view);
+				servers.push(a, b);
+				const r = await run(
+					'snapshot-bootstrap.ts',
+					['--from-chain', '--i-trust-signer', '--force', '--skip-verify'],
+					chainEnv([a, b])
+				);
+				expect(r.code).toBe(1);
+				expect(r.err).toMatch(/maximum allowed file size/);
+				expect(await dstIntact()).toBe(true);
+				served = whole.subarray(0, whole.length - 100);
+				const r2 = await run(
+					'snapshot-bootstrap.ts',
+					['--from-chain', '--i-trust-signer', '--force', '--skip-verify'],
+					chainEnv([a, b])
+				);
+				expect(r2.code).toBe(1);
+				expect(r2.err).toMatch(/the signed record says/);
+				expect(await dstIntact()).toBe(true);
+			}, 90_000);
+
+			it('a hidden or local source that redirects is not followed (v1.21.7)', async () => {
+				await freshDst();
+				const t = tarball(work, baseTar, (s) => s);
+				const good = await serve('127.0.0.1', () => ({ body: readFileSync(t.tar) }));
+				let redirected = 0;
+				const server = http.createServer((req, res) => {
+					redirected++;
+					res.writeHead(302, { location: `${good.url}${req.url}` });
+					res.end();
+				});
+				await new Promise<void>((ok) => server.listen(0, '127.0.0.1', () => ok()));
+				const redirector: Srv = {
+					url: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+					hits: 0,
+					close: () =>
+						new Promise<void>((ok) => {
+							server.closeAllConnections?.();
+							server.close(() => ok());
+						})
+				};
+				const nothing = await serve('127.0.0.1', () => ({ status: 404, body: 'no' }));
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_008);
+				const a = await chainStub('127.0.0.1', view);
+				const b = await chainStub('localhost', view);
+				servers.push(a, b, good, redirector, nothing);
+				const r = await run(
+					'snapshot-bootstrap.ts',
+					['--from-chain', '--i-trust-signer', '--force', '--skip-verify'],
+					{
+						...chainEnv([a, b]),
+						MORPHIT_IPFS_GATEWAYS: nothing.url,
+						MORPHIT_LOCAL_IPFS_GATEWAY: redirector.url
+					}
+				);
+				expect(redirected).toBeGreaterThan(0);
+				// A hidden source could otherwise send a Tor/I2P-only box to a
+				// clearnet address, through its proxy.
+				expect(good.hits).toBe(0);
+				expect(r.code).toBe(1);
+				expect(await dstIntact()).toBe(true);
+			}, 90_000);
+
+			it('a hostile first source of exactly the signed size is skipped, and the next one restores (v1.21.7)', async () => {
+				await freshDst();
+				const t = tarball(work, baseTar, (s) => s);
+				const goodBytes = readFileSync(t.tar);
+				// The dump a link to /dev/zero, padded to the signed size.
+				const hw = mkdtempSync(join(work, 'hostile-'));
+				writeFileSync(join(hw, 'manifest.json'), '{}');
+				symlinkSync('/dev/zero', join(hw, 'indexer.sql.gz'));
+				spawnSync('tar', [
+					'-czf',
+					join(hw, 'h.tar.gz'),
+					'-C',
+					hw,
+					'manifest.json',
+					'indexer.sql.gz'
+				]);
+				const h = readFileSync(join(hw, 'h.tar.gz'));
+				const hostileBytes = Buffer.concat([h, Buffer.alloc(goodBytes.length - h.length)]);
+				const bad = await serve('127.0.0.1', () => ({ body: hostileBytes }));
+				const good = await serve('127.0.0.1', () => ({ body: goodBytes }));
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_009);
+				const a = await chainStub('127.0.0.1', view);
+				const b = await chainStub('localhost', view);
+				servers.push(a, b, bad, good);
+				const r = await run(
+					'snapshot-bootstrap.ts',
+					['--from-chain', '--i-trust-signer', '--force', '--skip-verify'],
+					{
+						...chainEnv([a, b]),
+						MORPHIT_LOCAL_IPFS_GATEWAY: bad.url,
+						MORPHIT_IPFS_GATEWAYS: good.url,
+						// Not hidden-only, so the public gateway is a source too.
+						MORPHIT_INDEXER_RPC_ENDPOINTS: 'https://rpc.invalid',
+						MORPHIT_SNAPSHOT_NO_KUBO: '1'
+					}
+				);
+				expect(bad.hits).toBeGreaterThan(0);
+				expect(good.hits).toBeGreaterThan(0);
+				expect(r.code, r.err).toBe(0);
+			}, 90_000);
+
+			/** The bootstrap as fast-sync runs it (tsx, which relays a Ctrl+C to its
+			 *  child), in a TMPDIR of its own and with fast-sync's marker; `ctrlC`
+			 *  is sent to tsx's own process once `when` returns true. */
+			async function bootstrapCtrlC(
+				rpcs: Srv[],
+				when: (out: string) => boolean,
+				afterMs: number,
+				/** Sent to the whole process group (a closed terminal) instead. */
+				toGroup: NodeJS.Signals | null = null
+			): Promise<{ code: number | null; out: string; tmpLeft: string[]; marker: boolean }> {
+				const tmp = mkdtempSync(join(work, 'tmp-'));
+				const marker = join(work, `marker-${randomBytes(3).toString('hex')}`);
+				const p = spawn(
+					TSX,
+					[
+						'--tsconfig',
+						join(REPO, 'tsconfig.smoke.json'),
+						join(REPO, 'apps/indexer/scripts/snapshot-bootstrap.ts'),
+						'--from-chain',
+						'--i-trust-signer',
+						'--force',
+						'--verify-samples',
+						'2'
+					],
+					{
+						cwd: REPO,
+						env: {
+							...process.env,
+							...chainEnv(rpcs),
+							TMPDIR: tmp,
+							MORPHIT_SNAPSHOT_RESTORE_MARKER: marker
+						},
+						stdio: ['ignore', 'pipe', 'pipe'],
+						detached: toGroup !== null
+					}
+				);
+				let out = '';
+				let sent = false;
+				const onData = (d: Buffer): void => {
+					out += String(d);
+					if (!sent && when(out)) {
+						sent = true;
+						setTimeout(() => {
+							if (toGroup === null) p.kill('SIGINT');
+							else process.kill(-p.pid!, toGroup);
+						}, afterMs);
+					}
+				};
+				p.stdout.on('data', onData);
+				p.stderr.on('data', onData);
+				const code = await new Promise<number | null>((r) => p.on('close', (c) => r(c)));
+				const tmpLeft = readdirSync(tmp).filter((n) => n.startsWith('morphit-snap-restore-'));
+				const left = existsSync(marker);
+				rmSync(marker, { force: true });
+				return { code, out, tmpLeft, marker: left };
+			}
+
+			it('Ctrl+C during the op-log check, relayed by tsx: exit 4 (replaced, not checked), never "nothing changed" (v1.21.7)', async () => {
+				await freshDst();
+				const t = tarball(work, baseTar, (s) => s);
+				served = readFileSync(t.tar);
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_006);
+				// Blocks other than the snapshot op's own answer slowly (a Tor-like
+				// chain): the check takes seconds, and the Ctrl+C lands inside it.
+				const slowChain = async (host: string): Promise<Srv> => {
+					const server = http.createServer((req, res) => {
+						let body = '';
+						req.on('data', (c) => (body += c));
+						req.on('end', () => {
+							const j = JSON.parse(body) as { id?: number; method?: string; params?: unknown[] };
+							let result: unknown = null;
+							let delay = 0;
+							if (j.method === 'condenser_api.get_account_history') result = view.history;
+							else if (j.method === 'condenser_api.get_block') {
+								const n = Number((j.params ?? [])[0]);
+								if (n !== 8_000_006) delay = 3000;
+								result = view.blocks[n] ?? null;
+							} else if (j.method === 'condenser_api.get_dynamic_global_properties')
+								result = {
+									head_block_number: 9_000_000,
+									last_irreversible_block_num: 9_000_000,
+									time: '2026-09-24T00:00:00'
+								};
+							setTimeout(() => {
+								res.writeHead(200);
+								res.end(JSON.stringify({ jsonrpc: '2.0', id: j.id ?? 0, result }));
+							}, delay);
+						});
+					});
+					await new Promise<void>((ok) => server.listen(0, '127.0.0.1', () => ok()));
+					return {
+						url: `http://${host}:${(server.address() as { port: number }).port}`,
+						hits: 0,
+						close: () =>
+							new Promise<void>((ok) => {
+								server.closeAllConnections?.();
+								server.close(() => ok());
+							})
+					};
+				};
+				const a = await slowChain('127.0.0.1');
+				const b = await slowChain('localhost');
+				servers.push(a, b);
+				const r = await bootstrapCtrlC(
+					[a, b],
+					(o) => /op-log spot-check against the chain/.test(o),
+					1500
+				);
+				// Before: tsx found its child blocked in spawnSync, killed it, and
+				// exited 130 — read by fast-sync as "the database is as it was", and
+				// the indexer was started on it (review, 2026-10-12).
+				expect(r.code, r.out).toBe(4);
+				expect(
+					(await q(DST, `SELECT last_applied_block::int AS b FROM indexer_state`)).rows[0].b
+				).toBe(manifest.lastAppliedBlock);
+				expect(r.marker, 'the marker fast-sync reads was removed').toBe(true);
+				expect(r.tmpLeft).toEqual([]);
+			}, 180_000);
+
+			for (const [label, toGroup, code] of [
+				['Ctrl+C', null, 130],
+				// tsx itself dies of a SIGHUP (no exit code); the bootstrap still cleans up.
+				['a closed terminal (SIGHUP to the group)', 'SIGHUP', null],
+				['SIGTERM to the group', 'SIGTERM', 143]
+			] as const)
+				it(`${label} during the download: stops at once, nothing changed, nothing left in /tmp (v1.21.7)`, async () => {
+					await freshDst();
+					const t = tarball(work, baseTar, (s) => s);
+					const view = publish(OFFICIAL, payloadFor(t), 8_000_007);
+					const a = await chainStub('127.0.0.1', view);
+					const b = await chainStub('localhost', view);
+					servers.push(a, b);
+					// A gateway that sends part of the snapshot, then nothing.
+					const whole = readFileSync(t.tar);
+					const slow = http.createServer((_req, res) => {
+						res.writeHead(200, { 'content-length': String(whole.length) });
+						res.write(whole.subarray(0, Math.floor(whole.length / 2)));
+					});
+					await new Promise<void>((ok) => slow.listen(0, '127.0.0.1', () => ok()));
+					const url = `http://127.0.0.1:${(slow.address() as { port: number }).port}`;
+					servers.push({
+						url,
+						hits: 0,
+						close: () =>
+							new Promise<void>((ok) => {
+								slow.closeAllConnections?.();
+								slow.close(() => ok());
+							})
+					});
+					const saved = gateway.url;
+					gateway.url = url;
+					try {
+						const r = await bootstrapCtrlC([a, b], (o) => /fetching from/i.test(o), 1500, toGroup);
+						expect(r.code, r.out).toBe(code);
+						expect(await dstIntact()).toBe(true);
+						expect(r.marker).toBe(false);
+						// Before: tsx killed the process in spawnSync(curl), and the
+						// half download stayed in /tmp.
+						expect(r.tmpLeft).toEqual([]);
+					} finally {
+						gateway.url = saved;
+					}
+				}, 120_000);
 
 			it('the spot-check itself calls an empty ops log inconclusive (exit 2), never verified (rv2-6)', async () => {
 				const a = await chainStub('127.0.0.1', { history: [], blocks: {} });

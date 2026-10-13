@@ -119,7 +119,7 @@ import { operatorRegistrationRoute } from '$api/operatorRegistration';
 import { activityRoute } from '$api/activity';
 import { statsRoute } from '$api/stats';
 import {
-	rpcEndpointsRoute,
+	rpcEndpointsApp,
 	RpcHealthProber,
 	publishedRpcEndpoints,
 	directoryHiddenEndpoints,
@@ -1053,8 +1053,9 @@ async function main(): Promise<void> {
 	app.route('/v1/stats', statsApp);
 
 	// Per-node health of the PUBLIC Blurt RPC nodes for the stats page's RPC
-	// card. A background prober (v1.21.6) measures every node continuously, so
-	// the card opens on real, current figures; ?probe=1 re-measures now.
+	// card. A prober measures every node while the card is being read (v1.21.7:
+	// only then, and each node at most once per 10 s), so the card opens on
+	// real figures; ?probe=1 re-measures nodes not measured in the last 10 s.
 	// Allow-list = the PUBLIC lists only (publishedRpcEndpoints): the clearnet
 	// canon, the built-in hidden canon this instance uses, and the signed
 	// directory's hidden nodes. The operator's own onion/I2P/local endpoints are
@@ -1065,28 +1066,28 @@ async function main(): Promise<void> {
 	// Live getter (re-derived per call, ~60s dir cache): a newly-pinned hidden
 	// node is measured and shown network-wide without an indexer restart or a
 	// Morphit release; a removed one drops off (rpc_directory is latest-wins).
+	// Read through the API pool (apiDb), like the other public reads.
 	const publishedRpcUrls = async (): Promise<readonly string[]> =>
 		publishedRpcEndpoints({
 			usesClearnet: config.blurtRpcEndpoints.length > 0,
 			clearnetCanon: DEFAULT_BLURT_RPC_ENDPOINTS,
 			hiddenCanon: DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS,
 			configuredHidden: config.hiddenRpcEndpoints,
-			directoryHidden: await directoryHiddenEndpoints(db)
+			directoryHidden: await directoryHiddenEndpoints(apiDb)
 		});
+	// Measures only while the stats card is read (v1.21.7, see rpcHealth.ts).
 	const rpcProber = new RpcHealthProber(publishedRpcUrls);
 	rpcProber.start();
-	const rpcEndpointsApp = new Hono();
-	rpcEndpointsApp.use('*', rateLimit('resource', config.resourceRatePerMin));
-	rpcEndpointsApp.route(
-		'/',
-		rpcEndpointsRoute(
+	app.route(
+		'/v1/rpc-endpoints',
+		rpcEndpointsApp(
 			rpcProber,
 			publishedRpcUrls,
 			// Optional per-node operator handles from the on-chain directory.
-			async () => directoryNodeNames(db)
+			async () => directoryNodeNames(apiDb),
+			config.resourceRatePerMin
 		)
 	);
-	app.route('/v1/rpc-endpoints', rpcEndpointsApp);
 
 	// Operator-instance payment-method additions (ADR-0021).
 	// Frontend reads on app-boot to populate the picker's

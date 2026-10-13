@@ -73,7 +73,8 @@ check(
 check(
 	'the card re-reads the figures every 10 s while the page is visible (POLL_MS) and on return to the tab',
 	/POLL_MS = 10_000/.test(src) &&
-		/setInterval\([\s\S]{0,120}visibilityState === 'visible'/.test(src) &&
+		// (behaviour: EndpointList.poll.test.ts; v1.21.7 returns early when hidden)
+		/setInterval\([\s\S]{0,120}visibilityState [!=]== 'visible'/.test(src) &&
 		/visibilitychange/.test(src)
 );
 check(

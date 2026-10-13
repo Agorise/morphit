@@ -63,7 +63,10 @@ sudo morphit-ops branding apply \
   command again any time to change something.
 
 Or let it ask you: `sudo morphit-ops branding setup` (also in the `sudo morphit-ops` menu, under
-*Branding*) asks for each file, the name and the colours, one question at a time, and applies them.
+*Branding*, and the last step of the setup wizard) first lists the three files it needs — names,
+SVG only, the heights they are shown at and the 2 MB limit — then asks for each file, the name and
+the colours, one question at a time, and applies them. For the colours you can type just your main
+colour or `logo` (see [Colours](#colours)).
 
 The home-screen icons and launch screens are drawn from your SVGs by a small image converter,
 `librsvg2-bin`. If the server does not have it, `branding apply` offers to install it; you can
@@ -198,6 +201,16 @@ Give the first and last colour of your gradient — Morphit derives every other 
   (the dark text is guaranteed at least 4.5:1); *deep*: your last colour deepened, with white or dark
   text — Morphit's own style. `champagne-gold` uses bright, Morphit uses deep. Saved as
   `MORPHIT_INSTANCE_THEME_BUTTON`; `--theme-button=` goes back to the theme's own.
+
+**Just one colour, or your logo's.** In `sudo morphit-ops branding setup`, answer the colour
+question with your main colour alone (`#d4a017`), or with `logo`. From one colour, the gradient runs
+from a lighter, softer tint of it to a deeper shade; from the logo, its most used colours are taken
+(the lighter starts the gradient, the deeper ends it; black, white and greys are skipped). The page
+background becomes a near-black with a trace of that colour, and the buttons are *bright* for a
+light colour, *deep* otherwise. Each colour is lifted until it reads on the page, the result is
+checked like any other theme, and setup shows it and asks before using it. It is saved as the
+ordinary `MORPHIT_INSTANCE_THEME_*` lines. (The logo's colours are read from the SVG's fills,
+strokes and gradient stops; a picture embedded inside the SVG is not looked at.)
 
 Or a ready-made theme: `--theme champagne-gold` (Vigilante Trading: champagne `#f3dca0` to gold
 `#bb872f` on near-black `#181818`, gold buttons with dark text), `--theme morphit` (the Morphit

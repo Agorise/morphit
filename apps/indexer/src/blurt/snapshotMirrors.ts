@@ -27,6 +27,8 @@
  *   2. Federation peers on the transport we ALREADY speak. A Tor-only node asks
  *      .onion peers over its existing SOCKS circuit; it never opens a clearnet
  *      socket, so it leaks nothing by fast-syncing.
+ *   2b. This box's own IPFS node, fetching from the IPFS network (not hidden-only).
+ *   2c. The hidden Blurt RPC nodes in this node's settings, at /ipfs/<cid>.
  *   3. The signed https mirror (forgejo_url).
  *   4. Public IPFS gateways.
  *
@@ -54,15 +56,25 @@ export interface SnapshotSourceInputs {
 	readonly localGateway?: string | null;
 	/** True when this node has no clearnet: clearnet sources are omitted, not just deprioritised. */
 	readonly hiddenOnly: boolean;
+	/** This box runs an IPFS (kubo) daemon that can fetch from the public IPFS
+	 *  network. Used only when the node is not hidden-only. */
+	readonly localNode?: boolean;
+	/** This node's hidden Blurt RPC nodes (MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS):
+	 *  asked for the snapshot at /ipfs/<cid> on the same address and port
+	 *  (docs/HIDDEN-RPC-SNAPSHOT-MIRROR.md). Only .onion / .b32.i2p ones. */
+	readonly rpcMirrors?: readonly string[];
 }
 
 export interface SnapshotSource {
 	/** Full URL to fetch. */
 	readonly url: string;
 	/** How this source is reached — drives which proxy the fetcher must use. */
-	readonly transport: 'local' | 'tor' | 'i2p' | 'clearnet';
+	readonly transport: 'local' | 'tor' | 'i2p' | 'kubo' | 'clearnet';
 	/** Short human label for progress output ("Tor peer abcd…", "ipfs.io"). */
 	readonly label: string;
+	/** A source that most likely does not hold it (a hidden RPC node, most of
+	 *  which do not mirror yet): given up on sooner when it stalls. */
+	readonly longShot?: boolean;
 }
 
 const stripSlash = (s: string): string => s.trim().replace(/\/+$/, '');
@@ -125,6 +137,36 @@ export function buildSnapshotSources(input: SnapshotSourceInputs): SnapshotSourc
 		if (I2P_B32_RE.test(i2p)) {
 			push({ url: `http://${i2p}${path}`, transport: 'i2p', label: shortHiddenLabel(i2p) });
 		}
+	}
+
+	// 2b. This box's own IPFS node, fetching from the public IPFS network
+	//     (snapshotKuboFetch.ts). Peer to peer, so not rate-limited like the
+	//     public gateways, and its gateway alone cannot fetch (Gateway.NoFetch).
+	//     Never on a hidden-only node: its IPFS node stays off the public network.
+	if (!input.hiddenOnly && input.localNode === true) {
+		push({ url: `kubo:${input.cid}`, transport: 'kubo', label: 'this server\u2019s IPFS node' });
+	}
+
+	// 2c. The hidden Blurt RPC nodes this node already uses. Their addresses are
+	//     in its own settings, so even a brand-new Tor/I2P-only node — no
+	//     indexer, no directory, a snapshot record that names no mirror — has
+	//     somewhere private to ask. One that does not mirror answers 404.
+	for (const raw of input.rpcMirrors ?? []) {
+		let u: URL;
+		try {
+			u = new URL(raw.trim());
+		} catch {
+			continue;
+		}
+		const host = u.hostname.toLowerCase();
+		const transport = ONION_RE.test(host) ? 'tor' : I2P_B32_RE.test(host) ? 'i2p' : null;
+		if (transport === null || u.protocol !== 'http:') continue;
+		push({
+			url: `http://${host}${u.port ? `:${u.port}` : ''}${path}`,
+			transport,
+			label: `${transport === 'tor' ? 'Tor' : 'I2P'} RPC node ${host.slice(0, 8)}\u2026`,
+			longShot: true
+		});
 	}
 
 	// 3 + 4. Clearnet. A hidden-only node stops here: omitting these is the whole

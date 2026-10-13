@@ -59,7 +59,7 @@ For the long version, every claim is enumerated and source-anchored in [`docs/MO
 The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPHIT-NODE.md)**. The short version:
 
 1. Get an Ubuntu 24.04 machine, or a 24.04-based flavour, x86-64 or arm64 (a VPS, or an old PC at home — 2+ CPUs, 4+ GB RAM, 80+ GB SSD) and point a domain at it (or skip the domain and run Tor-only). Hosting at home shows your home IP to clearnet visitors unless you run Tor-only.
-2. Download a signed release from [morphit.io/en/download](https://morphit.io/en/download#source-code) onto that machine and extract it.
+2. Download the latest release from [the release page](https://git.agorise.net/agorise/morphit/releases/latest) onto that machine and extract it into a folder (the exact commands are in [docs/RUN-A-MORPHIT-NODE.md](docs/RUN-A-MORPHIT-NODE.md) §6).
 3. In that folder, run `sudo bash morphit-setup.sh` and choose **Full guided install**: it installs Node.js, PostgreSQL, the services, HTTPS, BunkerWeb, Tor/I2P and the hardening, asking a few plain-language questions.
 4. Register your instance on-chain: `sudo morphit-ops register` (on the server).
 5. Updating later: `sudo morphit-ops upgrade` — see [`docs/UPGRADING.md`](docs/UPGRADING.md).

@@ -402,7 +402,8 @@ async function main(): Promise<void> {
 			}),
 			publicGateways: [],
 			localGateway: null,
-			hiddenOnly: config.blurtRpcEndpoints.length === 0
+			hiddenOnly: config.blurtRpcEndpoints.length === 0,
+			rpcMirrors: config.hiddenRpcEndpoints
 		});
 		const got = await pinSnapshotFromPeers(sources, op.ipfs_cid, {
 			fetch: (u, init) => fetch(u, init),

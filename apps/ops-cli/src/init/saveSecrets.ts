@@ -50,6 +50,9 @@ export function formatSecretsToSave(secrets: readonly SecretToSave[]): string {
 	lines.push('    \u2022 Do NOT email them to yourself, and do NOT store them in the cloud.');
 	lines.push('    \u2022 Anyone who has these can reach your node\u2019s database.');
 	lines.push('');
+	lines.push('  TO COPY: select the text, then Ctrl+Shift+C (on a Mac: Cmd+C).');
+	lines.push('  Ctrl+C alone stops the installer.');
+	lines.push('');
 	lines.push(rule);
 	return lines.join('\n');
 }

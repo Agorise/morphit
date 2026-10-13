@@ -120,7 +120,6 @@ apps/indexer/src/db/migrations.ts
 apps/indexer/src/db/snapshotManifest.ts
 apps/indexer/src/db/snapshotOplogVerify.ts
 apps/indexer/src/indexer/clearnetGate.ts
-apps/indexer/src/indexer/federationProbe.ts
 apps/indexer/src/indexer/fee/moneroProofVerifier.ts
 apps/indexer/src/indexer/flowBackfill.ts
 apps/indexer/src/indexer/fx/frankfurterFetcher.ts
@@ -273,7 +272,6 @@ apps/ops-cli/src/init/i2pGenerate.ts
 apps/ops-cli/src/init/prompt.ts
 apps/ops-cli/src/lib/altAddressValidate.ts
 apps/ops-cli/src/lib/localBlock.ts
-apps/ops-cli/test/backupHealth.test.ts
 apps/ops-cli/test/federationBodyCap.test.ts
 apps/relay/scripts/account-create-op-smoke.ts
 apps/relay/scripts/canonical-message-cross-check-smoke.ts

@@ -18,7 +18,13 @@
 	 *  every node now; the rows on screen stay as they are until the new figures
 	 *  arrive (they are never swapped for older or guessed ones). A node the
 	 *  indexer has not measured yet (it just started) says "probing…", never
-	 *  "offline". Each row shows how long ago it was measured. */
+	 *  "offline". Each row shows how long ago it was measured.
+	 *
+	 *  v1.21.7 — ONLY WHILE SOMEONE IS THERE. Re-reading stops when the tab is
+	 *  hidden and after IDLE_MS without input, and the card says it paused; any
+	 *  input reads again at once. The indexer measures the nodes only while the
+	 *  card is read and caps refreshes per node, so no number of open pages or
+	 *  scripted requests makes it contact the nodes more often. */
 	let endpoints = $state<RpcEndpointHealth[]>([]);
 	/** True while a refresh (or the first load) is in flight — spins the icon. */
 	let loading = $state(false);
@@ -57,6 +63,20 @@
 	const MIN_SPIN_MS = 550;
 	/** Re-read the indexer's latest figures this often while the page is visible. */
 	const POLL_MS = 10_000;
+	/** v1.21.7 — stop re-reading after this long without mouse, touch, keyboard
+	 *  or scroll input (a tab left open on a second screen, a phone on a desk).
+	 *  The indexer measures the nodes only while the card is read, so an idle
+	 *  page frees that bandwidth on this site and on the nodes. Any input reads
+	 *  again at once. */
+	const IDLE_MS = 3 * 60_000;
+	/** Figures older than this on the first answer were measured before a
+	 *  quiet spell (the indexer had stopped): read again after FOLLOW_UP_MS,
+	 *  once, instead of leaving them until the next POLL_MS read. */
+	const OLD_FIGURE_MS = 60_000;
+	const FOLLOW_UP_MS = 3_000;
+	/** True while re-reading is paused for lack of input. */
+	let paused = $state(false);
+	let lastInputAt = Date.now();
 
 	/** Read the indexer's figures. `probe` asks it to re-measure every node now
 	 *  (the refresh button). On failure, or on an answer that is not the
@@ -88,21 +108,76 @@
 		endpoints = rows;
 	}
 
+	/** True when any row was measured before a quiet spell (or not yet). */
+	function hasOldFigures(): boolean {
+		const at = nowMs + clockOffsetMs;
+		return endpoints.some((h) => {
+			const t = h.checked_at == null ? NaN : Date.parse(h.checked_at);
+			return !Number.isFinite(t) || at - t > OLD_FIGURE_MS;
+		});
+	}
+
 	$effect(() => {
 		if (!browser) return;
+		lastInputAt = Date.now();
+		paused = false;
+		let followUp: ReturnType<typeof setTimeout> | null = null;
+		let stopped = false;
+		/** Read now; when what comes back predates a quiet spell (the indexer
+		 *  has only just started measuring again), read once more FOLLOW_UP_MS
+		 *  later — on the first read, and on every return from a pause or a
+		 *  hidden tab. */
+		const readNow = async (): Promise<void> => {
+			await fetchHealth(false);
+			if (stopped || !hasOldFigures()) return;
+			if (followUp) clearTimeout(followUp);
+			followUp = setTimeout(() => {
+				followUp = null;
+				if (!stopped && document.visibilityState === 'visible') void fetchHealth(false);
+			}, FOLLOW_UP_MS);
+		};
 		loading = true;
-		void fetchHealth(false).finally(() => (loading = false));
+		void readNow().finally(() => (loading = false));
 		const poll = setInterval(() => {
-			if (document.visibilityState === 'visible') void fetchHealth(false);
+			if (document.visibilityState !== 'visible') return;
+			if (Date.now() - lastInputAt >= IDLE_MS) {
+				paused = true;
+				return;
+			}
+			void fetchHealth(false);
 		}, POLL_MS);
 		const clock = setInterval(() => (nowMs = Date.now()), 1000);
-		const onVisible = (): void => {
-			if (document.visibilityState === 'visible') void fetchHealth(false);
+		/** Input (or a return to the tab): count as active; read at once if paused. */
+		const onInput = (): void => {
+			lastInputAt = Date.now();
+			if (paused && document.visibilityState === 'visible') {
+				paused = false;
+				void readNow();
+			}
 		};
+		const onVisible = (): void => {
+			if (document.visibilityState !== 'visible') return;
+			lastInputAt = Date.now();
+			paused = false;
+			void readNow();
+		};
+		const INPUT = [
+			'pointermove',
+			'pointerdown',
+			'keydown',
+			'wheel',
+			'touchstart',
+			'scroll',
+			'focus'
+		];
+		for (const e of INPUT) window.addEventListener(e, onInput, { passive: true });
 		document.addEventListener('visibilitychange', onVisible);
 		return () => {
+			stopped = true;
 			clearInterval(poll);
 			clearInterval(clock);
+			if (followUp) clearTimeout(followUp);
+			for (const e of INPUT) window.removeEventListener(e, onInput);
 			document.removeEventListener('visibilitychange', onVisible);
 		};
 	});
@@ -273,6 +348,11 @@
 	     because the refresh button is now the only child, and justify-between
 	     with one child silently left-aligns it. -->
 	<div class="mb-3 flex items-start justify-end gap-3">
+		{#if paused}
+			<p class="mr-auto text-xs text-ink-500 dark:text-ink-400" role="status">
+				{$_('settings.endpoints.paused')}
+			</p>
+		{/if}
 		<button
 			type="button"
 			onclick={onRefreshClick}

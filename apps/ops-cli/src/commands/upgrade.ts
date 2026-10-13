@@ -5129,6 +5129,7 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// A template fix is not a fix for INSTALLED nodes (upgrade does not re-run
 		// Ansible), so open the IPFS swarm port here too (review B7).
 		['the IPFS swarm firewall heal', () => healIpfsSwarmFirewall()],
+		['the web containers\u2019 firewall heal', () => healBridgeFirewall()],
 		['the IPFS gateway heal', () => healIpfsGatewayExposure()],
 		['the frontend config heal', () => healFrontendConfig()],
 		// A certificate set up to renew with port 80 of its own cannot renew while
@@ -6305,6 +6306,127 @@ export function healIpfsSwarmFirewall(deps: IpfsSwarmFirewallDeps = {}): void {
 		}
 	} catch {
 		/* best-effort — never fail the self-heal phase over the swarm firewall */
+	}
+}
+
+export interface BridgeFirewallDeps {
+	run?: (cmd: string, args: readonly string[]) => { status: number | null; stdout: string };
+	/** This box hosts IPFS with its gateway exposed to the web containers. */
+	ipfsGateway?: () => boolean;
+	/** morphit-mcp runs (the frontend proxies /mcp to it). */
+	mcpRunning?: () => boolean;
+	info?: (m: string) => void;
+	warn?: (m: string) => void;
+}
+
+/**
+ * SELF-HEAL (v1.21.7): the firewall rules that let the install's web
+ * containers (bunkerweb_net) reach the host's relay (8080), indexer (8081),
+ * IPFS gateway (8082) and MCP (8124). Without them every /v1 call from the
+ * site hangs and peers list the node as "Clearnet blocked" — what the
+ * install's SSH safety revert left on a fresh VPS by emptying the firewall
+ * (2026-10-12). Only on the install's own layout (the bunkerweb_net network,
+ * its subnet read from Docker), only when ufw is on, adding only the missing
+ * rules, from that subnet only. Verified by reading ufw back.
+ */
+/** How the bridge heal runs ufw and docker: LC_ALL=C, because ufw's status
+ *  words are translated on a non-English box. */
+export function bridgeHealRun(
+	cmd: string,
+	args: readonly string[]
+): { status: number | null; stdout: string } {
+	const r = spawnSync(cmd, [...args], {
+		encoding: 'utf8',
+		timeout: 20_000,
+		env: { ...process.env, LC_ALL: 'C' }
+	});
+	return { status: r.status, stdout: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+}
+
+/** The subnet the web containers' rules are opened from: the first private
+ *  IPv4 subnet of bunkerweb_net (a dual-stack network lists an IPv6 one too),
+ *  never wider than its private range — a "0.0.0.0/0" or a public range would
+ *  have opened the relay, indexer and MCP to the internet (review,
+ *  2026-10-12). null when there is none. PURE. */
+export function bridgeSubnet(inspectOutput: string): string | null {
+	for (const cand of inspectOutput.split(/\s+/)) {
+		const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(cand);
+		if (!m) continue;
+		const [a, b, c, d, len] = m.slice(1).map(Number) as [number, number, number, number, number];
+		if ([a, b, c, d].some((o) => o > 255) || len > 32) continue;
+		const ok =
+			(a === 10 && len >= 8) ||
+			(a === 172 && b >= 16 && b <= 31 && len >= 12) ||
+			(a === 192 && b === 168 && len >= 16);
+		if (ok) return cand;
+	}
+	return null;
+}
+
+export function healBridgeFirewall(deps: BridgeFirewallDeps = {}): void {
+	const say = deps.info ?? info;
+	const warnFn = deps.warn ?? warn;
+	const run = deps.run ?? bridgeHealRun;
+	const ipfsGateway =
+		deps.ipfsGateway ??
+		(() => run('systemctl', ['is-active', '--quiet', 'ipfs.service']).status === 0);
+	const mcpRunning =
+		deps.mcpRunning ??
+		(() => run('systemctl', ['is-active', '--quiet', 'morphit-mcp.service']).status === 0);
+	try {
+		if (
+			run('sh', ['-c', 'command -v ufw >/dev/null 2>&1 && command -v docker >/dev/null 2>&1'])
+				.status !== 0
+		)
+			return;
+		const net = run('docker', [
+			'network',
+			'inspect',
+			'bunkerweb_net',
+			'-f',
+			'{{range .IPAM.Config}}{{.Subnet}} {{end}}'
+		]);
+		if (net.status !== 0) return; // not the install's layout
+		const subnet = bridgeSubnet(net.stdout);
+		if (subnet === null) {
+			say(
+				`Firewall: bunkerweb_net has no private IPv4 subnet (${net.stdout.trim().slice(0, 80)}), so the ` +
+					'web containers\u2019 firewall rules were not checked.'
+			);
+			return;
+		}
+		const status = (): string => run('ufw', ['status']).stdout;
+		if (!ufwIsActive(status())) return;
+		const ports = [
+			'8080',
+			'8081',
+			...(ipfsGateway() ? ['8082'] : []),
+			...(mcpRunning() ? ['8124'] : [])
+		];
+		const esc = subnet.replace(/[./]/g, (c) => `\\${c}`);
+		const has = (text: string, p: string): boolean =>
+			new RegExp(`^\\s*${p}\\/tcp\\s+ALLOW(?:\\s+IN)?\\s+${esc}(?:\\s+#.*)?\\s*$`, 'im').test(text);
+		const missing = ports.filter((p) => !has(status(), p));
+		if (missing.length === 0) return;
+		for (const p of missing)
+			run('ufw', ['allow', 'from', subnet, 'to', 'any', 'port', p, 'proto', 'tcp']);
+		const after = status();
+		const still = missing.filter((p) => !has(after, p));
+		if (still.length === 0) {
+			say(
+				`Firewall: the web containers (${subnet}) can reach this box\u2019s services again ` +
+					`(added port${missing.length === 1 ? '' : 's'} ${missing.join(', ')}).`
+			);
+		} else {
+			warnFn(
+				`Firewall: could not confirm the web containers (${subnet}) may reach port(s) ${still.join(', ')}; ` +
+					`the site's /v1 calls will hang. Run: ${still
+						.map((p) => `sudo ufw allow from ${subnet} to any port ${p} proto tcp`)
+						.join(' && ')}`
+			);
+		}
+	} catch {
+		/* best-effort — never fail the self-heal phase over this */
 	}
 }
 

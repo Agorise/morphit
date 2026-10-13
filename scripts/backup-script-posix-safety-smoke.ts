@@ -283,7 +283,7 @@ check(
 // and health flags a bogus "failing" backup. The script must skip a schemaless DB.
 check(
 	'skips a schemaless (unmigrated) DB via a CREATE TABLE probe before dumping',
-	/--schema-only "\$DB_NAME"/.test(code) && /grep -qi 'CREATE TABLE'/.test(code)
+	/--schema-only "\$DB_NAME"/.test(code) && /grep -ci 'CREATE TABLE' >\/dev\/null/.test(code)
 );
 check(
 	'the schemaless skip exits 0 (nothing to back up yet) — not a failure state',
