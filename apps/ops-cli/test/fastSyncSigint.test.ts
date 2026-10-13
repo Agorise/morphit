@@ -113,15 +113,20 @@ describe('fast-sync and Ctrl+C (plain node)', () => {
 		const r0 = repo(
 			[
 				'(',
-				'  st=$(sed "s/.*) //" /proc/$BASHPID/stat | cut -d" " -f20)',
-				'  echo "$BASHPID $st" > "$MORPHIT_SNAPSHOT_PID_FILE"',
+				// $BASHPID read OUTSIDE $( ), which runs in a subshell of its own.
+				'  me=$BASHPID',
+				'  st=$(sed "s/.*) //" /proc/$me/stat | cut -d" " -f20)',
+				'  echo "$me $st" > "$MORPHIT_SNAPSHOT_PID_FILE"',
 				'  sleep 1',
 				'  echo started > "$MORPHIT_SNAPSHOT_RESTORE_MARKER"',
 				'  sleep 1',
 				'  rm -f "$MORPHIT_SNAPSHOT_PID_FILE"',
 				'  exit 4',
 				') &',
-				'sleep 0.3',
+				// The restore has said who it is (it does so first thing) before
+				// its wrapper dies: waited for, not timed — on a busy CI runner a
+				// fixed 0.3 s came before the pid file (2026-10-13).
+				'for i in $(seq 1 200); do [ -s "$MORPHIT_SNAPSHOT_PID_FILE" ] && break; sleep 0.05; done',
 				'exit 129'
 			].join('\n')
 		);

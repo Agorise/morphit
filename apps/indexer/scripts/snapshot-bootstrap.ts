@@ -345,8 +345,35 @@ async function download(
 		args.push('--max-time', '600');
 	}
 	args.push(url);
-	const r = await runChild('curl', args);
-	return r.status === 0;
+	// --max-filesize alone is not enough: an older curl (Debian 12's 7.88) does
+	// not enforce it on a download of unknown length, and a source streaming on
+	// forever filled the disk until curl's --max-time (CI, 2026-10-13). So the
+	// file is watched too, and curl stopped as soon as it is larger.
+	let tooBig = false;
+	const watch = setInterval(() => {
+		let size = 0;
+		try {
+			size = statSync(dest).size;
+		} catch {
+			return; // not there yet
+		}
+		if (size > maxBytes && !tooBig) {
+			tooBig = true;
+			currentChild?.kill('SIGTERM');
+		}
+	}, 250);
+	try {
+		const r = await runChild('curl', args);
+		if (tooBig) {
+			process.stderr.write(
+				`  ✗ the download is larger than the signed size (${maxBytes} bytes) — stopped.\n`
+			);
+			return false;
+		}
+		return r.status === 0;
+	} finally {
+		clearInterval(watch);
+	}
 }
 
 /**

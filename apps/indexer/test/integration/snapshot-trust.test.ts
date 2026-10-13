@@ -788,6 +788,19 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				expect(r.err).toMatch(/QUARANTINED/);
 			}, 120_000);
 
+			/** A PATH dir whose curl ignores --max-filesize, as older ones do for
+			 *  a download of unknown length (Debian 12's 7.88 — CI). */
+			function oldCurl(): string {
+				const bin = mkdtempSync(join(work, 'oldcurl-'));
+				const real = spawnSync('sh', ['-c', 'command -v curl'], { encoding: 'utf8' }).stdout.trim();
+				writeFileSync(
+					join(bin, 'curl'),
+					`#!/bin/bash\na=()\nwhile [ $# -gt 0 ]; do\n  if [ "$1" = --max-filesize ]; then shift 2; continue; fi\n  a+=("$1"); shift\ndone\nexec ${real} "\${a[@]}"\n`,
+					{ mode: 0o755 }
+				);
+				return bin;
+			}
+
 			it('a copy of another size than the signed one is never unpacked (v1.21.7)', async () => {
 				await freshDst();
 				const t = tarball(work, baseTar, (s) => s);
@@ -804,8 +817,22 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 					['--from-chain', '--i-trust-signer', '--force', '--skip-verify'],
 					chainEnv([a, b])
 				);
+				// Refused before anything is unpacked: by curl's own limit (8.x), by
+				// fast-sync's watch, or — a copy small enough to arrive before the
+				// watch looks — by the size check (CI's Debian 12 curl 7.88 let it
+				// through, 2026-10-13). With either curl.
+				const larger =
+					/maximum allowed file size|larger than the signed size|the download is \d+ bytes; the signed record says/;
 				expect(r.code).toBe(1);
-				expect(r.err).toMatch(/maximum allowed file size/);
+				expect(r.err).toMatch(larger);
+				expect(await dstIntact()).toBe(true);
+				const rOld = await run(
+					'snapshot-bootstrap.ts',
+					['--from-chain', '--i-trust-signer', '--force', '--skip-verify'],
+					{ ...chainEnv([a, b]), PATH: `${oldCurl()}:${process.env.PATH ?? ''}` }
+				);
+				expect(rOld.code).toBe(1);
+				expect(rOld.err).toMatch(larger);
 				expect(await dstIntact()).toBe(true);
 				served = whole.subarray(0, whole.length - 100);
 				const r2 = await run(
@@ -817,6 +844,55 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				expect(r2.err).toMatch(/the signed record says/);
 				expect(await dstIntact()).toBe(true);
 			}, 90_000);
+
+			it('a source that streams on forever is cut off at the signed size, whatever curl does with --max-filesize (v1.21.7)', async () => {
+				await freshDst();
+				const t = tarball(work, baseTar, (s) => s);
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_010);
+				const a = await chainStub('127.0.0.1', view);
+				const b = await chainStub('localhost', view);
+				// No length, no end: chunks as fast as the client takes them.
+				const endless = http.createServer((_req, res) => {
+					res.writeHead(200);
+					const chunk = Buffer.alloc(64 * 1024, 7);
+					const pump = (): void => {
+						while (res.write(chunk));
+						res.once('drain', pump);
+					};
+					pump();
+					res.on('close', () => res.removeAllListeners('drain'));
+				});
+				await new Promise<void>((ok) => endless.listen(0, '127.0.0.1', () => ok()));
+				const url = `http://127.0.0.1:${(endless.address() as { port: number }).port}`;
+				servers.push(a, b, {
+					url,
+					hits: 0,
+					close: () =>
+						new Promise<void>((ok) => {
+							endless.closeAllConnections?.();
+							endless.close(() => ok());
+						})
+				});
+				const bin = oldCurl();
+				const tmp = mkdtempSync(join(work, 'tmp-'));
+				const t0 = Date.now();
+				const r = await run(
+					'snapshot-bootstrap.ts',
+					['--from-chain', '--i-trust-signer', '--force', '--skip-verify'],
+					{
+						...chainEnv([a, b]),
+						MORPHIT_LOCAL_IPFS_GATEWAY: url,
+						PATH: `${bin}:${process.env.PATH ?? ''}`,
+						TMPDIR: tmp
+					}
+				);
+				// Before: it ran until curl's --max-time (10 minutes), the disk filling.
+				expect(r.code, r.err).toBe(1);
+				expect(r.err).toMatch(/larger than the signed size/);
+				expect(Date.now() - t0).toBeLessThan(60_000);
+				expect(readdirSync(tmp).filter((n) => n.startsWith('morphit-snap-restore-'))).toEqual([]);
+				expect(await dstIntact()).toBe(true);
+			}, 120_000);
 
 			it('a hidden or local source that redirects is not followed (v1.21.7)', async () => {
 				await freshDst();
