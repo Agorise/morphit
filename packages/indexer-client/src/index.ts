@@ -997,15 +997,21 @@ export interface ChatHistoryResponse {
 // %). Those questions govern *how* rows are populated, not what
 // columns are returned.
 
-/** Denormalized per-operator earnings, included only when the
- *  operator has attracted at least one attributed order. */
+/** Per-operator figures since inception (v1.21.8: every operator — see
+ *  apps/indexer/src/indexer/operatorStats.ts). */
 export interface OperatorStats {
+	/** BLURT that reached the operator's fees account in Morphit fee payments
+	 *  (listing, first-contact, featured-slot). From chain data alone: the
+	 *  same on every node. */
 	readonly cumulative_blurt_earned: number;
+	/** Orders carrying the operator's tag whose fee this node holds as paid
+	 *  (verified, or verified by attestation). This node's own count: nodes
+	 *  can differ a little. */
 	readonly total_orders_attributed: number;
 }
 
 /** One operator in the public directory. Fields correspond 1:1
- *  with the `operators` table + a lazily-joined stats object. */
+ *  with the `operators` table, plus its fees account and stats. */
 export interface OperatorRecord {
 	readonly account: string;
 	readonly tag: string;
@@ -1013,6 +1019,13 @@ export interface OperatorRecord {
 	readonly contact_url: string | null;
 	readonly registered_at: string;
 	readonly is_active: boolean;
+	/** The fees account it registered on chain most recently, or null
+	 *  (v1.21.8; absent from older indexers). */
+	readonly fee_account?: string | null;
+	/** From v1.21.8, present for every operator the indexer has counted
+	 *  (absent for one registered since the last count, and for all until
+	 *  the first count after the upgrade or a restore); an older indexer
+	 *  omitted it for an operator with nothing attributed. */
 	readonly stats?: OperatorStats;
 }
 

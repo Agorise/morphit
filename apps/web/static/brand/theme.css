@@ -1,0 +1,4 @@
+/* This instance's look. Canonically empty: the Morphit colours are the app's own
+   stylesheet. `morphit-ops branding apply` writes a branded instance's colours and
+   name here, so every page — also the ones the app draws in the browser — has them
+   from its first paint (docs/BRANDING.md). */

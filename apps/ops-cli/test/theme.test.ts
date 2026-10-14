@@ -13,10 +13,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+	blendOver,
 	contrastRatio,
 	deriveTheme,
+	EDGE_ALPHA,
 	normalizeHex,
 	parseBrandJsonTheme,
+	relativeLuminance as relLum,
 	themeStyleElement,
 	THEME_TOKENS,
 	type ThemePalette
@@ -34,6 +37,9 @@ const FROZEN_V1_19_1: Record<string, string> = {
 	'brand-bubble': '#009e51', // tailwind morphit.emerald-bubble
 	'brand-btn-face': '#027c86', // tailwind morphit.btn, --morphit-btn-face
 	'brand-btn-text': '#ffffff', // text-white on the button face
+	// v1.21.8: the primary button's hover edge — brand-primary on Morphit's
+	// deep buttons, the same colour it always was.
+	'brand-btn-edge': '#00da69',
 	'focus-ring': '#00da69', // --focus-ring rgba(0,218,105,.35)
 	'card-accent-1': '#8eef26',
 	'card-accent-2': '#00da69',
@@ -84,6 +90,9 @@ const VIGILANTE: Record<string, string> = {
 	'brand-bubble': '#9a824e',
 	'brand-btn-face': '#d6b26a',
 	'brand-btn-text': '#181818',
+	// v1.21.8: a light edge on the bright gold face (it was the face's own colour,
+	// so the hover edge did not show).
+	'brand-btn-edge': '#fff9e8',
 	'focus-ring': '#d6b26a',
 	'card-accent-1': '#f3dca0',
 	'card-accent-2': '#d6b26a',
@@ -238,7 +247,7 @@ describe('theme derivation', () => {
 		expect(bright.tokens['brand-btn-text']).toBe(bright.tokens['surface-950']);
 		// Only the button changes between the two.
 		const diff = Object.keys(bright.tokens).filter((k) => bright.tokens[k] !== deep.tokens[k]);
-		expect(diff.sort()).toEqual(['brand-btn-face', 'brand-btn-text']);
+		expect(diff.sort()).toEqual(['brand-btn-edge', 'brand-btn-face', 'brand-btn-text']);
 		// Morphit stays deep (exact v1.20.0 colours); bright on Morphit is a real theme.
 		expect(ok({ preset: 'morphit' }).inputs.button).toBe('deep');
 		const mb = ok({ preset: 'morphit', button: 'bright' });
@@ -255,6 +264,68 @@ describe('theme derivation', () => {
 		expect(dim.adjusted).toContain('brand-btn-face');
 		const bad = deriveTheme({ preset: 'morphit', button: 'neon' });
 		expect(bad.ok ? '' : bad.problems.join()).toMatch(/deep or bright/);
+	});
+
+	it('the primary button\u2019s hover edge always stands out from its face (deep and bright, any colours)', () => {
+		// The 1px edge a primary button lights on hover was drawn in brand-primary,
+		// which IS the face of a bright button: on Vigilante Trading's gold
+		// buttons it was invisible (2026-10-13).
+		// As painted: app.css draws the edge at EDGE_ALPHA over the face.
+		const edgeOf = (p: { tokens: Record<string, string> }): number =>
+			contrastRatio(
+				blendOver(p.tokens['brand-btn-edge']!, p.tokens['brand-btn-face']!, EDGE_ALPHA),
+				p.tokens['brand-btn-face']!
+			);
+		const whiteOn = (face: string): number =>
+			contrastRatio(blendOver('#ffffff', face, EDGE_ALPHA), face);
+		// The presets' deep buttons keep the edge they always had: brand-primary.
+		for (const input of [{ preset: 'morphit' }, { preset: 'champagne-gold', button: 'deep' }]) {
+			const p = ok(input);
+			expect(p.tokens['brand-btn-edge']).toBe(p.tokens['brand-primary']);
+			expect(edgeOf(p)).toBeGreaterThanOrEqual(1.8);
+		}
+		const gold = ok({ preset: 'champagne-gold' });
+		expect(edgeOf(gold)).toBeGreaterThanOrEqual(1.8);
+		// …and lighter than the face: a BRIGHT flash.
+		expect(relLum(gold.tokens['brand-btn-edge']!)).toBeGreaterThan(
+			relLum(gold.tokens['brand-btn-face']!)
+		);
+		// Any theme, deep or bright: at least 1.8:1 from the face, lighter than
+		// it — or, on a face so pale that not even white is 1.8:1 from it, a
+		// darker shade. Deep faces can sit right on brand-primary with some
+		// colours (#338ec0 face, #3e91a8 primary: 1.01:1).
+		const r = rng(7);
+		let n = 0;
+		for (let i = 0; i < 800 && n < 240; i++) {
+			const button = i % 2 ? 'bright' : 'deep';
+			const res = deriveTheme({ from: hex(r), mid: hex(r), to: hex(r), button });
+			if (!res.ok) continue;
+			n++;
+			const p = res.palette;
+			const face = p.tokens['brand-btn-face']!;
+			const whiteReaches = whiteOn(face) >= 1.8;
+			const what = `${button}: ${face} → ${p.tokens['brand-btn-edge']}`;
+			expect(edgeOf(p), what).toBeGreaterThanOrEqual(1.8 - 1e-9);
+			if (whiteReaches)
+				expect(relLum(p.tokens['brand-btn-edge']!), what).toBeGreaterThan(relLum(face));
+		}
+		expect(n).toBeGreaterThan(100);
+		// White and near-white bright buttons (the random colours above rarely
+		// make one): not even white stands out from them, so the edge is a
+		// darker shade of the face — never the face itself.
+		let pale = 0;
+		for (const mid of ['#ffffff', '#fdfdfd', '#e8e0c8', '#d0d0d0', '#f6f0ff']) {
+			const res = deriveTheme({ from: '#f3dca0', mid, to: '#bb872f', button: 'bright' });
+			if (!res.ok) continue;
+			pale++;
+			const p = res.palette;
+			const face = p.tokens['brand-btn-face']!;
+			const what = `bright ${mid}: ${face} → ${p.tokens['brand-btn-edge']}`;
+			expect(edgeOf(p), what).toBeGreaterThanOrEqual(1.8 - 1e-9);
+			if (whiteOn(face) < 1.8)
+				expect(relLum(p.tokens['brand-btn-edge']!), what).toBeLessThan(relLum(face));
+		}
+		expect(pale).toBeGreaterThanOrEqual(3);
 	});
 
 	it('prototype keys are not presets (T2)', () => {

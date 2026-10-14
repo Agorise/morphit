@@ -205,8 +205,10 @@ const ROOT = { uid: 0, gid: 0 };
 		ok("clears GPG_TTY so a passphrased key can't hang on a tty pinentry");
 	else bad('should clear GPG_TTY for the non-interactive refresh');
 
-	// The manual reminder must NOT also fire when the auto-restore succeeded.
-	if (/!canaryAutoRefreshed && existsSync\(join\(backupDir/.test(src))
+	// The manual reminder must NOT also fire when the auto-restore succeeded
+	// (v1.21.8: canaryClearedByUpgrade, whose truth table is in
+	// test/canaryCarry.test.ts, gets canaryAutoRefreshed first).
+	if (/canaryClearedByUpgrade\(\s*canaryAutoRefreshed,\s*existsSync\(join\(backupDir/.test(src))
 		ok('the manual re-run reminder is suppressed once the canary is auto-restored');
 	else bad('the reminder should be gated on !canaryAutoRefreshed');
 

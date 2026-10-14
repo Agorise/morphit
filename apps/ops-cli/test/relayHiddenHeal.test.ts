@@ -317,7 +317,19 @@ describe('the upgrade actually runs it', () => {
 		const r = spawnSync(
 			join(REPO, 'node_modules', '.bin', 'tsx'),
 			[join(REPO, 'apps', 'ops-cli', 'src', 'main.ts'), '__post-upgrade-selfheal'],
-			{ encoding: 'utf8', timeout: 120_000, env: { ...process.env, MORPHIT_ENV_ROOT: root } }
+			{
+				encoding: 'utf8',
+				timeout: 120_000,
+				env: {
+					...process.env,
+					MORPHIT_ENV_ROOT: root,
+					// The self-heal also runs the web heal, which records its
+					// outcome: under the scratch root, never the machine's own
+					// /var/lib/morphit-ops (other tests read that record).
+					MORPHIT_WEB_HEAL_STATE: join(root, 'web-heal.json'),
+					MORPHIT_WEB_HEAL_LOG: join(root, 'web-heal.log')
+				}
+			}
 		);
 		expect(r.status).toBe(0);
 		const v = readEffectiveEnv(

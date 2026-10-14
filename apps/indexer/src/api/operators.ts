@@ -11,21 +11,33 @@
  *       {
  *         account, tag, display_name, contact_url,
  *         registered_at, is_active,
+ *         fee_account,            // latest registered fees account, or null
  *         stats?: { cumulative_blurt_earned, total_orders_attributed }
  *       }
  *     ]
  *   }
  *
- * The stats object is only included if the operator has an
- * operator_earnings row (created lazily on first attributed
- * order). Zero-earnings operators have no stats attached —
- * there's no useful distinction between "zero earnings shown"
- * and "no stats" for display purposes, but at the wire level
- * we preserve the difference.
+ * STATS (v1.21.8 — every operator, since inception). Before, they came from
+ * operator_earnings, which only the operator's OWN indexer filled (and only for
+ * listing fees, from the version that added it), so every other operator
+ * showed nothing anywhere. They are computed in the background by the poller
+ * (indexer/operatorStats.ts, which documents exactly what they count) into
+ * `operator_stats`; this route only reads that table, so it stays fast however
+ * many fee payments exist. `stats` is absent for an operator the background
+ * pass has not counted yet: one registered since the last count, or every
+ * one before the first count after the upgrade or a restore (the count waits
+ * until the node has caught up with the chain).
  *
- * Phase 5b scaffolding. The table exists (migration v7) but is
- * empty until the ADR-0013-gated registration op lands. Until
- * then this endpoint always returns `{operators: []}`.
+ *  - total_orders_attributed: orders carrying the operator's tag whose fee
+ *    this node holds as paid (any fee method, free first buys included),
+ *    whatever the order's status now — this node's judgement, so nodes can
+ *    differ a little (assets a node does not list, BTC/XMR confirmations).
+ *  - cumulative_blurt_earned: the BLURT that reached the operator's fees
+ *    account in Morphit fee payments (listing, first-contact, featured-slot),
+ *    from chain data only — the same on every node.
+ *
+ * Order: active operators first, then most orders, then most earned, then
+ * the earliest registered. Inactive operators stay listed, below.
  */
 
 import { Hono } from 'hono';
@@ -39,8 +51,9 @@ interface OperatorRow {
 	contact_url: string | null;
 	registered_at: Date;
 	is_active: boolean;
-	cumulative_blurt_earned: string | null;
-	total_orders_attributed: string | null;
+	fee_account: string | null;
+	earned_milli: string | null;
+	orders: string | null;
 }
 
 interface OperatorStatsWire {
@@ -55,6 +68,7 @@ interface OperatorWire {
 	contact_url: string | null;
 	registered_at: string;
 	is_active: boolean;
+	fee_account: string | null;
 	stats?: OperatorStatsWire;
 }
 
@@ -65,41 +79,38 @@ function rowToWire(r: OperatorRow): OperatorWire {
 		display_name: r.display_name,
 		contact_url: r.contact_url,
 		registered_at: r.registered_at.toISOString(),
-		is_active: r.is_active
+		is_active: r.is_active,
+		fee_account: r.fee_account
 	};
-	// Stats are optional on the wire — zero-earnings operators
-	// don't have an operator_earnings row, and we'd rather omit
-	// the key than emit `stats: {0, 0}` which is ambiguous between
-	// "never attributed" and "returned-to-zero after payout".
-	if (r.cumulative_blurt_earned !== null && r.total_orders_attributed !== null) {
+	if (r.earned_milli !== null && r.orders !== null) {
 		wire.stats = {
-			cumulative_blurt_earned: Number(r.cumulative_blurt_earned),
-			total_orders_attributed: Number(r.total_orders_attributed)
+			// milliBLURT is exact; one division at the edge.
+			cumulative_blurt_earned: Number(r.earned_milli) / 1000,
+			total_orders_attributed: Number(r.orders)
 		};
 	}
 	return wire;
 }
 
+export const OPERATORS_SQL = `
+SELECT o.account, o.tag, o.display_name, o.contact_url, o.registered_at, o.is_active,
+       (SELECT f.fee_recipient FROM operator_fee_recipients f
+         WHERE f.account = o.account
+         ORDER BY f.effective_block DESC, f.trx_in_block DESC, f.op_in_trx DESC
+         LIMIT 1) AS fee_account,
+       s.earned_milli::text AS earned_milli,
+       s.orders::text AS orders
+  FROM operators o
+  LEFT JOIN operator_stats s ON s.account = o.account
+ ORDER BY o.is_active DESC, COALESCE(s.orders, 0) DESC, COALESCE(s.earned_milli, 0) DESC,
+          o.registered_at ASC, o.account ASC
+ LIMIT 500`;
+
 export function operatorsRoute(db: Database): Hono {
 	const app = new Hono();
 
 	app.get('/', async (c) => {
-		// LEFT JOIN — operators without an earnings row still appear,
-		// just without a stats object. Order: active first, then
-		// recently-registered first. Inactive operators are still
-		// listed for transparency (they existed, they don't anymore),
-		// but they appear below active ones.
-		const sql = `
-			SELECT o.account, o.tag, o.display_name, o.contact_url,
-			       o.registered_at, o.is_active,
-			       e.cumulative_blurt_earned::text,
-			       e.total_orders_attributed::text
-			  FROM operators o
-			  LEFT JOIN operator_earnings e ON e.account = o.account
-			 ORDER BY o.is_active DESC, o.registered_at DESC
-			 LIMIT 500`;
-
-		const result = await db.query<OperatorRow>(sql);
+		const result = await db.query<OperatorRow>(OPERATORS_SQL);
 		return c.json({
 			operators: result.rows.map(rowToWire)
 		});

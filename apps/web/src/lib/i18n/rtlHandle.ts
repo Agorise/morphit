@@ -18,6 +18,9 @@
  *      (U+2066 … U+2069). Harmless in LTR locales (the marks are invisible and
  *      change nothing); in RTL they pin the '@' + account as one LTR unit. Any
  *      NEW string that writes `@{account}` inherits the fix for free.
+ *      In an RTL locale, literal handles written into the text ("@bob with
+ *      @sally", v1.21.8) are isolated the same way, and so are Matrix
+ *      addresses (@agorise:matrix.org) and /@paths (/@username/).
  *   2. The two non-i18n render sites (a profile <h1> and the backup-card print)
  *      wrap the handle in `<bdi class="ltr-in-rtl">` — same isolate +
  *      direction:ltr, expressed in the template.
@@ -40,24 +43,52 @@ const AT_HANDLE = /@(\{[A-Za-z0-9_]+\})/g;
  * an already-wrapped slot (a '@' already preceded by U+2066) is left alone, so
  * re-running the transform never double-wraps.
  */
-export function isolateHandleString(s: string): string {
-	if (s.indexOf('@{') === -1) return s;
-	return s.replace(AT_HANDLE, (match, brace: string, offset: number, full: string) =>
-		offset > 0 && full[offset - 1] === LRI ? match : `${LRI}@${brace}${PDI}`
-	);
+/**
+ * A literal Blurt handle written into the text ("@bob with @sally"): '@' not
+ * after a word character, '/', or an LRI (so not an email, a /@path, nor one
+ * already isolated), then a Blurt account name, not followed by a word
+ * character, '.'+word, ':' or '{' (so not a Matrix id like @agorise:matrix.org,
+ * nor an @{var} slot).
+ */
+const AT_LITERAL = /(^|[^\w/\u2066])@([a-z][a-z0-9.-]{1,14}[a-z0-9])(?![\w:{]|\.\w)/g;
+
+/** A Matrix address written into the text (@agorise:matrix.org): '@' not
+ *  after a word character, '/' or an LRI, the user part, ':', a server name. */
+const AT_MATRIX = /(^|[^\w/\u2066])@([a-z0-9._=-]+:[a-z0-9-]+(?:\.[a-z0-9-]+)+)(?![\w.-]*\u2069)/g;
+
+/** A /@path written into the text (/@username/): starts after a space, an
+ *  opening quote or '*' (never inside a link target "](…)", a `code` span,
+ *  or one already isolated), up to the next space or closing mark. */
+const AT_PATH = /(^|[\s*"«])(\/@[a-z{][^\s`*)\]»"]*)/g;
+
+export function isolateHandleString(s: string, opts: { literals?: boolean } = {}): string {
+	let out = s;
+	if (out.indexOf('@{') !== -1)
+		out = out.replace(AT_HANDLE, (match, brace: string, offset: number, full: string) =>
+			offset > 0 && full[offset - 1] === LRI ? match : `${LRI}@${brace}${PDI}`
+		);
+	// v1.21.8 — in an RTL locale, literal handles too (the FAQ's examples).
+	if (opts.literals === true && out.indexOf('@') !== -1) {
+		out = out.replace(AT_LITERAL, (_m, pre: string, name: string) => `${pre}${LRI}@${name}${PDI}`);
+		// Matrix addresses and /@paths read wrong the same way ("agorise:matrix.org@",
+		// "/username@/"): the whole address is one LTR unit.
+		out = out.replace(AT_MATRIX, (_m, pre: string, id: string) => `${pre}${LRI}@${id}${PDI}`);
+		out = out.replace(AT_PATH, (_m, pre: string, path: string) => `${pre}${LRI}${path}${PDI}`);
+	}
+	return out;
 }
 
 /**
  * Recursively transform a loaded messages tree, isolating `@{var}` in every
  * string leaf. Returns a NEW value; never mutates the imported module object.
  */
-export function isolateAtHandles<T>(node: T): T {
-	if (typeof node === 'string') return isolateHandleString(node) as unknown as T;
-	if (Array.isArray(node)) return node.map((v) => isolateAtHandles(v)) as unknown as T;
+export function isolateAtHandles<T>(node: T, opts: { literals?: boolean } = {}): T {
+	if (typeof node === 'string') return isolateHandleString(node, opts) as unknown as T;
+	if (Array.isArray(node)) return node.map((v) => isolateAtHandles(v, opts)) as unknown as T;
 	if (node !== null && typeof node === 'object') {
 		const out: Record<string, unknown> = {};
 		for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
-			out[k] = isolateAtHandles(v);
+			out[k] = isolateAtHandles(v, opts);
 		}
 		return out as unknown as T;
 	}

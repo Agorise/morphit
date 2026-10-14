@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { formatDayMonth } from '$lib/i18n/formatters';
+	import { formatBlurtTotal, formatCount, formatDayMonth } from '$lib/i18n/formatters';
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -16,6 +16,9 @@
 	// still publish one — e.g. time.relay shows on /instances but not /operators).
 	let instanceContactByTag = $state<Record<string, string>>({});
 	import CopyButton from '$lib/components/CopyButton.svelte';
+	// The canonical treasury: an operator whose fees account IS it (morphit.io,
+	// or an instance that left its fees account blank) collects into it.
+	import { FEE_RECIPIENT } from '$lib/orders/fee';
 	import { normalizeContactUrl, detectContactProtocol } from '@morphit/operator-config/contact';
 
 	// Loading states are explicit so empty-data and failed-fetch
@@ -72,13 +75,8 @@
 		}
 	});
 
-	// Display helpers — kept inline because they're single-page
-	// concerns. If a second page needs the same formatting, move
-	// them to $lib/utils.
-	function formatBlurt(n: number): string {
-		return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(n);
-	}
-
+	// Numbers in the page's language (formatCount, formatBlurtTotal), not the
+	// browser's (v1.21.8).
 	function formatDate(iso: string): string {
 		// Sitewide canonical date format ("30 June, 2026").
 		return formatDayMonth(iso);
@@ -181,7 +179,9 @@
 		<ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 			{#each operators as op (op.account)}
 				{@const labelProps = extractLabelPropsFromProfile(profileMap[op.account])}
-				<li class="card border border-ink-200 dark:border-ink-800">
+				<!-- min-w-0: a grid item is otherwise as wide as its longest word, so a
+				     long operator name or tag widened the page at 320 px. -->
+				<li class="card min-w-0 border border-ink-200 dark:border-ink-800">
 					<header class="flex items-start gap-3">
 						<!--
 							IdentityLabel carries the identicon avatar + display_name
@@ -217,7 +217,7 @@
 							>{$_('operators.tag_label')}</span
 						>
 						<code
-							class="rounded bg-ink-200 px-1.5 py-0.5 text-xs text-morphit-emerald dark:bg-ink-800"
+							class="min-w-0 break-all rounded bg-ink-200 px-1.5 py-0.5 text-xs text-morphit-emerald dark:bg-ink-800"
 						>
 							{op.tag}
 						</code>
@@ -230,7 +230,7 @@
 									{$_('operators.orders_attributed')}
 								</dt>
 								<dd class="mt-0.5 font-display text-lg font-semibold">
-									{op.stats.total_orders_attributed}
+									{formatCount(op.stats.total_orders_attributed)}
 								</dd>
 							</div>
 							<div>
@@ -238,9 +238,12 @@
 									{$_('operators.earnings_lifetime')}
 								</dt>
 								<dd class="mt-0.5 font-display text-lg font-semibold">
-									{formatBlurt(op.stats.cumulative_blurt_earned)}
+									{formatBlurtTotal(op.stats.cumulative_blurt_earned)}
 									<span class="text-sm font-normal text-ink-600 dark:text-ink-400">BLURT</span>
 								</dd>
+								{#if op.fee_account === FEE_RECIPIENT}
+									<dd class="mt-0.5 text-xs text-ink-500">{$_('operators.earnings_to_treasury')}</dd>
+								{/if}
 							</div>
 						</dl>
 					{/if}

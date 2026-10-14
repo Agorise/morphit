@@ -304,6 +304,19 @@ for (const ws of WORKSPACES_SVELTE) {
 		const errLines = out.split('\n').filter((l) => l.includes('Error:'));
 		fail(`svelte-check ${ws}`, `${errLines.length} error(s):\n${errLines.slice(0, 5).join('\n')}`);
 	}
+	// The service worker: SvelteKit's generated tsconfig EXCLUDES it, so
+	// svelte-check never saw it — and the build only WARNS on a missing import
+	// there, shipping a worker that throws on every request it handles (found
+	// 2026-10-13). tsconfig.sw.json checks it on its own.
+	if (existsSync(join(wsPath, 'tsconfig.sw.json'))) {
+		try {
+			execSync('npx tsc --noEmit -p tsconfig.sw.json', { cwd: wsPath, stdio: 'pipe' });
+			pass(`tsc service worker ${ws}`);
+		} catch (err: any) {
+			const out = (err.stdout?.toString() || '') + (err.stderr?.toString() || '');
+			fail(`tsc service worker ${ws}`, out.split('\n').slice(0, 5).join('\n'));
+		}
+	}
 }
 
 const total = passed + failed + skipped;

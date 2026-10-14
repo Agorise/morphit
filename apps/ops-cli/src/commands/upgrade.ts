@@ -318,6 +318,7 @@ import { daemonReload } from '../lib/restartServices.ts';
 import { healXmrExplorerList } from '../lib/feeExplorerListHeal.ts';
 import { healBtcExplorerList } from '../lib/btcFeeExplorerListHeal.ts';
 import { chooseCanaryDirOwner, parsePasswdRefreshTarget } from '../lib/canaryDirOwner.ts';
+import { type CanaryCarry, carryCanaryForward } from '../lib/canaryCarry.ts';
 import {
 	detectDbContainerAsync,
 	parseBackupDbContainer,
@@ -3408,7 +3409,15 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	//      skips and the reminder near the end fires instead. Guarded: non-interactive
 	//      + 90s timeout + no controlling tty, so a passphrase-protected key can never
 	//      hang the upgrade; any failure falls through to the reminder.
+	//   0. FIRST, while the new build/ is still root-owned: put back the canary
+	//      that was served before the upgrade (canary.txt + pgp_keys.asc, the
+	//      same signed bytes — lib/canaryCarry.ts). A canary signed on another
+	//      computer used to be missing from every upgrade until its operator
+	//      re-ran the refresh (morphit.io, vigilante.trading, v1.21.7), which
+	//      reads as a canary that tripped. Its dates still run out on their own;
+	//      the refresh below, on a box that signs here, replaces it with a new one.
 	let canaryAutoRefreshed = false;
+	const canaryCarried = carryOldCanary(backupDir, installDir);
 	if (canaryDirUid >= 0) {
 		const webBuild = join(installDir, 'apps', 'web', 'build');
 		const webStatic = join(installDir, 'apps', 'web', 'static');
@@ -3508,6 +3517,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}
 		}
 	}
+
+	afterCanaryRefresh(
+		canaryCarried,
+		canaryAutoRefreshed,
+		Date.now(),
+		(u) => spawnSync('systemctl', ['cat', u], { stdio: 'ignore', timeout: 10_000 }).status === 0
+	);
 
 	// ─── 9b2. Rebuild the dist-shipping workspaces ─────
 	//
@@ -4484,8 +4500,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			to: latestTag,
 			backupDir,
 			schemaChanged,
-			canaryCleared:
-				!canaryAutoRefreshed && existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt')),
+			canaryCleared: canaryClearedByUpgrade(
+				canaryAutoRefreshed,
+				existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt')),
+				canaryCarried
+			),
 			frontendVerified,
 			servicesVerified,
 			startedMs: upgradeStartedMs,
@@ -4645,6 +4664,99 @@ let afterRestartLaunched = false;
 
 /** Things this upgrade found for the operator to do, named in its last lines. */
 const leftForYou: string[] = [];
+
+/** Step 9b1, part one: put back the canary served before the upgrade, from
+ *  the old install (renamed by root to `backupDir`, the folder nothing below
+ *  may be a link in) into the new build. Says what was not put back, and
+ *  why. Never throws. Exported for its test. */
+export function carryOldCanary(backupDir: string, installDir: string): CanaryCarry | null {
+	try {
+		const carried = carryCanaryForward(
+			join(backupDir, 'apps', 'web', 'build'),
+			join(installDir, 'apps', 'web', 'build'),
+			{ trustedRoot: backupDir }
+		);
+		for (const sk of carried.skipped)
+			info(
+				`(The warrant canary's ${sk.name} from before the upgrade was not put back: ${sk.why}.)`
+			);
+		return carried;
+	} catch {
+		/* best-effort: the reminder at the end still names the refresh */
+		return null;
+	}
+}
+
+/** Did this upgrade leave the site without the canary it served before?
+ *  Only when there was one, no same-server refresh signed a new one, and it
+ *  was not put back. Exported for its test. */
+export function canaryClearedByUpgrade(
+	autoRefreshed: boolean,
+	hadCanary: boolean,
+	carried: CanaryCarry | null
+): boolean {
+	return !autoRefreshed && hadCanary && !(carried?.carried.includes('canary.txt') ?? false);
+}
+
+/** Step 9b1, part two (after a same-server refresh had its chance): report
+ *  the canary that was put back — unless the refresh replaced it with a new
+ *  one, or none was. Exported for its test. */
+export function afterCanaryRefresh(
+	carried: CanaryCarry | null,
+	autoRefreshed: boolean,
+	nowMs: number,
+	unitExists: (unit: string) => boolean
+): void {
+	if (autoRefreshed || carried === null || !carried.carried.includes('canary.txt')) return;
+	reportCarriedCanary(carried, nowMs, unitExists);
+}
+
+/** A carried canary with less validity than this left is named in the last
+ *  lines (health's own warning margin). */
+const CARRIED_CANARY_MARGIN_MS = 5 * 24 * 60 * 60 * 1000;
+
+/** Say that the canary signed before the upgrade is served again, and when it
+ *  runs out; one that runs out within days (or has, or has no readable date)
+ *  goes to the last lines with the command that re-signs it. Exported for its
+ *  test. */
+export function reportCarriedCanary(
+	carry: Pick<CanaryCarry, 'validThrough' | 'validThroughMs' | 'skipped'>,
+	nowMs: number,
+	unitExists: (unit: string) => boolean
+): void {
+	const until = carry.validThrough ?? 'no readable date';
+	const resign = unitExists('morphit-canary.timer')
+		? 'on this server: sudo systemctl start morphit-canary.service'
+		: 'on the computer that holds its key: bash ~/.morphit/update-canary.sh';
+	// Without its public key (/pgp_keys.asc) nobody can check the canary: the
+	// refresh publishes the key again.
+	const key = carry.skipped.find(
+		(s) => s.name === 'pgp_keys.asc' && s.why !== 'the new install already has one'
+	);
+	if (key)
+		leftForYou.push(
+			`Publish the warrant canary's public key again (/pgp_keys.asc was not put back: ${key.why}) ${resign}`
+		);
+	if (
+		Number.isFinite(carry.validThroughMs) &&
+		carry.validThroughMs - nowMs >= CARRIED_CANARY_MARGIN_MS
+	) {
+		info(
+			`\u2713 Warrant canary: the one you signed before the upgrade is served again, unchanged (valid through ${until}).`
+		);
+		return;
+	}
+	const due =
+		Number.isFinite(carry.validThroughMs) && carry.validThroughMs > nowMs
+			? `runs out on ${until}`
+			: Number.isFinite(carry.validThroughMs)
+				? `ran out on ${until}`
+				: 'has no readable "Valid through" date';
+	info(
+		`Warrant canary: the one you signed before the upgrade is served again, unchanged, but it ${due}.`
+	);
+	leftForYou.push(`Re-sign the warrant canary (the one served again ${due}) ${resign}`);
+}
 
 /** Where the heal phase (a child process) leaves how many warnings it printed,
  *  so the upgrade's last word never says "Nothing else to do." after them. */

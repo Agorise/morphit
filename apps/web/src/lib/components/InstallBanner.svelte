@@ -79,8 +79,8 @@
 
 {#if visible}
 	<div
-		class="border-b border-morphit-emerald/30 bg-emerald-50 px-4 py-2 text-sm
-		       text-ink-800 dark:border-morphit-emerald/25 dark:bg-emerald-950/40
+		class="border-b border-morphit-emerald/30 bg-morphit-emerald/10 px-4 py-2 text-sm
+		       text-ink-800 dark:border-morphit-emerald/25 dark:bg-morphit-emerald/10
 		       dark:text-ink-100"
 		role="region"
 		aria-label={$_('install.banner.heading')}

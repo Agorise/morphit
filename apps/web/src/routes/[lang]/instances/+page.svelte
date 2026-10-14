@@ -398,13 +398,15 @@
 	</header>
 
 	<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
-		<label class="flex flex-col gap-1 text-sm">
+		<!-- max-w-full: the menu is as wide as its longest choice, wider than
+		     a 320 px screen in several languages (v1.21.8). -->
+		<label class="flex min-w-0 max-w-full flex-col gap-1 text-sm">
 			<span class="text-xs uppercase tracking-widest text-ink-500">
 				{$_('instances.filter_label')}
 			</span>
 			<select
 				bind:value={statusFilter}
-				class="rounded-md border border-ink-200 bg-white px-3 py-1.5 text-sm dark:border-ink-700 dark:bg-ink-900"
+				class="max-w-full rounded-md border border-ink-200 bg-white px-3 py-1.5 text-sm dark:border-ink-700 dark:bg-ink-900"
 			>
 				<option value="">{$_('instances.filter_all')}</option>
 				<option value="good">{$_('instances.status_menu.good')}</option>

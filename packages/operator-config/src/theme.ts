@@ -32,6 +32,8 @@
  * apps/ops-cli/test/theme.test.ts and scripts/theme-tokens-smoke.ts).
  */
 
+import { BRAND_NAME_CSS_PROP, brandNameCssHex } from './brand.js';
+
 /** '#rrggbb', lower case. */
 export type Hex = string;
 
@@ -104,6 +106,7 @@ type TokenRule =
 	| { kind: 'bubble'; stop: 1 | 2 | 3 }
 	| { kind: 'btn-face'; stop: 1 | 2 | 3 }
 	| { kind: 'btn-text' }
+	| { kind: 'btn-edge' }
 	| { kind: 'alias'; of: string };
 
 export interface ThemeTokenDef {
@@ -176,6 +179,12 @@ export const THEME_TOKENS: readonly ThemeTokenDef[] = [
 		ref: '#ffffff',
 		rule: { kind: 'btn-text' },
 		use: 'text on the primary button (white or dark, whichever passes WCAG AA)'
+	},
+	{
+		name: 'brand-btn-edge',
+		ref: '#00da69',
+		rule: { kind: 'btn-edge' },
+		use: 'the 1px edge a primary button lights on hover (brand-primary on deep buttons, the lightest stop on bright ones; lifted lighter until it stands out from the face, or a darker shade of a light face not even white stands out from)'
 	},
 	{
 		name: 'focus-ring',
@@ -450,6 +459,20 @@ function oklchMid(a: Hex, b: Hex): Hex {
 	if (dh > Math.PI) dh -= 2 * Math.PI;
 	if (dh < -Math.PI) dh += 2 * Math.PI;
 	return lchToHex({ L: (A.L + B.L) / 2, C: (A.C + B.C) / 2, h: ha + dh / 2 });
+}
+
+/** How far the 1px hover edge of a primary button stands out from its face —
+ *  as painted: apps/web/src/app.css draws it at {@link EDGE_ALPHA} opacity. */
+const EDGE_MIN = 1.8;
+/** The hover edge's opacity in apps/web/src/app.css (theme-tokens-smoke TT-9
+ *  reads the rule and checks the painted contrast with the alpha it finds). */
+export const EDGE_ALPHA = 0.9;
+
+/** `top` painted at `alpha` over `under` (CSS blends in sRGB). */
+export function blendOver(top: Hex, under: Hex, alpha: number): Hex {
+	const a = hexToRgb(top);
+	const b = hexToRgb(under);
+	return rgbToHex([0, 1, 2].map((i) => a[i]! * alpha + b[i]! * (1 - alpha)) as unknown as RGB);
 }
 
 /** Raise (dir 1) or lower (dir -1) OKLCH lightness in small steps until
@@ -728,6 +751,43 @@ export function deriveTheme(input: ThemeInput = {}): ThemeResult {
 				});
 				break;
 			}
+			case 'btn-edge': {
+				// The 1px edge a primary button lights on hover: brand-primary on
+				// deep buttons (as it always was), the lightest stop on bright ones
+				// (there brand-primary IS the face, so the edge did not show —
+				// Vigilante Trading, 2026-10-13). It must stand out from the face by
+				// 1.8:1, lighter than it — lifted until it does (a deep face can sit
+				// right on brand-primary with some colours: 1.01:1 seen). A face so
+				// pale that not even white is 1.8:1 from it (a white bright button)
+				// gets a darker edge instead: a shade of the face.
+				const face = tokens['brand-btn-face']!;
+				const start: Hex =
+					button === 'bright'
+						? [stops[1], stops[2], stops[3]].sort(
+								(a, b) => relativeLuminance(b) - relativeLuminance(a)
+							)[0]!
+						: tokens['brand-primary']!;
+				const painted = (h: Hex): number => contrastRatio(blendOver(h, face, EDGE_ALPHA), face);
+				const lighter = (h: Hex): boolean =>
+					relativeLuminance(h) > relativeLuminance(face) && painted(h) + 1e-9 >= EDGE_MIN;
+				const darker = (h: Hex): boolean =>
+					relativeLuminance(h) < relativeLuminance(face) && painted(h) + 1e-9 >= EDGE_MIN;
+				const edge: Hex = lighter(start)
+					? start
+					: (walkLightness(hexToLch(start), 1, lighter) ??
+						(lighter('#ffffff')
+							? '#ffffff'
+							: (walkLightness(hexToLch(face), -1, darker) ?? '#000000')));
+				tokens[t.name] = edge;
+				checks.push({
+					what: 'button hover edge on the button',
+					fg: t.name,
+					bg: 'brand-btn-face',
+					ratio: painted(edge),
+					min: EDGE_MIN
+				});
+				break;
+			}
 			case 'btn-text':
 			case 'alias':
 				break; // filled by btn-face / below
@@ -846,6 +906,27 @@ export function themeCssDeclarations(p: Pick<ThemePalette, 'tokens' | 'gridOpaci
 export function gridOpacityValue(v: unknown): string {
 	const n = typeof v === 'number' && Number.isFinite(v) ? Math.min(0.2, Math.max(0, v)) : REF.grid;
 	return String(Math.round(n * 1000) / 1000);
+}
+
+/** The stylesheet every page links in its <head> (apps/web/src/app.html),
+ *  render-blocking, so the first paint already has the instance's look — also
+ *  on the pages the app draws in the browser, which boot from the untouched
+ *  index.html. Canonically it sets nothing; `morphit-ops branding apply` writes
+ *  the instance's colours and name into it (the name as brand.ts encodes it). */
+export const BRAND_THEME_CSS_REL = 'brand/theme.css';
+
+/** /brand/theme.css for a branded instance: the name, and the colours when it
+ *  has a colour theme (the same declarations as the pages' theme <style>). */
+export function brandThemeCss(
+	name: string,
+	palette: Pick<ThemePalette, 'tokens' | 'gridOpacity'> | null
+): string {
+	const decl = [`${BRAND_NAME_CSS_PROP}:${brandNameCssHex(name)}`];
+	if (palette !== null) decl.push(themeCssDeclarations(palette));
+	return (
+		"/* This instance's look, written by morphit-ops branding apply (docs/BRANDING.md). */\n" +
+		`html:root{${decl.join(';')}}\n`
+	);
 }
 
 /** The <style> block branding puts into every prerendered page's <head>. */

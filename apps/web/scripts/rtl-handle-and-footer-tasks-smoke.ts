@@ -68,11 +68,63 @@ check(
 	})()
 );
 
+// v1.21.8 — literal handles written into RTL text (the FAQ's examples such as
+// "@bob with @sally") flipped to "bob@" in Farsi: only @{var} slots were
+// isolated. In an RTL locale, literal Blurt handles are isolated too, and so
+// are Matrix addresses and /@paths (each as one unit) — but not an email, a
+// markdown link target, a `code` span, a URL, or an @{var} (the slot rule).
+check(
+	'RTL: a literal @handle in prose is isolated, @ first',
+	isolateHandleString('گفتگوی @bob با @sally دیروز', { literals: true }) ===
+		`گفتگوی ${LRI}@bob${PDI} با ${LRI}@sally${PDI} دیروز`
+);
+check(
+	'RTL: emails and markdown link targets are left alone; a Matrix address is one unit',
+	isolateHandleString('[@alice](/@alice) a@b.com @agorise:matrix.org', { literals: true }) ===
+		`[${LRI}@alice${PDI}](/@alice) a@b.com ${LRI}@agorise:matrix.org${PDI}`
+);
+check(
+	'RTL: a Matrix address in bold, and a /@path in prose, are each one LTR unit',
+	isolateHandleString('به **@agorise:matrix.org** بفرستید', { literals: true }) ===
+		`به **${LRI}@agorise:matrix.org${PDI}** بفرستید` &&
+		isolateHandleString('با /@username/ و پس', { literals: true }) ===
+			`با ${LRI}/@username/${PDI} و پس`
+);
+check(
+	'RTL: a `code` span, a URL and an already isolated address are not touched again',
+	(() => {
+		const src = '`/rss/orderbook/by-account/@alice.xml` https://blurt.blog/@alice @agorise:matrix.org /@bob/';
+		const once = isolateHandleString(src, { literals: true });
+		return (
+			once.startsWith('`/rss/orderbook/by-account/@alice.xml` https://blurt.blog/@alice ') &&
+			isolateHandleString(once, { literals: true }) === once
+		);
+	})()
+);
+check(
+	'RTL: literal isolation is idempotent and leaves @{var} slots to the slot rule',
+	(() => {
+		const once = isolateHandleString('@bob و @{peer}', { literals: true });
+		return (
+			once === `${LRI}@bob${PDI} و ${LRI}@{peer}${PDI}` &&
+			isolateHandleString(once, { literals: true }) === once
+		);
+	})()
+);
+check(
+	'LTR locales: literal handles are not touched (no invisible marks in their text)',
+	isolateHandleString('chatted with @alice') === 'chatted with @alice'
+);
+
 // ─── Task 1: the rule is wired structurally ─────────────────────
 const idx = read('src/lib/i18n/index.ts');
 check(
 	'i18n loader applies isolateAtHandles to every registered locale',
 	/isolateAtHandles\(/.test(idx) && /register\(/.test(idx) && /import.*rtlHandle/.test(idx)
+);
+check(
+	'i18n loader isolates literal handles in RTL locales',
+	/isolateAtHandles\(m\.default \?\? m, \{ literals: isRtlLocale\(code\) \}\)/.test(idx)
 );
 const css = read('src/app.css');
 check(

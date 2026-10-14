@@ -294,11 +294,13 @@
 				<MorphitLogoBling heightPx={32} shine priority />
 			</a>
 
+			<!-- px-3 until lg: at 768 px the French and Russian labels pushed the
+			     Start button off the screen with px-4 (v1.21.8). -->
 			<nav aria-label={$_('a11y.nav_primary') as string} class="hidden gap-1 md:flex">
 				{#each navLinks as link (link.href)}
 					<a
 						href={link.href}
-						class="rounded-xl px-4 py-2 font-medium transition hover:bg-ink-100 dark:hover:bg-ink-800 {isActive(
+						class="rounded-xl px-3 py-2 font-medium transition hover:bg-ink-100 lg:px-4 dark:hover:bg-ink-800 {isActive(
 							link.href
 						)
 							? 'text-morphit-emerald'
@@ -326,11 +328,18 @@
 
 		<!-- Mobile nav -->
 		<nav aria-label={$_('a11y.nav_mobile') as string} class="border-t border-ink-100 dark:border-ink-800 md:hidden">
+			<!-- flex-auto + min-w-0 + break-words + the smaller type under
+			     360 px: the four labels in Russian, German, Polish, Spanish or
+			     Italian are wider than a 320 px phone at the desktop padding,
+			     and pushed the last one off the screen (v1.21.8). flex-auto,
+			     not flex-1: each link gets room by its own label's width, so a
+			     long one is not cut in the middle of a word to fit an equal
+			     share. -->
 			<div class="mx-auto flex max-w-7xl items-center justify-around px-2 py-1">
 				{#each navLinks as link (link.href)}
 					<a
 						href={link.href}
-						class="flex-1 rounded-lg px-3 py-2 text-center text-sm font-medium {isActive(link.href)
+						class="min-w-0 flex-auto break-words rounded-lg px-1 py-2 text-center text-sm font-medium max-[359px]:text-xs sm:px-3 {isActive(link.href)
 							? 'text-morphit-emerald'
 							: 'text-ink-600 dark:text-ink-300'}"
 						aria-current={isActive(link.href) ? 'page' : undefined}
@@ -397,8 +406,9 @@
 			     at the request so the footer matches the header exactly — only the display
 			     height differs.) variant="footer" → /brand/site-logo-footer.svg: identical to
 			     the header logo on a canonical build, but an operator can give the footer its
-			     own wordmark (docs/BRANDING.md). One cached file, served stale-while-revalidate
-			     by the service worker, so no extra per-page round trip (Priority #4). -->
+			     own wordmark (docs/BRANDING.md). One file, served network-first by the
+			     service worker (the stored copy only offline), so it is never a logo
+			     the site no longer has. -->
 			<a
 				href={lp('/')}
 				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"

@@ -20,8 +20,12 @@
  * compiled in. It arrives at runtime:
  *   - prerendered pages: `<html data-brand-name="…">`, written by
  *     `morphit-ops branding apply` (a canonical page carries "Morphit");
- *   - the SPA fallback shell (index.html, which the tamper check covers and
- *     nothing may rewrite): `/brand/brand.json`, fetched before hydration.
+ *   - every page, the SPA fallback shell included (index.html, which the
+ *     tamper check covers and nothing may rewrite): `/brand/theme.css`, the
+ *     render-blocking stylesheet it links, written by branding with the name
+ *     (`--brand-name-hex`) and colours — so they are known before the first
+ *     paint; `/brand/brand.json` when that file names no site (an older
+ *     branding, or an unbranded instance).
  *
  * NO-FLASH / NO-JS: during PRERENDER every brand slot is bracketed by an
  * invisible U+2060 sentinel ("\u2060Morphit\u2060"). A post-build step
@@ -42,5 +46,7 @@ export {
 	applyBrandToString,
 	applyBrandToMessages,
 	brandFileSlug,
+	BRAND_NAME_CSS_PROP,
+	decodeBrandNameCssHex,
 	type BrandRenderer
 } from '@morphit/operator-config/brand';

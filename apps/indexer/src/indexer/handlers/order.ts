@@ -1297,3 +1297,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 };
 
 export default handle;
+
+/** The payload checks that depend on the op alone (no node settings, no
+ *  database): operatorStats.ts uses them to find a featured order's own
+ *  order op the same way on every node. */
+export { validate as validateOrderPayload };

@@ -158,7 +158,7 @@ tmux new -s morphit
 
 ```sh
 # on the server
-V=1.21.7
+V=1.21.8
 mkdir -p ~/morphit && cd ~/morphit
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz"
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz.sha256"
@@ -279,7 +279,7 @@ It downloads and checks the new release itself, backs up first, redeploys the si
 bash scripts/canary/setup.sh
 ```
 
-It asks which kind of setup you have, offers to make you a signing key, and then re-signs the canary weekly on its own (uploading it to your server with `scp -O` in the VPS case). An upgrade clears the served folder, so the canary needs re-laying afterward — if you sign on the **same box**, the upgrade now does that for you; if you sign on a **separate laptop** (recommended for a VPS, so the key never sits on the server), it reminds you to run `bash ~/.morphit/update-canary.sh` once. Full reasoning: `OPERATIONS.md` §36.
+It asks which kind of setup you have, offers to make you a signing key, and then re-signs the canary weekly on its own (uploading it to your server with `scp -O` in the VPS case). An upgrade installs a fresh served folder; it puts the canary you signed back into it, unchanged (upgrades run by v1.21.8 or later — before that, a canary signed on a **separate laptop** had to be re-uploaded after every upgrade with `bash ~/.morphit/update-canary.sh`), and if you sign on the **same box** it also signs a new one. It names the re-upload only when it could not put the canary or its public key back (and says why), or when the canary it put back runs out within days. Full reasoning: `OPERATIONS.md` §36.
 
 **Helping the next node start fast.** Your instance keeps a pinned copy of the federation's indexer snapshot — a small (~600 kB) file that lets a brand-new node be useful in minutes instead of replaying the chain for days. It refreshes itself weekly and after every upgrade, and it serves over your web address, your `.onion` and your `.i2p` alike, so a newcomer running Tor-only can start up without ever touching the clearnet. There is nothing to set up and nothing to watch: it is automatic wherever IPFS hosting is on. You are not vouching for anything by mirroring — the newcomer checks the file against a fingerprint published on the blockchain, so a bad copy is caught by maths, not by trust. Old releases and snapshots are cleaned up weekly, keeping the current and previous ones (`OPERATIONS.md` §48, "Clean-up"). Detail: `OPERATIONS.md` §52.
 

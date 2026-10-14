@@ -685,13 +685,26 @@ every 25 s.
 Tier: `list`
 
 All registered operators on the chain: `{ "operators": [ { account,
-tag, display_name, contact_url, registered_at, is_active, stats? } ] }`
-(`stats` = `{ cumulative_blurt_earned, total_orders_attributed }`
-once an order has been attributed). No query parameters and no
-per-tag endpoint — filter client-side. Every account that has
-broadcast `morphit_operator_register_v1` is listed, active ones first
-(`is_active`). Distinct from /instances — operators are the chain
-identities, instances are the running servers.
+tag, display_name, contact_url, registered_at, is_active, fee_account,
+stats? } ] }`. `fee_account` is the fees account the operator registered
+on chain most recently (`null` if none). `stats` = `{
+cumulative_blurt_earned, total_orders_attributed }` (v1.21.8), for every
+operator: `cumulative_blurt_earned` is the BLURT that reached the
+operator's fees account in Morphit fee payments (listing, first-contact
+and featured-slot fees) since inception, computed from chain data alone,
+so every node shows the same; `total_orders_attributed` counts the orders
+carrying the operator's tag whose fee this node holds as paid (any fee
+method, free first orders included) — this node's judgement, so nodes can
+differ a little. Both are recomputed in the background (within a minute
+of a new fee payment, at least every 10 minutes); `stats` is absent for an
+operator not counted yet: one registered since the last count, or every
+operator before the first count after the upgrade or a restore, which
+waits until the node has caught up with the chain. See
+FEES-AND-REWARDS.md, "Auditing per-operator earnings". No query
+parameters and no per-tag endpoint — filter client-side. Every account
+that has broadcast `morphit_operator_register_v1` is listed: active ones
+first, then most orders, then most earned. Distinct from /instances —
+operators are the chain identities, instances are the running servers.
 
 ---
 

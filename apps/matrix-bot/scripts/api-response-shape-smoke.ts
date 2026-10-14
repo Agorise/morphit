@@ -129,14 +129,11 @@ const ErrorResponseSchema = z.object({
 	message: z.string()
 });
 
-const OperatorStatsSchema = z.object({
-	probe_status: z.enum(['ok', 'degraded', 'down', 'unknown']),
-	probe_latency_ms: z.number().nullable(),
-	probe_checked_at: z.string().nullable(),
-	live_orders_total: z.number(),
-	live_orders_24h: z.number(),
-	feedback_total: z.number(),
-	feedback_positive_pct: z.number().nullable()
+// /v1/operators stats (v1.21.8; the schema used here before described fields
+// the API never sent).
+const OperatorRecordStatsSchema = z.object({
+	cumulative_blurt_earned: z.number(),
+	total_orders_attributed: z.number()
 });
 
 const OperatorRecordSchema = z.object({
@@ -146,7 +143,8 @@ const OperatorRecordSchema = z.object({
 	contact_url: z.string().nullable(),
 	registered_at: z.string(),
 	is_active: z.boolean(),
-	stats: OperatorStatsSchema.optional()
+	fee_account: z.string().nullable().optional(),
+	stats: OperatorRecordStatsSchema.optional()
 });
 
 const AltNetworksSchema = z.object({
@@ -545,7 +543,9 @@ const sampleOperator = {
 	display_name: 'Alice Operator',
 	contact_url: null,
 	registered_at: '2026-05-14T00:00:00Z',
-	is_active: true
+	is_active: true,
+	fee_account: 'morphit-alice-fees',
+	stats: { cumulative_blurt_earned: 100.5, total_orders_attributed: 50 }
 } satisfies OperatorRecord;
 
 const sampleInstance = {
@@ -883,6 +883,20 @@ const scenarios: Scenario[] = [
 		valid: sampleOperator,
 		invalidate: (s) => ({ ...s, is_active: 'yes' }),
 		invalidReason: "is_active='yes' (must be boolean)"
+	},
+	{
+		name: 'OperatorRecord (fees account)',
+		schema: OperatorRecordSchema,
+		valid: sampleOperator,
+		invalidate: (s) => ({ ...s, fee_account: 42 }),
+		invalidReason: 'fee_account=42 (must be a string or null)'
+	},
+	{
+		name: 'OperatorRecord (stats)',
+		schema: OperatorRecordSchema,
+		valid: sampleOperator,
+		invalidate: (s) => ({ ...s, stats: { cumulative_blurt_earned: 1 } }),
+		invalidReason: 'stats without total_orders_attributed'
 	},
 	{
 		name: 'InstanceResponse',

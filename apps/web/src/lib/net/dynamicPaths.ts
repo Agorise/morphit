@@ -1,3 +1,5 @@
+import { withHiddenFloor } from './transportBudget';
+
 /**
  * Morphit — dynamic same-origin endpoint classifier.
  *
@@ -66,18 +68,20 @@ export function isDynamicDataPath(pathname: string): boolean {
  * `morphit-ops branding apply` may REPLACE in place — same URL, new bytes.
  *
  * They are static assets (precached, offline-capable), so they are NOT dynamic
- * data; but pure cache-first would pin a visitor to the logo/brand their
- * service worker first saw until the next Morphit release rotates the cache.
- * The service worker therefore serves exactly these paths
- * STALE-WHILE-REVALIDATE: the cached copy answers instantly (no extra round
- * trip, still works offline) while a background refresh updates the cache, so
- * a re-applied brand reaches returning visitors on their next load.
+ * data; but cache-first would pin a visitor to the logo/brand their service
+ * worker first saw until the next Morphit release rotates the cache. The
+ * service worker therefore serves exactly these paths NETWORK-FIRST
+ * ({@link serveBrandFile}): the server's copy whenever it answers, the stored
+ * one only offline. (v1.21.8: they were stale-while-revalidate, which showed a
+ * visitor who had seen the site before it was branded — or before a re-brand —
+ * the old look for a whole page load: vigilante.trading, 2026-10-13.)
  *
  * Keep in sync with the overlay targets in apps/ops-cli/src/lib/branding.ts
  * (a branding-overridable-paths smoke asserts the two lists match).
  */
 export const BRAND_OVERRIDABLE_PATHS: readonly string[] = [
 	'/brand/brand.json',
+	'/brand/theme.css',
 	'/brand/site-logo.svg',
 	'/brand/site-logo-footer.svg',
 	'/favicon.svg',
@@ -91,26 +95,41 @@ export const BRAND_OVERRIDABLE_PATHS: readonly string[] = [
 ];
 
 /** Query parameter asking the service worker for the NETWORK's copy of a
- *  brand file (the cached one only when offline). Sent only by the Blurt post
- *  (lib/syndication/publish.ts), right before posting. */
+ *  brand file. On a read by the app itself (a fetch() — the Blurt post,
+ *  lib/syndication/publish.ts) it means "never the stored copy, even
+ *  offline". The pages' own logo URLs carry it too (lib/brand/brandAssets.ts):
+ *  for an <img> this worker still falls back to the stored copy offline, but
+ *  v1.21.7's worker — still running in a visitor's browser on the first page
+ *  after an upgrade — fetched only `?fresh=1` reads from the network, so the
+ *  parameter is what keeps that page from showing a logo stored before the
+ *  site was branded. */
 export const BRAND_FRESH_PARAM = 'fresh';
 
 /**
  * Which response the service worker gives for a brand file (PURE).
  * `fresh` is the network's answer (null when it failed or timed out), `cached`
- * the stored copy. A `?fresh=1` read (the Blurt post deciding which picture to
- * use) must NEVER get the stored copy: one stored before the site was branded
- * says "Morphit", and the post would carry Morphit's picture on a branded site.
- * It gets the network's answer, or 'offline' (a 503).
+ * the stored copy.
+ *  - The server's good answer, always.
+ *  - The server answered with an error (404, 429, 503…, or the worker's own
+ *    504 when it gave up waiting): its error — a stored copy may be from
+ *    before the site was branded, and a missing logo is better than
+ *    Morphit's — except where `keepStoredOnError` (the theme stylesheet:
+ *    without it the page shows the default look, so a stored copy can only
+ *    do better).
+ *  - No answer at all (offline, or the connection dropped): the stored copy.
+ * A `?fresh=1` read by the app (the Blurt post deciding which picture to use)
+ * NEVER gets the stored copy: it gets the network's answer, or 'offline' (a
+ * 503).
  */
 export function chooseBrandResponse<R extends { ok: boolean }>(
 	fresh: R | null,
 	cached: R | undefined,
-	wantsFresh: boolean
+	wantsFresh: boolean,
+	keepStoredOnError = false
 ): R | 'offline' {
 	if (fresh && fresh.ok) return fresh;
+	if (fresh && !(keepStoredOnError && cached && !wantsFresh)) return fresh;
 	if (cached && !wantsFresh) return cached;
-	if (fresh) return fresh;
 	return 'offline';
 }
 
@@ -121,4 +140,100 @@ export function chooseBrandResponse<R extends { ok: boolean }>(
  */
 export function isBrandOverridablePath(pathname: string): boolean {
 	return BRAND_OVERRIDABLE_PATHS.includes(pathname) || pathname.startsWith('/splash/');
+}
+
+/**
+ * The service worker's answer for a brand file (see BRAND_OVERRIDABLE_PATHS):
+ * NETWORK-FIRST. Asks the network and reads the stored copy together; stores a
+ * good network answer for offline use and returns it; the stored copy only
+ * when the network failed (`network` resolves null on an error or its own
+ * timeout), and never for a `?fresh=1` read (chooseBrandResponse). Never
+ * throws; 'offline' when there is nothing to answer with.
+ *
+ * Deliberately no "serve the stored copy if the network is slow" deadline:
+ * the stored copy may be from before the site was branded, and a slow answer
+ * (Tor, a weak mobile link) is far more common than a server that sends the
+ * page but stalls on one small file. With a deadline, a returning visitor on a
+ * slow link saw Morphit's logo for a whole page after a re-brand (measured in
+ * Chromium with the brand files 3 s late) — exactly what this must never do.
+ */
+export async function serveBrandFile<R extends { ok: boolean; status: number; clone(): R }>(
+	deps: {
+		readonly match: () => Promise<R | undefined>;
+		readonly network: () => Promise<R | null>;
+		readonly store: (fresh: R) => Promise<void>;
+	},
+	wantsFresh: boolean,
+	keepStoredOnError = false
+): Promise<R | 'offline'> {
+	const [cached, fresh] = await Promise.all([
+		deps.match().catch(() => undefined),
+		deps.network().catch(() => null)
+	]);
+	if (fresh !== null && fresh.ok && fresh.status === 200)
+		await deps.store(fresh.clone()).catch(() => undefined);
+	return chooseBrandResponse(fresh, cached, wantsFresh, keepStoredOnError);
+}
+
+/** Brand files whose stored copy beats a server error (see chooseBrandResponse).
+ *  Not brand.json: a copy stored before a re-brand carries the old colours. */
+function keepsStoredOnError(pathname: string): boolean {
+	return pathname === '/brand/theme.css';
+}
+
+/**
+ * The service worker's whole answer to a request for a brand file
+ * (isBrandOverridablePath): network-first through serveBrandFile, stored
+ * under the bare path, the fetch bounded by `timeoutMs` (armed until the
+ * body is stored, not just the headers); a server that has not answered by
+ * then counts as one that answered with an error (a 504), not as one that
+ * cannot be reached — the stored copy is for offline. A `?fresh=1` read counts as the
+ * app's strict read only when the app made it (fetch(): destination ''); an
+ * <img>/<link> carrying it (the pages' logo URLs, see BRAND_FRESH_PARAM) is
+ * served like any other brand file. Never throws; a 503 when there is
+ * nothing to answer with.
+ */
+export async function answerBrandRequest(
+	req: Request,
+	deps: {
+		readonly cache: {
+			match(r: Request, o?: CacheQueryOptions): Promise<Response | undefined>;
+			put(r: Request, res: Response): Promise<void>;
+		};
+		readonly fetch: (r: Request, init: RequestInit) => Promise<Response>;
+		readonly timeoutMs: number;
+	}
+): Promise<Response> {
+	const url = new URL(req.url);
+	const wantsFresh = url.searchParams.has(BRAND_FRESH_PARAM) && req.destination === '';
+	const key = new Request(url.origin + url.pathname);
+	const ac = new AbortController();
+	// Raised to the hidden-transport floor on a .onion/.i2p/.loki origin.
+	const timer = setTimeout(() => ac.abort(), withHiddenFloor(deps.timeoutMs, url.origin));
+	let pick: Response | 'offline';
+	try {
+		pick = await serveBrandFile<Response>(
+			{
+				match: () => deps.cache.match(req, { ignoreSearch: true }),
+				network: () =>
+					deps.fetch(req, { cache: 'no-cache', signal: ac.signal }).catch((err: unknown) => {
+						if (!ac.signal.aborted) throw err;
+						return new Response('The server did not answer in time.', {
+							status: 504,
+							headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+						});
+					}),
+				store: (fresh) => deps.cache.put(key, fresh)
+			},
+			wantsFresh,
+			keepsStoredOnError(url.pathname)
+		);
+	} finally {
+		clearTimeout(timer);
+	}
+	if (pick !== 'offline') return pick;
+	return new Response('Offline — resource unavailable.', {
+		status: 503,
+		headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+	});
 }

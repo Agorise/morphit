@@ -8,12 +8,14 @@
 
 :root {
 	color-scheme: dark;
-	--bg: #0a0e0f;
-	--panel: #131a1c;
-	--text: #d8e0e2;
-	--muted: #7c8a8e;
-	--accent: #34d399;
-	--border: #1f2a2d;
+	/* The instance's colours when /brand/theme.css sets them (a branded
+	   site), else Morphit's (the fallbacks, unchanged since v1.21.7). */
+	--bg: rgb(var(--surface-950-rgb, 10 14 15));
+	--panel: rgb(var(--surface-900-rgb, 19 26 28));
+	--text: rgb(var(--surface-100-rgb, 216 224 226));
+	--muted: rgb(var(--surface-400-rgb, 124 138 142));
+	--accent: rgb(var(--brand-accent-rgb, 52 211 153));
+	--border: rgb(var(--surface-700-rgb, 31 42 45));
 }
 
 html,
@@ -43,7 +45,7 @@ main {
 	border-radius: 12px;
 	padding: 2rem;
 	box-shadow:
-		0 0 0 1px rgba(52, 211, 153, 0.05),
+		0 0 0 1px rgb(var(--brand-accent-rgb, 52 211 153) / 0.05),
 		0 12px 40px rgba(0, 0, 0, 0.4);
 }
 
@@ -80,7 +82,7 @@ ul li {
 a {
 	color: var(--accent);
 	text-decoration: none;
-	border-bottom: 1px solid rgba(52, 211, 153, 0.3);
+	border-bottom: 1px solid rgb(var(--brand-accent-rgb, 52 211 153) / 0.3);
 }
 
 a:hover {

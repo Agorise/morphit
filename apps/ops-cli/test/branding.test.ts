@@ -17,7 +17,28 @@
  *   - verify.json is refreshed and discloses the override;
  *   - apply is idempotent, and reset restores every byte of the canonical build.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+/** Disk failure injection (crash-safety tests): the next rename onto a path
+ *  ending in `failRenameOnto.suffix` throws ENOSPC, as a full disk would. */
+const failRenameOnto: { suffix: string | null } = vi.hoisted(() => ({ suffix: null }));
+vi.mock('node:fs', async (importOriginal) => {
+	const fs = await importOriginal<typeof import('node:fs')>();
+	return {
+		...fs,
+		renameSync: (from: import('node:fs').PathLike, to: import('node:fs').PathLike) => {
+			const suffix = failRenameOnto.suffix;
+			if (suffix !== null && String(to).endsWith(suffix)) {
+				failRenameOnto.suffix = null;
+				fs.rmSync(String(from), { force: true });
+				throw Object.assign(new Error(`ENOSPC: no space left on device, rename '${String(to)}'`), {
+					code: 'ENOSPC'
+				});
+			}
+			return fs.renameSync(from, to);
+		}
+	};
+});
 import { spawnSync } from 'node:child_process';
 import {
 	existsSync,
@@ -30,7 +51,10 @@ import {
 	symlinkSync,
 	writeFileSync
 } from 'node:fs';
-import { applyBrandToString } from '../../../packages/operator-config/src/brand.ts';
+import {
+	applyBrandToString,
+	brandNameCssHex
+} from '../../../packages/operator-config/src/brand.ts';
 import {
 	brandForCompound,
 	continuesAsCompound
@@ -42,7 +66,7 @@ import {
 } from '../../../packages/operator-config/src/theme.ts';
 import { themeUpdates, mergeTheme, themeUpdateProblem } from '../src/commands/branding.ts';
 import { createHash } from 'node:crypto';
-import { gunzipSync, brotliDecompressSync, gzipSync } from 'node:zlib';
+import { gunzipSync, brotliDecompressSync, brotliCompressSync, gzipSync } from 'node:zlib';
 import { join, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -158,6 +182,7 @@ beforeEach(() => {
 		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>'
 	);
 	write('brand/brand.json', '{\n\t"schema": 1,\n\t"name": "Morphit"\n}\n', true);
+	write('brand/theme.css', "/* This instance's look. Canonically empty. */\n", true);
 	write(
 		'manifest.webmanifest',
 		JSON.stringify({ name: 'Morphit', short_name: 'Morphit', start_url: '/' }, null, '\t') + '\n'
@@ -289,6 +314,24 @@ describe('morphit-ops branding apply / reset', () => {
 		expect(v.operator_branding.brand_name).toBe('A&B Trading');
 		expect(v.operator_branding.files).toContain('en/login.html');
 		expect(v.operator_branding.files).toContain('brand/site-logo.svg');
+
+		// The stylesheet every page links before it paints (v1.21.8): the name,
+		// so the pages the app draws in the browser never show Morphit first.
+		expect(read('brand/theme.css')).toContain(
+			`html:root{--brand-name-hex:${brandNameCssHex('A&B Trading')}}`
+		);
+		expect(v.operator_branding.files).toContain('brand/theme.css');
+		expect(gunzipSync(readFileSync(join(buildDir, 'brand/theme.css.gz'))).toString()).toBe(
+			read('brand/theme.css')
+		);
+	});
+
+	it('a colour theme alone: theme.css carries the colours and names the site Morphit', () => {
+		applyBranding({ buildDir, settings: settings({ theme: { preset: 'champagne-gold' } }) });
+		const css = read('brand/theme.css');
+		expect(css).toContain(`--brand-name-hex:${brandNameCssHex('Morphit')}`);
+		expect(css).toContain('--brand-btn-face-rgb:214 178 106');
+		expect(css).toContain('--surface-page-rgb:');
 	});
 
 	it('re-applying is a no-op, and reset restores the canonical build byte for byte', () => {
@@ -509,6 +552,129 @@ describe('crash safety and link safety (run as root)', () => {
 		// … and reset restores every byte.
 		applyBranding({ buildDir, settings: settings(), reset: true });
 		expect(snapshot()).toEqual(canonical);
+	});
+
+	it('a full disk after a page was replaced but before its .gz/.br: the next apply rewrites them (nginx serves them)', () => {
+		const branded = (() => {
+			applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+			const b = snapshot();
+			applyBranding({ buildDir, settings: settings(), reset: true });
+			return b;
+		})();
+		failRenameOnto.suffix = join('build', 'brand', 'theme.css.gz');
+		expect(() =>
+			applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) })
+		).toThrow(/ENOSPC/);
+		expect(failRenameOnto.suffix).toBe(null);
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		const css = read('brand/theme.css');
+		expect(gunzipSync(readFileSync(join(buildDir, 'brand/theme.css.gz'))).toString()).toBe(css);
+		expect(
+			brotliDecompressSync(readFileSync(join(buildDir, 'brand/theme.css.br'))).toString()
+		).toBe(css);
+		const after = snapshot();
+		after.delete('verify.json');
+		branded.delete('verify.json');
+		expect(after).toEqual(branded);
+	});
+
+	it('a page left branded with its old .gz/.br (an older version cut off mid-file) is finished by the next apply', () => {
+		const canonicalGz = readFileSync(join(buildDir, 'en/login.html.gz'));
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		const page = read('en/login.html');
+		writeFileSync(join(buildDir, 'en/login.html.gz'), canonicalGz);
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		expect(gunzipSync(readFileSync(join(buildDir, 'en/login.html.gz'))).toString()).toBe(page);
+	});
+
+	it('a full disk while saving the originals: reset still restores every byte', () => {
+		const canonical = snapshot();
+		failRenameOnto.suffix = join('.brand-pristine', 'files', 'brand', 'theme.css.gz');
+		expect(() =>
+			applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) })
+		).toThrow(/ENOSPC/);
+		expect(failRenameOnto.suffix).toBe(null);
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		applyBranding({ buildDir, settings: settings(), reset: true });
+		expect(snapshot()).toEqual(canonical);
+	});
+
+	/** Real builds ship a brotli copy of every page too (precompress); the
+	 *  fixture adds them for the tests that need one. */
+	function addBrotliCopies(): void {
+		for (const rel of [
+			'en/login.html',
+			'pl.html',
+			'index.html',
+			'brand/brand.json',
+			'brand/theme.css'
+		])
+			writeFileSync(
+				join(buildDir, `${rel}.br`),
+				brotliCompressSync(readFileSync(join(buildDir, rel)))
+			);
+		writeVerifyJson();
+	}
+
+	it('a full disk while saving the original page (its .gz already saved): the next apply leaves no stale .gz, and reset is exact', () => {
+		const canonical = snapshot();
+		failRenameOnto.suffix = join('.brand-pristine', 'files', 'en', 'login.html');
+		expect(() =>
+			applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) })
+		).toThrow(/ENOSPC/);
+		expect(failRenameOnto.suffix).toBe(null);
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		const page = read('en/login.html');
+		expect(page).toContain('Vigilante Trading');
+		expect(gunzipSync(readFileSync(join(buildDir, 'en/login.html.gz'))).toString()).toBe(page);
+		applyBranding({ buildDir, settings: settings(), reset: true });
+		expect(snapshot()).toEqual(canonical);
+	});
+
+	it('a full disk while saving the original .br: the next apply leaves both copies current, and reset is exact', () => {
+		addBrotliCopies();
+		const canonical = snapshot();
+		failRenameOnto.suffix = join('.brand-pristine', 'files', 'en', 'login.html.br');
+		expect(() =>
+			applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) })
+		).toThrow(/ENOSPC/);
+		expect(failRenameOnto.suffix).toBe(null);
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		const page = read('en/login.html');
+		expect(gunzipSync(readFileSync(join(buildDir, 'en/login.html.gz'))).toString()).toBe(page);
+		expect(brotliDecompressSync(readFileSync(join(buildDir, 'en/login.html.br'))).toString()).toBe(
+			page
+		);
+		applyBranding({ buildDir, settings: settings(), reset: true });
+		expect(snapshot()).toEqual(canonical);
+	});
+
+	it('a page an older version left with its new .gz but its old .br is finished by the next apply', () => {
+		addBrotliCopies();
+		const canonicalBr = readFileSync(join(buildDir, 'en/login.html.br'));
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		const page = read('en/login.html');
+		// v1.21.7 wrote the page, its .gz, then its .br: cut off before the .br.
+		writeFileSync(join(buildDir, 'en/login.html.br'), canonicalBr);
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		expect(brotliDecompressSync(readFileSync(join(buildDir, 'en/login.html.br'))).toString()).toBe(
+			page
+		);
+	});
+
+	it('a full disk as the page itself is written: the compressed copies most browsers get are already branded', () => {
+		addBrotliCopies();
+		failRenameOnto.suffix = join('build', 'en', 'login.html');
+		expect(() =>
+			applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) })
+		).toThrow(/ENOSPC/);
+		expect(failRenameOnto.suffix).toBe(null);
+		expect(read('en/login.html')).not.toContain('Vigilante Trading');
+		const gz = gunzipSync(readFileSync(join(buildDir, 'en/login.html.gz'))).toString();
+		const br = brotliDecompressSync(readFileSync(join(buildDir, 'en/login.html.br'))).toString();
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		expect(gz).toBe(read('en/login.html'));
+		expect(br).toBe(read('en/login.html'));
 	});
 
 	it('recovers when it died before state.json was written (only originals saved)', () => {

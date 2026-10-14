@@ -137,8 +137,10 @@
 					loading="lazy"
 					decoding="async"
 				/>
-				<h1 class="text-2xl font-bold">
-					{$_('privacy.guide_heading', { values: { asset: asset.ticker } })}
+				<h1 class="font-display text-2xl font-extrabold">
+					<span class="brand-gradient-text"
+						>{$_('privacy.guide_heading', { values: { asset: asset.ticker } })}</span
+					>
 				</h1>
 			</div>
 			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">

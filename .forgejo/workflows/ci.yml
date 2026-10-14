@@ -139,6 +139,12 @@ jobs:
         # keeps the CI step legible without an indirection.
         run: npx svelte-check --tsconfig ./tsconfig.json --threshold error
 
+      - name: service worker typecheck (svelte-check never sees it)
+        working-directory: apps/web
+        # SvelteKit's generated tsconfig excludes src/service-worker.ts, and the
+        # build only warns on a missing import there.
+        run: npx tsc --noEmit -p tsconfig.sw.json
+
   integration:
     name: Integration tests (real Postgres 16)
     runs-on: ubuntu-24.04

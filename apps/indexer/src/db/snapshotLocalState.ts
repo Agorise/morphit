@@ -51,7 +51,11 @@ export const LOCAL_ONLY_TABLES: readonly string[] = [
 	'btc_fee_address_log',
 	// This node's own hourly observations of the chain's account-creation
 	// fee, stamped with ITS wall clock: an install timeline, not chain state.
-	'witness_fee_history'
+	'witness_fee_history',
+	// v1.21.8: every operator's orders and earnings, recomputed in the
+	// background from chain-derived tables (indexer/operatorStats.ts) — a
+	// cache, rebuilt after a restore, never taken on a snapshot's word.
+	'operator_stats'
 ];
 
 /** known_instances columns that come from the chain (the register op). The
@@ -80,6 +84,10 @@ export const CHAIN_DERIVED_TABLES: readonly string[] = [
 	'chat_read_state',
 	'featured_slot_bids',
 	'fee_attestations',
+	// v1.21.8: every fee op with the BLURT transfers that paid it (the
+	// Operators page's earnings). Recorded live or re-fetched from the chain.
+	'fee_payment_legs',
+	'fee_payments',
 	'fee_transfers',
 	'feedback',
 	'feedback_responses',

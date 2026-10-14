@@ -45,7 +45,10 @@ const st = JSON.parse(fs.readFileSync(S, 'utf8'));
 const args = process.argv.slice(2);
 st.calls.push(args);
 const out = (s) => process.stdout.write(s);
-const done = (c) => { fs.writeFileSync(S, JSON.stringify(st)); process.exit(c); };
+// Written to a side file and renamed into place: the status command runs
+// several docker calls at once, and a reader catching the file half-written
+// read a container as absent (an intermittent "partial", v1.21.8).
+const done = (c) => { const t = S + '.' + process.pid; fs.writeFileSync(t, JSON.stringify(st)); fs.renameSync(t, S); process.exit(c); };
 const running = () => Object.keys(st.containers).filter((n) => st.containers[n].running);
 const isEdge = (c) => /(^|\/)bunkerity\/bunkerweb(:|$)/.test(c.image);
 function inspectJson(c) {

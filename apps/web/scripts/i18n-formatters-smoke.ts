@@ -41,6 +41,7 @@ import {
 	formatFiat,
 	formatPercent,
 	formatBlurt,
+	formatBlurtTotal,
 	formatCount,
 	formatDayMonth,
 	formatDayMonthTime,
@@ -48,6 +49,8 @@ import {
 	formatMonthYear,
 	formatCountCompact
 } from '../src/lib/i18n/formatters';
+import { locale } from 'svelte-i18n';
+import { readFileSync } from 'node:fs';
 
 interface Scenario {
 	readonly name: string;
@@ -181,6 +184,44 @@ const scenarios: readonly Scenario[] = [
 		fn: () => {
 			const out = formatBlurt(60, 0);
 			return out === '60' || out === '60' || /^[0-9۰-۹]+$/.test(out);
+		}
+	},
+
+	// ─── formatBlurtTotal / formatCount in the PAGE's language ──
+	// (v1.21.8: the Operators page wrote its numbers the browser's way.)
+	{
+		name: 'formatBlurtTotal / formatCount follow the page language, not the browser',
+		fn: () => {
+			const at = (code: string, f: () => string): string => {
+				locale.set(code);
+				try {
+					return f();
+				} finally {
+					locale.set('en');
+				}
+			};
+			return (
+				at('en', () => formatBlurtTotal(1234567.891)) === '1,234,567.891' &&
+				at('de', () => formatBlurtTotal(1234567.891)) === '1.234.567,891' &&
+				at('de', () => formatCount(1234567)) === '1.234.567' &&
+				at('en', () => formatBlurtTotal(56.25)) === '56.25' &&
+				at('ru', () => formatCount(1234567)).replace(/\s/g, ' ') === '1 234 567'
+			);
+		}
+	},
+
+	{
+		name: 'the Operators page formats with them (no number format of its own)',
+		fn: () => {
+			const src = readFileSync(
+				new URL('../src/routes/[lang]/operators/+page.svelte', import.meta.url),
+				'utf8'
+			);
+			return (
+				!src.includes('Intl.NumberFormat') &&
+				/\{formatCount\(op\.stats\.total_orders_attributed\)\}/.test(src) &&
+				/\{formatBlurtTotal\(op\.stats\.cumulative_blurt_earned\)\}/.test(src)
+			);
 		}
 	},
 

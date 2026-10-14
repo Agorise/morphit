@@ -67,6 +67,7 @@
 	 * and LIGHTENS it. Deepen this hex instead. */
 	--brand-btn-face-rgb: 2 124 134; /* primary button face (.btn-primary, Tailwind morphit-btn) */
 	--brand-btn-text-rgb: 255 255 255; /* text on the primary button (white or dark, whichever passes WCAG AA) */
+	--brand-btn-edge-rgb: 0 218 105; /* the 1px edge a primary button lights on hover (brand-primary on deep buttons, the lightest stop on bright ones; lifted lighter until it stands out from the face, or a darker shade of a light face not even white stands out from) */
 	--focus-ring-rgb: 0 218 105; /* keyboard focus ring (35% alpha glow / solid field ring) */
 	--card-accent-1-rgb: 142 239 38; /* homepage priority cards 1, 4, 7 icon colour (≥ 3:1 on the card) */
 	--card-accent-2-rgb: 0 218 105; /* homepage priority cards 2, 5 icon colour */

@@ -108,6 +108,16 @@ const ALLOW_LIST: readonly AllowEntry[] = [
 			'asset cache-first network fallback in the SW fetch handler — a blanket AbortController would prematurely 503 a slow-but-working immutable asset; the browser manages the request timeout'
 	},
 	{
+		// v1.21.8: the brand-file branch hands the worker's fetch to
+		// answerBrandRequest (src/lib/net/dynamicPaths.ts), which passes its
+		// own AbortController's signal, armed for `timeoutMs` (the
+		// timeoutMs: line right below), as the `init` this forwards.
+		file: 'apps/web/src/service-worker.ts',
+		snippet: 'fetch: (r, init) => fetch(r, init),',
+		reason:
+			'the brand-file fetch is bounded inside answerBrandRequest: deps.fetch(req, { signal: ac.signal }) with a timer of timeoutMs (tested in serviceWorkerBrand.test.ts: a server that never answers gets a 504)'
+	},
+	{
 		// fetchWithTimeout itself wraps fetch() — the `signal` it passes
 		// IS the timeout, but the AbortController is constructed >15 lines
 		// up, beyond the smoke's look-back window, so it needs an entry.

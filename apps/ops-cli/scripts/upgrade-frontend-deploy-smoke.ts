@@ -554,6 +554,37 @@ function tmp(prefix: string): string {
 	)
 		ok('cp753 canary reminder is accurate + names the systemd/harden path');
 	else bad('cp753', 'canary reminder wording is stale/cryptic');
+
+	// v1.21.8: the canary served before the upgrade is put back (lib/canaryCarry.ts,
+	// whose behaviour test is test/canaryCarry.test.ts) — in the run flow, while the
+	// new build/ is still root-owned (BEFORE its ownership is handed to the canary
+	// uploader, so nothing can race the root write), and a carried canary is not
+	// then reported as cleared; and what was put back is reported after the
+	// same-server refresh had its chance (carryOldCanary / afterCanaryRefresh —
+	// their behaviour: test/canaryCarry.test.ts).
+	{
+		const carryAt = parserSrc.indexOf(
+			'const canaryCarried = carryOldCanary(backupDir, installDir);'
+		);
+		const chownAt = parserSrc.indexOf("spawnSync('chown', ['-R'", carryAt);
+		const reportAt = parserSrc.indexOf(
+			'afterCanaryRefresh(\n\t\tcanaryCarried,\n\t\tcanaryAutoRefreshed,',
+			chownAt
+		);
+		// (canaryClearedByUpgrade's truth table: test/canaryCarry.test.ts.)
+		const cleared = /canaryCleared: canaryClearedByUpgrade\([\s\S]{0,200}?canaryCarried\s*\)/.exec(
+			parserSrc
+		);
+		if (carryAt > 0 && chownAt > carryAt && reportAt > chownAt && cleared)
+			ok(
+				'v1.21.8 upgrade puts the served canary back before handing build/ over, and does not call it cleared'
+			);
+		else
+			bad(
+				'v1.21.8 canary carry',
+				`carry at ${carryAt}, chown at ${chownAt}, report at ${reportAt}, cleared accounts for it: ${cleared !== null}`
+			);
+	}
 }
 
 console.log('');

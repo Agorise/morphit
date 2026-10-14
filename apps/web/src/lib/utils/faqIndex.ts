@@ -418,7 +418,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 
 	// Trading flow
 	how_to_buy: ['how_to_sell', 'how_to_trade_walkthrough'],
-	how_to_sell: ['how_to_buy', 'how_to_trade_walkthrough'],
+	how_to_sell: ['how_to_buy', 'how_to_trade_walkthrough', 'fees'],
 	how_to_trade_walkthrough: [
 		'how_to_buy',
 		'how_to_sell',
@@ -567,6 +567,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'chat_anti_spam',
 		'chat_privacy',
 		'user_hide_accounts',
+		'block_privacy',
 		'push_notifications_privacy'
 	],
 

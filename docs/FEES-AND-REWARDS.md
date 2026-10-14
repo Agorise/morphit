@@ -284,15 +284,15 @@ no relay forwarding and nobody trusted to remit a share afterward.
 Total latency from the user clicking "Post" to BLURT landing in the
 owner's account is one Blurt block (~3 seconds).
 
-Per-order, in the same transaction that applies the order op, the
-indexer also records **earnings attribution** for the operator
-dashboard (audit only — the money already moved):
-
-1. Insert an audit row in `operator_attribution_events` (UNIQUE on
-   `trx_id` rejects replays), recording the fee, the owner's 90%
-   share, and the canonical 10% share.
-2. UPSERT `operator_earnings` running totals
-   (`cumulative_blurt_earned`, `total_orders_attributed`).
+For every fee op (listing, first-contact, featured-slot), applied or
+not, the indexer records the BLURT transfers that paid it in
+`fee_payments` / `fee_payment_legs` (v1.21.8) — the source of the
+earnings on the Operators page (see "Auditing per-operator earnings"
+below; audit only — the money already moved). The order handler also
+still writes its older per-instance audit rows
+(`operator_attribution_events`, `operator_earnings`) for orders tagged
+with this instance's own operator tag; nothing reads them for the page
+any more.
 
 No `relay_pending_transfers` row and no `operator_payouts` row are
 written for the fee — the operator was already paid by the split.
@@ -329,10 +329,66 @@ featured-slot, cold-message) whenever the signer is the recipient.
 curl -s https://<instance>/v1/operators | jq '.operators[] | select(.tag == "<tag>")'
 ```
 
-Each operator's entry carries `stats.cumulative_blurt_earned` and
-`stats.total_orders_attributed` (there is no per-tag endpoint).
-Per-order earnings detail is in `operator_attribution_events`. The
-money itself is in the operator's fees account on chain.
+Each operator's entry carries `stats.total_orders_attributed` and
+`stats.cumulative_blurt_earned` (there is no per-tag endpoint). Since
+v1.21.8 every operator has them, since inception. Earnings come from
+chain data alone, so every node shows the same; the orders count is the
+node's own judgement, so nodes can differ a little:
+
+- **Orders** — the orders carrying the operator's tag whose fee this
+  node holds as paid (verified, or verified by attestation): BLURT, BTC,
+  XMR or a free first buy, whatever the order's status now. An underpaid
+  order is not counted. A node that does not list an asset has none of
+  its orders, BTC and XMR payments are confirmed by each node's own
+  explorers, and an operator's own node also accepts fees paid to its
+  own fees account before it registered that account — so the count can
+  differ from node to node.
+- **Earned** — the BLURT that reached the operator's fees account in
+  Morphit fee payments: listing fees, first-contact fees and
+  featured-slot bids. Every fee op is recorded with the transfers in
+  its transaction that come from its signer and carry its memo
+  (`fee_payments`, `fee_payment_legs`; at most 16 per fee op, the rest
+  are ignored), whatever the op's verdict — the BLURT moved either way. A transfer is credited to the operator
+  whose registered fees account it went to **as of its block** (the
+  latest registration before the block; for a block before the
+  operator's first registration, the first account it registered —
+  the same legacy grace as above — but then only for a payment that
+  names the operator, so registering an account claims nothing other
+  sites' users paid into it before). If two operators registered the
+  same account, the one the payment names wins, else the one that
+  registered it first.
+- **The treasury's tenth.** A payment counts only when the treasury
+  got its 10% of all its transfers (less the 2% split tolerance —
+  the same check every fee handler makes). So BLURT an operator sends
+  round in a circle to its own fees account inflates nothing unless it
+  also pays the treasury a real tenth — the same cost as a real order.
+- **The treasury.** A transfer to `@morphit-fees` is credited only
+  when the whole fee went there AND the payment names an operator
+  whose fees account IS `@morphit-fees` (morphit.io, or an instance
+  that left its fees account blank — the Operators page marks those
+  as paid to the Morphit treasury). The 10% treasury leg of a split
+  fee, and a fee paid from an operator's fees account itself (it
+  cannot pay itself, so the whole fee goes to the treasury), credit
+  nobody. A featured-slot bid names no operator; the featured order's
+  tag stands in. (Whoever holds the treasury's keys could pay it
+  BLURT naming morphit.io and get it straight back; for anyone else,
+  inflating a treasury-account operator costs the whole amount.)
+- **BTC and XMR fees** go 100% to the canonical treasury, so they
+  add orders but no earnings.
+
+Fee ops indexed by an older version are filled in after the upgrade
+by a back-fill that fetches each original transaction again through
+the node's own RPC pool and checks its id (≤ 25 blocks every 10 s
+until none is left; a block whose transactions cannot be fetched is
+set aside after 3 tries in a row and tried again every 10 minutes). The
+figures are recomputed in the background into a small local table
+(`operator_stats`, never in a snapshot): within a minute of a new fee
+payment, registration or operator, and at least every 10 minutes, so
+the page never waits on the count. An operator not counted yet has no
+`stats`: one registered since the last count, or every operator before
+the first count after the upgrade or a restore, which waits until the
+node has caught up with the chain. The money itself is in
+the operator's fees account on chain.
 
 ### What if the configured operator_tag doesn't match a
 registered operator?
@@ -340,12 +396,15 @@ registered operator?
 The fee **still splits** to the instance's fee recipient (90%) and
 the canonical treasury (10%) — the split is driven by the
 instance's configured `MORPHIT_INDEXER_FEE_RECIPIENT`, not by the
-tag. The `operator_tag` only drives the earnings-dashboard
-attribution, which is silently skipped for an unknown tag. A typo
-or unregistered tag never blocks order posting and never misroutes
-the money; it just omits the dashboard credit. Operators should
-verify their `MORPHIT_INSTANCE_OPERATOR_TAG` matches their on-chain
-registration after first config.
+tag. Earnings follow the fees account the BLURT reached, so they are
+still credited once that account is in the operator's on-chain
+registration. The order count follows the tag, so orders carrying a
+typo'd or unregistered tag are counted for nobody. A wrong tag never
+blocks order posting and never misroutes the money (on other
+instances, though, the 90% leg is accepted only for the tag's
+registered fees account). Operators should verify their
+`MORPHIT_INSTANCE_OPERATOR_TAG` matches their on-chain registration
+after first config.
 
 ---
 

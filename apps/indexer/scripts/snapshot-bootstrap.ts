@@ -318,7 +318,8 @@ async function download(
 	// source could point a Tor/I2P-only node at a clearnet URL (review,
 	// 2026-10-12). And a source that stalls — accepts, then sends next to
 	// nothing — is dropped instead of holding the run for its whole time limit
-	// (the hidden RPC nodes are asked too, and most do not mirror yet).
+	// (the hidden RPC nodes are asked too; those not on hidden-rpc v1.3.0 or
+	// later do not mirror it).
 	const args = [
 		'-fS',
 		...(transport === 'clearnet' ? ['-L'] : ['--max-redirs', '0']),

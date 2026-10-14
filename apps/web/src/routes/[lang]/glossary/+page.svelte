@@ -65,6 +65,7 @@
 		'ipfs',
 		'listing_fee',
 		'mcp',
+		'morphit',
 		'network_fee',
 		'operator',
 		'p2p',

@@ -1156,6 +1156,10 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'glossary.mcp.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
 	{ key: 'glossary.mcp.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
 	{ key: 'glossary.mcp.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
+	// v1.21.8: the glossary entry for the software itself.
+	{ key: 'glossary.morphit.title', locale: 'de', reason: '(c) invariant — the software\'s proper name, identical in every Latin-script locale' },
+	{ key: 'glossary.morphit.title', locale: 'es', reason: '(c) invariant — the software\'s proper name, identical in every Latin-script locale' },
+	{ key: 'glossary.morphit.title', locale: 'fr', reason: '(c) invariant — the software\'s proper name, identical in every Latin-script locale' },
 	{ key: 'glossary.p2p.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
 	{ key: 'glossary.p2p.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
 	{ key: 'glossary.p2p.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },

@@ -56,8 +56,9 @@
 	  - The logo is ONE cached file per placement: every instance on a page (and
 	    the shine mask, which points at the same URL) reuses the browser's copy.
 	    It is no longer a fingerprinted import (an operator must be able to
-	    replace it in place); the service worker serves it
-	    stale-while-revalidate, so repeat visits cost no extra round trip.
+	    replace it in place); the service worker serves it network-first (the
+	    stored copy only offline), so a visitor never sees a logo the site no
+	    longer has.
 -->
 <script lang="ts">
 	// Per-instance branding (docs/BRANDING.md). The logo is served from STABLE,
@@ -70,12 +71,14 @@
 	//   /brand/site-logo-footer.svg  footer
 	// (These used to be one Vite-imported, fingerprinted asset — that import is
 	// why a file swap could never give the footer its own logo. The service
-	// worker serves both stale-while-revalidate, so a re-branded logo shows up
-	// on the visitor's next load; see isBrandOverridablePath.)
+	// worker serves both network-first, so a re-branded logo shows up at once;
+	// see isBrandOverridablePath.)
 	import { brandName } from '$lib/brand/brand';
-
-	const SITE_LOGO_PATH = '/brand/site-logo.svg';
-	const SITE_LOGO_FOOTER_PATH = '/brand/site-logo-footer.svg';
+	// The logo URLs carry ?fresh=1 — see brandAssets.ts for why.
+	import {
+		SITE_LOGO_SRC as SITE_LOGO_PATH,
+		SITE_LOGO_FOOTER_SRC as SITE_LOGO_FOOTER_PATH
+	} from '$lib/brand/brandAssets';
 
 	interface Props {
 		/** Which operator-overridable logo to show: `main` (header + hero) or
@@ -174,6 +177,14 @@
 		max-width: 60vw;
 		object-fit: contain;
 		z-index: 1;
+	}
+	/* On the narrowest phones (320 px) 60vw left too little room beside the
+	 * header's sign-in button in French (v1.21.8): the button went off the
+	 * screen. From 360 px up nothing changes. */
+	@media (max-width: 359px) {
+		.morphit-logo-bling-wordmark {
+			max-width: 50vw;
+		}
 	}
 	/* The shine layer sits OVER the wordmark (z-index 2) but is MASKED to the
 	 * wordmark's own shape, so the moving highlight only shows on the

@@ -21,6 +21,15 @@
  *         reader (applyTheme leaves a server-themed page alone by that id).
  *   TT-8  When a built frontend is present (apps/web/build), its COMPILED CSS
  *         :root carries exactly the Morphit token values.
+ *   TT-9  The 1px edge a primary button lights on hover stands out from the
+ *         button's face (1.8:1, as painted: at the rule's own opacity) in every
+ *         preset (deep and bright buttons), on white and near-white bright
+ *         buttons, and in 200 random themes — read from the CSS rules (source,
+ *         and the build when present), so an edge painted in the face's own
+ *         colour fails here.
+ *   TT-10 /brand/theme.css (every page links it before it paints) sets nothing
+ *         canonically, and app.html (and the built shell) link it as a plain,
+ *         render-blocking stylesheet ahead of the app's head.
  *
  * The full pixel-level proof (screenshots of a build before/after, plus a
  * compiled-rule equivalence check) is apps/web/scripts/theme-pixel-check.mjs —
@@ -30,8 +39,11 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+	THEME_PRESETS,
 	THEME_TOKENS,
 	THEME_STYLE_ID,
+	blendOver,
+	contrastRatio,
 	deriveTheme,
 	hexToRgbTriplet
 } from '../packages/operator-config/src/theme.ts';
@@ -186,6 +198,165 @@ if (existsSync(assets)) {
 	console.log(
 		'  · TT-8: no apps/web/build here — compiled-CSS check not applicable (TT-1…TT-3 cover the sources)'
 	);
+}
+
+// TT-9
+/** Every innermost `selector { body }` of a CSS text (comments removed). */
+function rules(css: string): { sel: string; body: string }[] {
+	const out: { sel: string; body: string }[] = [];
+	const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
+	for (const m of text.matchAll(/([^{};]+)\{([^{}]*)\}/g))
+		out.push({ sel: m[1]!.trim(), body: m[2]! });
+	return out;
+}
+/** The theme token a custom property finally reads (`--brand-x-rgb` → brand-x,
+ *  following `--alias: rgb(var(--…))` declarations), or null. */
+function tokenOf(v: string, all: { sel: string; body: string }[], depth = 0): string | null {
+	const t = /^--(.+)-rgb$/.exec(v);
+	if (t && THEME_TOKENS.some((x) => x.name === t[1])) return t[1]!;
+	if (depth > 5) return null;
+	const esc = v.replace(/[-]/g, '\\-');
+	for (const r of all) {
+		const d = new RegExp(`(?:^|[;\\s])${esc}\\s*:\\s*([^;]+)`).exec(r.body);
+		const next = d && /var\((--[a-z0-9-]+)/.exec(d[1]!);
+		if (next) return tokenOf(next[1]!, all, depth + 1);
+	}
+	return null;
+}
+/** The hover edge's token and the primary button face's token, as the CSS
+ *  paints them. */
+function edgeAndFace(css: string): { edge: string | null; face: string | null; alpha: number } {
+	const all = rules(css);
+	const hover = all.find(
+		(r) => /btn-primary/.test(r.sel) && /:hover/.test(r.sel) && /outline\s*:/.test(r.body)
+	);
+	// `rgb(var(--x-rgb) / 0.9)` (source) or `rgb(var(--x-rgb)/.9)` (built): the
+	// edge is painted at that opacity over the face.
+	// Exactly `rgb(var(--x-rgb))` or `rgb(var(--x-rgb) / <number>[%])`: any
+	// other way of writing the colour (rgba(), calc(), color-mix(), 5e-1…) is
+	// not read at all — it fails here instead of counting as fully opaque.
+	const edgeVar =
+		hover &&
+		/outline\s*:[^;]*?\brgb\(\s*var\((--[a-z0-9-]+)\)\s*(?:\/\s*(\d*\.?\d+)(%?)\s*)?\)/.exec(
+			hover.body
+		);
+	const alpha = edgeVar?.[2] ? Number(edgeVar[2]) / (edgeVar[3] ? 100 : 1) : 1;
+	const btn = all.find(
+		(r) => /(^|,)\s*\.btn-primary\s*$/m.test(r.sel) && /background\s*:/.test(r.body)
+	);
+	const faceVar = btn && /background\s*:[^;]*var\((--[a-z0-9-]+)/.exec(btn.body);
+	return {
+		edge: edgeVar ? tokenOf(edgeVar[1]!, all) : null,
+		face: faceVar ? tokenOf(faceVar[1]!, all) : null,
+		alpha
+	};
+}
+/** A palette's hover edge falls short when, painted at `alpha` over the face,
+ *  it is not at least 1.8:1 from it. */
+function edgeShortfalls(edge: string, face: string, alpha: number): string[] {
+	const bad: string[] = [];
+	const themes: { name: string; input: Parameters<typeof deriveTheme>[0] }[] = [];
+	for (const preset of Object.keys(THEME_PRESETS))
+		for (const button of ['deep', 'bright'])
+			themes.push({ name: `${preset}/${button}`, input: { preset, button } });
+	let a = 20261013;
+	const r = (): number => {
+		a = (a + 0x6d2b79f5) | 0;
+		let x = Math.imul(a ^ (a >>> 15), 1 | a);
+		x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+		return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+	};
+	const hx = (): string =>
+		'#' +
+		[0, 0, 0]
+			.map(() =>
+				Math.floor(r() * 256)
+					.toString(16)
+					.padStart(2, '0')
+			)
+			.join('');
+	for (const mid of ['#ffffff', '#e8e0c8', '#d0d0d0'])
+		themes.push({
+			name: `pale ${mid}/bright`,
+			input: { from: '#f3dca0', mid, to: '#bb872f', button: 'bright' }
+		});
+	// 200 random themes the theme engine accepts (it refuses some colour sets
+	// outright; those are not counted).
+	for (let i = 0, usable = 0; usable < 200 && i < 5000; i++) {
+		const input = { from: hx(), mid: hx(), to: hx(), button: i % 2 ? 'bright' : 'deep' };
+		if (!deriveTheme(input).ok) continue;
+		usable++;
+		themes.push({ name: JSON.stringify(input), input });
+	}
+	for (const t of themes) {
+		const res = deriveTheme(t.input);
+		if (!res.ok) continue;
+		const e = res.palette.tokens[edge]!;
+		const f = res.palette.tokens[face]!;
+		const ratio = contrastRatio(blendOver(e, f, alpha), f);
+		if (!(ratio + 1e-9 >= 1.8))
+			bad.push(`${t.name}: edge ${e} at ${alpha} on face ${f} = ${ratio.toFixed(2)}:1`);
+	}
+	return bad;
+}
+const sources: [string, string][] = [
+	[
+		'src/app.css + src/theme.css',
+		['app.css', 'theme.css'].map((f) => readFileSync(join(WEB, 'src', f), 'utf8')).join('\n')
+	]
+];
+if (existsSync(assets))
+	sources.push([
+		'the built frontend',
+		readdirSync(assets)
+			.filter((f) => f.endsWith('.css'))
+			.map((f) => readFileSync(join(assets, f), 'utf8'))
+			.join('\n')
+	]);
+for (const [where, css] of sources) {
+	const { edge, face, alpha } = edgeAndFace(css);
+	const bad =
+		edge && face ? edgeShortfalls(edge, face, alpha) : ['hover edge or button face not found'];
+	check(
+		`TT-9: ${where}: the primary button's hover edge (${edge}) stands out from its face (${face}) in every theme`,
+		bad.length === 0,
+		bad.slice(0, 4).join('; ')
+	);
+}
+
+// TT-10
+{
+	// /brand/theme.css: every page links it before anything paints (v1.21.8).
+	// Canonically it must set nothing — an unbranded instance keeps the Morphit
+	// look byte for byte — and the shell must link it as a plain, render-blocking
+	// stylesheet in the head (no media/async tricks that would let a page paint
+	// first), ahead of the app's own head.
+	const canonicalCss = readFileSync(join(WEB, 'static', 'brand', 'theme.css'), 'utf8');
+	const declarations = canonicalCss.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+	check(
+		'TT-10a: the shipped /brand/theme.css sets nothing (unbranded = Morphit)',
+		declarations === '',
+		declarations.slice(0, 120)
+	);
+	const appHtml = readFileSync(join(WEB, 'src', 'app.html'), 'utf8').replace(
+		/<!--[\s\S]*?-->/g,
+		''
+	);
+	const head = appHtml.slice(0, appHtml.indexOf('</head>'));
+	const link =
+		/<link\s+rel="stylesheet"\s+href="%sveltekit\.assets%\/brand\/theme\.css"\s*\/>/.exec(head);
+	check(
+		'TT-10b: app.html links /brand/theme.css as a render-blocking stylesheet, before the app head',
+		link !== null && head.indexOf(link[0]) < head.indexOf('%sveltekit.head%'),
+		link ? '' : 'no plain <link rel="stylesheet" href="…/brand/theme.css"> in the head'
+	);
+	if (existsSync(join(assets, '..', '..', '..', 'index.html'))) {
+		const shell = readFileSync(join(assets, '..', '..', '..', 'index.html'), 'utf8');
+		check(
+			'TT-10c: the built SPA shell (index.html) links it too',
+			/<link rel="stylesheet" href="[^"]*\/brand\/theme\.css"/.test(shell)
+		);
+	}
 }
 
 if (failed > 0) {

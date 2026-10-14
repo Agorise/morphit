@@ -222,6 +222,11 @@ What is derived, and how it stays readable:
 
 - the button colour (with `deep`: the last colour deepened, the way Morphit's button is a deepened
   teal) with white or dark text — whichever reads better (at least 4.5:1, WCAG AA);
+- the thin bright edge a main button lights when the mouse is over it: the accent colour on deep
+  buttons, the lightest gradient colour on bright ones — lifted lighter if needed until it stands
+  out from the button (at least 1.8:1 as drawn, at 90% opacity; a little less on the buttons that
+  also brighten on hover); on a button so light that not even white stands out from it (Morphit's
+  emerald, yellows, cyans, white), a darker shade of it;
 - the accent colour for links, highlighted text and borders, lifted if needed until it reads on
   every background it sits on (at least 4.5:1);
 - the chat bubble, the keyboard focus ring, the homepage card icons (3:1), the card hover, the two
@@ -247,6 +252,11 @@ error red, coin colours, print styles — go on its ALLOW list with a reason). T
 the derivation are `packages/operator-config/src/theme.ts`; `scripts/theme-tokens-smoke.ts` keeps
 theme.css equal to it. The pixel-level proof that an unthemed build is unchanged:
 `apps/web/scripts/theme-pixel-check.mjs` (header explains how to run it).
+
+`/brand/theme.css` sets the same custom properties on `html:root`, plus the site name as
+`--brand-name-hex` (`h` and the name's UTF-8 bytes in hex: one CSS identifier, so no name can break
+out of the stylesheet); `apps/web/src/lib/brand/brand.ts` reads it before the first render.
+`theme-tokens-smoke` TT-10 keeps the shipped file empty and the link in `app.html` render-blocking.
 
 `build/.brand-slots.json` keeps `files` in the v1.19 shape (site-name slots only): `morphit-ops
 upgrade` runs the PREVIOUS release's CLI branding on the new build first, and a v1.19 CLI treats
@@ -280,12 +290,15 @@ warning. Branding therefore never rebuilds. `morphit-ops branding apply` edits t
   such place is recorded in `build/.brand-slots.json`; software mentions are not in that list and
   are never touched. Because the page itself carries your name, it is right on first paint, for
   visitors without JavaScript, and for search engines and link previews.
-- `/brand/brand.json` carries the name for pages the app renders in the browser (chats, profiles,
-  orders), which boot from the untouched `index.html`.
+- `/brand/theme.css` carries your name and colours for every page, including the ones the app
+  draws in the browser (chats, profiles, orders), which boot from the untouched `index.html`: every
+  page links it in its head, so the browser paints nothing until it has loaded. No page ever shows
+  Morphit's look first. (Canonically the file sets nothing.) `/brand/brand.json` carries the same,
+  for older tools and the browser's toolbar colour.
 - **Colours**: every colour the app's (signed, untouched) stylesheet paints is a CSS custom
   property with Morphit's value. Each prerendered page gets a small `<style id="morphit-theme">`
   just before `</head>` that sets your values (and its `theme-color` meta), so the colours are right
-  on first paint, without JavaScript, and in Tor Browser. `/brand/brand.json` carries the same
+  on first paint, without JavaScript, and in Tor Browser. `/brand/theme.css` carries the same
   values for the pages the app draws in the browser. `/manifest.webmanifest` gets your theme and
   background colours (it is not on the on-chain manifest). The colour slots are recorded in
   `build/.brand-slots.json` under `theme_files` (see "Colours in the frontend").
@@ -297,9 +310,15 @@ warning. Branding therefore never rebuilds. `morphit-ops branding apply` edits t
 
 The originals are kept in `apps/web/.brand-pristine`, so `apply` is repeatable and `reset` is exact.
 `apply` saves every original before it changes anything, so an interrupted run (Ctrl-C, a full
-disk) is finished or undone correctly by the next `apply` or `reset`. The service worker refreshes
-the logo, icons and `brand.json` in the background, and the web server tells browsers to re-check
-them, so a changed brand reaches returning visitors on their next visit.
+disk) is finished or undone correctly by the next `apply` or `reset` — the compressed copies
+included. The service worker asks the server for the logo, icons, `theme.css` and `brand.json` on
+every load. Its stored copy is used only when the server cannot be reached at all (offline, or the
+connection drops): that copy may be from before you branded, so it is never used because the
+server is slow, nor in place of an error or a server that has not answered within the worker's
+time limit (the logo is then missing rather than possibly Morphit's). Only `theme.css` keeps its
+stored copy over an error. Where `theme.css` names your site, `brand.json` is not read at all. The
+web server tells browsers to re-check these files, so a visitor who saw your site before you
+branded it — or before a change — gets the new look on their very next page.
 
 A green integrity check means the site runs the signed Morphit code. It does not say who runs the
 site: for that, visitors look at the address bar and *About this instance*.
@@ -309,10 +328,6 @@ site: for that, visitors look at the address bar and *About this instance*.
 - Fonts, layout and wording beyond the site name need a fork of the frontend. A fork is
   rebuilt, so it shows the integrity warning, and upgrades reinstall the canonical frontend, so you
   maintain the fork yourself. See [RUN-A-MORPHIT-NODE.md §11](RUN-A-MORPHIT-NODE.md).
-- On the pages the app draws in the browser (an order, a chat, a profile), the first instant
-  before `/brand/brand.json` arrives shows the Morphit page background; the page itself only
-  renders once the colours are known (or after 3 seconds on a very slow connection). Prerendered
-  pages are right from the first paint.
 - The app icons and iPhone launch screens made from your `icon.svg` / `logo.svg` sit on your
   theme's background; without your own icon they keep Morphit's (navy) icons.
 - The hero heading's gradient runs left to right, as Morphit's does.

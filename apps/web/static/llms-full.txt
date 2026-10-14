@@ -53,7 +53,7 @@ LocalBitcoins (closed 2023) and LocalMonero (closed 2024) were companies. They h
 
 Morphit works differently:
 • **No custody.** Morphit never holds your coins. The seller sends straight to the buyer.
-• **No company to shut down.** Orders, feedback and chat live on the Blurt blockchain. Anyone can run an instance, and instances can be reached over the normal web, Tor, I2P and Lokinet.
+• **No company to shut down.** Orders, feedback and encrypted chat live on the Blurt blockchain. Anyone can run an instance, and instances can be reached over the normal web, Tor, I2P and Lokinet.
 • **Private chat.** Messages are end-to-end encrypted on your device. Operators can't read them.
 • **Your account is yours.** Your keys stay in your browser, and your 12-word seed opens your account on any device or instance.
 
@@ -74,7 +74,7 @@ BasicSwap is a kindred no-middleman project to Morphit: it does atomic swaps (a 
 • **Crypto only vs. cash too.** BasicSwap trades coin for coin. Morphit also does cash, payment apps and barter.
 • **Reputation and chat.** BasicSwap has neither. Morphit has signed on-chain feedback and encrypted chat.
 
-On 14 July 2026, BasicSwap was exploited for more than 0.66 BTC (about $42,000), as confirmed by its own developer and by Orangefren. We mention it so you can choose with the facts, not to gloat: Morphit never holds your coins, so there is nothing to drain — but we are software too, and we have bugs.
+On 14 July 2026, BasicSwap was exploited for more than 0.66 BTC (about $42,000), as confirmed by its own developer and by Orangefren. We mention it so you can choose with the facts, not to gloat: Morphit never holds your coins, so there is nothing to drain. Software can have bugs, but they are constantly being scanned for.
 
 Both designs are valid. They suit different people.
 
@@ -84,17 +84,17 @@ Both designs are valid. They suit different people.
 
 **FAQ key:** `vs_bisq_haveno`
 
-Bisq and Haveno (and Haveno's fork RetoSwap) are the closest projects to Morphit in spirit: non-custodial, peer-to-peer, no KYC. Haveno is a fork of Bisq, so they work much the same way.
+Bisq and Haveno (and Haveno's fork RetoSwap) are the closest projects to ours in spirit: non-custodial, peer-to-peer, no KYC. Haveno is a fork of Bisq, so they work much the same way.
 
 The main differences:
 • **Desktop app vs. browser.** Bisq and Haveno are desktop apps. Morphit runs in any browser, phones included, with nothing to install.
 • **Escrow vs. reputation.** On Bisq and Haveno, both traders lock coins plus a security deposit in a multisig escrow (2-of-3 on Haveno), and arbitrators settle disputes. Morphit has no escrow, no deposit and no arbitrator — you rely on the other trader's signed, on-chain reputation.
 • **More to trade.** Every Haveno trade involves Monero. Morphit trades many coins, plus cash and barter.
-• **More ways in.** Morphit instances can be reached over the normal web, Tor, I2P and Lokinet.
+• **More ways in.** Morphit instances can be reached over the clearnet/normal web, Tor, I2P, ENS and Lokinet.
 
 An escrow-and-arbitrator safety net is also something to attack. Haveno's trade protocol was exploited on 20 May 2026 (about $2.7 million, using a forged arbitrator message) and again on 16 June 2026 through its dispute process (about 1,500 XMR, by early estimates). RetoSwap paused trading both times. Bisq has also been hacked in the past, with user funds stolen.
 
-Morphit has no arbitrator, escrow or dispute payout for attacks like these to target. The price is that you alone decide who to trust.
+Morphit has no arbitrator, escrow or dispute payout for attacks like these to target. The price is that you alone decide who to trust. Reputation is everything.
 
 ---
 
@@ -106,7 +106,7 @@ OpenMonero (a LocalMonero clone) is custodial: it keeps users' coins in its own 
 
 Morphit keeps no wallet of users' coins. The seller sends XMR straight to the buyer, so there is nothing on a Morphit server to drain or freeze, and no operator who could vanish holding your coins.
 
-Morphit is also fully open source with no hidden code: everything that runs in your browser is published and can be checked. OpenMonero obfuscates parts of its code, so you can't fully check what it does with your funds.
+We are fully open source with no hidden code: everything that runs in your browser is published and can be checked. OpenMonero obfuscates parts of its code, so you can't fully check what it does with your funds.
 
 ---
 
@@ -257,7 +257,7 @@ Nothing is erased: the blockchain keeps the original, every edit and the cancell
 What you write in Morphit's encrypted chat is private. Messages are end-to-end encrypted: only you and your trade partner can read them. Not Morphit, not the operator, not anyone reading the blockchain.
 
 What others **can** see, because chat is stored on the public Blurt chain:
-• who you chat with, and when
+• who and when (@scooby chatted with @alice yesterday)
 • which order a chat is about
 • roughly how long each message is
 • when you read a conversation (read receipts)
@@ -265,7 +265,7 @@ What others **can** see, because chat is stored on the public Blurt chain:
 
 There is no forward secrecy: anyone who later gets your keys can read your past messages. For very sensitive talk, use a dedicated messenger such as **Signal**, **Session** or **Matrix/Element**.
 
-The tech: X25519 key agreement that mixes a fresh one-time key per message with both people's long-term keys (which proves who sent it), ChaCha20-Poly1305 encryption and BLAKE2b, all from libsodium. Details are in docs/CHAT-CRYPTO.md, and everything that is visible is listed in docs/METADATA-LEAK-CATALOG.md.
+The tech: X25519 key agreement that mixes a fresh one-time key per message with both people's long-term keys (which proves who sent it), ChaCha20-Poly1305 encryption and BLAKE2b, all from libsodium.
 
 ---
 
@@ -313,8 +313,6 @@ What does exist:
 • **What your browser asks for.** Orders, chats and the things you send go through this site's server, so its operator can see which accounts and orders you look at, and your signed actions before the blockchain does.
 • **What you publish.** Orders, reviews and chat messages (encrypted, but with sender, recipient and time) are public on the Blurt chain.
 • **Push notifications**, if you turn them on: the site keeps your account name with your browser's push address until you turn them off.
-
-The full list is in the repository's docs/METADATA-LEAK-CATALOG.md.
 
 ---
 
@@ -442,9 +440,9 @@ A new address for each trade breaks that link. Your wallet makes new addresses f
 
 **FAQ key:** `who_runs_it`
 
-Anyone can run it. Morphit is open source, and anyone can run their own site with its own indexer and relay. The morphit.io site is run by Agorise.
+Morphit is the open source software that runs this site and anyone can run a copy of it. The morphit.io site for example, is run by Agorise, the Dev Team of the software.
 
-The design assumes that any one site, morphit.io included, may go offline. Orders, reviews and chats live on the Blurt chain, so other Morphit sites (on the normal web, Tor, I2P or Lokinet) read the same data, and your keys work on any of them.
+The design assumes that any one site may go offline which is why this site is syndicated, push-mirrored and federated across multiple networks like Tor and I2P. Orders, reviews and encrypted chats live on the Blurt chain, so other sites (on the clearnet (normal web), Tor, I2P, ENS or Lokinet) read the same data, and your keys work on any of them.
 
 ---
 
@@ -548,14 +546,14 @@ We publish these rules openly. Being a real trader is always the easier path.
 
 **FAQ key:** `blurt_benefits`
 
-Blurt is the public blockchain Morphit runs on. Your account, orders, reviews and chat messages are all stored there. Its coin is BLURT.
+Blurt is the public blockchain Morphit runs on. Your account, orders, reviews and encrypted chat messages are all stored there. Its coin is BLURT.
 
 Why it comes up:
 
-• **Tiny network fees.** Blurt charges a very small BLURT fee for each action (an order, a review, a chat message), so keep a little liquid BLURT on hand. New accounts get 2 BLURT to start. See 'What is Mana on Blurt?'.
+• **Tiny network fees.** Blurt charges a very small BLURT fee for each action (an order, a review, an encrypted chat message), so keep a little liquid BLURT on hand. New accounts get 2 BLURT to start. See 'What is Mana on Blurt?'.
 • **Cheaper listing fees.** Paying a listing fee in BLURT costs about $0.125, half the BTC/XMR price, and it's checked on chain right away. Where the site offers it, you can pay in BTC or XMR instead.
 • **Rewards.** The welcome bonus and loyalty rewards come in BLURT and Blurt Power (BP).
-• **Blurt Power.** BLURT you power up earns a small yearly reward and gives your votes weight on Blurt social sites like blurt.blog.
+• **Blurt Power.** BP earns you a nice % APR and gives your votes weight on Blurt social sites like blurt.media and blurt.blog.
 
 You can trade XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, or XRP on Morphit without ever trading BLURT itself. You only need that little bit for network fees.
 
@@ -612,7 +610,7 @@ The operator can show prices in a currency other than USD, such as EUR. Then the
 
 **FAQ key:** `first_order_free`
 
-Yes. If your very first Morphit order (on any Morphit site) is a **buy of BLURT** worth at least **$1**, Morphit covers the listing fee. You enter the amount in your own currency, and the app checks it's worth at least $1.
+Yes. If your very first order is a **buy of BLURT** worth at least **$1**, Morphit pays the listing fee for you. You enter the amount in your own currency, and the app checks it's worth at least $1.
 
 **The rules:**
 • It must be your very first order. Post any other order first and the free one is gone.
@@ -663,7 +661,7 @@ Every listing fee you pay in BLURT adds to your lifetime total (on all Morphit s
 • It's a loan (a delegation), not a gift. The BP stays the site's, and its operator can take it back.
 • Blurt only lends BP in amounts of about 33 BP or more, so small rewards wait until they add up: for most traders, at the 500 BLURT milestone (61 BP with the 1 BP welcome stake).
 
-BP gives your votes weight on Blurt social sites like blurt.blog. With the 1 BP welcome stake, that's up to 1,261 BP lent to you. See also "What is the welcome bonus and how do I earn it?"
+BP gives your votes weight on Blurt social sites like blurt.media and blurt.blog. With the 1 BP welcome stake, that's up to 1,261 BP lent to you. See also "What is the welcome bonus and how do I earn it?"
 
 ---
 
@@ -749,7 +747,7 @@ Most orders pay a small listing fee: about $0.125 in BLURT (half price, on purpo
 
 **What you pay:** about 102 BLURT for every new account your relay creates (the chain's 100 BLURT fee plus 2 BLURT of starter funds); 10 BLURT plus 10 BLURT powered up when a user completes a first trade on a listing they paid for on your site; and 1 BLURT top-ups for active users who run low. Blurt Power rewards (a 1 BP welcome stake, loyalty rewards up to 1,260 BP per user) are lent, so that BLURT stays yours. Plus your server.
 
-At a BLURT price of $0.002, your share of one listing is about 56 BLURT, so about two paid listings cover one new account. All numbers: `docs/FEES-AND-REWARDS.md`.
+At a BLURT price of $0.002, your share of one listing is about 56 BLURT, so about two paid listings cover one new account.
 
 ---
 
@@ -783,7 +781,7 @@ Morphit chat is private messaging between two traders. Each message is locked (e
 • **Check once.** Compare the safety number with each partner once (⋮ → Verify peer) to make sure nobody swapped a key.
 
 What is *not* private. Anyone reading the chain can see:
-• who you chat with, and when
+• who and when (@scooby chatted with @alice yesterday)
 • roughly how long each message is
 • which order a conversation is about, how far you have read, and whom you block
 
@@ -830,7 +828,7 @@ So chat doesn't depend on any one company's server.
 • **One source of truth.** There are no separate copies to keep in sync between sites.
 
 The trade-offs:
-• The content of each message is end-to-end encrypted, but who talks to whom, and when, is public on the chain (see 'Are my chats private?').
+• The content of each message is end-to-end encrypted, but who talks to whom and when (@bob with @sally yesterday), is public on the chain (see 'Are my chats private?').
 • Messages usually arrive within a few seconds rather than instantly. That's fine for arranging a trade.
 
 ---
@@ -939,7 +937,7 @@ Morphit already skips the big privacy leaks: no KYC, no email, no phone number. 
 • Prefer Monero when you can. Its on-chain privacy is far stronger than Bitcoin's.
 • For cash in person, meet in a neutral public place and share only what the meetup needs.
 
-Remember that chats and orders leave public traces on the blockchain, such as who talked to whom, and when. Privacy is a habit, not a setting. For coin-by-coin advice, see the [privacy guides](/privacy) (for example [Bitcoin](/privacy/btc) or [Litecoin](/privacy/ltc)).
+Remember that chats and orders leave public traces on the blockchain, such as who talked to whom (@bartsimpson with @dumbass), and when. Privacy is a habit, not a setting. For coin-by-coin advice, see the [privacy guides](/privacy) (for example [Bitcoin](/privacy/btc) or [Litecoin](/privacy/ltc)).
 
 ---
 
@@ -1102,9 +1100,9 @@ Only the sending wallet has it — an exchange can't give it to you.
 
 **FAQ key:** `morphit_mirrors`
 
-So nobody can silence the project by taking down one website. A project kept in one place can be killed in one place: a platform can suspend it, a government can order a takedown, or a host can simply disappear.
+So nobody can silence the project by taking down one website. A project kept in one place can be killed in one place: a platform can suspend it, a government can force a takedown, or a host can simply disappear.
 
-So Morphit's source code (open source, AGPL-3.0) lives on our own Forgejo server at git.agorise.net — the main copy — and on more than a dozen other code hosts, such as GitHub, GitLab, SourceForge, SourceHut, Bitbucket and Launchpad, plus IPFS, which no single host controls. If one host drops it, the other copies remain, and the license lets anyone copy, check or fork it. The full list is on the [Download page](/download).
+The Morphit source code (open source, AGPL-3.0) lives on more than a dozen code hosts, such as the Agorise Forgejo, GitHub, GitLab, SourceForge, SourceHut, Bitbucket and Launchpad, plus IPFS, which no single host controls. If one host drops it, the other copies remain, and the license lets anyone copy, check or fork it. The full list is on the [Download page](/download).
 
 There's nothing to get from an app store: Morphit installs straight from your browser. The mirrors are for the code.
 
@@ -1483,7 +1481,7 @@ Some of it is private and some is public — on purpose.
 **Public (anyone can read it):**
 
 • **Your orders**, including prices and terms.
-• **Reviews** — stars, comments and replies. Each review names the order it's about, so it publicly links the two accounts to that trade. See 'Who can see the reviews I've left for other traders?'.
+• **Reviews** — stars, comments and replies. Each review names the order it's about, so it publicly links the two accounts (@squirrel and @scooby) to that trade. See 'Who can see the reviews I've left for other traders?'.
 • **Everything about a chat except the words:** who talked to whom, when, about which order, roughly how long each message was, and how far each of you has read (read receipts).
 
 All of it is saved on the Blurt blockchain, and nothing saved there can be deleted. The only difference is who can read it.
@@ -1622,7 +1620,7 @@ If an order is stuck on a "Not in orderbook" status, cancel it and post a new on
 
 **FAQ key:** `signup_stuck`
 
-Your site's relay creates your Blurt account and pays the fee for you (about 102 BLURT), so it has limits against abuse. What the messages mean:
+This site's relay creates your Blurt account and pays the fee for you (about 102 BLURT), so it has limits against abuse. What the messages mean:
 
 • **"Verifying you're human…" takes long, or "Human verification failed"** — your browser solves a small puzzle (Altcha). Close other tabs, refresh and try again.
 • **"You've made too many attempts. Try again in an hour."** — too many sign-up tries from your internet connection in the last hour. Shared Wi-Fi counts everyone on it. Wait, or use another network.
@@ -1704,7 +1702,7 @@ See also "How does Morphit stop spam and unsolicited messages from strangers?".
 
 On Blurt, Mana is your voting power. It only decides how much weight your upvotes carry. Think of a stamina bar: each vote uses a little, and it refills by about 20% a day. The more Blurt Power (BP) you hold, the more your votes count.
 
-Mana does **not** pay for anything you do. (On Steem and Hive, "Resource Credits" pay for actions; Blurt dropped that.) On Blurt, every action costs a small fee in BLURT, taken from your liquid (unstaked) balance: a transfer, a post, and on Morphit an order, a review or a chat message. Mana only matters for voting.
+Mana does **not** pay for anything you do. (On Steem and Hive, "Resource Credits" pay for actions; Blurt dropped that.) On Blurt, every action costs a small fee in BLURT, taken from your liquid (unstaked) balance: a transfer, a post, and on Morphit an order, a review or an encrypted chat message. Mana only matters for voting.
 
 So the rule is simple: keep a little liquid BLURT in your account and your actions go through. You never have to wait for Mana to refill before you trade. Receiving BLURT is free, so topping up is easy.
 
@@ -1731,7 +1729,7 @@ The installer checks your machine before it starts and tells you if anything fal
 • A domain, if you choose Tor-only. Your site then lives at a `.onion` address.
 • A data center. But a normal (clearnet) site run from home will expose your home IP address to every visitor. A Tor-only site does not.
 
-One cost to know: your relay pays about 102 BLURT for every account it creates, so a site that signs up many people can lose money. Run one because you want it to exist, not to get rich.
+One cost to know: your relay pays about 102 BLURT for every account it creates, so a site that signs up many people can lose money if very few people on it are actually trading.
 
 ---
 
@@ -2297,7 +2295,7 @@ Anyone with the ID can look the payment up on a public block explorer. On open c
 
 **FAQ key:** `ip_address_and_rpc_nodes`
 
-**What your site sees.** Like any website, the server you load Morphit from gets your IP address with each request. Morphit's code keeps it only in memory, for rate limits — about a minute for ordinary requests, up to 24 hours for the signup limits — and never writes it to disk or a log, or sends it anywhere. The web server in front, as Morphit installs it, keeps addresses only in memory for its own limits and short bans, and keeps no access log with them. Your operator runs the server and could change that. No cookies, analytics, trackers or telemetry. Orders, chat, balances and the block explorer all go through your site.
+**What this site sees.** Like any website, the server gets your IP address with each request. The code keeps it only in memory, for rate limits — about a minute for ordinary requests, up to 24 hours for the signup limits — and never writes it to disk or a log, or sends it anywhere. The web server keeps addresses only in memory for its own limits and short bans, and keeps no access log with them. No cookies, analytics, trackers or telemetry. Orders, encrypted chat, balances and the block explorer data are all secured on-chain.
 
 **The one possible IP leak.** At most once a day (and once after each site update, or when you press **Try again** on a fee panel), your browser asks a public network node — a Blurt RPC node run by someone else — for the signed release record that says which Morphit version is current. That is two small requests to one node (each may come with a CORS preflight): the last 100 entries of @morphit's history, then the block holding the release. Only if that node fails, sends a record that can't be verified, or names a different release than this site runs, is another node asked the same. If the release is older than those 100 entries, one more history request is made (up to about 115 KB). The result is remembered for 24 hours and shared by all your tabs; if a node offers only a release older than this site's, your browser asks again within the hour. If your browser blocks this site's storage, it can't remember, so it asks each time you open Morphit. You can watch all of it in your browser's Network tab.
 

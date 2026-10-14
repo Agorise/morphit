@@ -183,10 +183,10 @@ const scenarios: Scenario[] = [
 			// slow link then fetches first.
 			const html = readFileSync(resolve(REPO, 'apps/web/src/app.html'), 'utf8');
 			const at = html.search(
-				/<link\s+rel="preload"\s+href="%sveltekit\.assets%\/brand\/site-logo\.svg"\s+as="image"\s+fetchpriority="high"\s+crossorigin="anonymous"\s*\/>/
+				/<link\s+rel="preload"\s+href="%sveltekit\.assets%\/brand\/site-logo\.svg\?fresh=1"\s+as="image"\s+fetchpriority="high"\s+crossorigin="anonymous"\s*\/>/
 			);
 			const head = html.indexOf('%sveltekit.head%', html.indexOf('</script>'));
-			if (at < 0) return 'no <link rel="preload" … /brand/site-logo.svg as="image" fetchpriority="high"> in app.html';
+			if (at < 0) return 'no <link rel="preload" … /brand/site-logo.svg?fresh=1 as="image" fetchpriority="high"> in app.html';
 			if (head >= 0 && at > head) return 'the logo preload comes after %sveltekit.head% (the script preloads)';
 			return null;
 		}

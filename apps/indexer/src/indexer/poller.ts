@@ -56,6 +56,8 @@ import {
 	type ExternalFeeAvailability
 } from '$indexer/fee/externalFeeAvailability';
 import { BlurtFeeReverifier } from '$indexer/blurtFeeReverify';
+import { FeeLegsBackfill } from '$indexer/feeLegsBackfill';
+import { OperatorStatsRefresher } from '$indexer/operatorStats';
 import { OfficialOpReverifier } from '$indexer/officialOpReverify';
 import type { EndpointState } from '@morphit/rpc-pool';
 import { TreasurySource } from '$indexer/treasurySource';
@@ -192,6 +194,12 @@ export class Poller {
 	/** v1.20.0 (G1) — one-shot re-judging of BLURT fee ops indexed before the
 	 *  tagged operator's fee account was known here. */
 	private readonly blurtFeeReverifier: BlurtFeeReverifier;
+	/** v1.21.8 — records what the fee ops indexed by an older version paid
+	 *  (the Operators page's earnings), from re-fetched transactions. */
+	private readonly feeLegsBackfill: FeeLegsBackfill;
+	/** v1.21.8 — every operator's orders and earnings for /v1/operators,
+	 *  recomputed in the background into operator_stats. */
+	private readonly operatorStatsRefresher: OperatorStatsRefresher;
 	/** Re-judges stored release / rpc-directory ops by their signature, from
 	 *  agreed blocks (officialOpReverify.ts). */
 	private readonly officialOpReverifier: OfficialOpReverifier;
@@ -500,6 +508,8 @@ export class Poller {
 			onOrderVerified: (orderId) => orderbookEventBus.emit(orderId)
 		});
 		this.officialOpReverifier = new OfficialOpReverifier({ db, blurt: this.blurt, config });
+		this.feeLegsBackfill = new FeeLegsBackfill({ db, blurt: this.blurt });
+		this.operatorStatsRefresher = new OperatorStatsRefresher({ db });
 
 		this.status = {
 			running: false,
@@ -837,6 +847,16 @@ export class Poller {
 				// checked are re-judged once each, from agreed blocks — first pass at
 				// once, then while any wait for a quorum. Never throws.
 				await this.officialOpReverifier.maybeRun();
+				// (v1.21.8) What fee ops indexed by an older version paid, for the
+				// Operators page — only STARTS a pass, in the background (≤25 block
+				// fetches, then 10 s after it ends while any are left; never again
+				// this process once none is). Never throws.
+				await this.feeLegsBackfill.maybeRun();
+				// (v1.21.8) The Operators page's figures — only STARTS a pass, in
+				// the background: at once, then a minute after one when fee
+				// payments or registrations changed, else every 10 minutes.
+				// Never throws.
+				await this.operatorStatsRefresher.maybeRun();
 			} catch (err) {
 				this.status = {
 					...this.status,

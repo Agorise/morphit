@@ -8,7 +8,7 @@
  *   - apps/web locale JSON: `{brand}` / `{brand|<default form>}` placeholders;
  *   - apps/web (runtime): src/lib/brand/*, and BRAND_OVERRIDABLE_PATHS in
  *     src/lib/net/dynamicPaths.ts (the service worker serves those
- *     stale-while-revalidate so a re-brand reaches returning visitors);
+ *     network-first so a re-brand reaches returning visitors at once);
  *   - scripts/build-brand-slots.mjs (build): records every site-name slot and
  *     stamps the canonical <html> attributes;
  *   - apps/ops-cli src/lib/branding.ts (`morphit-ops branding apply`): rewrites

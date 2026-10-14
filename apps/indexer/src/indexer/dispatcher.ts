@@ -52,6 +52,7 @@ import { confirmFeeRelevantTransactions } from '$indexer/fee/btcFeeBlockConfirm'
 import { hasXmlNoncharacter, jsonNestingExceeds, pgSafeBlock, pgSafeDeep } from '$db/pgText';
 import { consensusV2Active } from '$indexer/consensusActivation';
 import { blockTimeOf } from '$indexer/blockTime';
+import { recordFeePayment } from '$indexer/feePayments';
 
 import profileHandler from '$indexer/handlers/profile';
 import orderHandler from '$indexer/handlers/order';
@@ -175,6 +176,9 @@ interface LogRow {
 	readonly payload: unknown;
 	readonly status: 'applied' | 'rejected';
 	readonly rejectReason: string | null;
+	/** The op's transaction, in order (v1.21.8): a fee op's BLURT legs are
+	 *  recorded with it (feePayments.ts), whatever the verdict. */
+	readonly siblingOps: readonly ChainOperation[];
 }
 
 async function writeEventLog(client: pg.PoolClient, row: LogRow): Promise<void> {
@@ -197,6 +201,9 @@ async function writeEventLog(client: pg.PoolClient, row: LogRow): Promise<void> 
 			row.rejectReason
 		]
 	);
+	// Every fee op, applied or rejected at any step, marks itself recorded
+	// here, so the back-fill (feeLegsBackfill.ts) never re-fetches it.
+	await recordFeePayment(client, row, row.siblingOps);
 }
 
 // ─── Op extraction from block shape ────────────────────────────────
@@ -822,6 +829,7 @@ export async function applyBlock(
 		const signerResult = extractSigner(op, ACTIVE_AUTH_OP_IDS.has(op.id));
 		if (!signerResult.ok) {
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,
@@ -845,6 +853,7 @@ export async function applyBlock(
 		// would parse.)
 		if (rawInvalidOps.has(`${trxInBlock}:${opInTrx}`)) {
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,
@@ -864,6 +873,7 @@ export async function applyBlock(
 		const parsed = parseJsonPayload(op);
 		if (parsed === null) {
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,
@@ -882,6 +892,7 @@ export async function applyBlock(
 		// it, and recorded with its raw text (see MAX_PAYLOAD_DEPTH).
 		if (jsonNestingExceeds(parsed, maxPayloadDepth(blockTime))) {
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,
@@ -907,6 +918,7 @@ export async function applyBlock(
 		// broke every feed that carried the op's text).
 		if (payload !== parsed || (consensusV2Active(blockTime) && hasXmlNoncharacter(parsed))) {
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,
@@ -928,6 +940,7 @@ export async function applyBlock(
 		const handler = HANDLERS[op.id];
 		if (!handler) {
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,
@@ -1018,6 +1031,7 @@ export async function applyBlock(
 			const reason =
 				err instanceof Error ? `handler_threw:${err.message.slice(0, 120)}` : 'handler_threw';
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,
@@ -1065,6 +1079,7 @@ export async function applyBlock(
 				chatChanges.push(ev);
 			}
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,
@@ -1098,6 +1113,7 @@ export async function applyBlock(
 			opPendingChatChanges.length = 0;
 			await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
 			await writeEventLog(client, {
+				siblingOps,
 				blockNum,
 				trxInBlock,
 				opInTrx,

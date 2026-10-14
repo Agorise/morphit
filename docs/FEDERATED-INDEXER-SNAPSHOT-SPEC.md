@@ -170,6 +170,13 @@ unchanged (chain-id / schema / pg gates already correct).
 node-local tables are exported empty. v1.20.0 adds `operator_fee_recipients`
 (chain-derived — each operator's registered fees account over time; exported) and
 `fee_reverify_done` (local bookkeeping for the one-time fee re-check; exported empty).
+v1.21.8 adds `fee_payments` and `fee_payment_legs` (chain-derived — every fee op
+with the BLURT transfers that paid it, the Operators page's earnings; exported). A node
+restored from an older snapshot, which carries neither, fills them in by fetching those
+fee ops' transactions from the chain again (`indexer/feeLegsBackfill.ts`). It also adds
+`operator_stats` (node-local — the Operators page's figures, recomputed from the tables
+above and the node's own orders; exported empty, refilled once the restored node has caught up
+with the chain).
 
 ---
 

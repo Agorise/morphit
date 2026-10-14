@@ -72,8 +72,9 @@ export interface SnapshotSource {
 	readonly transport: 'local' | 'tor' | 'i2p' | 'kubo' | 'clearnet';
 	/** Short human label for progress output ("Tor peer abcd…", "ipfs.io"). */
 	readonly label: string;
-	/** A source that most likely does not hold it (a hidden RPC node, most of
-	 *  which do not mirror yet): given up on sooner when it stalls. */
+	/** A source that may not hold it (a hidden RPC node: those on hidden-rpc
+	 *  v1.3.0 or later serve it, others answer 404): given up on sooner when it
+	 *  stalls. */
 	readonly longShot?: boolean;
 }
 

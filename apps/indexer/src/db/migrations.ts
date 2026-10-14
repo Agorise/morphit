@@ -1017,6 +1017,75 @@ COMMENT ON COLUMN orders.lang IS
     'languages (v1.21.1); with no language chosen, untagged orders show too.';
 `
 	}
+
+	,{
+		version: 68,
+		description:
+			'fee_payments + fee_payment_legs: every Morphit fee op (listing, first-contact, featured-slot bid), whatever its verdict, with the BLURT transfers that paid it (at most 16 per op), so the Operators page can show what each operator has earned since inception (v1.21.8); operator_stats, the figures recomputed in the background. Additive; filled live by the dispatcher and, for ops indexed before, by a back-fill that re-fetches the original transaction.',
+		sql: `
+-- v1.21.8 — what each operator's site has earned, since inception, for the
+-- Operators page. Every Morphit fee op (listing, first-contact, featured-slot
+-- bid) is recorded here with the BLURT transfers that paid it: the transfers in
+-- the same transaction, from the op's signer, carrying the op's memo. Recorded
+-- for every such op whatever its verdict (the BLURT moved either way), live by
+-- the dispatcher and, for ops indexed before this version, by a back-fill that
+-- fetches the original transaction again (indexer/feeLegsBackfill.ts). Which
+-- operator a transfer credits is decided when the figures are counted
+-- (indexer/operatorStats.ts, into operator_stats), from the on-chain
+-- fees-account history (operator_fee_recipients), so a later registration
+-- applies to older payments the same way on every node.
+CREATE TABLE IF NOT EXISTS fee_payments (
+    block_num BIGINT NOT NULL,
+    trx_in_block INT NOT NULL,
+    op_in_trx INT NOT NULL,
+    -- listing (morphit_order_v1), stranger (morphit_stranger_fee_v1),
+    -- feature (morphit_feature_bid_v1).
+    kind TEXT NOT NULL CHECK (kind IN ('listing', 'stranger', 'feature')),
+    payer TEXT NOT NULL,
+    -- The op's operator_tag when well-formed (feature bids carry none).
+    operator_tag TEXT,
+    -- What the memo names: the order permlink (listing, feature) or the
+    -- message recipient (stranger). NULL when the payload names none.
+    ref TEXT,
+    trx_id TEXT NOT NULL,
+    block_time TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (block_num, trx_in_block, op_in_trx)
+);
+
+CREATE TABLE IF NOT EXISTS fee_payment_legs (
+    block_num BIGINT NOT NULL,
+    trx_in_block INT NOT NULL,
+    -- The transfer's own position in the transaction: one transfer is one
+    -- leg, even if two fee ops in the transaction name the same memo.
+    leg_op_in_trx INT NOT NULL,
+    -- The fee op it paid (fee_payments.op_in_trx in the same transaction).
+    op_in_trx INT NOT NULL,
+    recipient TEXT NOT NULL,
+    amount_milli BIGINT NOT NULL CHECK (amount_milli > 0),
+    PRIMARY KEY (block_num, trx_in_block, leg_op_in_trx)
+);
+CREATE INDEX IF NOT EXISTS fee_payment_legs_recipient_idx
+    ON fee_payment_legs (recipient, block_num);
+
+COMMENT ON TABLE fee_payments IS
+    'Every Morphit fee op (listing, stranger, feature), whatever its verdict, '
+    'with its BLURT legs in fee_payment_legs (v1.21.8). The Operators page '
+    'credits each leg to the operator whose registered fees account received it.';
+COMMENT ON TABLE fee_payment_legs IS
+    'The BLURT transfers that paid a fee op: same transaction, from its signer, '
+    'with its memo. Amounts in milliBLURT.';
+
+-- Every operator's figures for /v1/operators, recomputed in the background by
+-- the indexer (indexer/operatorStats.ts) from fee_payments, operator_fee_recipients
+-- and orders. A local cache: never exported in a snapshot, recomputed after one.
+CREATE TABLE IF NOT EXISTS operator_stats (
+    account TEXT PRIMARY KEY,
+    orders BIGINT NOT NULL,
+    earned_milli NUMERIC NOT NULL,
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+`
+	}
 ];
 
 /** Validate the MIGRATIONS array at load time:

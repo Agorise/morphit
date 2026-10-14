@@ -188,6 +188,9 @@ export async function truncateAll(fx: IntegrationFixture): Promise<void> {
 		'chat_identities',
 		'chat_messages',
 		'fee_attestations',
+		// v1.21.8: fee payments and their legs (operator earnings).
+		'fee_payment_legs',
+		'fee_payments',
 		'fee_transfers',
 		'feedback_responses',
 		'feedback',

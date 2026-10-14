@@ -455,9 +455,12 @@ the signature against).  Morphit itself ships no key there: an
 instance serves only the key its operator publishes.  After setup,
 the weekly refresh lives at `~/.morphit/update-canary.sh`.
 
-**After every `morphit-ops upgrade`** the rebuild wipes the
-served `build/` dir, so re-run the refresh once to restore
-the canary — the upgrade prints this reminder:
+**After a `morphit-ops upgrade`** the served `build/` dir is
+new; the upgrade puts the canary you signed back into it,
+unchanged, and names the refresh only when that canary runs
+out within days, or it could not put the canary or its
+public key back (upgrades run by v1.21.7 and earlier did not
+put it back, and always printed this reminder):
 
 ```
 bash ~/.morphit/update-canary.sh
@@ -6304,9 +6307,12 @@ already landed. So "monitoring earnings" is two independent things:
 1. **The money** — the BLURT itself, which arrives in your fees
    account on-chain. Check its balance on a chain explorer
    (https://blocks.blurtwallet.com or similar) or in your wallet.
-2. **The dashboard attribution** — a running tally the indexer
-   keeps for display, driven by your `operator_tag`. This is
-   audit/analytics only; it does NOT move money.
+2. **The Operators page figures** — what `/v1/operators` shows for
+   you: the orders carrying your `operator_tag`, and the BLURT that
+   reached your fees account in Morphit fee payments. The earnings
+   are computed from chain data, the same on every instance; the
+   order count is each instance's own judgement and can differ a
+   little. Display only, it does NOT move money.
 
 ### Verifying earnings are flowing
 
@@ -6316,10 +6322,21 @@ curl -s http://localhost:8081/v1/operators | jq '.operators[] | select(.tag == "
 
 (There is no per-tag endpoint; `/v1/operators` lists every
 registered operator.) Look for, under `stats`:
-- `cumulative_blurt_earned` — total BLURT the dashboard has
-  credited you (your 90% shares summed), > 0 once BLURT-paid
-  orders have been attributed to your tag.
-- `total_orders_attributed` — count of orders attributed to you.
+- `cumulative_blurt_earned` — the BLURT that reached your fees
+  account in Morphit fee payments since you started (listing,
+  first-contact and featured-slot fees; your 90% shares, or the
+  whole fee if your fees account is `@morphit-fees`).
+- `total_orders_attributed` — the orders carrying your tag whose fee
+  this instance holds as paid (BLURT, BTC, XMR or a free first buy;
+  verified or verified by attestation).
+
+Right after an upgrade to v1.21.8 the indexer fills in the fee
+payments it indexed before, by fetching them from the chain again
+(`fee_legs_backfill_pass` in the indexer log); until that finishes,
+`cumulative_blurt_earned` can be short. The figures are recomputed in
+the background (`operator_stats_refreshed` in the indexer log) within a
+minute of a new fee payment and at least every 10 minutes; `stats` is
+missing for an operator not counted yet.
 
 And separately, confirm the actual BLURT balance of your fees
 account on-chain — that is the ground truth for the money.
@@ -6353,57 +6370,52 @@ means the order never reached `fee_status='verified'`:
    Once it is, your earlier live orders appear there too, within minutes (FEES-AND-REWARDS.md, "Orders paid
    before the operator registered").
 
-### If the dashboard attribution is missing (but the money arrived)
+### If the Operators page figures look wrong (but the money arrived)
 
-The money and the dashboard are independent: the split pays your
-fees account regardless of the tag; the `operator_tag` only drives
-the dashboard credit. If your balance grows but your entry in
-`/v1/operators` shows no `stats`:
+The money and the page are independent: the split pays your fees
+account whatever the page shows. If your balance grows but your entry
+in `/v1/operators` does not:
 
-1. **Did the order op include your tag?** Inspect a recent order
-   op's payload on a chain explorer — its `operator_tag` must
-   match your registered tag exactly. If missing, your frontend
-   isn't sending it — check `MORPHIT_INSTANCE_OPERATOR_TAG` in
-   `/opt/morphit/morphit.config.env` and confirm the indexer was restarted.
-2. **Is your tag in the operators table?**
+1. **Is your fees account in your on-chain registration?** Earnings
+   are credited by the fees account the BLURT reached, as registered
+   on chain (`fee_account` in your `/v1/operators` entry).
+   `sudo morphit-ops status` (on the server) says whether it is; if
+   not, run `sudo morphit-ops register` on the server. Payments from
+   before your first registration that name your tag are credited to
+   the first account you register.
+2. **Did the order op include your tag?** The order count follows
+   the tag. Inspect a recent order op's payload on a chain explorer —
+   its `operator_tag` must match your registered tag exactly. If it
+   is missing, check `MORPHIT_INSTANCE_OPERATOR_TAG` in
+   `/opt/morphit/morphit.config.env` and confirm the indexer was
+   restarted.
+3. **Is the back-fill still running?** After the upgrade to v1.21.8,
+   look for `fee_legs_backfill_pass` and `fee_legs_fetch_failed` in
+   the indexer log. A block whose transactions failed three times in
+   a row is set aside and tried again every 10 minutes.
+4. **Is the payment recorded?**
    ```
    sudo -u postgres psql morphit_indexer -c \
-     "SELECT account, tag, is_active FROM operators WHERE tag = 'yourtag';"
-   ```
-   0 rows → the on-chain registration didn't land or didn't index.
-3. **Was the order's BLURT fee verified?** Attribution only fires
-   for `fee_status='verified'` BLURT orders (BTC/XMR-paid orders
-   don't attribute — 100% goes to the canonical treasury).
-   ```
-   sudo -u postgres psql morphit_indexer -c \
-     "SELECT permlink, fee_method, fee_status FROM orders \
-      WHERE account = 'orderposter' ORDER BY created_at DESC LIMIT 5;"
-   ```
-4. **Is the attribution event recorded?**
-   ```
-   sudo -u postgres psql morphit_indexer -c \
-     "SELECT operator_tag, fee_blurt, operator_share_blurt \
-      FROM operator_attribution_events \
-      WHERE operator_tag = 'yourtag' \
-      ORDER BY observed_at DESC LIMIT 5;"
+     "SELECT p.kind, p.payer, p.operator_tag, l.recipient, l.amount_milli \
+        FROM fee_payment_legs l JOIN fee_payments p USING (block_num, trx_in_block, op_in_trx) \
+       WHERE l.recipient = 'yourfeesaccount' ORDER BY l.block_num DESC LIMIT 5;"
    ```
 
 ### Edge cases to know about
 
 **Operator deactivation.** If `operators.is_active = FALSE` for
-your row (a future moderation feature), new attributions skip you
-silently — the dashboard stops crediting you, though any fees your
-account already received (they were paid directly) stay yours.
-There is no pending balance to strand.
+your row (a future moderation feature), you are listed below the
+active operators; any fees your account already received (they were
+paid directly) stay yours. There is no pending balance to strand.
 
 **Self-dealing / mis-tagging.** If a hostile user lists orders
 through your instance carrying a *different* operator's tag, that
-other operator gets the dashboard credit — but the **money** still
-splits to *your* instance's fees account (the split follows your
-configured recipient, not the tag) plus the canonical 10%. So
-mis-tagging can only misattribute the dashboard analytics, never
-misroute the fees. The public `operator_attribution_events.operator_tag`
-audit trail shows which tag was credited per order.
+other operator gets the order count — but the **money** still splits
+to *your* instance's fees account (the split follows your configured
+recipient, not the tag) plus the canonical 10%, and the earnings
+follow the money. So mis-tagging can only move the order count, never
+the fees or the earnings. `fee_payments.operator_tag` shows which tag
+each payment named.
 
 ## 29. Running a second instance — DO NOT share relay accounts
 
@@ -7919,13 +7931,20 @@ in step 5, to upload the finished files.
      compelled to spy on users, you simply stop — after 14 days a
      stale `Generated:` date is the signal users (or a watchdog) act
      on (there is no automatic banner; see the note below).
-   - **Re-upload after every `morphit-ops upgrade`.** An upgrade
-     rebuilds `build/`, which wipes the canary. If you sign on the
-     **same box** you serve from, the upgrade re-runs your refresh
-     (`~/.morphit/update-canary.sh`) and restores it for you. If you
-     sign on a **separate machine** (the recommended posture), the
-     upgrade prints a reminder and `morphit-ops health` shows the
-     canary "missing" (red) until you re-run step 5. Either way the
+   - **After a `morphit-ops upgrade`.** An upgrade installs a fresh
+     `build/`. It puts the canary served before it back, unchanged
+     (`canary.txt` and `pgp_keys.asc`, the same signed bytes; their
+     "Valid through" date still runs out on its own), so a canary
+     signed on a **separate machine** (the recommended posture) stays
+     up. If you sign on the **same box** you serve from, the upgrade
+     also re-runs your refresh, which signs a new one. The upgrade asks
+     you to re-run step 5 only when the canary it put back runs out
+     within 5 days, or when it could not put the canary or its public
+     key back, and says why (it copies only regular files with one
+     name, never through a link inside the old install, holding a
+     signed canary or public key blocks). (Upgrades run by v1.21.7 and earlier did not put
+     it back: there, a canary signed elsewhere showed "missing" (red)
+     in `morphit-ops health` until you re-ran step 5.) Either way the
      upgrade keeps `build/` and `static/` writable for your upload, and
      `scripts/canary/setup.sh` (remote mode) hands the served folder to
      your SSH login when it can — so you should not hit `Permission
@@ -11660,7 +11679,10 @@ These ARE gated:
 - `relay_pending_transfers` rows (only your
   operator's are queued by your indexer)
 - `operator_earnings` rolling totals (only your
-  operator's)
+  operator's; since v1.21.8 the Operators page no longer reads them —
+  it computes every operator's earnings from `fee_payments`, which
+  every indexer keeps alike, and each order count from the node's own
+  `orders`)
 
 ### Tests + smoke
 
@@ -13798,7 +13820,7 @@ The mirror job:
 
 1. reads the newest signed `indexer_snapshot_v1` op from chain, over whatever transport your node already uses (hidden RPC included — no clearnet required). Since v1.18.0 it only accepts an op that **two RPC operators agree on** (a node's `.onion` and `.b32.i2p` count as one operator; the default hidden nodes are all run by the project, so on a hidden-only node the signature is the real check) and whose signature comes from the pinned `MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY` — the same key the release and RPC-directory checks use. If the nodes it can reach do not agree yet, it pins nothing and tries again next run;
 2. refuses outright if the snapshot is for a different chain;
-3. pins the CID to your Kubo. When Kubo's own swarm cannot fetch it — a Tor/I2P-only box often has only two or three swarm peers, so with fewer than five the swarm gets 3 minutes — it asks the federation peers' `.onion` and `.b32.i2p` addresses (the publisher's own from the signed record first, then this node's federation directory with the publisher's instance leading, then any registration in the history it read), and then the hidden Blurt RPC nodes in its settings (since v1.21.7; most do not mirror yet, see [HIDDEN-RPC-SNAPSHOT-MIRROR.md](HIDDEN-RPC-SNAPSHOT-MIRROR.md)), for the snapshot as a CAR (`/ipfs/<cid>?format=car`; up to 64 MB, no redirects) and imports that, pinning only the anchored CID, whatever roots the CAR names. Fetching stops 18 minutes into the run, which leaves the steps after it the time they may take within the run's 30 minutes;
+3. pins the CID to your Kubo. When Kubo's own swarm cannot fetch it — a Tor/I2P-only box often has only two or three swarm peers, so with fewer than five the swarm gets 3 minutes — it asks the federation peers' `.onion` and `.b32.i2p` addresses (the publisher's own from the signed record first, then this node's federation directory with the publisher's instance leading, then any registration in the history it read), and then the hidden Blurt RPC nodes in its settings (since v1.21.7; those running hidden-rpc v1.3.0 or later serve it; for other RPC software see [HIDDEN-RPC-SNAPSHOT-MIRROR.md](HIDDEN-RPC-SNAPSHOT-MIRROR.md)), for the snapshot as a CAR (`/ipfs/<cid>?format=car`; up to 64 MB, no redirects) and imports that, pinning only the anchored CID, whatever roots the CAR names. Fetching stops 18 minutes into the run, which leaves the steps after it the time they may take within the run's 30 minutes;
 4. reads the pinned content back and **verifies it against the on-chain SHA-256** — if it does not match, the pin is removed and your box serves nothing rather than serving something a newcomer will reject;
 5. unpins the snapshot it was serving before and runs a repo GC. One live snapshot per box, never a growing pile — nobody wants last month's copy when this month's exists.
 
@@ -13829,7 +13851,7 @@ A healthy run ends with a line confirming the SHA-256 matched and that this inst
 
 ### Fast-syncing a new node
 
-On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order (v1.21.7): your own gateway if you run one (it serves only what it already holds), then federation peers over Tor and I2P (the publisher's own addresses from the signed record first), then — on a node in the public IPFS network, never a Tor/I2P-only one — your own IPFS node asking the network for it, then the hidden Blurt RPC nodes in your settings (most do not mirror yet; what their operators can run is in [HIDDEN-RPC-SNAPSHOT-MIRROR.md](HIDDEN-RPC-SNAPSHOT-MIRROR.md)), then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. A hidden source is never allowed to redirect the download. Whatever answers first is verified against the on-chain record before anything is restored, so which mirror served you affects only your wait, never your safety.
+On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order (v1.21.7): your own gateway if you run one (it serves only what it already holds), then federation peers over Tor and I2P (the publisher's own addresses from the signed record first), then — on a node in the public IPFS network, never a Tor/I2P-only one — your own IPFS node asking the network for it, then the hidden Blurt RPC nodes in your settings (those running hidden-rpc v1.3.0 or later serve it, and what operators of other RPC software can run is in [HIDDEN-RPC-SNAPSHOT-MIRROR.md](HIDDEN-RPC-SNAPSHOT-MIRROR.md)), then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. A hidden source is never allowed to redirect the download. Whatever answers first is verified against the on-chain record before anything is restored, so which mirror served you affects only your wait, never your safety.
 
 **What every downloaded copy must pass before it is unpacked (v1.21.7).** It must be exactly the size the signed record gives (a longer download is cut off there); the archive is read by fast-sync itself, not by `tar`, and only `manifest.json` and `indexer.sql.gz`, as plain files of bounded size, are accepted; the dump inside must match the signed SHA-256. A copy that fails any of these is thrown away and the next source is tried — one bad source can no longer stop the run or fill the disk.
 
@@ -14024,7 +14046,8 @@ to pick up a new name.
 | `sudo morphit-ops branding reset` | Serve the plain Morphit look again (config kept) |
 
 **What changes on disk.** Only files outside the on-chain release manifest:
-the two logo SVGs under `/brand/`, the site's `brand/brand.json`, `/favicon.svg`,
+the two logo SVGs under `/brand/`, the site's `brand/brand.json` and `brand/theme.css`
+(the name and colours every page loads before it paints), `/favicon.svg`,
 `/app-icon.svg`, `/app-icon-maskable.svg`, the PNG app icons, iPhone/iPad launch
 screens under `/splash/`, `/manifest.webmanifest`, any images the operator puts
 under `/etc/morphit/branding/static/` (images only — pages, scripts, fonts and the

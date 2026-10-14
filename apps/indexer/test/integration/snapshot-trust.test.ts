@@ -355,6 +355,10 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			 VALUES ('op1', 'chainblocked', 'blocked', 'on chain', 1, 't1', 1, now(), now(), 'chain'),
 			        ('op1', 'localblocked', 'blocked', '${MARK}', 1, 't2', 1, now(), now(), 'local')`
 			);
+			// v1.21.8: the Operators page's figures, a local count.
+			await pool.query(
+				`INSERT INTO operator_stats (account, orders, earned_milli, computed_at) VALUES ('${MARK}', 1, 1, now())`
+			);
 			await pool.end();
 			const exp = await run('snapshot-export.ts', ['--out', join(work, 'out')], env(SRC));
 			expect(exp.code, exp.err).toBe(0);

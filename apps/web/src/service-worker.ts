@@ -51,8 +51,9 @@
  *     never cached here — see isDynamicDataPath.
  *   • EVERY navigation (the HTML document) is NETWORK-FIRST, prerendered
  *     route or not; the cached copy is only the offline fallback.
- *   • Operator-replaceable brand assets are stale-while-revalidate (a read
- *     marked ?fresh=1 — the Blurt post — is network-first).
+ *   • Operator-replaceable brand assets are network-first (the stored copy
+ *     only when the server does not answer, and never for the app's own
+ *     ?fresh=1 read — the Blurt post): answerBrandRequest.
  *   • Other same-origin GETs (hashed chunks, /static) are cache-first and
  *     refetched on a miss.
  *
@@ -75,12 +76,10 @@
 import { build, files, prerendered, version } from '$service-worker';
 import { sanitizeClickPath } from '$lib/notifications/sanitizeClickPath';
 import {
-	BRAND_FRESH_PARAM,
-	chooseBrandResponse,
+	answerBrandRequest,
 	isDynamicDataPath,
 	isBrandOverridablePath
 } from '$lib/net/dynamicPaths';
-import { withHiddenFloor } from '$lib/net/transportBudget';
 import { DEFAULT_BRAND_NAME, sanitizeBrandName } from '$lib/brand/brandName';
 import { chatThreadFromClickPath, chatPeerMatches } from '$lib/notifications/chatThread';
 import { ReloadStashKeys, SW_STASH_PUT, SW_STASH_TAKE } from '$lib/auth/reloadStash';
@@ -95,8 +94,9 @@ declare const self: ServiceWorkerGlobalScope;
  */
 const CACHE = `morphit-${version}`;
 
-/** Upper bound on the background refresh of an operator-replaceable brand
- *  asset (logo, icons, manifest, brand.json) — see the fetch handler. */
+/** Longest the worker waits for the server's copy of an operator-replaceable
+ *  brand file (logo, icons, manifest, brand.json, theme.css) before answering
+ *  504 (theme.css: its stored copy) — see answerBrandRequest. */
 const BRAND_REFRESH_TIMEOUT_MS = 30_000;
 
 /**
@@ -260,58 +260,22 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 				}
 			}
 
-			// ── Operator-replaceable brand assets → STALE-WHILE-REVALIDATE ──
+			// ── Operator-replaceable brand assets → NETWORK-FIRST ──────────
 			// Per-instance branding (docs/BRANDING.md): the logo, favicon, app
-			// icons, manifest and /brand/brand.json keep their URL when an
-			// operator re-brands. Answer from cache instantly (offline-safe, no
-			// extra round trip) and refresh the cache in the background, so a
-			// re-applied brand shows on the visitor's next load instead of
-			// waiting for the next release to rotate this cache.
+			// icons, manifest, /brand/brand.json and /brand/theme.css keep their
+			// URL when an operator brands or re-brands the site. The server's
+			// copy whenever it answers, the stored one only offline — so no
+			// visitor ever sees a look the site no longer has (v1.21.8; they were
+			// stale-while-revalidate, and a visitor who had seen the site before
+			// it was branded got Morphit's look for a whole page load).
 			if (isBrandOverridablePath(url.pathname)) {
-				// `?fresh=1` (only the Blurt post sends it, right before posting):
-				// the network's copy when there is one, the cached one only when
-				// there is not. Everything else stays stale-while-revalidate.
-				const wantsFresh = url.searchParams.has(BRAND_FRESH_PARAM);
-				// Cached under the bare path, so a fresh read updates what every
-				// later (query-less) read gets.
-				const key = wantsFresh ? new Request(url.origin + url.pathname) : req;
-				const cached = await cache.match(req, { ignoreSearch: true });
-				// Bounded: a hung background refresh must not keep the SW
-				// alive via waitUntil. Raised to the hidden-transport floor on
-				// a .onion/.i2p origin; on a cache miss a timeout falls through
-				// to the 503 below.
-				const ac = new AbortController();
-				const timer = setTimeout(
-					() => ac.abort(),
-					withHiddenFloor(BRAND_REFRESH_TIMEOUT_MS, url.origin)
-				);
-				// The timer stays armed until the BODY is cached (cache.put reads
-				// it), not just the headers — a stall after the headers must not
-				// hold the worker open either.
-				const refresh = fetch(req, { cache: 'no-cache', signal: ac.signal })
-					.then((fresh) => {
-						if (fresh.ok && fresh.status === 200) {
-							return cache
-								.put(key, fresh.clone())
-								.catch(() => {})
-								.then(() => fresh);
-						}
-						return fresh;
-					})
-					.catch(() => null)
-					.finally(() => clearTimeout(timer));
-				if (cached && !wantsFresh) {
-					event.waitUntil(refresh);
-					return cached;
-				}
-				const fresh = await refresh;
-				// A ?fresh=1 read never gets the stored copy (it may predate the
-				// site's branding): see chooseBrandResponse.
-				const pick = chooseBrandResponse(fresh, cached, wantsFresh);
-				if (pick !== 'offline') return pick;
-				return new Response('Offline — resource unavailable.', {
-					status: 503,
-					headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+				// Bounded, so a hung server cannot hold the page (or keep the
+				// worker alive); answerBrandRequest raises the bound to the
+				// hidden-transport floor on a .onion/.i2p/.loki origin.
+				return answerBrandRequest(req, {
+					cache,
+					fetch: (r, init) => fetch(r, init),
+					timeoutMs: BRAND_REFRESH_TIMEOUT_MS
 				});
 			}
 

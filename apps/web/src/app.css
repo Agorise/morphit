@@ -560,7 +560,9 @@ body {
 		:disabled,
 		[aria-disabled='true']
 	):hover {
-	outline: 1px solid rgb(var(--brand-primary-rgb) / 0.9);
+	/* v1.21.8: its own token. brand-primary is the FACE of a bright button
+	 * (a gold theme), so the edge did not show there. */
+	outline: 1px solid rgb(var(--brand-btn-edge-rgb) / 0.9);
 	outline-offset: -1px;
 }
 

@@ -77,16 +77,26 @@
 		/>
 		<!-- v1.20.2: the header logo is the largest thing on a phone's first screen.
 		     Requested here, before the app's script preloads, instead of when the
-		     parser reaches the header. Same URL and CORS mode as the <img> AND the
-		     shine's mask-image (masks are always fetched in CORS mode), so one
-		     download serves all three. -->
+		     parser reaches the header. Same URL (SITE_LOGO_SRC in
+		     lib/brand/brandAssets.ts, ?fresh=1 included) and CORS mode as the <img>
+		     AND the shine's mask-image (masks are always fetched in CORS mode), so
+		     one download serves all three. -->
 		<link
 			rel="preload"
-			href="%sveltekit.assets%/brand/site-logo.svg"
+			href="%sveltekit.assets%/brand/site-logo.svg?fresh=1"
 			as="image"
 			fetchpriority="high"
 			crossorigin="anonymous"
 		/>
+
+		<!-- This instance's colours and name (docs/BRANDING.md): canonically
+		     empty, written by `morphit-ops branding apply`. A stylesheet in the
+		     head holds the first paint until it has loaded, and the app's
+		     scripts until it applies, so no page — not even one the app draws in
+		     the browser from this shared shell — ever shows another site's look
+		     first. (This file is on the on-chain tamper manifest and is never
+		     rewritten; the stylesheet it names is.) -->
+		<link rel="stylesheet" href="%sveltekit.assets%/brand/theme.css" />
 
 		<!-- The ?lang= hint, before first paint. An external file: the site's
 		     Content-Security-Policy allows no inline script. -->
@@ -166,7 +176,7 @@
 					line-height: 1.6;
 				"
 			>
-				<h1 style="margin-top: 0; font-size: 22px">&#8288;Morphit&#8288; works without JavaScript — partly.</h1>
+				<h1 style="margin-top: 0; font-size: 22px">This site works without JavaScript — partly.</h1>
 				<p>
 					With JavaScript off you can read the pages with fixed text, like the security page, the
 					glossary and the run-a-node page. The FAQ lists its questions, but its answers, the privacy
@@ -175,7 +185,7 @@
 				</p>
 				<p>
 					<strong>Trading</strong> (creating orders, chatting, signing feedback) needs JavaScript,
-					because all cryptography happens inside your browser. &#8288;Morphit&#8288; never sees your keys. If JS
+					because all cryptography happens inside your browser. This site never sees your keys. If JS
 					ran on our servers instead, we'd have to hold them — and we refuse to.
 				</p>
 				<p>Turn JavaScript on to read the FAQ answers, see orders or trade.</p>

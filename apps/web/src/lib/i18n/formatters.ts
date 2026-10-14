@@ -341,6 +341,19 @@ export function formatBlurt(amount: number, decimals = 3): string {
 	}).format(amount);
 }
 
+/**
+ * A BLURT total for reading (the Operators page's earnings, v1.21.8): grouped
+ * the page language's way, up to 3 decimals — "1,234,567.891" in en,
+ * "1.234.567,891" in de. Not for a fee the user is about to sign (formatBlurt).
+ */
+export function formatBlurtTotal(amount: number): string {
+	if (!Number.isFinite(amount)) return '—';
+	return getNumberFormat(activeLocale(), {
+		style: 'decimal',
+		maximumFractionDigits: 3
+	}).format(amount);
+}
+
 // ─── Count formatter ───────────────────────────────────────────
 
 /**

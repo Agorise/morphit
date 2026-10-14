@@ -86,8 +86,9 @@
 #     record may carry ships in one release; only a later release's record
 #     uses it (docs/OPERATIONS.md §40.6).
 #   • BLOCK 6 checks, after the upgrade, that morphit.io SERVES the anchored
-#     build, and repairs the canary (`morphit-ops upgrade` wipes
-#     build/canary.txt). Not optional.
+#     build, and re-signs the canary (an upgrade run by v1.21.7 or earlier
+#     clears build/canary.txt; from v1.21.8 the upgrade puts the served one
+#     back, and re-signing keeps it fresh). Not optional.
 #
 set -euo pipefail
 
@@ -169,7 +170,7 @@ There is deliberately **no public-gateway check here**. This block already asser
 
 ---
 
-**BLOCK 6** — check what morphit.io now serves, then repair the canary (laptop, repo root — the canary is signed there, never on the server; the upgrade wipes \`build/canary.txt\` every time). The first lines fetch the served verify.json and require it to name the anchored tarball's hash for every bootstrap file (the page, the service worker, the entry scripts):
+**BLOCK 6** — check what morphit.io now serves, then re-sign the canary (laptop, repo root — the canary is signed there, never on the server; an upgrade run by v1.21.7 or earlier clears \`build/canary.txt\`, a later one puts the signed one back, and this signs a fresh one either way). The first lines fetch the served verify.json and require it to name the anchored tarball's hash for every bootstrap file (the page, the service worker, the entry scripts):
 \`\`\`
 rm -f /tmp/morphit-verify.json
 curl -fsSL https://morphit.io/verify.json -o /tmp/morphit-verify.json

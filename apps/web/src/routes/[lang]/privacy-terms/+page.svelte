@@ -1,6 +1,11 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
+	import { localePath } from '$i18n/path';
+	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+
+	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 </script>
 
 <Head routeKey="privacy_terms" />
@@ -29,7 +34,10 @@
 			{$_('privacy_terms.privacy_body_3')}
 		</p>
 		<p class="mt-3 text-ink-700 dark:text-ink-200">
-			{$_('privacy_terms.privacy_body_zero_clearnet')}
+			<!-- The first sentence leads to the privacy guides (/privacy). -->
+			<a href={localePath('/privacy', currentLang)} class="text-morphit-emerald hover:underline"
+				>{$_('privacy_terms.privacy_body_zero_clearnet_link')}</a
+			>{$_('privacy_terms.privacy_body_zero_clearnet_post')}
 		</p>
 	</section>
 

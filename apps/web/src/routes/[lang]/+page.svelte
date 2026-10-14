@@ -163,12 +163,15 @@
 
 	<div class="mx-auto max-w-6xl px-4 py-16 md:px-6 md:py-24">
 		<div class="flex flex-col items-center text-center">
-			<div class="mb-6 animate-fade-up">
+			<!-- v1.21.8: the logo sits a little higher (the heading stays put), and
+			     the heading is 10% smaller than text-3xl/4xl/5xl/6xl, each with its
+			     line height scaled the same (37.5/40/48/60 px → 33.75/36/43.2/54). -->
+			<div class="-mt-3 mb-9 animate-fade-up md:-mt-4 md:mb-10">
 				<MorphitLogoBling heightClass="h-11 sm:h-16 md:h-20 lg:h-24" shine priority />
 			</div>
 
 			<h1
-				class="mt-4 animate-fade-up font-display text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl lg:text-6xl"
+				class="mt-4 animate-fade-up font-display text-[1.6875rem]/[1.25] font-extrabold tracking-tight sm:text-[2.025rem]/[2.25rem] md:text-[2.7rem]/none lg:text-[3.375rem]/none"
 				style="animation-delay: 60ms"
 			>
 				<span class="brand-gradient-text">{$_('home.hero_title')}</span>

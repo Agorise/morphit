@@ -13,6 +13,7 @@
  *   /manifest.webmanifest                                     PWA name
  *   /og-image.png                link-preview picture, drawn from the logo + name (./ogImage.ts)
  *   /brand/brand.json                                         brand for the SPA shell
+ *   /brand/theme.css             name + colours, linked by every page before first paint
  *   every prerendered page (.html)                            brand-name text slots
  *   anything under <branding dir>/static/                     free-form overlay
  *
@@ -80,7 +81,13 @@ import {
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { brotliCompressSync, gzipSync, constants as zc } from 'node:zlib';
+import {
+	brotliCompressSync,
+	brotliDecompressSync,
+	gunzipSync,
+	gzipSync,
+	constants as zc
+} from 'node:zlib';
 import {
 	DEFAULT_BRAND_NAME,
 	brandForCompound,
@@ -89,6 +96,8 @@ import {
 	INSTANCE_ENV
 } from '@morphit/operator-config';
 import {
+	BRAND_THEME_CSS_REL,
+	brandThemeCss,
 	deriveTheme,
 	themeStyleElement,
 	themePreset,
@@ -127,11 +136,12 @@ const ICON_BACKGROUND = '#0a0e16';
 
 /** Files the operator may replace in place. Keep in sync with
  *  BRAND_OVERRIDABLE_PATHS in apps/web/src/lib/net/dynamicPaths.ts (served
- *  stale-while-revalidate by the service worker). */
+ *  network-first by the service worker). */
 export const BRAND_TARGETS = {
 	siteLogo: 'brand/site-logo.svg',
 	siteLogoFooter: 'brand/site-logo-footer.svg',
 	brandJson: 'brand/brand.json',
+	themeCss: BRAND_THEME_CSS_REL,
 	favicon: 'favicon.svg',
 	appIconSvg: 'app-icon.svg',
 	appIconMaskableSvg: 'app-icon-maskable.svg',
@@ -915,12 +925,15 @@ function buildIdOf(paths: BrandingPaths): string {
 	return h.digest('hex');
 }
 
+/** The build files whose originals are saved. A saved page marks its file
+ *  (its .gz/.br are saved BEFORE it, see SAVE_ORDER), so a compressed copy
+ *  saved without its page is not a file of its own: phase 1 stopped before
+ *  that page, and the build was never changed for it (v1.21.8; listed on its
+ *  own, the next apply "restored" the old .gz over the branded one). */
 function listPristine(paths: BrandingPaths): string[] {
 	const dir = join(paths.pristineDir, 'files');
 	if (!existsSync(dir) || lstatSync(dir).isSymbolicLink()) return [];
-	return walkFiles(dir).filter(
-		(r) => !/\.(gz|br)$/.test(r) || !existsSync(join(dir, r.replace(/\.(gz|br)$/, '')))
-	);
+	return walkFiles(dir).filter((r) => !/\.(gz|br)$/.test(r));
 }
 
 /**
@@ -1286,6 +1299,15 @@ export function planBranding(
 	}
 	const brandJson = JSON.stringify(brandDoc, null, '\t') + '\n';
 	put(BRAND_TARGETS.brandJson, Buffer.from(brandJson));
+	// The stylesheet every page links before anything paints (app.html): the
+	// name and colours, so the pages the app draws in the browser from the
+	// untouched index.html never show Morphit's look first (v1.21.8,
+	// vigilante.trading). Canonically empty, and left so when neither is set.
+	if (brandName !== null || palette !== null)
+		put(
+			BRAND_TARGETS.themeCss,
+			Buffer.from(brandThemeCss(brandName ?? DEFAULT_BRAND_NAME, palette))
+		);
 	if (brandName !== null)
 		notes.push(`brand name: "${brandName}" (every place the UI names the site)`);
 
@@ -1423,6 +1445,8 @@ function acquireLock(paths: BrandingPaths): () => void {
 }
 
 const SIBLINGS = ['', '.gz', '.br'] as const;
+/** Originals are saved compressed copies first (see applyLocked, phase 1). */
+const SAVE_ORDER = ['.gz', '.br', ''] as const;
 const withSiblings = (rel: string): string[] =>
 	COMPRESSIBLE.test(rel) ? [rel, `${rel}.gz`, `${rel}.br`] : [rel];
 
@@ -1488,6 +1512,19 @@ function applyLocked(
 	const plan = planBranding(paths, settings, state, slotMap);
 	const pristineFiles = join(paths.pristineDir, 'files');
 	const cur = (rel: string): Buffer | null => safeRead(paths.buildDir, rel);
+	/** Each .gz/.br next to `rel` in the build holds exactly `want` (one that
+	 *  is absent is fine: none was shipped, or phase 2 removes it). */
+	const compressedCopiesMatch = (rel: string, want: Buffer): boolean => {
+		const gz = cur(`${rel}.gz`);
+		const br = cur(`${rel}.br`);
+		try {
+			if (gz !== null && !gunzipSync(gz).equals(want)) return false;
+			if (br !== null && !brotliDecompressSync(br).equals(want)) return false;
+		} catch {
+			return false;
+		}
+		return true;
+	};
 
 	// ── Decide. ──
 	const tracked = new Set(trackedBefore);
@@ -1511,7 +1548,10 @@ function applyLocked(
 			continue;
 		}
 		const now = cur(rel);
-		if (now !== null && now.equals(want) && tracked.has(rel)) continue; // already applied
+		// Already applied — the page AND its compressed copies (nginx serves the
+		// .gz/.br first): an apply cut off between them is finished here.
+		if (now !== null && now.equals(want) && tracked.has(rel) && compressedCopiesMatch(rel, want))
+			continue;
 		writes.push([rel, want]);
 		withSiblings(rel).forEach((r) => touched.add(r));
 	}
@@ -1536,7 +1576,10 @@ function applyLocked(
 		if (cur(rel) !== null) {
 			safeMkdirs(dirname(paths.pristineDir), posix.basename(paths.pristineDir));
 			safeMkdirs(paths.pristineDir, 'files');
-			for (const sfx of SIBLINGS) {
+			// The compressed copies first, the page last: a saved page is what
+			// marks the file as saved (listPristine), so it must never be there
+			// without its .gz/.br, or a reset could not put them back.
+			for (const sfx of SAVE_ORDER) {
 				const b = cur(rel + sfx);
 				if (b !== null) safeWrite(pristineFiles, rel + sfx, b);
 			}
@@ -1554,7 +1597,8 @@ function applyLocked(
 		const hadCanonical = state.modified.includes(rel);
 		const hadCompressed =
 			safeRead(pristineFiles, `${rel}.gz`) !== null || cur(`${rel}.gz`) !== null;
-		safeWrite(paths.buildDir, rel, want, true);
+		// The compressed copies first, the page last: until the page itself
+		// changes, the next apply sees the file as not applied and redoes it.
 		if (COMPRESSIBLE.test(rel) && (hadCompressed || !hadCanonical)) {
 			const c = compressed(want);
 			safeWrite(paths.buildDir, `${rel}.gz`, c.gz, true);
@@ -1563,6 +1607,7 @@ function applyLocked(
 			safeUnlink(paths.buildDir, `${rel}.gz`);
 			safeUnlink(paths.buildDir, `${rel}.br`);
 		}
+		safeWrite(paths.buildDir, rel, want, true);
 	}
 	for (const rel of restores) {
 		for (const sfx of SIBLINGS) {

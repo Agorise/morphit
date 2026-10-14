@@ -50,7 +50,11 @@
 
 <article class="mx-auto max-w-3xl px-4 py-8">
 	<header class="mb-6">
-		<h1 class="text-2xl font-bold">{$_('privacy.index_heading')}</h1>
+		<!-- v1.21.8: the site's own heading look (gradient in the theme's colours),
+		     like every other page, instead of plain white. -->
+		<h1 class="font-display text-3xl font-extrabold">
+			<span class="brand-gradient-text">{$_('privacy.index_heading')}</span>
+		</h1>
 		<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 			{$_('privacy.index_intro')}
 		</p>

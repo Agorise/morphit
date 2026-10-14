@@ -20,6 +20,13 @@ From Morphit v1.21.7, `fast-sync` already asks each hidden RPC node in its setti
 snapshot. A node that does not mirror simply answers 404 and the next source is tried, so nothing
 breaks before you turn this on.
 
+**Running hidden-rpc?** From hidden-rpc v1.3.0 every node does all of this out of the box: a small
+nginx gateway on loopback in front of blurtd serves the snapshot as two files it has proved against
+`@morphit`'s signed SHA-256, with no IPFS daemon, and passes JSON-RPC through unchanged. Upgrade
+with its installer; nothing else is needed. It was checked against Morphit's own code: `fast-sync`
+downloads and accepts the raw snapshot, a Morphit mirror imports and pins the CAR, and single and
+batch JSON-RPC calls reach blurtd byte for byte. The recipe below is for other Blurt RPC setups.
+
 ## What Morphit nodes request
 
 On the **same `.onion` / `.b32.i2p` and port** as your JSON-RPC (`:8091` for the nodes in Morphit's

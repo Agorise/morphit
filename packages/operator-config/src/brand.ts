@@ -76,6 +76,36 @@ export function sanitizeBrandName(raw: unknown): string | null {
 	return name;
 }
 
+/** The custom property carrying the site name in /brand/theme.css (theme.ts
+ *  writes the file; the page reads it before its first render). */
+export const BRAND_NAME_CSS_PROP = '--brand-name-hex';
+
+/** The site name as the `--brand-name-hex` value: `h` and its UTF-8 bytes in
+ *  hex. One CSS identifier, so no name can break out of the stylesheet, and
+ *  the page reads back exactly the name that was written. */
+export function brandNameCssHex(name: string): string {
+	let hex = 'h';
+	for (const b of new TextEncoder().encode(name)) hex += b.toString(16).padStart(2, '0');
+	return hex;
+}
+
+/** The site name a `--brand-name-hex` value carries, or null: anything that is
+ *  not exactly that encoding, not UTF-8, or not a usable name. */
+export function decodeBrandNameCssHex(raw: unknown): string | null {
+	if (typeof raw !== 'string') return null;
+	const m = /^h((?:[0-9a-f]{2}){1,256})$/.exec(raw.trim());
+	if (m === null) return null;
+	const bytes = new Uint8Array(m[1]!.length / 2);
+	for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(m[1]!.slice(i * 2, i * 2 + 2), 16);
+	let text: string;
+	try {
+		text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+	} catch {
+		return null;
+	}
+	return sanitizeBrandName(text);
+}
+
 /**
  * How a brand slot is written when it is directly followed by a hyphen and a
  * letter — a compound word, which German builds as "{brand}-Passwort". A

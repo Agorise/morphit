@@ -27,7 +27,13 @@ export {
 	type KnownLocaleCode
 } from './locales';
 
-import { SUPPORTED_LOCALES, DEFAULT_LOCALE, matchSupported, type LocaleCode } from './locales';
+import {
+	SUPPORTED_LOCALES,
+	DEFAULT_LOCALE,
+	isRtlLocale,
+	matchSupported,
+	type LocaleCode
+} from './locales';
 
 // Register each SUPPORTED locale with a lazy loader — only the
 // chosen bundle is fetched at runtime.  Planned locales are NOT
@@ -69,7 +75,7 @@ function loaderFor(code: string, part: LocalePart): () => Promise<Dictionary> {
 		return load().then((m) => {
 			// isolate @{handle} slots (LTR) at load time so usernames
 			// render "@alice", never "alice@", in RTL locales. See rtlHandle.ts.
-			const raw = isolateAtHandles(m.default ?? m) as Dictionary;
+			const raw = isolateAtHandles(m.default ?? m, { literals: isRtlLocale(code) }) as Dictionary;
 			let parts = rawBundles.get(code);
 			if (parts === undefined) rawBundles.set(code, (parts = new Map()));
 			parts.set(part, raw);

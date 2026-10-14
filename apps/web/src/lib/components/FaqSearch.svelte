@@ -473,12 +473,15 @@
 				<div class="flex items-start">
 					<button
 						type="button"
-						class="flex flex-1 items-start justify-between gap-4 px-5 py-4 text-left"
+						class="flex min-w-0 flex-1 items-start justify-between gap-4 px-5 py-4 text-left"
 						aria-expanded={isOpen}
 						aria-controls="faq-body-{entry.key}"
 						onclick={() => toggle(entry)}
 					>
-						<span class="font-display text-lg font-semibold">{entry.question}</span>
+						<!-- min-w-0 + break-words: a question with a long word
+						     ("centralized/decentralized") pushed the row, and the
+						     share button, off a 320 px screen (v1.21.8). -->
+						<span class="min-w-0 break-words font-display text-lg font-semibold">{entry.question}</span>
 						<span
 							class="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition-transform dark:bg-ink-800 dark:text-ink-300 {isOpen
 								? 'rotate-45'

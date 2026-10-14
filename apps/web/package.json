@@ -1,6 +1,6 @@
 {
 	"name": "morphit-web",
-	"version": "1.21.7",
+	"version": "1.21.8",
 	"private": true,
 	"type": "module",
 	"description": "Morphit web frontend — SvelteKit SSG, PWA, No-JS read-only paths",
@@ -11,7 +11,7 @@
 		"build": "node scripts/build-shipped-guard.mjs",
 		"postbuild": "npm run build:verify-json",
 		"preview": "vite preview --host",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit -p tsconfig.sw.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "tsx ../../scripts/lint-gate-smoke.ts",
 		"format": "prettier --write .",
