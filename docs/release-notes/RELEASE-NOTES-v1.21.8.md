@@ -294,6 +294,11 @@ before 2026-11-01 00:00 UTC.**
     there too (it wrote `/var/lib/morphit-ops/web-heal.json` on the test machine). The fake
     `docker` in `bunkerwebWafIdentify.test.ts` writes its state atomically: two `docker inspect`
     calls at once could read it half-written and fail the test now and then (also on v1.21.7).
+  - `mediakit-freshness-smoke` checks the kit's README colours against `theme.css` itself, and no
+    longer calls the kit stale when `theme.css` changed without changing those colours (git
+    keeps a byte-identical rebuilt zip at its older commit time; this failed the first v1.21.8
+    release run). `eli5-release.sh --recut` prints the ceremony for a tag whose release run
+    failed: BLOCK 2 moves the tag.
   - Checked in Chromium on a fresh build, branded and unbranded: no horizontal overflow at 320,
     360, 375 and 768 px in all ten languages on the home, FAQ, Instances, Operators, orderbook,
     glossary and privacy pages (none at 800, 900 and 1024 px on the home page either), and no menu

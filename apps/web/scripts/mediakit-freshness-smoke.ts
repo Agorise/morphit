@@ -35,6 +35,7 @@
 
 import { statSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { inflateRawSync } from 'node:zlib';
 import { join } from 'node:path';
 import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 
@@ -170,9 +171,17 @@ results.push({
 // to rebuild zip" before it ships.  Uses git-aware effective change
 // time (see header) so a fresh CI checkout's path-order mtimes can't
 // produce a false "stale" result.
+//
+// theme.css is left out of it: scenario 7b checks the README's colour
+// standards against theme.css itself (reading the zip in code, so it runs
+// on every machine, with or without unzip). A change to theme.css that leaves those colours alone rebuilds a
+// byte-identical zip, which git does not record as a change, so the zip's
+// commit stayed older than theme.css's and this check failed the v1.21.8
+// release run although the kit was current.
 if (existsSync(ZIP_PATH) && missing.length === 0) {
 	const zipChangeMs = effectiveChangeMs(ZIP_PATH);
-	const stale = sources.filter((s) => effectiveChangeMs(s.path) > zipChangeMs);
+	const timed = sources.filter((s) => s.path !== THEME_CSS);
+	const stale = timed.filter((s) => effectiveChangeMs(s.path) > zipChangeMs);
 	results.push({
 		name: 'morphit-mediakit.zip is no older than its sources',
 		ok: stale.length === 0,
@@ -299,6 +308,81 @@ if (existsSync(ZIP_PATH) && missing.length === 0) {
 						`Run \`bash scripts/build-mediakit.sh\` to rebuild from current sources, then commit the new zip.`
 		});
 	}
+}
+
+/** One entry of a zip, read in code (stored or deflated), or null. */
+function zipEntryText(zip: Buffer, name: string): string | null {
+	const eocd = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+	if (eocd < 0) return null;
+	const count = zip.readUInt16LE(eocd + 10);
+	let off = zip.readUInt32LE(eocd + 16);
+	for (let i = 0; i < count; i++) {
+		if (zip.readUInt32LE(off) !== 0x02014b50) return null;
+		const method = zip.readUInt16LE(off + 10);
+		const size = zip.readUInt32LE(off + 20);
+		const nameLen = zip.readUInt16LE(off + 28);
+		const extraLen = zip.readUInt16LE(off + 30);
+		const commentLen = zip.readUInt16LE(off + 32);
+		const local = zip.readUInt32LE(off + 42);
+		if (zip.toString('utf8', off + 46, off + 46 + nameLen) === name) {
+			const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+			const data = zip.subarray(start, start + size);
+			try {
+				if (method === 0) return data.toString('utf8');
+				if (method === 8) return inflateRawSync(data).toString('utf8');
+			} catch {
+				return null;
+			}
+			return null;
+		}
+		off += 46 + nameLen + extraLen + commentLen;
+	}
+	return null;
+}
+
+// ─── 7b. The README's colour standards are theme.css's colours ───
+// The same extraction build-mediakit.sh runs: each palette token's first
+// `--<token>-rgb: R G B;` line in theme.css, as #RRGGBB, and the gradient.
+if (existsSync(ZIP_PATH) && missing.length === 0) {
+	const css = readFileSync(THEME_CSS, 'utf-8');
+	const tok = (name: string): string | null => {
+		const m = new RegExp(`^[ \\t]*--${name}-rgb:[ \\t]*(\\d+) (\\d+) (\\d+);`, 'm').exec(css);
+		if (m === null) return null;
+		return (
+			'#' +
+			[m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, '0').toUpperCase()).join('')
+		);
+	};
+	const want: string[] = [];
+	const problems: string[] = [];
+	for (const [label, token] of [
+		['Lime', 'brand-1'],
+		['Accent', 'brand-accent'],
+		['Emerald', 'brand-2'],
+		['Teal', 'brand-3'],
+		['Btn', 'brand-btn-face'],
+		['Ink', 'shadow']
+	] as const) {
+		const hex = tok(token);
+		if (hex === null) problems.push(`theme.css has no --${token}-rgb`);
+		else want.push(`  ${label.padEnd(9)} ${hex}`);
+	}
+	want.push(`  ${'Paper'.padEnd(9)} #FEFEFE`);
+	want.push(
+		`    linear-gradient(90deg, ${tok('brand-1')} 0%, ${tok('brand-2')} 50%, ${tok('brand-3')} 100%)`
+	);
+	const readme = zipEntryText(readFileSync(ZIP_PATH), 'morphit-mediakit/README.txt');
+	if (readme === null) problems.push('README.txt missing from the zip (or unreadable)');
+	const lines = new Set((readme ?? '').split('\n'));
+	for (const w of want) if (!lines.has(w)) problems.push(`README lacks "${w.trim()}"`);
+	results.push({
+		name: "the zip's README colour standards are theme.css's colours",
+		ok: problems.length === 0,
+		detail:
+			problems.length === 0
+				? undefined
+				: `${problems.join('; ')}. Run \`bash scripts/build-mediakit.sh\` to rebuild, then commit the new zip.`
+	});
 }
 
 // ─── 8. The zip is deterministic and carries no builder clock ───

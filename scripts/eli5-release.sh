@@ -94,11 +94,31 @@ set -euo pipefail
 
 VERSION="${1:-}"
 MESSAGE="${2:-Morphit v${VERSION}}"
+# --recut: the tag was pushed but its release.yml run failed, so no release
+# exists. BLOCK 1 commits the fix; BLOCK 2 moves the tag to it (the old one is
+# deleted here and on the remote, then signed anew on the fixed commit).
+RECUT="${3:-}"
 
+if [[ -n "$RECUT" && "$RECUT" != "--recut" ]]; then
+	echo "unknown option: $RECUT (the only one is --recut)" >&2
+	exit 1
+fi
 if [[ -z "$VERSION" ]]; then
-	echo "usage: bash scripts/eli5-release.sh <version> [commit message]" >&2
+	echo "usage: bash scripts/eli5-release.sh <version> [commit message] [--recut]" >&2
 	echo "   eg: bash scripts/eli5-release.sh 1.3.0 \"v1.3.0 — active-key unlock\"" >&2
 	exit 1
+fi
+
+if [[ "$RECUT" == "--recut" ]]; then
+	TAG_INTRO='**BLOCK 2** — move the tag to the fixed commit and push it (laptop, repo root; signed). The failed run published no release, so the tag is deleted here and on the server, then signed anew. Pushing it fires `release.yml` again, which builds, hashes, signs when the signing secret is set, **publishes the Forgejo release, and attaches the tarball + `.sha256` + `distribution-anchor.env` + the offline bundle** — you download and upload nothing:'
+	TAG_LINES="git tag -d v${VERSION}
+git push origin :refs/tags/v${VERSION}
+git tag -s v${VERSION} -m \"Morphit v${VERSION}\"
+git push origin v${VERSION}"
+else
+	TAG_INTRO='**BLOCK 2** — tag + push (laptop, repo root; signed). Pushing the tag fires `release.yml`, which builds, hashes, signs when the signing secret is set, **publishes the Forgejo release, and attaches the tarball + `.sha256` + `distribution-anchor.env` + the offline bundle** — you download and upload nothing:'
+	TAG_LINES="git tag -s v${VERSION} -m \"Morphit v${VERSION}\"
+git push origin v${VERSION}"
 fi
 
 # The message goes into Block 1 single-quoted, each ' written as '\'' — so a
@@ -121,10 +141,9 @@ git push origin main
 
 ---
 
-**BLOCK 2** — tag + push (laptop, repo root; signed). Pushing the tag fires \`release.yml\`, which builds, hashes, signs when the signing secret is set, **publishes the Forgejo release, and attaches the tarball + \`.sha256\` + \`distribution-anchor.env\` + the offline bundle** — you download and upload nothing:
+${TAG_INTRO}
 \`\`\`
-git tag -s v${VERSION} -m "Morphit v${VERSION}"
-git push origin v${VERSION}
+${TAG_LINES}
 \`\`\`
 
 ---

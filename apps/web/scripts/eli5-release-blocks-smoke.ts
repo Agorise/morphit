@@ -454,6 +454,31 @@ for (const b of order) {
 check('all six blocks are present, in order', ordered);
 check('there is no stray BLOCK 7 (ceremony is 6 blocks)', !/BLOCK 7/.test(out));
 
+// ─── --recut: the tag was pushed, its release.yml run failed (v1.21.8) ───
+// BLOCK 2 moves the tag: deleted here and on the remote, then signed anew on
+// the fixed commit and pushed. Everything else is the normal ceremony, and a
+// normal run never deletes a tag.
+{
+	const recut = execFileSync('bash', [GEN, '9.9.9', 'test message', '--recut'], {
+		encoding: 'utf8'
+	});
+	const block2 = /\*\*BLOCK 2\*\*[\s\S]*?```\n([\s\S]*?)```/.exec(recut)?.[1] ?? '';
+	check(
+		'--recut: BLOCK 2 deletes the tag here and on the remote, signs it anew, pushes it — in that order',
+		block2 ===
+			'git tag -d v9.9.9\ngit push origin :refs/tags/v9.9.9\n' +
+				'git tag -s v9.9.9 -m "Morphit v9.9.9"\ngit push origin v9.9.9\n'
+	);
+	check(
+		'--recut: the rest of the ceremony is the normal one',
+		recut.replace(/\*\*BLOCK 2\*\*[\s\S]*?```[\s\S]*?```/, '') ===
+			out.replace(/\*\*BLOCK 2\*\*[\s\S]*?```[\s\S]*?```/, '')
+	);
+	check('a normal run never deletes a tag', !/git tag -d|:refs\/tags\//.test(out));
+	const bad = spawnSync('bash', [GEN, '9.9.9', 'test message', '--recutt'], { encoding: 'utf8' });
+	check('an unknown option is refused, not ignored', bad.status !== 0 && bad.stdout === '');
+}
+
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} eli5-release-blocks scenarios passed`);
 else {
