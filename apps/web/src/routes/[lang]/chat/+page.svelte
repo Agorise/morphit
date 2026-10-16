@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
@@ -79,6 +80,7 @@
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 	import { showToast } from '$lib/stores/toast';
+	import { followNoticeLink } from '$lib/notifications/noticeLink';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import type {
 		ConversationSummary,
@@ -579,6 +581,24 @@
 		void syncChatFoldersFromChain();
 		const t = setInterval(() => void syncChatFoldersFromChain(), FOLDER_SYNC_MS);
 		return () => clearInterval(t);
+	});
+
+	// Settings → Offline Notifications: a notice's link is /<lang>/chat?n=<token>.
+	// The relay says which conversation it opens (signed as her); a spent or
+	// foreign token leaves the address bar and history, a busy relay keeps it
+	// for another try. Each token is tried once per visit — see noticeLink.ts.
+	$effect(() => {
+		const url = $page.url;
+		const unlocked = $isUnlocked;
+		if (!unlocked || !url.searchParams.has('n')) return;
+		void followNoticeLink(url, unlocked, {
+			lp,
+			goto,
+			toast: (key) =>
+				key === 'link_retry'
+					? showToast($_('settings.offline_notify.link_retry') as string, 'warn')
+					: showToast($_('settings.offline_notify.link_gone') as string, 'info')
+		});
 	});
 
 	// v1.4.10 — Gmail-style un-archive: whenever the conversation list changes

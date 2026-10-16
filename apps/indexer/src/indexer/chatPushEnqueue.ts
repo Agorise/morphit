@@ -23,11 +23,13 @@
  * PRIVACY. Content is metadata-only: the title/body name the sender, never
  * the plaintext (which the indexer cannot read — chat is E2EE on chain).
  *
- * No-op when the recipient has no push subscription.
+ * The Web Push part is a no-op when the recipient has no push subscription;
+ * the offline-notice queue (offlineNoticeEnqueue.ts) is filled first, either way.
  */
 import type pg from 'pg';
 import { logger } from '$log';
 import { localize, normalizeLocale } from '$indexer/pushLocalize';
+import { enqueueOfflineNotice } from '$indexer/offlineNoticeEnqueue';
 
 const log = logger('chat-push-enqueue');
 
@@ -43,6 +45,10 @@ export interface ChatPushDb {
 export interface ChatPushParams {
 	/** Account the push targets (the message recipient). */
 	readonly recipient: string;
+	/** `db` is a client inside an open transaction (the durable handler's
+	 *  block transaction): the offline-notice insert then gets a savepoint of
+	 *  its own, so its failure cannot abort the transaction under the push. */
+	readonly inTransaction?: boolean;
 	/** The message sender — named in the notification body, and the chat peer
 	 *  the click-through opens the conversation with. */
 	readonly sender: string;
@@ -103,6 +109,20 @@ export async function enqueueChatPush(db: ChatPushDb, params: ChatPushParams): P
 		// handler already rejects self-chat long before it would reach here; the
 		// fast tailer does not pre-filter it).
 		if (params.recipient === params.sender) return;
+		// Settings → Offline Notifications: queued whether or not this account
+		// has a browser subscribed (it is for when she is away from every
+		// browser). Behind the same block-list gate as the push.
+		await enqueueOfflineNotice(
+			db,
+			{
+				recipient: params.recipient,
+				sender: params.sender,
+				orderPermlink: params.orderPermlink,
+				eventAt: params.eventAt
+			},
+			new Date(),
+			{ inTransaction: params.inTransaction === true }
+		);
 		const localeRow = await db.query<{ locale: string }>(
 			`SELECT locale FROM push_subscriptions
 			  WHERE account = $1

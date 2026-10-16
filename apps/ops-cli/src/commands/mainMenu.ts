@@ -109,6 +109,13 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				tip: 'Set it up once — every upgrade re-applies it. See docs/BRANDING.md. Without the menu: `sudo morphit-ops branding apply --logo FILE --icon FILE --name "…"`.'
 			},
 			{
+				label: 'Offline notifications for your users',
+				blurb:
+					'Let your users get a short note on Matrix, Session, XMPP, Telegram or email when a chat message arrives while they are away.',
+				subcommand: 'offline-notify',
+				tip: 'Optional. You set up an account for each app (each one is tested before it is saved); users then choose in Settings. On a Tor-only site only .onion servers work.'
+			},
+			{
 				label: 'Manage payment methods',
 				blurb: "List, add, or remove this instance's payment-method additions.",
 				subcommand: 'payment-method',
@@ -322,6 +329,7 @@ const ROOT_REQUIRED_SUBCOMMANDS: ReadonlySet<string> = new Set([
 	'alt-address',
 	'payment-method',
 	'branding',
+	'offline-notify',
 	'show-key',
 	'edit-active-key',
 	'register',

@@ -21,7 +21,7 @@
 	interface Props {
 		/** Primary CTA, secondary, ghost, or text-link (de-emphasized
 		 *  back/cancel nav). Only one primary per screen. */
-		variant?: 'primary' | 'secondary' | 'secondary-quiet' | 'ghost' | 'link' | 'danger';
+		variant?: 'primary' | 'secondary' | 'secondary-quiet' | 'ghost' | 'link' | 'danger' | 'danger-quiet';
 		/** True while the action is in flight. Shows spinner, disables button. */
 		busy?: boolean;
 		/** True briefly after a just-completed success. Shows a
@@ -94,6 +94,12 @@
 				// text + border with a faint red wash on hover. Outlined rather
 				// than solid-red so it reads as deliberate, not alarming.
 				return 'bg-white dark:bg-ink-900 text-red-700 dark:text-red-400 font-semibold border-2 border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/40 hover:border-red-500 disabled:border-ink-300 disabled:text-ink-400';
+			case 'danger-quiet':
+				// Like `danger` with a 1px border, to sit beside `secondary-quiet`
+				// on the Settings page (Offline Notifications: "Delete all my
+				// addresses"). Carries the dark-theme disabled colours that
+				// `secondary` gained in v1.8.10.
+				return 'bg-white dark:bg-ink-900 text-red-700 dark:text-red-400 font-semibold border border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/40 hover:border-red-500 disabled:border-ink-300 disabled:text-ink-400 dark:disabled:border-ink-700 dark:disabled:text-ink-600';
 			case 'ghost':
 				return 'bg-transparent text-ink-700 dark:text-ink-200 font-medium hover:bg-ink-100 dark:hover:bg-ink-800 disabled:text-ink-400';
 			case 'link':

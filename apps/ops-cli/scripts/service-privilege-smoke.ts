@@ -234,11 +234,16 @@ for (const [u, name] of [
 	for (const s of SERVICES) {
 		const unit = readFileSync(join(unitDir, s.unit), 'utf8');
 		const sourced = /for f in ([^;]+); do/.exec(unit)?.[1]?.trim().split(/\s+/) ?? [];
-		const inHelper =
-			new RegExp(`\\n\\t${s.role}\\)\\n\\t\\tFILES=\\(([^)]*)\\)`)
-				.exec(helper)?.[1]
-				?.trim()
-				.split(/\s+/) ?? [];
+		// The role's block: FILES (root:<service group>), then RELAY_ONLY when
+		// there is one (root:<relay group> — relay-notify.env, the offline-notice
+		// accounts' secrets, which the indexer must not read).
+		const block = new RegExp(`\\n\\t${s.role}\\)\\n([\\s\\S]*?);;`).exec(helper)?.[1] ?? '';
+		const list = (name: string): string[] =>
+			(new RegExp(`\\n\\t\\t${name}=\\(([^)]*)\\)`).exec(`\n${block}`)?.[1] ?? '')
+				.trim()
+				.split(/\s+/)
+				.filter(Boolean);
+		const inHelper = [...list('FILES'), ...list('RELAY_ONLY')];
 		check(
 			`${s.unit}: the files it sources = the pre-start helper's list = the heal's list`,
 			sourced.length > 0 &&

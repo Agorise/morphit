@@ -133,6 +133,7 @@ const FORGED = {
 	'X-I2P-DestHash': 'forged-hash'
 };
 const INTERNAL = Object.keys(FORGED).map((h) => h.toLowerCase());
+const SLOW_FILES = 200;
 const scriptSrcStrict = (csp: string): boolean => {
 	const m = /(?:^|;)\s*script-src\s+([^;]*)/.exec(csp);
 	const vals = (m?.[1] ?? '').trim().split(/\s+/);
@@ -149,6 +150,10 @@ async function main(): Promise<void> {
 	const site = join(work, 'site');
 	mkdirSync(join(site, '.well-known'), { recursive: true });
 	writeFileSync(join(site, 'index.html'), '<!doctype html><title>shell</title>SPA-SHELL');
+	// 200 files of 40 KB: what a first visit asks for at once (web.conf check).
+	mkdirSync(join(site, '_slow'));
+	for (let n = 0; n < SLOW_FILES; n++)
+		writeFileSync(join(site, '_slow', `f${n}.js`), 'x'.repeat(40_000));
 	const cert = join(work, 'cert.pem');
 	const key = join(work, 'key.pem');
 	const ssl = spawnSync(
@@ -227,6 +232,13 @@ async function main(): Promise<void> {
 			// ngx_brotli is not in every nginx build (it is not in Ubuntu's).
 			.replace(/^\s*brotli[a-z_]*\s+[^;]*;\s*$/gm, '')
 			.replace(/^\s*listen\s+\[::\][^;]*;\s*$/gm, '');
+		// web.conf: one location where every answer is sent at 8 KB/s — a visitor
+		// on a slow line — under the server's own connection cap.
+		if (c.file.endsWith('web.conf'))
+			text = text.replace(
+				/^(\s*)limit_conn\s+web_conn\s+[^;]*;/m,
+				(m, ws: string) => `${m}\n${ws}location ^~ /_slow/ { limit_rate 8k; }`
+			);
 		// The site's own listener (443, or the frontend's :80) gets `main`; any
 		// other (the frontend's :8088 edge port, the :80 redirect) gets `spare`.
 		const sitePort = c.tls ? '443' : '80';
@@ -244,7 +256,8 @@ async function main(): Promise<void> {
 			join(dir, 'nginx.conf'),
 			`${asRoot ? 'user root root;\n' : ''}worker_processes 1;\npid ${dir}/nginx.pid;\n` +
 				// The distro default: the main error log at level "error".
-				`error_log ${errorLog};\nevents {}\n` +
+				// Room for 300 visitors and their 300 upstream connections (web.conf).
+				`error_log ${errorLog};\nevents { worker_connections 4096; }\n` +
 				`http { include /etc/nginx/mime.types; default_type application/octet-stream;\n` +
 				`client_body_temp_path ${dir}; proxy_temp_path ${dir}; fastcgi_temp_path ${dir}; uwsgi_temp_path ${dir}; scgi_temp_path ${dir};\n` +
 				`include ${dir}/site.conf; }\n`
@@ -300,6 +313,55 @@ async function runChecks(
 	const L = c.label;
 	const versionShown = (g: Got): boolean =>
 		/\d/.test(String(g.headers.server ?? '')) || /nginx\/\d/.test(g.body);
+
+	// web.conf on a slow line: a first visit asks for every file of the site at
+	// once; over HTTP/2 the connection cap counts each download, and at 40 the
+	// rest got 429 (v1.21.8). 200 files at once at 8 KB/s must all arrive.
+	if (c.file.endsWith('web.conf')) {
+		if (!has('curl')) check(`${L}: (slow-visitor check skipped: no curl here)`, true);
+		else {
+			const list = join(tmpdir(), `ngx-slow-${process.pid}.txt`);
+			writeFileSync(
+				list,
+				Array.from(
+					{ length: SLOW_FILES },
+					(_, n) => `url = "https://morphit.test:${port}/_slow/f${n}.js"\noutput = "/dev/null"\n`
+				).join('')
+			);
+			const r = spawnSync(
+				'curl',
+				[
+					'-sk',
+					// This nginx, not a proxy from the environment (with one, curl
+					// ignores --resolve).
+					'--noproxy',
+					'*',
+					'--http2',
+					'--parallel',
+					'--parallel-immediate',
+					'--parallel-max',
+					String(SLOW_FILES),
+					'--resolve',
+					`morphit.test:${port}:127.0.0.1`,
+					'--max-time',
+					'60',
+					'-w',
+					'%{http_code}\n',
+					'-K',
+					list
+				],
+				{ encoding: 'utf8', timeout: 90_000 }
+			);
+			rmSync(list, { force: true });
+			const codes = (r.stdout ?? '').split('\n').filter((x) => /^\d{3}$/.test(x));
+			const n429 = codes.filter((x) => x === '429').length;
+			check(
+				`${L}: a slow visitor downloading ${SLOW_FILES} files at once gets every one (no 429)`,
+				codes.length === SLOW_FILES && codes.every((x) => x === '200'),
+				`${codes.length} answers, ${n429} × 429, others: ${[...new Set(codes.filter((x) => x !== '200' && x !== '429'))].join(' ')}`
+			);
+		}
+	}
 
 	// Server header and error pages.
 	const probes: Array<[string, Got]> = [];
@@ -391,10 +453,13 @@ async function runChecks(
 	const b = await get(port, c.page ? '/mcp' : '/v1/boom', { tls });
 	check(`${L}: a failed upstream answers 502`, b.status === 502, String(b.status));
 	if (c.file.endsWith('frontend/nginx.conf')) return;
-	const all = await Promise.all(Array.from({ length: 60 }, () => get(port, '/v1/slow', { tls })));
+	// More than the vhost's cap (web.conf 256 since v1.21.9's first-visit 429s;
+	// relay.conf and indexer.conf 40).
+	const many = c.file.endsWith('web.conf') ? 300 : 60;
+	const all = await Promise.all(Array.from({ length: many }, () => get(port, '/v1/slow', { tls })));
 	const limited = all.filter((g) => g.status === 429 || g.status === 503).length;
 	check(
-		`${L}: 60 parallel connections from one address hit the limit`,
+		`${L}: ${many} parallel connections from one address hit the limit`,
 		limited > 0,
 		`${limited} limited`
 	);

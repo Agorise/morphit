@@ -116,8 +116,9 @@ function charColumns(ch: string): number {
 /** A label as plain text on one line (v1.21.6 review): it can carry what other
  *  instances sent, and the spinner writes it straight to the terminal — no
  *  escape sequences, no colours, no bidirectional-text controls (they reorder
- *  what the operator reads), no line breaks. */
-function cleanLabel(label: string): string {
+ *  what the operator reads), no line breaks. Also used for any other text from
+ *  a server that is printed on its own line (offline-notify). */
+export function cleanLabel(label: string): string {
 	return plainText(label)
 		.replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
 		.replace(/[\n\t]+/g, ' ');

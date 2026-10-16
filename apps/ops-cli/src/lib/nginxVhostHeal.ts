@@ -23,6 +23,8 @@
  *  - a location that sets its own add_header lines gets the enclosing
  *    security headers it would otherwise lose (nginx inherits none then);
  *  - the IPFS gateway location asks for 127.0.0.1, not the visitor's Host.
+ *  - the web vhost's `limit_conn web_conn 40;` (as shipped) becomes 256: it
+ *    counts every HTTP/2 download, and a first visit asks for every file.
  * Then `nginx -t` (on failure every file is put back byte for byte), a
  * graceful reload, and VERIFY in what nginx really loaded (`nginx -T`, the
  * sections of these files) and in a live answer from each vhost on this box
@@ -56,6 +58,9 @@ const HEADER_NAMES: Record<string, string> = {
 	'x-i2p-destb32': 'X-I2P-DestB32',
 	'x-i2p-desthash': 'X-I2P-DestHash'
 };
+/** Downloads at once per visitor on the web vhost (ops/nginx/web.conf): two
+ *  HTTP/2 connections of nginx's 128 streams. */
+export const WEB_CONN_MAX = 256;
 export const OLD_SCRIPT_SRC = "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'";
 const NEW_SCRIPT_SRC = "script-src 'self' 'wasm-unsafe-eval'";
 
@@ -163,6 +168,7 @@ const indentOf = (text: string, at: number): string => {
 export function planVhost(text: string): { text: string; changes: string[] } {
 	const inserts: Array<{ at: number; lines: string[] }> = [];
 	const hostFixes: Dir[] = [];
+	const connFixes: Dir[] = [];
 	const changes = new Set<string>();
 	const addTo = (b: Blk, lines: string[]): void => {
 		if (lines.length > 0)
@@ -281,6 +287,19 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 			}
 		};
 		ipfs(s);
+		// The web vhost's cap of 40 at once per visitor (what web.conf shipped)
+		// counts every HTTP/2 download: a first visit asks for every file of the
+		// site, so on a slow line the rest got 429 (v1.21.8). Today's 256; an
+		// operator's own number is kept.
+		const conn = (b: Blk): void => {
+			for (const d of b.dirs)
+				if (d.name === 'limit_conn' && d.args[0] === 'web_conn' && d.args[1] === '40') {
+					connFixes.push(d);
+					changes.add(`a visitor may download ${WEB_CONN_MAX} files at once (was 40)`);
+				}
+			for (const k of b.kids) conn(k);
+		};
+		conn(s);
 		addTo(s, top);
 	}
 	let out = text;
@@ -290,6 +309,11 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 			at: d.start,
 			del: d.end - d.start,
 			ins: 'proxy_set_header Host 127.0.0.1;'
+		})),
+		...connFixes.map((d) => ({
+			at: d.start,
+			del: d.end - d.start,
+			ins: `limit_conn web_conn ${WEB_CONN_MAX};`
 		}))
 	];
 	for (const e of edits.sort((a, b) => b.at - a.at))
@@ -342,7 +366,10 @@ export function vhostLoadedOk(section: string): { ok: boolean; why: string[] } {
 	const why = [
 		h.tokensOff ? '' : 'nginx version still shown',
 		h.uncleared.length > 0 ? `internal headers passed on at ${h.uncleared.join(', ')}` : '',
-		loose.length > 0 ? 'a page CSP still allows inline script or eval' : ''
+		loose.length > 0 ? 'a page CSP still allows inline script or eval' : '',
+		/^\s*limit_conn\s+web_conn\s+40\s*;/m.test(section)
+			? 'a visitor may still download only 40 files at once'
+			: ''
 	].filter(Boolean);
 	return { ok: why.length === 0, why };
 }

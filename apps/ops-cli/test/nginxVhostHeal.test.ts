@@ -67,6 +67,19 @@ describe('the bare-metal nginx site heals like a fresh copy (planner)', () => {
 		expect(planVhost(p.text).text).toBe(p.text); // idempotent
 	});
 
+	it("the web vhost's cap of 40 downloads at once (as shipped) becomes 256; an operator's own number is kept", () => {
+		const p = planVhost(OLD);
+		expect(p.text).toMatch(/^ {4}limit_conn web_conn 256;$/m);
+		expect(p.text).not.toMatch(/limit_conn web_conn 40;/);
+		expect(p.changes).toContain('a visitor may download 256 files at once (was 40)');
+		expect(vhostLoadedOk(OLD).why).toContain('a visitor may still download only 40 files at once');
+		const own = OLD.replace('limit_conn web_conn 40;', 'limit_conn web_conn 64;');
+		expect(planVhost(own).text).toMatch(/^ {4}limit_conn web_conn 64;$/m);
+		// Another zone with 40 (relay.conf's own cap) is not the web vhost's.
+		const relay = OLD.replace(/web_conn/g, 'relay_conn');
+		expect(planVhost(relay).text).toMatch(/limit_conn relay_conn 40;/);
+	});
+
 	it('headers go where nginx takes them from: inherited list stays whole, a location with its own list gets them', () => {
 		const p = planVhost(OLD).text;
 		// /v1/health has no proxy_set_header of its own: the server-level list

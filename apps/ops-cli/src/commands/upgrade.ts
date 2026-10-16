@@ -231,6 +231,7 @@ import {
 import {
 	copyCount,
 	listRuleCopies,
+	modsecRuleFix,
 	planRuleDedupe,
 	removeRuleCopies,
 	restoreRuleCopies,
@@ -5921,7 +5922,7 @@ export async function runWebProxyHealsNow(opts: { readonly background: boolean }
 	let result = 'error';
 	let detail: string | undefined;
 	try {
-		healBunkerWebWaf(undefined, installBuildDir(), {
+		await healBunkerWebWaf(undefined, installBuildDir(), {
 			reloadBudgetMs: opts.background ? 10 * 60_000 : 60_000
 		});
 		const out = await healProxyConfig({
@@ -6935,6 +6936,18 @@ function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): 
 	return false;
 }
 
+/** BunkerWeb's catch-all request limit (LIMIT_REQ_URL, default `/` at 2r/s,
+ *  counted per visitor and per file) narrowed to the addresses that reach a
+ *  server process: a first visit fetches the same script file three times
+ *  within a second (page, offline cache, tamper check) and the third got a
+ *  429 (vigilante.trading, v1.21.8). The same value is in bunkerweb.env.j2 and
+ *  bunkerweb.env.example (bunkerweb-smoke checks all three agree). */
+export const BW_LIMIT_REQ_URL = '^/(?:ipfs|ipns|rss)/|^/mcp';
+export const BW_LIMIT_REQ_RATE = '2r/s';
+/** Downloads at once per visitor over HTTP/2: a browser keeps up to 128 going
+ *  on one connection (nginx's default), BunkerWeb allowed 100. */
+export const BW_LIMIT_CONN_MAX_HTTP2 = '256';
+
 /** v1.16.9 — SELF-HEAL the BunkerWeb WAF so the /v1/ + /relay/ JSON APIs work.
  *  The maintainer's mandate: trap every condition, try each fix more than one way, VERIFY it
  *  took against the RUNNING container, fall through, never throw. Fixes three
@@ -6950,6 +6963,11 @@ function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): 
  *     their own address per request (past BunkerWeb's bans and the relay's per-IP
  *     signup limits). Templates aren't re-rendered on upgrade, so turn it off here.
  *
+ *  E. BunkerWeb's default request limit (2 per second per visitor and file,
+ *     on every address) answered 429 to a browser's own first visit, and its
+ *     100 downloads at once to a slow one (vigilante.trading, v1.21.8). Set where the operator
+ *     left BunkerWeb's default; an operator's own value is kept.
+ *
  *  Wave 5 (B-from-C §4): BunkerWeb is found by IMAGE (findBunkerWebStack), its
  *  settings file is the one Docker Compose says it reads, and reloads touch only
  *  BunkerWeb's own services (`up -d --no-deps <edge> <scheduler>`) — never a
@@ -6957,11 +6975,11 @@ function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): 
  *  file → change nothing and say so calmly.
  *  `bwEnv` (used only when Compose can't say) and `buildDir` are parameters so
  *  the tests can run this against a temp dir. */
-export function healBunkerWebWaf(
+export async function healBunkerWebWaf(
 	bwEnv = '/etc/bunkerweb/bunkerweb.env',
 	buildDir = runningInstallBuildDir(),
 	opts: { readonly reloadBudgetMs?: number } = {}
-): void {
+): Promise<void> {
 	let found: ReturnType<typeof findBunkerWebStack>;
 	try {
 		found = findBunkerWebStack(buildDir);
@@ -6986,8 +7004,6 @@ export function healBunkerWebWaf(
 	const bw = stack.edge.name;
 	const sched = stack.scheduler?.name ?? null;
 	const ref = stack.ref;
-	const RULE_ID = '1990001';
-	const MODSEC_RULE = `SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:${RULE_ID},phase:1,t:none,nolog,pass,ctl:ruleEngine=Off"`;
 	const RELAY_BODY_FLOOR = 64 * 1024; // the relay's own body cap; BunkerWeb must allow ≥ this
 	let changed = false;
 
@@ -7047,8 +7063,14 @@ export function healBunkerWebWaf(
 	//    that worked (morphitir, 2026-09-30: frozen since Sep 7). The extra copies
 	//    are removed below (lib/bunkerwebRuleDedupe.ts). ──
 	try {
-		if (!/^CUSTOM_CONF_MODSEC_morphit_json_api_off=/m.test(env)) {
-			setVal('CUSTOM_CONF_MODSEC_morphit_json_api_off', MODSEC_RULE);
+		// Also replaces the rule earlier releases shipped: it turned ModSecurity's
+		// rules off for the APIs; this one also says, belt and braces, that the
+		// audit log and request-body reading are off for them, whatever version
+		// of ModSecurity BunkerWeb runs.
+		const fix = modsecRuleFix(getVal('CUSTOM_CONF_MODSEC_morphit_json_api_off'));
+		if (fix !== null) {
+			setVal('CUSTOM_CONF_MODSEC_morphit_json_api_off', fix);
+			info('WAF: the JSON APIs get no ModSecurity rules, audit log or body inspection.');
 		}
 	} catch {
 		/* keep going */
@@ -7077,6 +7099,36 @@ export function healBunkerWebWaf(
 					"WAF: set USE_REAL_IP=no. BunkerWeb is the public edge, so it now uses each visitor's real address instead of one they could type in."
 				);
 			}
+		}
+	} catch {
+		/* keep going */
+	}
+
+	// ── Fix E: the site's own files must not hit BunkerWeb's request limit.
+	//    BunkerWeb's default rule (every address, 2 per second per visitor and
+	//    file) is narrowed to the addresses a server process answers; where the
+	//    operator set their own rule or rate it is kept. Same for the number of
+	//    downloads at once over HTTP/2 when BunkerWeb's default is in force. ──
+	try {
+		if (unq(getVal('USE_LIMIT_REQ')).toLowerCase() !== 'no') {
+			const url = unq(getVal('LIMIT_REQ_URL'));
+			const rate = unq(getVal('LIMIT_REQ_RATE'));
+			if ((url === '' || url === '/') && (rate === '' || rate === '2r/s')) {
+				setVal('LIMIT_REQ_URL', BW_LIMIT_REQ_URL);
+				setVal('LIMIT_REQ_RATE', BW_LIMIT_REQ_RATE);
+				info(
+					"WAF: the site's own files no longer count toward BunkerWeb's request limit (a first visit fetches some files three times in a second); IPFS, RSS and MCP keep it."
+				);
+			}
+		}
+		if (
+			unq(getVal('USE_LIMIT_CONN')).toLowerCase() !== 'no' &&
+			unq(getVal('LIMIT_CONN_MAX_HTTP2')) === ''
+		) {
+			setVal('LIMIT_CONN_MAX_HTTP2', BW_LIMIT_CONN_MAX_HTTP2);
+			info(
+				`WAF: a visitor may now download ${BW_LIMIT_CONN_MAX_HTTP2} files at once over HTTP/2 (BunkerWeb's default of 100 turned away part of a first visit on a slow line).`
+			);
 		}
 	} catch {
 		/* keep going */
@@ -7395,6 +7447,85 @@ export function healBunkerWebWaf(
 	} catch {
 		/* best-effort — never fail the upgrade over a probe */
 	}
+
+	// (4) REQUEST LIMIT (Fix E) — when the env carries Morphit's rule, prove the
+	//     RUNNING BunkerWeb lets the home page be fetched three times in a second
+	//     (its old rule answered the third with 429). Still limited → recreate its
+	//     own services once and look again; then ask the operator. curl runs
+	//     without blocking (up to 25 s), so the spinner turns for the whole wait.
+	try {
+		if (site && unq(getVal('LIMIT_REQ_URL')) === BW_LIMIT_REQ_URL) {
+			const repeated = async (): Promise<'free' | 'limited' | null> => {
+				const url = `https://${site}/`;
+				const stop = startDotsSpinner('Checking a page can be fetched three times in a second…');
+				let out = '';
+				try {
+					out = (
+						await runAsync(
+							'curl',
+							[
+								'-sk',
+								'--max-time',
+								'15',
+								'--noproxy',
+								'*',
+								'--resolve',
+								`${site}:443:127.0.0.1`,
+								'-w',
+								'%{http_code} ',
+								'-o',
+								'/dev/null',
+								url,
+								'-o',
+								'/dev/null',
+								url,
+								'-o',
+								'/dev/null',
+								url
+							],
+							{ timeoutMs: 25000 }
+						)
+					).stdout;
+				} finally {
+					stop();
+				}
+				return classifyRepeatProbe(out);
+			};
+			let live = await repeated();
+			if (live === 'limited' && cycle?.kind !== 'refused' && ref !== null) {
+				const c = applyAndWait("recreating BunkerWeb so it reads Morphit's request limit", true);
+				if (c !== null) live = await repeated();
+			}
+			if (live === 'free')
+				info(
+					'WAF: request limit verified live — the home page fetched three times in a second got no 429.'
+				);
+			// No answer from this server's own edge: never reported as checked
+			// (review B9). The settings were applied either way.
+			else if (live === null)
+				info(
+					`WAF: the request-limit check got no answer from this server, so it could not be checked; the WAF settings were applied. To check again later, on this server: ${HEALS_COMMAND}`
+				);
+			else if (live === 'limited')
+				warn(
+					ref !== null
+						? `WAF: BunkerWeb still limits the site's own files (a first visit can fail to load part of a page). When convenient, run on this server: sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services])}`
+						: `WAF: BunkerWeb still limits the site's own files (a first visit can fail to load part of a page). ${bw} was not started by Docker Compose; recreate it on this server the way it was started so it reads ${bwEnv} again.`
+				);
+		}
+	} catch {
+		/* best-effort — never fail the upgrade over a probe */
+	}
+}
+
+/** What the request-limit probe's curl wrote (`-w '%{http_code} '` for three
+ *  fetches of the home page): 'limited' when one got a 429, 'free' when all
+ *  three got an answer without one, null when any got no answer (000, cut
+ *  short, nothing) — then nothing can be said either way (review B9). PURE. */
+export function classifyRepeatProbe(out: string): 'free' | 'limited' | null {
+	const codes = out.split(/\s+/).filter((c) => /^[0-9]{3}$/.test(c));
+	if (codes.length !== 3 || codes.includes('000')) return null;
+	return codes.includes('429') ? 'limited' : 'free';
 }
 
 /** The last non-empty value of `key` in the first of `files` that sets it. */

@@ -60,7 +60,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('pushes for unanswered senders', () => {
 			for (let m = 0; m < 50; m++) await message(`sock${s}`, 'seller', m, T0 + s * 1000 + m * 10);
 		}
 		expect(await pushes()).toBe(20);
-	});
+		// 1,000 messages through the real handler (each also asks the offline-
+		// notice queue): give a loaded machine room.
+	}, 60_000);
 
 	it('once the recipient replies, every message notifies again; and a new day earns a new push', async () => {
 		await message('buyer', 'seller', 1, T0);

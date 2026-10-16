@@ -267,3 +267,95 @@ describe('FAQ search — space-separated terms are AND (cp453)', () => {
 		expect(hits).toEqual(['both', 'hive_only']);
 	});
 });
+
+describe('FAQ search — an answer that points at another question', () => {
+	// The pointer's words are the other entry's subject: search reads every
+	// answer without them, in each language's quotation marks.
+	const POINTED = 'How do offline notifications work?';
+	const quoted: ReadonlyArray<readonly [string, string]> = [
+		['en', `See "${POINTED}".`],
+		['en (single)', `See '${POINTED}'.`],
+		['curly', `See “${POINTED}”.`],
+		['de', `Siehe „${POINTED}“.`],
+		['pl', `Zobacz „${POINTED}”.`],
+		['fr', `Voir « ${POINTED} ».`],
+		['ru / fa', `См. «${POINTED}».`],
+		['zh-HK', `見「${POINTED}」。`]
+	];
+	for (const [lang, pointer] of quoted) {
+		it(`${lang}: the entry pointed at comes first, the pointer is not a match`, () => {
+			const entries = [
+				mkEntry('overview', 'How am I told about things?', `Several ways. ${pointer}`),
+				mkEntry('offline', POINTED, 'A short note to an app you use while you are away.')
+			];
+			expect(searchEntries(entries, 'offline notifications').map((h) => h.entry.key)).toEqual([
+				'offline'
+			]);
+			expect(searchEntries(entries, '"offline notifications"').map((h) => h.entry.key)).toEqual([
+				'offline'
+			]);
+		});
+	}
+
+	it('a quoted label or message that is not a question stays searchable', () => {
+		const entries = [
+			mkEntry('stuck', 'Why is my signup stuck?', 'If you see "Registration is paused", wait.'),
+			mkEntry('other', 'Registration is paused', 'An entry whose question it is.')
+		];
+		// "Registration is paused" IS a question here: only the quotation of it goes.
+		expect(searchEntries(entries, 'registration paused').map((h) => h.entry.key)).toEqual([
+			'other'
+		]);
+		const label = [
+			mkEntry('stuck', 'Why is my signup stuck?', 'If you see "Registration is paused", wait.')
+		];
+		expect(searchEntries(label, 'registration paused').map((h) => h.entry.key)).toEqual(['stuck']);
+	});
+
+	it('a question named without quotation marks is still read', () => {
+		const entries = [
+			mkEntry('a', 'First?', `The answer mentions ${POINTED} in passing.`),
+			mkEntry('b', POINTED, 'Body.')
+		];
+		expect(searchEntries(entries, 'offline notifications').map((h) => h.entry.key)).toContain('a');
+	});
+
+	it('every language: searching the offline notifications question finds that answer, not the overview pointing at it', async () => {
+		const { readFileSync, readdirSync } = await import('node:fs');
+		const dir = new URL('../i18n/locales/', import.meta.url);
+		const langs = readdirSync(dir).filter((f) => f.endsWith('.json'));
+		expect(langs.length).toBeGreaterThanOrEqual(10);
+		for (const f of langs) {
+			const json = JSON.parse(readFileSync(new URL(f, dir), 'utf8')) as {
+				faq: { entries: Record<string, { q: string; a: string }> };
+			};
+			const entries = Object.entries(json.faq.entries).map(([k, v]) => mkEntry(k, v.q, v.a));
+			const q = json.faq.entries.offline_notifications!.q;
+			// The overview really does quote it (so this checks the stripping).
+			expect(json.faq.entries.notifications_overview!.a, f).toContain(q);
+			expect(
+				searchEntries(entries, `"${q}"`).map((h) => h.entry.key),
+				f
+			).toEqual(['offline_notifications']);
+		}
+	});
+});
+
+describe('FAQ search — "how do I know if …"', () => {
+	const entries = [
+		mkEntry('block', 'If I block someone, will they know?', 'They are not told you blocked them.'),
+		mkEntry(
+			'notes',
+			'How do offline notifications work?',
+			'If someone sends you a chat message while you are away, we send a short note.'
+		)
+	];
+	it('frames the question: what follows is what she asks about', () => {
+		expect(searchEntries(entries, 'how do i know if someone writes to me')[0]!.entry.key).toBe(
+			'notes'
+		);
+	});
+	it('"know" and "if" still count anywhere else', () => {
+		expect(searchEntries(entries, 'will they know if i block them')[0]!.entry.key).toBe('block');
+	});
+});

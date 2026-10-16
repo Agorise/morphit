@@ -31,11 +31,14 @@ const check = (d: string, ok: boolean): void => {
 	}
 };
 
-/** Lines Fixes A–C already want, so a case only exercises Fix D. */
+/** Lines Fixes A–C and E already want, so a case only exercises Fix D. */
 const STEADY_ABC = [
 	'MAX_CLIENT_SIZE=1m',
 	'BAD_BEHAVIOR_STATUS_CODES=401 403 404 405 429 444',
-	'CUSTOM_CONF_MODSEC_morphit_json_api_off=x'
+	'CUSTOM_CONF_MODSEC_morphit_json_api_off=x',
+	'LIMIT_REQ_URL=^/(?:ipfs|ipns|rss)/|^/mcp',
+	'LIMIT_REQ_RATE=2r/s',
+	'LIMIT_CONN_MAX_HTTP2=256'
 ].join('\n');
 
 const LIVE_WIDE =
@@ -103,7 +106,7 @@ function inspectJson(etc: string): string {
 	]);
 }
 
-function scenario(env: string, live: string, opts: { composeBroken?: boolean } = {}) {
+async function scenario(env: string, live: string, opts: { composeBroken?: boolean } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), 'bw-realip-'));
 	const bin = join(dir, 'bin');
 	const state = join(dir, 'state');
@@ -139,7 +142,7 @@ function scenario(env: string, live: string, opts: { composeBroken?: boolean } =
 	process.env.STUB_STATE = state;
 	let threw = false;
 	try {
-		healBunkerWebWaf(envPath);
+		await healBunkerWebWaf(envPath);
 	} catch {
 		threw = true;
 	} finally {
@@ -168,7 +171,7 @@ const wholeStackUp = (calls: string): boolean =>
 console.log('\n── BunkerWeb real-IP self-heal (H1) ─────────────────\n');
 
 {
-	const r = scenario(
+	const r = await scenario(
 		`SERVER_NAME=x.example\n${STEADY_ABC}\nUSE_REAL_IP=yes\nREAL_IP_FROM=0.0.0.0/0\nREAL_IP_HEADER=X-Forwarded-For\n`,
 		LIVE_WIDE
 	);
@@ -192,7 +195,7 @@ console.log('\n── BunkerWeb real-IP self-heal (H1) ────────�
 	check('…without throwing', !r.threw);
 }
 {
-	const r = scenario(
+	const r = await scenario(
 		`${STEADY_ABC}\nUSE_REAL_IP="yes"\nREAL_IP_FROM="0.0.0.0/0 ::/0"\n`,
 		LIVE_WIDE
 	);
@@ -202,7 +205,7 @@ console.log('\n── BunkerWeb real-IP self-heal (H1) ────────�
 	);
 }
 {
-	const r = scenario(`${STEADY_ABC}\nUSE_REAL_IP=yes\n`, LIVE_WIDE);
+	const r = await scenario(`${STEADY_ABC}\nUSE_REAL_IP=yes\n`, LIVE_WIDE);
 	check(
 		'USE_REAL_IP=yes with REAL_IP_FROM unset (BunkerWeb default private ranges) → turned off',
 		/^USE_REAL_IP=no$/m.test(r.env)
@@ -210,7 +213,7 @@ console.log('\n── BunkerWeb real-IP self-heal (H1) ────────�
 }
 {
 	const env = `${STEADY_ABC}\nUSE_REAL_IP=yes\nREAL_IP_FROM=173.245.48.0/20 103.21.244.0/22\n`;
-	const r = scenario(env, LIVE_CDN);
+	const r = await scenario(env, LIVE_CDN);
 	check(
 		'a deliberate CDN list is left alone',
 		r.env === env && !recreated(r.calls) && r.live === LIVE_CDN
@@ -218,21 +221,21 @@ console.log('\n── BunkerWeb real-IP self-heal (H1) ────────�
 }
 {
 	const env = `${STEADY_ABC}\nUSE_REAL_IP=no\n`;
-	const r = scenario(env, LIVE_OFF);
+	const r = await scenario(env, LIVE_OFF);
 	check(
 		'steady state (already off, live clean) → nothing written, nothing recreated',
 		r.env === env && !recreated(r.calls)
 	);
 }
 {
-	const r = scenario(`${STEADY_ABC}\nUSE_REAL_IP=no\n`, LIVE_WIDE);
+	const r = await scenario(`${STEADY_ABC}\nUSE_REAL_IP=no\n`, LIVE_WIDE);
 	check(
 		'env already says no but the running nginx still trusts XFF → recreated and verified',
 		recreated(r.calls) && !/set_real_ip_from/.test(r.live)
 	);
 }
 {
-	const r = scenario(`${STEADY_ABC}\nUSE_REAL_IP=yes\nREAL_IP_FROM=0.0.0.0/0\n`, LIVE_WIDE, {
+	const r = await scenario(`${STEADY_ABC}\nUSE_REAL_IP=yes\nREAL_IP_FROM=0.0.0.0/0\n`, LIVE_WIDE, {
 		composeBroken: true
 	});
 	check(

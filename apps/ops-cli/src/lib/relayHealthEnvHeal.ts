@@ -43,7 +43,8 @@ export function relayEnvFiles(root = ''): string[] {
 		`${root}/opt/morphit/morphit.env`,
 		`${root}/opt/morphit/morphit.config.env`,
 		`${root}/etc/morphit/relay.env`,
-		`${root}/etc/morphit/relay-vapid.env`
+		`${root}/etc/morphit/relay-vapid.env`,
+		`${root}/etc/morphit/relay-notify.env`
 	];
 }
 

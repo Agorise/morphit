@@ -34,8 +34,8 @@
 #                             inside the container, hitting its
 #                             container-local socket = trust/peer
 #                             auth, no password).
-#   2. pg_dump the indexer DB (the Web Push tables without their
-#      rows), gzip the output, optionally
+#   2. pg_dump the indexer DB (the Web Push and the seven offline-notice
+#      tables without their rows), gzip the output, optionally
 #      pipe through `age -r "$AGE_RECIPIENT"` for encryption,
 #      write to a .partial file first.  pg_dump's OWN exit status
 #      is recorded through a status file, because POSIX sh has no
@@ -262,6 +262,9 @@ fi
 # simply subscribe again — and a backup file, copied off the box, would carry
 # that account↔device mapping for as long as it is kept.
 DUMP_CMD="$DUMP_CMD --exclude-table-data=push_subscriptions --exclude-table-data=push_pending"
+# Offline notices: users' own addresses (sealed; the key is not in the
+# database either), their codes, queue and links. Never in a backup.
+DUMP_CMD="$DUMP_CMD --exclude-table-data=offline_notify_channels --exclude-table-data=offline_notify_code_log --exclude-table-data=offline_notify_address_log --exclude-table-data=offline_notify_pending --exclude-table-data=offline_notify_links --exclude-table-data=offline_notify_key --exclude-table-data=offline_notify_leave"
 
 # ─── Dump → (optionally encrypt) → atomically rename ──────────────────
 # Write to .partial first so a half-written file isn't named like

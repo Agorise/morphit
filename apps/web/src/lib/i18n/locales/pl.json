@@ -1258,7 +1258,7 @@
 			},
 			"data_collection": {
 				"q": "Jakie dane {brand} o mnie zbiera?",
-				"a": "Bardzo mało i nic o tym, kim jesteś. Bez e-maila, numeru telefonu, dokumentu tożsamości, ciasteczek, analityki i śledzenia.\n\nCo jednak istnieje:\n• **Twój adres IP.** Dociera do serwera jak przy każdej stronie. Kod Morphit trzyma go tylko w pamięci, na potrzeby limitów (najwyżej 24 godziny), i nigdy nie zapisuje go na dysku.\n• **O co prosi twoja przeglądarka.** Zlecenia, czaty i to, co wysyłasz, przechodzą przez serwer tej strony, więc jej operator widzi, jakie konta i zlecenia przeglądasz, oraz twoje podpisane działania, zanim zobaczy je blockchain.\n• **Co publikujesz.** Zlecenia, opinie i wiadomości czatu (zaszyfrowane, ale z nadawcą, odbiorcą i czasem) są publiczne w łańcuchu Blurt.\n• **Powiadomienia push**, jeśli je włączysz: strona przechowuje nazwę twojego konta razem z adresem push twojej przeglądarki, dopóki ich nie wyłączysz."
+				"a": "Bardzo mało i nic o tym, kim jesteś. Bez numeru telefonu, dokumentu tożsamości, ciasteczek, analityki i śledzenia, a także bez adresu e-mail, chyba że podasz go na potrzeby funkcji Powiadomienia offline.\n\nCo jednak istnieje:\n• **Twój adres IP.** Dociera do serwera jak przy każdej stronie. Kod Morphit trzyma go tylko w pamięci, na potrzeby limitów (najwyżej 24 godziny), i nigdy nie zapisuje go na dysku.\n• **O co prosi twoja przeglądarka.** Zlecenia, czaty i to, co wysyłasz, przechodzą przez serwer tej strony, więc jej operator widzi, jakie konta i zlecenia przeglądasz, oraz twoje podpisane działania, zanim zobaczy je blockchain.\n• **Co publikujesz.** Zlecenia, opinie i wiadomości czatu (zaszyfrowane, ale z nadawcą, odbiorcą i czasem) są publiczne w łańcuchu Blurt.\n• **Powiadomienia push**, jeśli je włączysz: strona przechowuje nazwę twojego konta razem z adresem push twojej przeglądarki, dopóki ich nie wyłączysz.\n• **Powiadomienia offline**, jeśli je włączysz: strona przechowuje adres, który do nich podałeś (e-mail, Matrix, Session, XMPP albo Telegram), zaszyfrowany, dopóki go nie usuniesz."
 			},
 			"lost_keys": {
 				"q": "Co, jeśli zgubię hasło lub frazę?",
@@ -1582,7 +1582,11 @@
 			},
 			"notifications_overview": {
 				"q": "Jak {brand} daje mi znać, gdy coś się dzieje — nowa wiadomość, zrealizowane zlecenie, opinia?",
-				"a": "{brand} informuje cię o nowościach na kilka sposobów. Te ciche są zawsze włączone; głośniejsze wybierasz sam w **Ustawienia → Powiadomienia**.\n\n**Zawsze włączone (bez żadnych uprawnień):**\n• Tytuł karty przeglądarki zaczyna się od liczby nieprzeczytanych, np. „(3)”.\n• Ikona strony na karcie dostaje małą kropkę z liczbą.\n• Jeśli zainstalowałeś {brand|Morphita} jako aplikację, jej ikona dostaje plakietkę (tam, gdzie system to obsługuje).\nDziałają, gdy jesteś zalogowany i odblokowany.\n\n**Do wyboru (wyłączone, dopóki ich nie włączysz):**\n• **Powiadomienia pulpitu** — okienko, gdy karta {brand|Morphita} nie jest na wierzchu. Przeglądarka poprosi o pozwolenie przy pierwszym takim powiadomieniu.\n• **Sygnał dźwiękowy** — krótki dźwięk.\n• **Wibracje** — krótkie brzęczenie, na telefonach, które to obsługują.\n• **Powiadomienia push** — powiadomienia nawet wtedy, gdy {brand} jest zamknięty. Przechodzą przez usługę push producenta twojej przeglądarki; zobacz „Jak powiadomienia push działają z moją prywatnością?”.\n\n**O czym dostajesz informacje:** zlecenia i kroki transakcji, wiadomości czatu i opinie. Wszystkie trzy są domyślnie włączone; wyłącz te, których nie chcesz.\n\n**Godziny ciszy** i **Wycisz wszystko** zatrzymują okienka i dźwięki. Powiadomienia push nadal się pojawiają (wymagają tego przeglądarki), ale bez dźwięku.\n\nJeśli chodzi o skrzynkę czatu, zobacz „Jak działa skrzynka czatu? Czy mogę kogoś wyciszyć lub wyłączyć wyciszenie?”."
+				"a": "{brand} informuje cię o nowościach na kilka sposobów. Te ciche są zawsze włączone; głośniejsze wybierasz sam w **Ustawienia → Powiadomienia**.\n\n**Zawsze włączone (bez żadnych uprawnień):**\n• Tytuł karty przeglądarki zaczyna się od liczby nieprzeczytanych, np. „(3)”.\n• Ikona strony na karcie dostaje małą kropkę z liczbą.\n• Jeśli zainstalowałeś {brand|Morphita} jako aplikację, jej ikona dostaje plakietkę (tam, gdzie system to obsługuje).\nDziałają, gdy jesteś zalogowany i odblokowany.\n\n**Do wyboru (wyłączone, dopóki ich nie włączysz):**\n• **Powiadomienia pulpitu** — okienko, gdy karta {brand|Morphita} nie jest na wierzchu. Przeglądarka poprosi o pozwolenie przy pierwszym takim powiadomieniu.\n• **Sygnał dźwiękowy** — krótki dźwięk.\n• **Wibracje** — krótkie brzęczenie, na telefonach, które to obsługują.\n• **Powiadomienia push** — powiadomienia nawet wtedy, gdy {brand} jest zamknięty. Przechodzą przez usługę push producenta twojej przeglądarki; zobacz „Jak powiadomienia push działają z moją prywatnością?”.\n\n**O czym dostajesz informacje:** zlecenia i kroki transakcji, wiadomości czatu i opinie. Wszystkie trzy są domyślnie włączone; wyłącz te, których nie chcesz.\n\n**Godziny ciszy** i **Wycisz wszystko** zatrzymują okienka i dźwięki. Powiadomienia push nadal się pojawiają (wymagają tego przeglądarki), ale bez dźwięku.\n\n**Gdy cię nie ma:** jeśli ta strona to oferuje, {brand} może też wysłać ci krótką notkę w aplikacji, której używasz, np. e-mailem albo w Telegramie. Zobacz „Jak działają powiadomienia offline i jak mój adres pozostaje prywatny?”.\n\nJeśli chodzi o skrzynkę czatu, zobacz „Jak działa skrzynka czatu? Czy mogę kogoś wyciszyć lub wyłączyć wyciszenie?”."
+			},
+			"offline_notifications": {
+				"q": "Jak działają powiadomienia offline i jak mój adres pozostaje prywatny?",
+				"a": "Jeśli ktoś wyśle ci wiadomość na czacie, gdy cię nie ma, {brand} może wysłać ci krótkie powiadomienie w aplikacji, której już używasz, żeby nic ci nie umknęło. Jest wyłączone, dopóki tego nie włączysz, w **Ustawienia → Powiadomienia offline**.\n\n**Jak włączyć.** Wybierz jedną z aplikacji, które oferuje ta strona: Matrix, Session, XMPP, Telegram albo e-mail. Każda strona sama decyduje, które oferuje. Wpisz swój adres dla tej aplikacji, a wyślemy na niego kod. Wpisz kod i gotowe — jest włączone. W Telegramie jest odwrotnie: to ty wysyłasz kod naszemu botowi, a przycisk robi to za ciebie. Kod dowodzi, że adres jest twój, więc nikt nie może zapisać kogoś innego.\n\n**Co jest w powiadomieniu.** Tylko „Ktoś właśnie wysłał Ci wiadomość na czacie w {brand}”, z linkiem. Nigdy nie mówi, kto napisał ani co. Link otwiera tę rozmowę i tylko dla ciebie; jeśli ktoś inny go zdobędzie, nic mu nie otworzy. Przestaje działać po 7 dniach.\n\n**Kiedy przychodzi.** Nie od razu: od 10 do 60 minut po wiadomości i zawsze o pełnej godzinie albo 15, 30 lub 45 minut po pełnej godzinie. (Dlaczego — wyjaśniamy niżej.) Nie dostaniesz go, jeśli już jesteś na stronie, ani gdy przeczytasz rozmowę lub odpiszesz. Dostajesz jedno powiadomienie na rozmowę, dopóki do niej nie zajrzysz, i najwyżej jedno dziennie od kogoś, do kogo nigdy nie pisałeś.\n\n**Jak twój adres pozostaje prywatny.**\n• Jest przechowywany w postaci zaszyfrowanej, a klucz, który go otwiera, jest trzymany osobno od bazy danych. Sama kopia bazy danych nic nie otworzy.\n• Nigdy nikomu nie jest pokazywany. Nie ma go w twoim profilu, nie widzą go osoby, z którymi handlujesz, i nigdy nie trafia do innych stron. Po zapisaniu nawet ty widzisz tylko „Włączone”.\n• Nie trafia do kopii zapasowych ani do logów strony.\n• Tylko ty możesz go dodać lub zmienić, bo każda zmiana jest podpisana twoim kluczem.\n• **Wyłącz** usuwa jedną aplikację; **Usuń wszystkie moje adresy** usuwa wszystko. Twój adres jest usuwany od razu. Jeśli strona przestanie oferować jakąś aplikację, adresy zapisane dla niej zostaną usunięte albo karta pokaże przycisk do usunięcia twojego.\n\n**Uczciwie.**\n• Aplikacja, która dostarcza ci powiadomienie, może je przeczytać — tak jak każdą wiadomość, którą tam dostajesz: widzi, że korzystasz z tej strony i kiedy przyszło powiadomienie, ale nigdy, kto napisał ani co. Tylko Session szyfruje je end-to-end. Dlatego powiadomienia wychodzą po losowym czasie, o porach wspólnych dla wszystkich: na podstawie chwili, w której przychodzi jedno z nich, dużo trudniej ustalić, o którą wiadomość na czacie chodziło.\n• Żeby dostarczyć powiadomienie, usługa, przez którą strona je wysyła (jej konto e-mail, Matrix, XMPP, Session albo Telegram), musi dostać twój adres — jak przy każdej wiadomości wysyłanej do ciebie.\n• Ludzie, którzy prowadzą tę stronę, prowadzą też serwer z kluczem, więc powierzasz im swój adres — jak każdej usłudze, której podajesz adres. Nic na stronie im go nie pokazuje, ale ktoś, kto kontroluje serwer, mógłby się do niego dostać.\n\n**Wskazówka:** dla największej prywatności użyj adresu, którego nie używasz do niczego innego. Session nie potrzebuje w ogóle numeru telefonu ani adresu e-mail."
 			},
 			"chat_key_changed": {
 				"q": "Co oznacza \"Nie udało się bezpiecznie wysłać\"?",
@@ -4149,7 +4153,7 @@
 			"broadcast_ok_detail": "Twoje krótkie bio jest teraz opublikowane i widoczne dla wszystkich."
 		},
 		"title": "Ustawienia",
-		"subtitle": "Twoja tożsamość, Twoje zasady. Zapisane u Ciebie, nigdy na naszych serwerach.",
+		"subtitle": "Twoja tożsamość, Twoje zasady. Twoje klucze nigdy nie opuszczają Twojego urządzenia.",
 		"display_name": {
 			"heading": "Nazwa wyświetlana",
 			"explain": "Przyjazna etykieta pokazywana obok awatara. NIE zastępuje Twojego klucza publicznego — ten zawsze jest w nawiasie i to jemu ludzie mają ufać.",
@@ -4658,7 +4662,9 @@
 			"device": "Tylko to urządzenie",
 			"public_detail": "Zapisywane jawnie w blockchainie — każdy może to odczytać, na zawsze.",
 			"private_detail": "Szyfrowane, zanim opuści Twoje urządzenie. Nawet operator nie może tego odczytać.",
-			"device_detail": "Pozostaje w tej przeglądarce. Nigdy nigdzie nie jest wysyłane."
+			"device_detail": "Pozostaje w tej przeglądarce. Nigdy nigdzie nie jest wysyłane.",
+			"instance": "Przechowywane tylko przez tę stronę",
+			"instance_detail": "Zaszyfrowane na serwerze tej strony i używane tylko do wysyłania Ci tych powiadomień. Nigdy publiczne."
 		},
 		"preferred_language": {
 			"title": "Preferowane języki",
@@ -4666,7 +4672,62 @@
 			"primary_label": "Główny (domyślny dla Twoich wpisów)",
 			"additional_label": "Pokazuj też oferty w"
 		},
-		"profile_load_failed": "Nie udało się wczytać twojego opublikowanego profilu, więc publikowanie zmian jest wstrzymane: pole, którego ta strona nie wczytała, zostałoby wysłane puste i skasowane. Nadal możesz zapisać na tym urządzeniu."
+		"profile_load_failed": "Nie udało się wczytać twojego opublikowanego profilu, więc publikowanie zmian jest wstrzymane: pole, którego ta strona nie wczytała, zostałoby wysłane puste i skasowane. Nadal możesz zapisać na tym urządzeniu.",
+		"offline_notify": {
+			"title": "Powiadomienia offline",
+			"intro": "Gdy ktoś wyśle Ci wiadomość na czacie, kiedy Cię nie ma, {site} może wysłać Ci krótkie powiadomienie w jednej z aplikacji poniżej. Powiadomienie mówi tylko, że ktoś do Ciebie napisał, z linkiem do przeczytania — nigdy, kto napisał ani co.",
+			"privacy_title": "Twoje adresy pozostają prywatne",
+			"privacy": "Przechowuje je {site}, w postaci zaszyfrowanej, i używa ich wyłącznie do tych powiadomień. Żeby dostarczyć powiadomienie, usługa, przez którą strona je wysyła, musi dostać Twój adres. Nigdy nie pojawiają się w Twoim profilu, nigdy nikomu nie są pokazywane (nawet tutaj, po zapisaniu) i nigdy nie są udostępniane innym stronom. Usuń je, kiedy chcesz.",
+			"tip": "Dla największej prywatności użyj adresu, którego nie używasz do niczego innego.",
+			"timing": "Wybrana aplikacja może czytać Twoje powiadomienia i widzieć, kiedy przychodzą.",
+			"signin": "Zaloguj się, aby włączyć powiadomienia offline.",
+			"zero_clearnet": "Ta strona nie korzysta z otwartego internetu (clearnet), więc oferuje tylko aplikacje, do których może dotrzeć przez Tor.",
+			"channel": {
+				"email": "E-mail",
+				"matrix": "Matrix",
+				"xmpp": "XMPP (Jabber)",
+				"telegram": "Telegram",
+				"session": "Session"
+			},
+			"from_bot": "Powiadomienia przychodzą od {bot}.",
+			"send_code": "Wyślij mi kod",
+			"sending": "Wysyłanie…",
+			"code_sent": {
+				"email": "Wysłaliśmy kod na wpisany adres. Sprawdź skrzynkę odbiorczą (i folder spam).",
+				"matrix": "Wysłaliśmy kod od {bot}. Przyjmij zaproszenie w swojej aplikacji Matrix, aby go przeczytać.",
+				"xmpp": "Wysłaliśmy kod od {bot}. Znajdziesz go w swojej aplikacji XMPP.",
+				"session": "Wysłaliśmy kod od {site}. W Session trafia do Próśb o wiadomość: zaakceptuj prośbę, aby przeczytać kod."
+			},
+			"code_label": "Kod",
+			"confirm": "Potwierdź",
+			"cancel": "Anuluj",
+			"on": "Włączone",
+			"change": "Użyj innego adresu",
+			"change_hint": "Nowy adres zastępuje obecny.",
+			"turn_off": "Wyłącz",
+			"not_offered": "Ta strona nie wysyła już tutaj powiadomień.",
+			"telegram_connect": "Połącz Telegram",
+			"telegram_steps": "Otwórz @{bot} w Telegramie i wyślij mu ten kod (przycisk poniżej zrobi to za Ciebie).",
+			"telegram_open": "Otwórz Telegram",
+			"telegram_waiting": "Czekam, aż Twój kod dotrze do bota…",
+			"telegram_check_again": "Sprawdź ponownie",
+			"delete_all": "Usuń wszystkie moje adresy",
+			"deleted": "Usunięte. Ta strona nie przechowuje już żadnego z Twoich adresów.",
+			"link_gone": "Ten link wygasł lub należy do innego konta. Wszystkie Twoje czaty są tutaj.",
+			"link_retry": "Nie udało się teraz otworzyć tego linku. Spróbuj ponownie za kilka minut.",
+			"errors": {
+				"invalid_address": "To nie wygląda na prawidłowy adres dla tej aplikacji.",
+				"too_many_codes": "Za dużo kodów dzisiaj. Spróbuj jutro.",
+				"send_failed": "Nie udało się teraz wysłać kodu. Sprawdź adres i spróbuj ponownie za kilka minut.",
+				"wrong": "Ten kod jest nieprawidłowy. Spróbuj ponownie.",
+				"expired": "Ten kod wygasł. Poproś o nowy.",
+				"none": "Nie czeka żaden kod. Poproś o nowy.",
+				"rate_limited": "Za dużo prób. Poczekaj kilka minut.",
+				"unavailable": "Powiadomienia offline nie są teraz dostępne na tej stronie.",
+				"failed": "Coś poszło nie tak. Spróbuj ponownie.",
+				"locked_session": "Najpierw odblokuj swoje konto."
+			}
+		}
 	},
 	"shipment_modal": {
 		"heading": "Zarejestruj przesyłkę",

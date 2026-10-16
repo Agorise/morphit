@@ -14,6 +14,9 @@
 	 *              key. Notification prefs, hidden/blocked accounts, region.
 	 *              The operator stores an opaque blob and can read none of it.
 	 *   device   → this browser only. Never leaves the machine.
+	 *   instance → kept by THIS site's server, encrypted, for one job (the
+	 *              offline-notice addresses: the server must read them to send).
+	 *              Never public, never shared — but not "only you can read it".
 	 *
 	 * The confusion is real: an account that had saved a screenful of fields was
 	 * described as "never broadcast settings" — true of the public record, false
@@ -33,7 +36,7 @@
 
 	interface Props {
 		/** Where this section's values end up. */
-		scope: 'public' | 'private' | 'device';
+		scope: 'public' | 'private' | 'device' | 'instance';
 	}
 
 	const { scope }: Props = $props();
@@ -43,14 +46,18 @@
 			? $t('settings.visibility.public')
 			: scope === 'private'
 				? $t('settings.visibility.private')
-				: $t('settings.visibility.device')
+				: scope === 'instance'
+					? $t('settings.visibility.instance')
+					: $t('settings.visibility.device')
 	);
 	const detail = $derived(
 		scope === 'public'
 			? $t('settings.visibility.public_detail')
 			: scope === 'private'
 				? $t('settings.visibility.private_detail')
-				: $t('settings.visibility.device_detail')
+				: scope === 'instance'
+					? $t('settings.visibility.instance_detail')
+					: $t('settings.visibility.device_detail')
 	);
 
 	/** Amber for public — it is the one that can surprise someone. Emerald for

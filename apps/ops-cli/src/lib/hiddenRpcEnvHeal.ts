@@ -104,7 +104,8 @@ export const SERVICES = (root = ''): ServiceSpec[] => [
 			`${root}/opt/morphit/morphit.env`,
 			`${root}/opt/morphit/morphit.config.env`,
 			`${root}/etc/morphit/relay.env`,
-			`${root}/etc/morphit/relay-vapid.env`
+			`${root}/etc/morphit/relay-vapid.env`,
+			`${root}/etc/morphit/relay-notify.env`
 		],
 		health: 'http://127.0.0.1:8080/v1/health'
 	}

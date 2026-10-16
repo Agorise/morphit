@@ -72,7 +72,7 @@ check('operators page no longer https-only-rejects contacts', !/u\.protocol !== 
 check('operators page falls back to the instance contact when the on-chain operator contact is empty (v1.16.12)', /instanceContactByTag\[op\.tag\]/.test(ops));
 const bw = read('ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2');
 check('bunkerweb exempts /v1/ + /relay/ from ModSecurity', /CUSTOM_CONF_MODSEC_/.test(bw) && /ruleEngine=Off/.test(bw) && /v1\|relay/.test(bw));
-check('upgrade self-heals the bunkerweb WAF exemption (no ansible re-run)', /CUSTOM_CONF_MODSEC_morphit_json_api_off=/.test(upSrc) && /\/etc\/bunkerweb\/bunkerweb\.env/.test(upSrc) && /compose[\s\S]{0,40}up.{0,6}-d/.test(upSrc));
+check('upgrade self-heals the bunkerweb WAF exemption (no ansible re-run)', /modsecRuleFix\(getVal\('CUSTOM_CONF_MODSEC_morphit_json_api_off'\)\)/.test(upSrc) && /setVal\('CUSTOM_CONF_MODSEC_morphit_json_api_off', fix\)/.test(upSrc) && /\/etc\/bunkerweb\/bunkerweb\.env/.test(upSrc) && /compose[\s\S]{0,40}up.{0,6}-d/.test(upSrc));
 
 console.log(fail === 0 ? `✓ all ${pass} contact-url-resilience checks hold` : `✗ ${fail} failed (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

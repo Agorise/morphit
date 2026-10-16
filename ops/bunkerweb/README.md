@@ -273,6 +273,21 @@ testing in staging.
   page load fires many `/v1/*` calls at once, and a tight edge limit
   turns that normal burst into `429`s.  `/relay/` is `120r/m` (the
   relay enforces its own deeper signup ceilings + spacing).
+- `LIMIT_REQ_URL` / `LIMIT_REQ_RATE` — BunkerWeb's own catch-all rule
+  (`/` at `2r/s`, counted per visitor AND per file) covers every
+  address no other rule matches.  On a first visit the page, the
+  offline cache and the tamper check each fetch the same script file
+  within a second, so the third fetch got `429` and the page failed to
+  load part of itself.  Morphit narrows the rule to the addresses that
+  reach a server process (`^/(?:ipfs|ipns|rss)/|^/mcp`, still `2r/s`);
+  the site's own files have no request limit.
+- `LIMIT_CONN_MAX_HTTP2` — downloads at once per visitor over HTTP/2,
+  `256` (BunkerWeb's default is `100`).  A first visit asks for every
+  file of the site, and a browser keeps up to 128 going per connection,
+  so on a slow line the rest got `429`.
+- Both reach installed boxes on their next `morphit-ops upgrade`, which
+  sets them where BunkerWeb's defaults are in force (an operator's own
+  value is kept) and checks the running site afterwards.
 - Bad-behavior bans (`BAD_BEHAVIOR_*`) — by default BunkerWeb counts
   `400 401 403 404 405 429 444` and bans an IP that accumulates too
   many.  Morphit narrows the counted set to `401 405 444`,

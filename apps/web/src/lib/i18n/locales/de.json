@@ -1258,7 +1258,7 @@
 			},
 			"data_collection": {
 				"q": "Welche Daten sammelt {brand} über mich?",
-				"a": "Sehr wenig, und nichts darüber, wer du bist. Keine E-Mail, keine Telefonnummer, kein Ausweis, keine Cookies, keine Analyse, kein Tracking.\n\nWas es gibt:\n• **Deine IP-Adresse.** Sie erreicht den Server wie bei jeder Website. Morphits Code hält sie nur im Arbeitsspeicher, für Ratenbegrenzungen (höchstens 24 Stunden), und schreibt sie nie auf die Festplatte.\n• **Was dein Browser abruft.** Orders, Chats und alles, was du sendest, laufen über den Server dieser Seite. Sein Betreiber kann daher sehen, welche Konten und Orders du dir ansiehst, und deine signierten Aktionen schon vor der Blockchain.\n• **Was du veröffentlichst.** Orders, Bewertungen und Chat-Nachrichten (verschlüsselt, aber mit Absender, Empfänger und Zeit) sind öffentlich auf der Blurt-Chain.\n• **Push-Benachrichtigungen**, wenn du sie einschaltest: Die Seite speichert deinen Kontonamen zusammen mit der Push-Adresse deines Browsers, bis du sie ausschaltest."
+				"a": "Sehr wenig, und nichts darüber, wer du bist. Keine Telefonnummer, kein Ausweis, keine Cookies, keine Analyse, kein Tracking und keine E-Mail-Adresse, außer du gibst eine für Offline-Benachrichtigungen an.\n\nWas es gibt:\n• **Deine IP-Adresse.** Sie erreicht den Server wie bei jeder Website. Morphits Code hält sie nur im Arbeitsspeicher, für Ratenbegrenzungen (höchstens 24 Stunden), und schreibt sie nie auf die Festplatte.\n• **Was dein Browser abruft.** Orders, Chats und alles, was du sendest, laufen über den Server dieser Seite. Sein Betreiber kann daher sehen, welche Konten und Orders du dir ansiehst, und deine signierten Aktionen schon vor der Blockchain.\n• **Was du veröffentlichst.** Orders, Bewertungen und Chat-Nachrichten (verschlüsselt, aber mit Absender, Empfänger und Zeit) sind öffentlich auf der Blurt-Chain.\n• **Push-Benachrichtigungen**, wenn du sie einschaltest: Die Seite speichert deinen Kontonamen zusammen mit der Push-Adresse deines Browsers, bis du sie ausschaltest.\n• **Offline-Benachrichtigungen**, wenn du sie einschaltest: Die Seite speichert die Adresse, die du dafür angegeben hast (E-Mail, Matrix, Session, XMPP oder Telegram), verschlüsselt, bis du sie löschst."
 			},
 			"lost_keys": {
 				"q": "Was ist, wenn ich Passwort oder Wiederherstellungsphrase verliere?",
@@ -1582,7 +1582,11 @@
 			},
 			"notifications_overview": {
 				"q": "Wie benachrichtigt mich {brand}, wenn etwas passiert — neue Nachricht, Auftrag gefüllt, Bewertung eingetroffen?",
-				"a": "{brand} informiert dich auf mehreren Wegen über Neues. Die leisen sind immer an; die lauteren wählst du selbst, unter **Einstellungen → Benachrichtigungen**.\n\n**Immer an (keine Erlaubnis nötig):**\n• Der Titel des Browser-Tabs beginnt mit der Zahl der ungelesenen, etwa „(3)“.\n• Das Seitensymbol im Tab bekommt einen kleinen Punkt mit der Zahl.\n• Wenn du {brand} als App installiert hast, bekommt ihr Symbol ein Badge (wo dein System das unterstützt).\nDiese funktionieren, solange du angemeldet und entsperrt bist.\n\n**Deine Wahl (aus, bis du sie einschaltest):**\n• **Desktop-Benachrichtigungen** — ein Pop-up, wenn der {brand}-Tab nicht im Vordergrund ist. Dein Browser fragt beim ersten Mal um Erlaubnis.\n• **Akustischer Hinweis** — ein kurzer Ton.\n• **Vibration** — ein kurzes Summen, auf Handys, die das unterstützen.\n• **Push-Benachrichtigungen** — Meldungen, auch wenn {brand} geschlossen ist. Sie laufen über den Push-Dienst deines Browserherstellers; siehe „Wie funktionieren Push-Benachrichtigungen mit meiner Privatsphäre?“.\n\n**Worüber du informiert wirst:** Orders und Trade-Schritte, Chat-Nachrichten und Bewertungen. Alle drei sind standardmäßig an; schalte ab, was du nicht willst.\n\n**Ruhezeiten** und **Alles stummschalten** stoppen Pop-ups und Töne. Push-Benachrichtigungen erscheinen trotzdem (Browser verlangen das), aber lautlos.\n\nZum Chat-Posteingang siehe „Wie funktioniert der Chat-Posteingang? Kann ich jemanden stummschalten oder das rückgängig machen?“."
+				"a": "{brand} informiert dich auf mehreren Wegen über Neues. Die leisen sind immer an; die lauteren wählst du selbst, unter **Einstellungen → Benachrichtigungen**.\n\n**Immer an (keine Erlaubnis nötig):**\n• Der Titel des Browser-Tabs beginnt mit der Zahl der ungelesenen, etwa „(3)“.\n• Das Seitensymbol im Tab bekommt einen kleinen Punkt mit der Zahl.\n• Wenn du {brand} als App installiert hast, bekommt ihr Symbol ein Badge (wo dein System das unterstützt).\nDiese funktionieren, solange du angemeldet und entsperrt bist.\n\n**Deine Wahl (aus, bis du sie einschaltest):**\n• **Desktop-Benachrichtigungen** — ein Pop-up, wenn der {brand}-Tab nicht im Vordergrund ist. Dein Browser fragt beim ersten Mal um Erlaubnis.\n• **Akustischer Hinweis** — ein kurzer Ton.\n• **Vibration** — ein kurzes Summen, auf Handys, die das unterstützen.\n• **Push-Benachrichtigungen** — Meldungen, auch wenn {brand} geschlossen ist. Sie laufen über den Push-Dienst deines Browserherstellers; siehe „Wie funktionieren Push-Benachrichtigungen mit meiner Privatsphäre?“.\n\n**Worüber du informiert wirst:** Orders und Trade-Schritte, Chat-Nachrichten und Bewertungen. Alle drei sind standardmäßig an; schalte ab, was du nicht willst.\n\n**Ruhezeiten** und **Alles stummschalten** stoppen Pop-ups und Töne. Push-Benachrichtigungen erscheinen trotzdem (Browser verlangen das), aber lautlos.\n\n**Wenn du weg bist:** Wenn diese Seite es anbietet, kann dir {brand} auch einen kurzen Hinweis in einer App schicken, die du nutzt, etwa per E-Mail oder Telegram. Siehe „Wie funktionieren Offline-Benachrichtigungen, und wie bleibt meine Adresse privat?“.\n\nZum Chat-Posteingang siehe „Wie funktioniert der Chat-Posteingang? Kann ich jemanden stummschalten oder das rückgängig machen?“."
+			},
+			"offline_notifications": {
+				"q": "Wie funktionieren Offline-Benachrichtigungen, und wie bleibt meine Adresse privat?",
+				"a": "Wenn dir jemand eine Chat-Nachricht schickt, während du weg bist, kann dir {brand} einen kurzen Hinweis in einer App schicken, die du schon nutzt — damit du sie nicht verpasst. Das ist aus, bis du es einschaltest, unter **Einstellungen → Offline-Benachrichtigungen**.\n\n**Einschalten.** Wähle eine der Apps, die diese Seite anbietet: Matrix, Session, XMPP, Telegram oder E-Mail. Jede Seite entscheidet selbst, welche sie anbietet. Gib deine Adresse für diese App ein, und wir schicken dir einen Code dorthin. Gib den Code ein, und es ist an. Bei Telegram geht es andersherum: Du schickst unserem Bot einen Code, und der Knopf erledigt das für dich. Der Code beweist, dass die Adresse dir gehört — so kann niemand eine andere Person anmelden.\n\n**Was im Hinweis steht.** Nur „Jemand hat dir gerade eine Chat-Nachricht auf {brand} geschickt“, mit einem Link. Er sagt nie, wer geschrieben hat oder was. Der Link öffnet dieses Gespräch, und zwar nur für dich; wer ihn sonst in die Hände bekommt, bekommt nichts zu sehen. Nach 7 Tagen funktioniert er nicht mehr.\n\n**Wann er kommt.** Nicht sofort: 10 bis 60 Minuten nach der Nachricht, und immer zur vollen Stunde, um Viertel nach, um halb oder um Viertel vor. (Warum, steht weiter unten.) Du bekommst keinen, wenn du schon auf der Seite bist oder wenn du das Gespräch gelesen oder geantwortet hast. Du bekommst einen Hinweis pro Gespräch, bis du es dir ansiehst, und höchstens einen am Tag von jemandem, dem du noch nie geschrieben hast.\n\n**So bleibt deine Adresse privat.**\n• Sie wird verschlüsselt gespeichert, und der Schlüssel dazu liegt getrennt von der Datenbank. Eine Kopie der Datenbank allein öffnet nichts.\n• Sie wird niemandem gezeigt. Sie steht nicht in deinem Profil, die Leute, mit denen du handelst, sehen sie nicht, und sie wird nie an andere Seiten weitergegeben. Sobald sie gespeichert ist, siehst sogar du nur „An“.\n• Sie bleibt aus den Backups und Protokollen der Seite heraus.\n• Nur du kannst sie hinzufügen oder ändern, denn jede Änderung wird mit deinem Schlüssel signiert.\n• **Ausschalten** entfernt eine App; **Alle meine Adressen löschen** entfernt alles. Deine Adresse wird sofort gelöscht. Wenn die Seite eine App nicht mehr anbietet, werden die dafür gespeicherten Adressen gelöscht, oder die Karte zeigt einen Knopf, um deine zu löschen.\n\n**Der ehrliche Teil.**\n• Die App, die dir den Hinweis bringt, kann ihn lesen, genau wie jede Nachricht, die du dort bekommst: Sie sieht, dass du diese Seite nutzt und wann ein Hinweis kam, aber nie, wer geschrieben hat oder was. Nur bei Session ist er Ende-zu-Ende-verschlüsselt. Deshalb gehen Hinweise nach einer zufälligen Wartezeit raus, zu Zeiten, die alle teilen: Aus dem Moment, in dem einer ankommt, lässt sich viel schwerer ablesen, um welche Chat-Nachricht es ging.\n• Um einen Hinweis zuzustellen, muss der Dienst, über den die Seite ihn verschickt (ihr E-Mail-, Matrix-, XMPP-, Session- oder Telegram-Konto), deine Adresse bekommen, wie bei jeder Nachricht, die man dir schickt.\n• Die Leute, die diese Seite betreiben, betreiben auch den Server mit dem Schlüssel — du vertraust ihnen deine Adresse also an, wie jedem Dienst, dem du eine Adresse gibst. Nichts auf der Seite zeigt sie ihnen, aber wer den Server kontrolliert, könnte an sie herankommen.\n\n**Tipp:** Für größtmögliche Privatsphäre nimm eine Adresse, die du für nichts anderes benutzt. Session braucht überhaupt keine Telefonnummer und keine E-Mail-Adresse."
 			},
 			"chat_key_changed": {
 				"q": "Was bedeutet \"Konnten nicht sicher senden\"?",
@@ -4149,7 +4153,7 @@
 			"broadcast_ok_detail": "Deine Kurzbio ist jetzt für alle sichtbar veröffentlicht."
 		},
 		"title": "Einstellungen",
-		"subtitle": "Deine Identität, deine Regeln. Auf deinem Gerät gespeichert, nie auf unseren Servern.",
+		"subtitle": "Deine Identität, deine Regeln. Deine Schlüssel verlassen nie dein Gerät.",
 		"display_name": {
 			"heading": "Anzeigename",
 			"explain": "Ein freundliches Etikett neben deinem Avatar. Er ERSETZT nicht deinen Public Key — der steht immer in Klammern daneben, und genau dem sollten Leute trauen.",
@@ -4658,7 +4662,9 @@
 			"device": "Nur dieses Gerät",
 			"public_detail": "Offen in der Blockchain gespeichert – für jeden dauerhaft lesbar.",
 			"private_detail": "Verschlüsselt, bevor es dein Gerät verlässt. Nicht einmal der Betreiber kann es lesen.",
-			"device_detail": "Bleibt in diesem Browser. Wird nirgendwohin gesendet."
+			"device_detail": "Bleibt in diesem Browser. Wird nirgendwohin gesendet.",
+			"instance": "Nur auf dieser Website gespeichert",
+			"instance_detail": "Verschlüsselt auf dem Server dieser Website und nur genutzt, um dir diese Hinweise zu schicken. Nie öffentlich."
 		},
 		"preferred_language": {
 			"title": "Bevorzugte Sprachen",
@@ -4666,7 +4672,62 @@
 			"primary_label": "Haupt (Vorgabe für deine Beiträge)",
 			"additional_label": "Auch Angebote anzeigen in"
 		},
-		"profile_load_failed": "Dein veröffentlichtes Profil konnte nicht geladen werden, daher ist das Veröffentlichen pausiert: Ein Feld, das diese Seite nicht geladen hat, würde leer gesendet und gelöscht. Auf diesem Gerät speichern geht weiterhin."
+		"profile_load_failed": "Dein veröffentlichtes Profil konnte nicht geladen werden, daher ist das Veröffentlichen pausiert: Ein Feld, das diese Seite nicht geladen hat, würde leer gesendet und gelöscht. Auf diesem Gerät speichern geht weiterhin.",
+		"offline_notify": {
+			"title": "Offline-Benachrichtigungen",
+			"intro": "Wenn dir jemand eine Chat-Nachricht schickt, während du nicht da bist, kann {site} dir einen kurzen Hinweis in einer der Apps unten schicken. Der Hinweis sagt nur, dass dir jemand geschrieben hat, mit einem Link zum Lesen — nie, wer geschrieben hat oder was.",
+			"privacy_title": "Deine Adressen bleiben privat",
+			"privacy": "{site} speichert sie, verschlüsselt, und nutzt sie ausschließlich für diese Hinweise. Um einen Hinweis zuzustellen, muss der Dienst, über den die Website ihn verschickt, deine Adresse bekommen. Sie erscheinen nie in deinem Profil, werden niemandem gezeigt (auch hier nicht, sobald gespeichert) und nie an andere Websites weitergegeben. Lösche sie, wann immer du willst.",
+			"tip": "Für größtmögliche Privatsphäre nimm eine Adresse, die du für nichts anderes nutzt.",
+			"timing": "Die App, die du wählst, kann deine Hinweise lesen und sehen, wann sie ankommen.",
+			"signin": "Melde dich an, um Offline-Benachrichtigungen einzuschalten.",
+			"zero_clearnet": "Diese Website nutzt kein offenes Internet (Clearnet), daher bietet sie nur Apps an, die sie über Tor erreichen kann.",
+			"channel": {
+				"email": "E-Mail",
+				"matrix": "Matrix",
+				"xmpp": "XMPP (Jabber)",
+				"telegram": "Telegram",
+				"session": "Session"
+			},
+			"from_bot": "Hinweise kommen von {bot}.",
+			"send_code": "Code schicken",
+			"sending": "Wird gesendet…",
+			"code_sent": {
+				"email": "Wir haben einen Code an die eingegebene Adresse geschickt. Sieh in deinem Posteingang nach (und im Spam-Ordner).",
+				"matrix": "Wir haben einen Code von {bot} geschickt. Nimm die Einladung in deiner Matrix-App an, um ihn zu lesen.",
+				"xmpp": "Wir haben einen Code von {bot} geschickt. Du findest ihn in deiner XMPP-App.",
+				"session": "Wir haben einen Code von {site} geschickt. In Session kommt er unter Nachrichtenanfragen an: Nimm die Anfrage an, um den Code zu lesen."
+			},
+			"code_label": "Code",
+			"confirm": "Bestätigen",
+			"cancel": "Abbrechen",
+			"on": "An",
+			"change": "Andere Adresse verwenden",
+			"change_hint": "Eine neue Adresse ersetzt die aktuelle.",
+			"turn_off": "Ausschalten",
+			"not_offered": "Diese Seite schickt hierhin keine Hinweise mehr.",
+			"telegram_connect": "Telegram verbinden",
+			"telegram_steps": "Öffne @{bot} in Telegram und schick ihm diesen Code (der Knopf unten erledigt das für dich).",
+			"telegram_open": "Telegram öffnen",
+			"telegram_waiting": "Wir warten darauf, dass dein Code beim Bot ankommt…",
+			"telegram_check_again": "Noch einmal prüfen",
+			"delete_all": "Alle meine Adressen löschen",
+			"deleted": "Gelöscht. Diese Website speichert keine deiner Adressen mehr.",
+			"link_gone": "Dieser Link ist abgelaufen oder gehört zu einem anderen Konto. Alle deine Chats sind hier.",
+			"link_retry": "Dieser Link ließ sich gerade nicht öffnen. Bitte versuch es in ein paar Minuten noch einmal.",
+			"errors": {
+				"invalid_address": "Das sieht nicht nach einer gültigen Adresse für diese App aus.",
+				"too_many_codes": "Heute zu viele Codes. Bitte versuch es morgen wieder.",
+				"send_failed": "Der Code konnte gerade nicht gesendet werden. Prüf die Adresse und versuch es in ein paar Minuten noch einmal.",
+				"wrong": "Dieser Code stimmt nicht. Bitte versuch es noch einmal.",
+				"expired": "Dieser Code ist abgelaufen. Bitte fordere einen neuen an.",
+				"none": "Es wartet kein Code. Bitte fordere einen neuen an.",
+				"rate_limited": "Zu viele Versuche. Bitte warte ein paar Minuten.",
+				"unavailable": "Offline-Benachrichtigungen sind auf dieser Website gerade nicht verfügbar.",
+				"failed": "Etwas ist schiefgegangen. Bitte versuch es noch einmal.",
+				"locked_session": "Entsperre zuerst dein Konto."
+			}
+		}
 	},
 	"shipment_modal": {
 		"heading": "Versand erfassen",

@@ -3,7 +3,9 @@
  *
  * A node's backup must not carry the Web Push rows: a push_subscriptions row
  * ties an account to a browser's push endpoint (a device), and backups get
- * copied off the box and kept for weeks. Runs the REAL ops/backup/morphit-backup.sh
+ * copied off the box and kept for weeks. Nor the offline-notice rows
+ * (offline_notify_*): users' sealed addresses, their code logs, the queue,
+ * the links and the key check — a user's address must never leave the box. Runs the REAL ops/backup/morphit-backup.sh
  * against a scratch database on TEST_DATABASE_URL holding push rows and an
  * ordinary table, then reads the dump: both push tables are there (a restore
  * recreates them) with no rows; the ordinary rows are all there.
@@ -59,6 +61,17 @@ const psql = (d: string, sql: string) =>
 		encoding: 'utf8',
 		env
 	});
+/** Every offline-notice table: the indexer's schema.sql, read here, so a new
+ *  one cannot be added without this smoke checking it. */
+const OFFLINE = [
+	...new Set(
+		[
+			...readFileSync(join(REPO, 'apps/indexer/src/db/schema.sql'), 'utf8').matchAll(
+				/CREATE TABLE IF NOT EXISTS (offline_notify_\w+)/g
+			)
+		].map((m) => m[1]!)
+	)
+];
 const work = mkdtempSync(join(tmpdir(), 'bkpush-'));
 psql(u.pathname.slice(1), `DROP DATABASE IF EXISTS ${db}`);
 const created = psql(u.pathname.slice(1), `CREATE DATABASE ${db}`);
@@ -70,6 +83,7 @@ try {
 		 INSERT INTO push_subscriptions VALUES ('alice', 'https://push.example/device-SECRET-1');
 		 CREATE TABLE push_pending (id int, account text, body text);
 		 INSERT INTO push_pending VALUES (1, 'alice', 'PENDING-NOTE');
+		 ${OFFLINE.map((t) => `CREATE TABLE ${t} (account text, secret text); INSERT INTO ${t} VALUES ('alice', 'OFFLINE-SECRET-${t}');`).join('\n')}
 		 CREATE TABLE orders (permlink text);
 		 INSERT INTO orders VALUES ('order-KEEP-ME');`
 	);
@@ -104,6 +118,14 @@ try {
 		!dump.includes('device-SECRET-1')
 	);
 	check('no pending push row', !dump.includes('PENDING-NOTE'));
+	check('the schema has the seven offline-notice tables', OFFLINE.length === 7, OFFLINE.join(','));
+	for (const t of OFFLINE) {
+		check(
+			`${t}: in the dump with no row`,
+			new RegExp(`CREATE TABLE public\\.${t}\\b`).test(dump) &&
+				!dump.includes(`OFFLINE-SECRET-${t}`)
+		);
+	}
 	check('the ordinary rows are all there', dump.includes('order-KEEP-ME'));
 } finally {
 	psql(u.pathname.slice(1), `DROP DATABASE IF EXISTS ${db}`);

@@ -39,6 +39,13 @@ import { PushSubscriptionStore } from './policy/pushSubscriptions.ts';
 import { PushSender } from './policy/pushSender.ts';
 import { PushQueueJanitor } from './policy/pushQueueJanitor.ts';
 import { PushEndpoints } from './api/push.ts';
+import { notifyConfigFromEnv, offeredChannels } from './notify/config.ts';
+import { VaultUnavailableError } from './notify/vault.ts';
+import { openSealedStore, type OfflineNotifyStore } from './notify/store.ts';
+import { errorClass } from './notify/dispatch.ts';
+import { NotifySigVerifier } from './notify/sig.ts';
+import { OfflineNotifyWorker, Presence } from './notify/worker.ts';
+import { notifyLimits, OfflineNotifyEndpoints } from './notify/api.ts';
 import { corsAllowlist } from './middleware/cors.ts';
 import { enforceOriginAllowlist } from './middleware/origin_enforcement.ts';
 import { requireJsonContentType } from './middleware/content_type.ts';
@@ -447,6 +454,59 @@ async function main(): Promise<void> {
 				(err) => bootLog.error('push_queue_janitor_failed', {}, err as Error)
 			);
 
+	// Settings → Offline Notifications (notify/). Off unless the operator set
+	// up at least one channel (/etc/morphit/relay-notify.env, `sudo morphit-ops
+	// offline-notify`). The users' addresses are sealed under a key in the
+	// relay's own state directory, never in the database (notify/vault.ts).
+	// The store also opens when no channel is offered but addresses are still
+	// saved: users can then still see and delete them, and the worker still
+	// purges what has run its course.
+	const notifyCfg = await notifyConfigFromEnv(process.env, {
+		torSocks: cfg.hiddenServiceProxies.torSocks,
+		hiddenOnly: cfg.hiddenOnly
+	});
+	let notifyStore: OfflineNotifyStore | null = null;
+	try {
+		let wanted = offeredChannels(notifyCfg).length > 0 || Object.keys(notifyCfg.off).length > 0;
+		if (!wanted) {
+			const r = await db.query<{ any: boolean }>(
+				`SELECT EXISTS (SELECT 1 FROM offline_notify_channels)
+				     OR EXISTS (SELECT 1 FROM offline_notify_key) AS any`
+			);
+			wanted = r.rows[0]?.any === true;
+		}
+		if (wanted) {
+			if (cfg.dataDir === null)
+				throw new VaultUnavailableError('the relay has no state directory (MORPHIT_RELAY_DATA_DIR)');
+			const { store, created } = await openSealedStore(db, cfg.dataDir);
+			notifyStore = store;
+			if (created) bootLog.info('offline_notify_key_created', { dir: cfg.dataDir });
+		}
+	} catch (err) {
+		bootLog.warn('offline_notify_unavailable', {
+			hint: `Offline notices are off: ${err instanceof VaultUnavailableError ? err.message : errorClass(err)}`
+		});
+	}
+	bootLog.info('offline_notify', {
+		channels: notifyStore === null ? [] : offeredChannels(notifyCfg),
+		off: notifyCfg.off,
+		link_origin: notifyCfg.linkOrigin ?? '(none: set MORPHIT_INSTANCE_ORIGIN or the .onion address)'
+	});
+	const notifyPresence = new Presence();
+	const notifyWorker =
+		notifyStore === null ? null : new OfflineNotifyWorker(notifyCfg, notifyStore, notifyPresence);
+	const notifyEndpoints = new OfflineNotifyEndpoints(
+		notifyCfg,
+		notifyStore,
+		// The posting key as two RPC operators agree it is: one node must not
+		// be able to name a key of its own choosing for someone else's account.
+		new NotifySigVerifier({ postingKeyAgreed: (n) => blurt.postingKeyAgreed(n) }, notifyCfg.audience),
+		notifyPresence,
+		// Per IP (failed requests that cost something), the shared budget for
+		// IPs that used theirs up, and per account (see notify/api.ts).
+		notifyLimits()
+	);
+
 	// Start the background BLURT-balance poll. We don't wait for it
 	// to succeed — the relay should come up even if the chain is
 	// temporarily unreachable, with `/v1/health` reporting stale=true
@@ -464,6 +524,7 @@ async function main(): Promise<void> {
 	// per-device Web Push deliveries.  Only when VAPID is set.
 	if (pushSender) pushSender.start();
 	else pushJanitor?.start();
+	notifyWorker?.start();
 
 	// Stored push data the relay will never use, removed at every boot (this is
 	// also how installed relays get it on upgrade). A hidden-only relay never
@@ -525,6 +586,7 @@ async function main(): Promise<void> {
 	inviteEndpoint.register(app);
 	createEndpoint.register(app);
 	pushEndpoints.register(app);
+	notifyEndpoints.register(app);
 
 	// Catch-all 404 returning a tight JSON body — never an HTML error page.
 	app.notFound((c) => c.json({ status: 'not_found' }, 404));
@@ -560,6 +622,7 @@ async function main(): Promise<void> {
 		altcha.close();
 		healthService.close();
 		rpcDirSync.stop();
+		notifyWorker?.stop();
 		// Stop the queue drainer (awaits in-flight broadcasts).
 		// We don't await here because the callback pattern of
 		// server.close expects a sync handler; instead we let the

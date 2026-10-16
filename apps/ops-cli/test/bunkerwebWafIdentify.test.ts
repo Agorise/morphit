@@ -26,10 +26,12 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+	classifyRepeatProbe,
 	healBunkerWebWaf,
 	restartFrontendContainer,
 	selfHealSteps
 } from '../src/commands/upgrade.ts';
+import { spinnerFrames } from './helpers/pty.ts';
 import { runBunkerWeb } from '../src/commands/bunkerweb.ts';
 import {
 	collectInstallSummary,
@@ -134,6 +136,7 @@ if (cmd === 'compose') {
 		const svcs = sub.slice(1).filter((a) => !a.startsWith('-'));
 		// Only a recreate of the edge re-reads its env file.
 		if ((svcs.length === 0 || svcs.includes(st.edgeService)) && /^USE_REAL_IP=no$/m.test(fs.readFileSync(st.envPath, 'utf8'))) st.edgeLive = st.cleanLive;
+		if ((svcs.length === 0 || svcs.includes(st.edgeService)) && !st.edgeKeepsOldLimit) st.limitLoaded = /^LIMIT_REQ_URL=\^\/\(\?:ipfs\|ipns\|rss\)\/\|\^\/mcp$/m.test(fs.readFileSync(st.envPath, 'utf8'));
 		done(0);
 	}
 	done(0);
@@ -147,7 +150,8 @@ const CLEAN = 'http {\n  server {\n    listen 8443 ssl;\n  }\n}\n';
 // The frontend behind BunkerWeb legitimately trusts BunkerWeb's forwarding.
 const FRONTEND_LIVE = 'http {\n  server {\n    set_real_ip_from 172.16.0.0/12;\n  }\n}\n';
 const STEADY_ABC =
-	'MAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 403 404 405 429 444\nCUSTOM_CONF_MODSEC_morphit_json_api_off=x\n';
+	'MAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 403 404 405 429 444\nCUSTOM_CONF_MODSEC_morphit_json_api_off=x\n' +
+	'LIMIT_REQ_URL=^/(?:ipfs|ipns|rss)/|^/mcp\nLIMIT_REQ_RATE=2r/s\nLIMIT_CONN_MAX_HTTP2=256\n';
 
 interface Ctr {
 	service: string;
@@ -187,6 +191,12 @@ function morphitIo(
 		edgeLive?: string;
 		/** BunkerWeb keeps its old nginx config even when recreated. */
 		edgeKeepsOldConfig?: boolean;
+		/** BunkerWeb keeps its old request limit even when recreated. */
+		edgeKeepsOldLimit?: boolean;
+		/** What curl writes for the three-fetch probe instead (e.g. no answer). */
+		repeatAnswer?: string;
+		/** How long the three-fetch probe takes, in ms. */
+		repeatDelayMs?: number;
 	} = {}
 ) {
 	const w = mkdtempSync(join(tmpdir(), 'bw-identify-'));
@@ -210,9 +220,19 @@ function morphitIo(
 	);
 	writeFileSync(join(w, 'bin/docker'), FAKE);
 	writeFileSync(join(w, 'bin/sleep'), '#!/bin/sh\nexit 0\n');
+	// curl: the three-fetch probe (three `-o /dev/null <url>`) answers like
+	// BunkerWeb — its old request limit 429s the third fetch until it has been
+	// recreated with Morphit's rule; every other probe answers as before.
 	writeFileSync(
 		join(w, 'bin/curl'),
-		'#!/bin/sh\ncase "$*" in *v1/health*) printf "${FAKE_CURL_API:-200}";; *) printf "${FAKE_CURL_HOME:-200}";; esac\n'
+		String.raw`#!/usr/bin/env node
+const fs = require('fs');
+const a = process.argv.slice(2);
+const st = JSON.parse(fs.readFileSync(process.env.FAKE_DOCKER_STATE, 'utf8'));
+const urls = a.filter((x, i) => /^https?:/.test(x) && a[i - 1] === '/dev/null');
+if (urls.length === 3) { st.repeatProbes = (st.repeatProbes || 0) + 1; const t = process.env.FAKE_DOCKER_STATE + '.' + process.pid; fs.writeFileSync(t, JSON.stringify(st)); fs.renameSync(t, process.env.FAKE_DOCKER_STATE); if (st.repeatDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, st.repeatDelayMs); process.stdout.write(st.repeatAnswer ?? (st.limitLoaded ? '200 200 200 ' : '200 200 429 ')); process.exit(st.repeatAnswer === undefined ? 0 : 7); }
+process.stdout.write(a.join(' ').includes('v1/health') ? (process.env.FAKE_CURL_API || '200') : (process.env.FAKE_CURL_HOME || '200'));
+`
 	);
 	writeFileSync(
 		join(w, 'bin/systemd-run'),
@@ -278,6 +298,12 @@ function morphitIo(
 		envPath,
 		edgeLive: opts.edgeLive ?? WIDE,
 		cleanLive: opts.edgeKeepsOldConfig ? WIDE : CLEAN,
+		edgeKeepsOldLimit: opts.edgeKeepsOldLimit ?? false,
+		repeatAnswer: opts.repeatAnswer,
+		repeatDelayMs: opts.repeatDelayMs ?? 0,
+		// Loaded at start when the env already carries Morphit's rule.
+		limitLoaded: false as boolean,
+		repeatProbes: 0,
 		otherLive: FRONTEND_LIVE,
 		calls: [] as string[][],
 		compose: [] as Array<{ g: { p: string; d: string; f: string[]; e: string[] }; sub: string[] }>,
@@ -292,6 +318,9 @@ function morphitIo(
 		removedIds: [] as number[],
 		restoredCount: 0
 	};
+	state.limitLoaded = /^LIMIT_REQ_URL=\^\/\(\?:ipfs\|ipns\|rss\)\/\|\^\/mcp$/m.test(
+		readFileSync(envPath, 'utf8')
+	);
 	const statePath = join(w, 'state.json');
 	writeFileSync(statePath, JSON.stringify(state));
 	return {
@@ -714,4 +743,125 @@ describe('install summary (wave 6): BunkerWeb + front-end rows are checked by im
 		});
 		expect(got2).toEqual([false, false]);
 	});
+});
+
+// vigilante.trading, v1.21.8: BunkerWeb's default request limit (2 per second
+// per visitor AND per file, on every address) answered the third fetch of a
+// script file with 429 — the page, the offline cache and the tamper check each
+// fetch it on a first visit — and "Failed to fetch dynamically imported module".
+describe('healBunkerWebWaf: the site’s own files are not request-limited', () => {
+	// The edge already runs without the real-IP trust (CLEAN): only the request
+	// limit is under test here.
+	const LIMITLESS = `SERVER_NAME=vigilante.trading\nMAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 405 444\nCUSTOM_CONF_MODSEC_morphit_json_api_off=x\nUSE_REAL_IP=no\nUSE_LIMIT_REQ=yes\nLIMIT_REQ_URL_1=/v1/\nLIMIT_REQ_RATE_1=1800r/m\nLIMIT_REQ_URL_2=/relay/\nLIMIT_REQ_RATE_2=120r/m\n`;
+	const line = (env: string, k: string): string | null =>
+		new RegExp(`^${k}=(.*)$`, 'm').exec(env)?.[1] ?? null;
+
+	it('a box installed with BunkerWeb’s default: the rule is narrowed, recreated, and verified live', async () => {
+		const box = morphitIo({ env: LIMITLESS, edgeLive: CLEAN });
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(line(r.env, 'LIMIT_REQ_URL')).toBe('^/(?:ipfs|ipns|rss)/|^/mcp');
+		expect(line(r.env, 'LIMIT_REQ_RATE')).toBe('2r/s');
+		expect(line(r.env, 'LIMIT_CONN_MAX_HTTP2')).toBe('256');
+		// The API rules are left as they were.
+		expect(line(r.env, 'LIMIT_REQ_URL_1')).toBe('/v1/');
+		expect(line(r.env, 'LIMIT_REQ_RATE_2')).toBe('120r/m');
+		// BunkerWeb's own services were recreated so they read it…
+		expect(ups(r.st).some((u) => u.sub.includes('--force-recreate'))).toBe(true);
+		// …and the running edge answers three fetches in a second without a 429.
+		expect(r.st.limitLoaded).toBe(true);
+		expect(r.st.repeatProbes).toBeGreaterThan(0);
+		expect(r.out).toMatch(/request limit verified live/);
+		expect(r.out).not.toMatch(/still limits the site/);
+	});
+
+	it('BunkerWeb still answering 429 after its recreate: recreated once more, then a counted warning with the command', async () => {
+		const { warningCount } = await import('../src/render/term.ts');
+		const box = morphitIo({ env: LIMITLESS, edgeLive: CLEAN, edgeKeepsOldLimit: true });
+		const before = warningCount();
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(line(r.env, 'LIMIT_REQ_URL')).toBe('^/(?:ipfs|ipns|rss)/|^/mcp');
+		expect(r.st.repeatProbes).toBe(2);
+		expect(ups(r.st).filter((u) => u.sub.includes('--force-recreate')).length).toBe(2);
+		expect(r.out).toMatch(
+			/ERR \[WARN\] WAF: BunkerWeb still limits the site's own files .*sudo docker compose -p bunkerweb .* up -d --no-deps --force-recreate bunkerweb bw-scheduler/
+		);
+		expect(r.out).not.toMatch(/request limit verified live/);
+		expect(warningCount() - before).toBeGreaterThanOrEqual(1);
+	});
+
+	it('an operator’s own rule, rate and download count are kept, and nothing is probed', async () => {
+		const own = LIMITLESS + 'LIMIT_REQ_URL=/\nLIMIT_REQ_RATE=10r/s\nLIMIT_CONN_MAX_HTTP2=50\n';
+		const box = morphitIo({ env: own, edgeLive: CLEAN });
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.env).toBe(own);
+		expect(ups(r.st)).toEqual([]);
+		expect(r.st.repeatProbes).toBe(0);
+	});
+
+	it('request and connection limits turned off by the operator: left off', async () => {
+		const off =
+			LIMITLESS.replace('USE_LIMIT_REQ=yes\n', 'USE_LIMIT_REQ=no\n') + 'USE_LIMIT_CONN=no\n';
+		const box = morphitIo({ env: off, edgeLive: CLEAN });
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.env).toBe(off);
+		expect(ups(r.st)).toEqual([]);
+	});
+
+	it('already healed: no rewrite, no restart, still verified live; a second run changes nothing', async () => {
+		const box = morphitIo({ env: LIMITLESS, edgeLive: CLEAN });
+		const first = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		const second = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(second.threw).toBeNull();
+		expect(second.env).toBe(first.env);
+		expect(ups(second.st).length).toBe(ups(first.st).length);
+		expect(second.out).toMatch(/request limit verified live/);
+		expect(second.out).not.toMatch(/no longer count toward/);
+	});
+
+	// Review B9: a probe that got no answer from this server's own edge proves
+	// nothing — never "verified", never a warning about a limit not seen.
+	it('no answer to the three-fetch probe: not called verified, said plainly', async () => {
+		for (const answer of ['000 000 000 ', '200 200 000 ', '200 ', '']) {
+			const box = morphitIo({ env: LIMITLESS, edgeLive: CLEAN, repeatAnswer: answer });
+			const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+			expect(r.threw, answer).toBeNull();
+			expect(r.st.repeatProbes, answer).toBeGreaterThan(0);
+			expect(r.out, answer).not.toMatch(/request limit verified live/);
+			expect(r.out, answer).not.toMatch(/still limits the site/);
+			expect(r.out, answer).toMatch(
+				/request-limit check got no answer from this server, so it could not be checked; the WAF settings were applied\. To check again later, on this server: sudo morphit-ops upgrade --heals/
+			);
+		}
+	});
+
+	it('classifyRepeatProbe: only three answers without a 429 are "free"', () => {
+		expect(classifyRepeatProbe('200 200 200 ')).toBe('free');
+		expect(classifyRepeatProbe('200 304 200')).toBe('free');
+		expect(classifyRepeatProbe('200 200 429 ')).toBe('limited');
+		expect(classifyRepeatProbe('000 000 000 ')).toBeNull();
+		expect(classifyRepeatProbe('200 200 000 ')).toBeNull();
+		expect(classifyRepeatProbe('200 200 ')).toBeNull();
+		expect(classifyRepeatProbe('')).toBeNull();
+	});
+
+	// Review R5 #8: curl may take up to 25 s; the spinner must turn meanwhile.
+	it('the braille spinner turns while the three-fetch probe runs', async () => {
+		const box = morphitIo({ env: LIMITLESS, edgeLive: CLEAN, repeatDelayMs: 700 });
+		const tty = process.stdout.isTTY;
+		process.stdout.isTTY = true;
+		try {
+			const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+			expect(r.threw).toBeNull();
+			expect(r.out).toMatch(/request limit verified live/);
+			expect(
+				spinnerFrames(r.out, 'Checking a page can be fetched three times in a second…')
+			).toBeGreaterThanOrEqual(4);
+		} finally {
+			process.stdout.isTTY = tty;
+		}
+	}, 30_000);
 });

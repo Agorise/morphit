@@ -130,6 +130,45 @@ const put = (root: string, rel: string, body: string, m = 0o600): string => {
 	rmSync(root, { recursive: true, force: true });
 }
 
+// ── the relay: its offline-notice accounts, readable by the relay alone ──
+// relay-notify.env holds the passwords, bot tokens and Session recovery words
+// of the accounts the offline notices are sent from. The indexer's user is in
+// the service group too, so this file takes the RELAY's group, never that one.
+{
+	const root = fresh();
+	const vapid = put(root, 'etc/morphit/relay-vapid.env', 'MORPHIT_RELAY_VAPID_PUBLIC_KEY=x\n');
+	const notify = put(
+		root,
+		'etc/morphit/relay-notify.env',
+		'MORPHIT_NOTIFY_EMAIL_PASSWORD=s3cret\n',
+		0o644
+	);
+	const status = run(root, 'relay');
+	check('exits 0', status === 0, `status ${status}`);
+	check(
+		'relay-notify.env → root:<relay group> 0640 (not the service group)',
+		owner(notify) === `0:${gid(G_KEY)}` && mode(notify) === '640',
+		`${owner(notify)} ${mode(notify)}`
+	);
+	check(
+		'relay-vapid.env stays in the service group',
+		owner(vapid) === `0:${gid(G_ENV)}` && mode(vapid) === '640',
+		`${owner(vapid)} ${mode(vapid)}`
+	);
+	// …and a keystore path set there is honoured: it is sourced last.
+	put(root, 'etc/morphit/relay.env', 'MORPHIT_RELAY_ACTIVE_KEY_FILE=/etc/morphit/a.keystore\n');
+	writeFileSync(notify, 'MORPHIT_RELAY_ACTIVE_KEY_FILE=/etc/morphit/b.keystore\n');
+	const a = put(root, 'etc/morphit/a.keystore', '{}');
+	const b = put(root, 'etc/morphit/b.keystore', '{}');
+	run(root, 'relay');
+	check(
+		'a keystore path set in relay-notify.env wins, as when the relay starts',
+		owner(b) === `0:${gid(G_KEY)}` && owner(a) === '0:0',
+		`${owner(a)} ${owner(b)}`
+	);
+	rmSync(root, { recursive: true, force: true });
+}
+
 // ── what it must never touch ────────────────────────────────────────────
 {
 	const root = fresh();
@@ -155,6 +194,46 @@ const put = (root: string, rel: string, body: string, m = 0o600): string => {
 	check(
 		'a file in a directory others can write is left as it is',
 		owner(loose) === '0:0' && mode(loose) === '600'
+	);
+	rmSync(root, { recursive: true, force: true });
+}
+// relay-notify.env gets the same safety checks as every other file (review
+// P3): a link to a root-only file, a file another user owns, a file in a
+// directory others can write — each left exactly as it is.
+{
+	const root = fresh();
+	const target = put(root, 'secret/shadow', 'x');
+	symlinkSync(target, join(root, 'etc/morphit/relay-notify.env'));
+	const status = run(root, 'relay');
+	check('relay: exits 0 beside a linked relay-notify.env', status === 0, `status ${status}`);
+	check(
+		'relay-notify.env as a link: not followed (the target keeps root:root 0600)',
+		owner(target) === '0:0' && mode(target) === '600',
+		`${owner(target)} ${mode(target)}`
+	);
+	rmSync(root, { recursive: true, force: true });
+}
+{
+	const root = fresh();
+	const theirs = put(root, 'etc/morphit/relay-notify.env', 'MORPHIT_NOTIFY_EMAIL_PASSWORD=x\n');
+	chownSync(theirs, 4242, 4242);
+	run(root, 'relay');
+	check(
+		'relay-notify.env another user owns: left as it is',
+		owner(theirs) === '4242:4242' && mode(theirs) === '600',
+		`${owner(theirs)} ${mode(theirs)}`
+	);
+	rmSync(root, { recursive: true, force: true });
+}
+{
+	const root = fresh();
+	chmodSync(join(root, 'etc/morphit'), 0o770);
+	const loose = put(root, 'etc/morphit/relay-notify.env', 'MORPHIT_NOTIFY_EMAIL_PASSWORD=x\n');
+	run(root, 'relay');
+	check(
+		'relay-notify.env in a directory others can write: left as it is',
+		owner(loose) === '0:0' && mode(loose) === '600',
+		`${owner(loose)} ${mode(loose)}`
 	);
 	rmSync(root, { recursive: true, force: true });
 }

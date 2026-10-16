@@ -1086,6 +1086,160 @@ CREATE TABLE IF NOT EXISTS operator_stats (
 );
 `
 	}
+
+	,{
+		version: 69,
+		description:
+			'offline_notify_channels / _code_log / _address_log / _pending / _links / _key / _leave: Settings → Offline Notifications — a user\'s own email, Matrix, XMPP, Telegram or Session address, sealed by the relay (key outside the database), and the queue and links of the short notices sent there when a chat message arrives while she is away. Local only; additive.',
+		sql: `
+-- Settings → Offline Notifications. A user may give THIS instance
+-- one or more of her own addresses (email, Matrix, XMPP, Session, or a
+-- Telegram chat through the instance's bot); when a chat message reaches her
+-- while she is away, the instance sends a short notice there: "Someone just
+-- sent you a chat message on <site>", with a link. Never the sender, never the
+-- message. Local to this instance: none of these tables is ever published in a
+-- snapshot, and the backup leaves their rows out.
+--
+-- Every address is stored ENCRYPTED by the relay (AES-256-GCM) under a key
+-- that lives in the relay's own state directory, not in this database
+-- (apps/relay/src/notify/vault.ts). A copy of the database is ciphertext, and
+-- nothing here can tell that two accounts gave the same address.
+CREATE TABLE IF NOT EXISTS offline_notify_channels (
+    account TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK (channel IN ('email', 'matrix', 'xmpp', 'telegram', 'session')),
+    -- The address (Telegram: the chat id), sealed and padded to a fixed size.
+    -- NULL while a Telegram link waits for the user to send her code to the bot.
+    address_sealed BYTEA,
+    -- Matrix only: the direct-message room, sealed (it names her homeserver).
+    route_sealed BYTEA,
+    -- Set once she typed the code we sent (or, for Telegram, sent it to us).
+    verified_at TIMESTAMPTZ,
+    -- The pending code, as a keyed hash; expiry; wrong guesses so far.
+    code_mac BYTEA,
+    code_expires_at TIMESTAMPTZ,
+    code_attempts INT NOT NULL DEFAULT 0,
+    -- The language her notices are written in (a supported UI code).
+    locale TEXT NOT NULL DEFAULT 'en',
+    -- Which of the site's addresses the links in her notices open: the network
+    -- she used the site on when she set this up (a Tor user gets the .onion).
+    link_net TEXT NOT NULL DEFAULT 'clearnet' CHECK (link_net IN ('clearnet', 'tor', 'i2p', 'loki')),
+    -- While she changes a confirmed address (or re-links Telegram): the one
+    -- she had, exactly as it was (still sealed). It keeps her notes possible
+    -- if the change is cancelled, its code cannot be sent, expires, or is
+    -- guessed wrong five times — it is put back instead of leaving her with
+    -- nothing. Cleared once the new one is confirmed.
+    prev_address_sealed BYTEA,
+    prev_route_sealed BYTEA,
+    prev_verified_at TIMESTAMPTZ,
+    prev_link_net TEXT CHECK (prev_link_net IN ('clearnet', 'tor', 'i2p', 'loki')),
+    -- Notices sent today (a daily cap), and the day they were counted on.
+    sent_day DATE,
+    sent_count INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (account, channel)
+);
+CREATE INDEX IF NOT EXISTS offline_notify_channels_code_idx
+    ON offline_notify_channels (code_mac) WHERE code_mac IS NOT NULL;
+
+-- Codes sent by an account, for its daily limit. The day only, no time and no
+-- address. (Someone reading the LIVE database could still pair the latest of
+-- these rows with the per-address row written in the same transaction; that
+-- pairs an account with a keyed hash, never with an address, and both tables
+-- are kept out of backups and snapshots and emptied the next day.)
+CREATE TABLE IF NOT EXISTS offline_notify_code_log (
+    account TEXT NOT NULL,
+    sent_on DATE NOT NULL
+);
+CREATE INDEX IF NOT EXISTS offline_notify_code_log_idx
+    ON offline_notify_code_log (account, sent_on);
+
+-- Codes sent to an address (a keyed hash of it, relay key), for its daily
+-- limit across accounts; and, under a keyed hash of the account and the
+-- address together, for one account's limit per address. No account column:
+-- which account asked is not kept.
+CREATE TABLE IF NOT EXISTS offline_notify_address_log (
+    address_mac BYTEA NOT NULL,
+    sent_on DATE NOT NULL,
+    sent INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (address_mac, sent_on)
+);
+
+-- Chat messages waiting their delay. One row per conversation thread: more
+-- messages in the same thread before it is due add nothing. Removed when
+-- handled. sender and order_permlink are on-chain-public chat metadata.
+CREATE TABLE IF NOT EXISTS offline_notify_pending (
+    account TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    order_permlink TEXT NOT NULL DEFAULT '',
+    event_at TIMESTAMPTZ NOT NULL,
+    due_at TIMESTAMPTZ NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (account, sender, order_permlink)
+);
+CREATE INDEX IF NOT EXISTS offline_notify_pending_due_idx
+    ON offline_notify_pending (due_at);
+
+-- The links in sent notices: a random token (only its hash is kept) that opens
+-- the conversation for the account it was sent to, once she is signed in. The
+-- link itself names nobody, so the mail, Matrix, XMPP, Telegram or Session
+-- servers that carry it learn nothing about who wrote. Expire after 7 days.
+CREATE TABLE IF NOT EXISTS offline_notify_links (
+    token_hash BYTEA PRIMARY KEY,
+    account TEXT NOT NULL,
+    peer TEXT NOT NULL,
+    order_permlink TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS offline_notify_links_expires_idx
+    ON offline_notify_links (expires_at);
+-- One notice per thread until she reads it; strangers one a day.
+CREATE INDEX IF NOT EXISTS offline_notify_links_peer_idx
+    ON offline_notify_links (account, peer, created_at);
+
+-- Which key sealed the addresses (a keyed hash of a fixed string). A relay
+-- whose key file is missing or different refuses to start offline notices
+-- rather than drop every address it cannot open.
+CREATE TABLE IF NOT EXISTS offline_notify_key (
+    id INT PRIMARY KEY CHECK (id = 1),
+    key_check BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Matrix rooms the bot must still leave and forget. Whenever a room is held
+-- by no column of its row any more — her address removed, changed, or never
+-- confirmed (code expired, too many wrong codes), or the operator turned
+-- Matrix off — the relay puts the room here in the same transaction
+-- (apps/relay/src/notify/store.ts, guardRooms) and then leaves and forgets
+-- it, retrying until the homeserver answers. Otherwise the bot's own account
+-- would keep a list of every Matrix user it ever invited. Sealed like the row
+-- it came from (same key and account), so the room id is as unreadable here
+-- as it was there. (No trigger: a snapshot carries data only, never database
+-- code — snapshotDumpSanitize refuses any function.)
+CREATE TABLE IF NOT EXISTS offline_notify_leave (
+    route_sealed BYTEA PRIMARY KEY,
+    account TEXT NOT NULL,
+    tries INT NOT NULL DEFAULT 0,
+    -- Due at once (whatever the relay's clock says); later only after a failure.
+    next_at TIMESTAMPTZ NOT NULL DEFAULT '-infinity'
+);
+COMMENT ON TABLE offline_notify_channels IS
+    'Offline notices: the addresses a user gave this instance, sealed by the relay '
+    '(the key is not in this database). Local only: never in a snapshot or a backup.';
+COMMENT ON TABLE offline_notify_pending IS
+    'Offline notices waiting their delay (one per thread). Local only.';
+COMMENT ON TABLE offline_notify_links IS
+    'Offline-notice links: hash of a random token -> the conversation it opens for its account. Local only.';
+COMMENT ON TABLE offline_notify_code_log IS
+    'Offline-notice codes an account asked for, by day, for its limit. Local only.';
+COMMENT ON TABLE offline_notify_address_log IS
+    'Offline-notice codes sent to an address (keyed hash, no account), by day, for its limit. Local only.';
+COMMENT ON TABLE offline_notify_key IS
+    'Offline notices: which relay key sealed the addresses. Local only.';
+COMMENT ON TABLE offline_notify_leave IS
+    'Offline notices: Matrix rooms (sealed) the bot still has to leave and forget. Local only.';
+`
+	}
 ];
 
 /** Validate the MIGRATIONS array at load time:

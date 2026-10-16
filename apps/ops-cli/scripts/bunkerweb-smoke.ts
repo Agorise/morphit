@@ -518,6 +518,127 @@ expect(
 	);
 }
 
+// ─── vigilante.trading, v1.21.8: a first visit got 429 on the site's own files ───
+// BunkerWeb applies its own catch-all request rule (LIMIT_REQ_URL=/ at 2r/s,
+// counted per visitor AND per file) to every address the settings do not
+// replace. On a first visit the page, the offline cache and the tamper check
+// each fetch the same script file within a second, so the third fetch got 429
+// ("Failed to fetch dynamically imported module"). Driven here through a model
+// of BunkerWeb 1.5.10's limit plugin (src/common/core/limit/limit.lua: rule per
+// URL regex, `/` only when no other rule matches, timestamps kept per server +
+// visitor + file for 1 s / 1 min / …, a 429 once more than the rate are kept),
+// checked against that Lua file running for real when this was written.
+// MORPHIT_BW_ROOT=<dir containing ops/> runs another tree to watch it fail.
+{
+	const root = resolve(
+		process.env.MORPHIT_BW_ROOT ?? resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+	);
+	const parse = (text: string): Record<string, string> => {
+		const out: Record<string, string> = {};
+		for (const l of text.split('\n')) {
+			const m = /^([A-Z0-9_]+)=(.*)$/.exec(l);
+			if (m) out[m[1]!] = m[2]!.trim();
+		}
+		return out;
+	};
+	/** BunkerWeb 1.5.10's request limit for one site, from its settings. */
+	const bunkerWebLimit = (settings: Record<string, string>) => {
+		const v: Record<string, string> = {
+			USE_LIMIT_REQ: 'yes',
+			LIMIT_REQ_URL: '/',
+			LIMIT_REQ_RATE: '2r/s',
+			...settings
+		};
+		const rules = new Map<string, string | undefined>();
+		for (const [k, url] of Object.entries(v))
+			if (/LIMIT_REQ_URL/.test(k)) rules.set(url, v[k.replace('URL', 'RATE')]);
+		const stamps = new Map<string, number[]>();
+		const DELAY: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
+		return (uri: string, now: number, visitor = '203.0.113.7'): number => {
+			if (v.USE_LIMIT_REQ !== 'yes') return 200;
+			let rate: string | undefined;
+			for (const [url, r] of rules)
+				if (url !== '/' && new RegExp(url).test(uri)) {
+					rate = r;
+					break;
+				}
+			if (rate === undefined) {
+				if (!rules.has('/')) return 200;
+				rate = rules.get('/');
+			}
+			const m = /(\d+)r\/(.)/.exec(rate ?? '');
+			if (!m) return 200;
+			const max = Number(m[1]);
+			const key = `${visitor}${uri}`;
+			const kept = (stamps.get(key) ?? []).filter((t) => now - t <= (DELAY[m[2]!] ?? 0));
+			if (kept.length <= max) kept.push(now);
+			stamps.set(key, kept);
+			return kept.length > max ? 429 : 200;
+		};
+	};
+	const { BW_LIMIT_REQ_URL, BW_LIMIT_REQ_RATE, BW_LIMIT_CONN_MAX_HTTP2 } = await import(
+		'../src/commands/upgrade.ts'
+	);
+	for (const [label, rel] of [
+		['ansible.j2', 'ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2'],
+		['env.example', 'ops/bunkerweb/bunkerweb.env.example']
+	] as const) {
+		const settings = parse(readFileSync(resolve(root, rel), 'utf8'));
+		const fetchAll = (uri: string, times: number, at: number): number[] => {
+			const limit = bunkerWebLimit(settings);
+			return Array.from({ length: times }, () => limit(uri, at));
+		};
+		for (const uri of [
+			'/_app/immutable/chunks/CmsKOCeN.js',
+			'/_app/immutable/entry/app.Dx1.js',
+			'/',
+			'/orderbook',
+			'/brand/site-logo.svg',
+			'/verify.json',
+			'/service-worker.js'
+		]) {
+			const codes = fetchAll(uri, 5, 1_000_000);
+			expect(
+				`${label}: a first visit fetching ${uri} 5 times in one second gets no 429`,
+				!codes.includes(429),
+				`BunkerWeb would answer ${codes.join(' ')}`
+			);
+		}
+		for (const uri of ['/ipfs/bafyexample', '/ipns/k51example', '/rss/orders.xml', '/mcp']) {
+			const codes = fetchAll(uri, 4, 1_000_000);
+			expect(
+				`${label}: ${uri} keeps BunkerWeb's 2 per second (third fetch in a second → 429)`,
+				codes.join(' ') === '200 200 429 429',
+				`BunkerWeb would answer ${codes.join(' ')}`
+			);
+		}
+		{
+			const limit = bunkerWebLimit(settings);
+			const n = Array.from({ length: 30 }, () => limit('/v1/orderbook', 1_000_000)).filter(
+				(c) => c === 429
+			).length;
+			expect(
+				`${label}: 30 /v1/ calls in one second still pass (its own 1800r/m rule)`,
+				n === 0,
+				`${n} × 429`
+			);
+		}
+		const conn = Number(settings.LIMIT_CONN_MAX_HTTP2 ?? '100');
+		expect(
+			`${label}: a visitor may download ≥ 256 files at once over HTTP/2 (two connections of nginx's 128)`,
+			settings.USE_LIMIT_CONN !== 'no' && conn >= 256,
+			`LIMIT_CONN_MAX_HTTP2=${settings.LIMIT_CONN_MAX_HTTP2 ?? '(BunkerWeb default 100)'}`
+		);
+		expect(
+			`${label}: the request rule and download count are the ones the upgrade heal writes`,
+			settings.LIMIT_REQ_URL === BW_LIMIT_REQ_URL &&
+				settings.LIMIT_REQ_RATE === BW_LIMIT_REQ_RATE &&
+				settings.LIMIT_CONN_MAX_HTTP2 === BW_LIMIT_CONN_MAX_HTTP2,
+			`file: ${settings.LIMIT_REQ_URL} ${settings.LIMIT_REQ_RATE} ${settings.LIMIT_CONN_MAX_HTTP2}; heal: ${BW_LIMIT_REQ_URL} ${BW_LIMIT_REQ_RATE} ${BW_LIMIT_CONN_MAX_HTTP2}`
+		);
+	}
+}
+
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) {

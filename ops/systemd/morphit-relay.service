@@ -67,7 +67,7 @@ LoadCredentialEncrypted=relay_passphrase:/etc/morphit/relay_passphrase.cred
 # a tool that rewrote one atomically leaves it root-only. Root-owned helper;
 # it never makes anything writable (ops/scripts/morphit-service-perms.sh).
 ExecStartPre=+-/usr/local/lib/morphit/morphit-service-perms.sh relay
-ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/relay.env /etc/morphit/relay-vapid.env; do if [ -e "$f" ]; then [ -r "$f" ] || { echo "cannot read $f" >&2; exit 78; }; . "$f"; fi; done; export MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${CREDENTIALS_DIRECTORY}/relay_passphrase"; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
+ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/relay.env /etc/morphit/relay-vapid.env /etc/morphit/relay-notify.env; do if [ -e "$f" ]; then [ -r "$f" ] || { echo "cannot read $f" >&2; exit 78; }; . "$f"; fi; done; export MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${CREDENTIALS_DIRECTORY}/relay_passphrase"; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
 # With the env-var passphrase path, restart-on-crash actually succeeds now
 # (no interactive prompt to hang on).
 # v1.20.1: ALWAYS, not on-failure. On morphitir (2026-09-27) the relay's boot

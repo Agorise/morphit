@@ -59,7 +59,8 @@ export const RELAY_ENV_FILES: readonly string[] = [
 	'/opt/morphit/morphit.env',
 	'/opt/morphit/morphit.config.env',
 	'/etc/morphit/relay.env',
-	'/etc/morphit/relay-vapid.env'
+	'/etc/morphit/relay-vapid.env',
+	'/etc/morphit/relay-notify.env'
 ];
 
 /** Where a missing setting is written: the first of these that exists. Each is

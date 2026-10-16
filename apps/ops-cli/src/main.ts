@@ -103,6 +103,7 @@ import { runBunkerWeb } from './commands/bunkerweb.ts';
 import { runHealth } from './commands/health.ts';
 import { runMcp } from './commands/mcp.ts';
 import { runMatrix } from './commands/matrix.ts';
+import { runOfflineNotify } from './commands/offlineNotify.ts';
 import { runMainMenu } from './commands/mainMenu.ts';
 import { gatherMenuAnnotations } from './lib/menuAnnotations.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
@@ -296,6 +297,9 @@ function printHelp(): void {
 		'                                  surface). Read-only + non-custodial; on by default.',
 		'  matrix [set <mxid>|clear|test]  Matrix alert username: set/edit/clear it (the bot auto',
 		'                                  starts/stops); "test" DMs you a sample alert.',
+		'  offline-notify [status]         Offline notifications for your users: set up the Matrix,',
+		'                                  Session, XMPP, Telegram and email accounts this site sends',
+		'                                  them from (each tested before it is saved).',
 		'  status                          Operator dashboard at a glance',
 		'  drain-queue [--age=DUR]         List pending relay transfers',
 		'  signups [--since=DUR]           Recent signups via this relay',
@@ -796,6 +800,22 @@ async function main(): Promise<number> {
 	// auto start/stop the morphit-matrix-bot service to match. Touches
 	// only the bot's env file + systemctl (no DB, no morphit.config.env),
 	// so it lives in the pre-DB group alongside mcp/ssl/bunkerweb/health.
+	// `offline-notify` — the accounts Settings → Offline Notifications sends
+	// from (/etc/morphit/relay-notify.env). Touches that file and restarts the
+	// relay; no database.
+	if (args.subcommand === 'offline-notify') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runOfflineNotify({
+				positional: args.positional,
+				colorEnabled,
+				repoRoot: defaultRepoRoot()
+			});
+		} catch (err) {
+			return commandFailed(err);
+		}
+	}
+
 	if (args.subcommand === 'matrix') {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
 		try {

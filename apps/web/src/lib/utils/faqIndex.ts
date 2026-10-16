@@ -176,6 +176,7 @@ export const FAQ_KEYS = [
 	'offline_caching',
 	'syndicate_trade_announcement',
 	'notifications_overview',
+	'offline_notifications',
 	'how_to_spread_morphit',
 
 	// ─── 11. Run your own node / operators ─────────────────────
@@ -577,7 +578,22 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 	// design.  Related cluster surfaces both deep-dive companions
 	// plus chat_anti_spam (the Requests-tab triage is part of the
 	// inbox experience the overview opens with).
-	notifications_overview: ['chat_inbox_features', 'push_notifications_privacy', 'chat_anti_spam'],
+	notifications_overview: [
+		'chat_inbox_features',
+		'push_notifications_privacy',
+		'offline_notifications',
+		'chat_anti_spam'
+	],
+	// Settings → Offline Notifications: a note on another app (Matrix,
+	// Session, XMPP, Telegram, email) while she is away. Its companions:
+	// the overview of every way the site tells her, push's own privacy
+	// story (the other "while you're away" channel), and the privacy pages.
+	offline_notifications: [
+		'notifications_overview',
+		'push_notifications_privacy',
+		'privacy_practices',
+		'data_collection'
+	],
 	chat_anti_spam: [
 		'chat_inbox_features',
 		'sybil_protection',
@@ -924,7 +940,13 @@ const STOPWORDS_EN = new Set([
 	'for',
 	'with',
 	'and',
-	'or'
+	'or',
+	// "notify me by email", "when I am away": no answer needs these to
+	// match, and an answer that happens not to say "by" was dropped.
+	'by',
+	'me',
+	'am',
+	'at'
 ]);
 
 /**
@@ -1066,6 +1088,18 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	notifications: ['inbox', 'chat', 'messages', 'alerts'],
 	notification: ['inbox', 'chat', 'messages', 'alerts'],
 	alerts: ['notifications', 'inbox'],
+	// "notify me by email", "tell me on Telegram when someone writes" — words
+	// no answer uses, so without these every such question found nothing.
+	// "away", "offline" and "notifications" are whole words of the two answers
+	// about being told (the notifications overview and offline notifications)
+	// and of few others. "note" was too common ("a short note about using it"
+	// on profiles): "how do i get notified" and "someone writes to me" landed
+	// on the iPhone and profile answers. ("writes" found the overview only
+	// through its pointer to the offline notifications answer, which search
+	// no longer reads: see stripCrossRefs.)
+	notify: ['notifications', 'notification', 'away', 'alerts', 'offline'],
+	notified: ['notifications', 'notification', 'away', 'alerts', 'offline'],
+	writes: ['wrote', 'message', 'messages', 'away', 'notifications', 'offline'],
 	requests: ['inbox', 'stranger', 'first-contact'],
 	tabs: ['inbox', 'messages', 'requests'],
 	// Crypto assets
@@ -1319,11 +1353,66 @@ function unbrandQuery(query: string, brandName: string): string {
 	return out === q ? query : out;
 }
 
+// ─── Cross-references ─────────────────────────────────────────────
+//
+// An answer points at another entry by quoting its question: See "How do
+// offline notifications work…?". Those words are the OTHER entry's subject;
+// indexed here they made the pointer outrank the entry it points at. Search
+// reads every answer without them (the page still shows them). Only a quoted
+// text that IS one of the FAQ's questions goes — a quoted button label or
+// error message ("Registration is paused") is what she would search for.
+
+/** Marks that open / close a quotation in the languages the FAQ is written
+ *  in: "…", '…', “…”, ‘…’, „…“ and „…”, ‚…‘, «…» (« … » in French), ‹…›,
+ *  「…」, 『…』, ＂…＂. */
+const QUOTE_OPEN = new Set(['"', "'", '“', '‘', '„', '‚', '«', '‹', '「', '『', '＂']);
+const QUOTE_CLOSE = new Set(['"', "'", '”', '’', '“', '‘', '»', '›', '」', '』', '＂']);
+const SPACE = /\s/u;
+
+/** `text` with every quotation of one of `questions` taken out. */
+function stripCrossRefs(text: string, questions: readonly string[]): string {
+	let out = text;
+	for (const q of questions) {
+		let at = out.indexOf(q);
+		while (at !== -1) {
+			let open = at - 1;
+			while (open >= 0 && SPACE.test(out[open]!)) open--;
+			let close = at + q.length;
+			while (close < out.length && SPACE.test(out[close]!)) close++;
+			if (open >= 0 && QUOTE_OPEN.has(out[open]!) && QUOTE_CLOSE.has(out[close] ?? '')) {
+				out = `${out.slice(0, open)} ${out.slice(close + 1)}`;
+				at = out.indexOf(q, open + 1);
+			} else at = out.indexOf(q, at + 1);
+		}
+	}
+	return out;
+}
+
+const indexedCache = new WeakMap<readonly FaqEntry[], FaqEntry[]>();
+/** The entries as search reads them: answers without their quoted
+ *  cross-references (kept per list, like the IDF table). */
+function indexedEntries(entries: FaqEntry[]): FaqEntry[] {
+	const hit = indexedCache.get(entries);
+	if (hit !== undefined) return hit;
+	const questions = [...new Set(entries.map((e) => e.question.trim()))].filter((q) => q !== '');
+	const out = entries.map((e) => ({ ...e, answer: stripCrossRefs(e.answer, questions) }));
+	indexedCache.set(entries, out);
+	return out;
+}
+
+/** "How do I know if …", "how will I know whether …": five words that only
+ *  frame the question. Counted as words, "know" and "if" made "how do I know
+ *  if someone writes to me" an answer about blocking ("If I block someone,
+ *  will they know?") — "will they know if I block them" keeps them. */
+const KNOW_IF_LEAD =
+	/^how (?:do|does|did|can|could|will|would|should) (?:i|we|you|she|he|they) know (?:if|whether) /;
+
 /** Filter query tokens by stripping stopwords. If removing stopwords
  *  would leave nothing, keep everything — the user's intent is
  *  probably just those words. */
 function filterStopwords(tokens: readonly string[]): string[] {
-	const filtered = tokens.filter((t) => !STOPWORDS_EN.has(t));
+	const rest = KNOW_IF_LEAD.test(`${tokens.join(' ')} `) ? tokens.slice(5) : tokens;
+	const filtered = rest.filter((t) => !STOPWORDS_EN.has(t));
 	return filtered.length > 0 ? filtered : [...tokens];
 }
 
@@ -1491,14 +1580,16 @@ export function searchEntries(
 	// diacritic-insensitive (via normalize()), but punctuation and hyphens
 	// are preserved, so "post-launch" returns just the one or two entries
 	// that contain that exact string — a precise way to pinpoint a term.
+	const indexed = indexedEntries(entries);
 	const phrase = parseQuotedPhrase(query);
 	if (phrase !== null) {
 		if (!phrase) return []; // empty quotes ("") → no phrase → no results
 		const needle = normalize(phrase);
-		return entries
-			.filter(
-				(entry) =>
-					normalize(entry.question).includes(needle) || normalize(entry.answer).includes(needle)
+		return indexed
+			.flatMap((entry, i) =>
+				normalize(entry.question).includes(needle) || normalize(entry.answer).includes(needle)
+					? [entries[i]!]
+					: []
 			)
 			.slice(0, limit)
 			.map((entry) => ({ entry, score: 1 }));
@@ -1510,7 +1601,7 @@ export function searchEntries(
 	// "escrow" and bury the answers about escrow. A query that names the
 	// site (its whole name, in place) reads "morphit" instead.
 	const branded = unbrandable(brandName);
-	const scored = branded ? unbrandEntries(entries, brandName) : entries;
+	const scored = branded ? unbrandEntries(indexed, brandName) : indexed;
 	const q = branded ? unbrandQuery(query, brandName) : query;
 	const idf = computeIdf(scored);
 	const intro = asksWhatThisSiteIs(q);

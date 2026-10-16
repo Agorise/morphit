@@ -8,8 +8,8 @@ reassuring-by-omission: where a public chain or a server necessarily sees
 something, it says so. Many of these properties are checked by smoke tests;
 not every line is.
 
-One-line summary: **no analytics, no cookies, no email, no phone, no KYC, no
-access logs; your keys and chat plaintext never leave your device; your IP is
+One-line summary: **no analytics, no cookies, no phone, no KYC, no email
+unless you choose to give one for offline notices, no access logs; your keys and chat plaintext never leave your device; your IP is
 held in memory only, for rate limiting.** What remains visible is what a
 *public-orderbook, public-chain* marketplace exposes — and that is more than
 just the orders: who chats with whom and about which order, read receipts,
@@ -21,7 +21,7 @@ blocks and reviews are public too. The tables below list all of it.
 
 | Surface | Why it's safe |
 |---|---|
-| **Your identity** | No email, phone, SMS, KYC, or real name — ever. Accounts are pseudonymous Blurt keys. There is no central account database to subpoena or breach. |
+| **Your identity** | No phone, SMS, KYC or real name — ever, and no email unless you choose to give an address for offline notices (below). Accounts are pseudonymous Blurt keys. There is no central account database to subpoena or breach. |
 | **Your chat content** | End-to-end encrypted (X25519 + ChaCha20-Poly1305-IETF, a fresh sender ephemeral key per message, sender authentication; `docs/CHAT-CRYPTO.md`). Bodies are unreadable to the indexer operator and to chain observers. **There is no forward secrecy:** your chat key, derived from your posting key, decrypts every message you ever received, so a later posting-key leak exposes them. |
 | **Your keys** | Private keys never leave your browser. The project could not decrypt your chats if a regulator demanded it. (The relay's own hot key is encrypted at rest with scrypt N=2^17 + AES-256-GCM, its passphrase sealed to the host — a full disk image opens it.) |
 | **Your behaviour** | No Google Analytics, no Hotjar, no Facebook Pixel, no cookies, no third-party telemetry. Fonts and assets are self-hosted (no Google Fonts, no CDNs). |
@@ -64,6 +64,7 @@ metadata above.
 | **Your IP address** | Seen like any website sees it, unless you use the `.onion` or `.i2p` address. The indexer and relay keep it **in memory only**, for rate limiting: minutes for indexer reads, up to 1 hour for the relay's signup and push limits, up to 24 hours for the daily signup limit (as the /24 or /64 network). It is never written to disk or logged; the shipped web servers keep no access log. (A rare critical nginx error line can still name a client.) |
 | **What you read and send** | Every chain read and broadcast goes through the operator's own indexer (`/v1/chain/condenser`, `/v1/broadcast`), so the operator sees which accounts, orders and blocks your browser asks about, and your signed transactions before the chain does. |
 | **Push subscription** | If you turn on push notifications, the relay stores your account, your browser's push endpoint URL and keys, one of the 10 UI locales and your muted categories (no IP, no user-agent). That links your account to a browser vendor's push channel, in the operator's database and backups (push rows are left out of backups). |
+| **Offline-notice addresses** | Only if you turn Offline Notifications on: each address you give (email, Matrix ID, Session ID, XMPP address, or your Telegram chat), sealed with AES-256-GCM under a key kept outside the database, padded to one size, with your account name, your language, when you added and confirmed it, which network you set it up from (clearnet, Tor, I2P or Lokinet — the network the link in a note uses) and today's count of notes sent. Never shown to anyone, never in backups or snapshots, deleted when you remove it (a Matrix chat the bot still has to leave stays in its queue — your account and the sealed room — until it has left, about two days at most). Whoever controls the server can get at the key and so at the address. For each note: a link row (your account, the sender, the order, when) kept 7 days. Waiting messages (account, sender, order, time) until handled, a day at most. Code counts by day (account; keyed hashes of addresses), emptied the next day. Whether you have the site open: a signed heartbeat once a minute, in memory only. |
 | **Order views** | Viewing an order adds to a public, unauthenticated count (`{count}` only; no times, no viewer). |
 | **Operator-side records** | Operator blocks and their reasons, moderation records, and aggregate counters. |
 | **The app itself** | The operator serves the code your browser runs. A hostile operator can serve code that steals keys as you type them; the in-page integrity check runs from that same code. Pick operators you trust, or run your own. |
@@ -74,6 +75,7 @@ metadata above.
 |---|---|
 | **One public Blurt RPC node** | Your browser's one third-party request: the release check, at most once a day per build (2 requests to 1 node, each possibly preceded by a CORS preflight; one more if the release is old; a second node only if the first fails, serves something that does not verify, or names another version). Each node sees your IP on clearnet, `Origin` (including a hidden instance's address on a plain-http page), `User-Agent` and `Accept-Language`. On a `.onion` page only onion nodes are used, on an `.i2p` page only I2P nodes. |
 | **Your browser's push service** | With push on, Google, Mozilla, Apple or Microsoft deliver the encrypted notification and see when you get one. |
+| **The app that carries an offline notice** | With Offline Notifications on: the servers between your instance and you — the instance's mail provider and yours, the Matrix homeservers, the XMPP servers, or Telegram — get your address and can read the note ("Someone just sent you a chat message on <site>" and a link): that you use that site, and when a note came. Never who wrote or what. Session alone carries it end-to-end encrypted, over Tor. Notes go out a random 10–60 minutes after the message, on a UTC quarter hour shared by everyone, so a note's arrival is hard to match to one on-chain message. |
 | **Other instances (fast chat)** | Before your message is in a block, your instance may push it over Tor to instances a probe has verified; they learn the signed message (all public on chain seconds later) a few seconds early, not which instance sent it. |
 | **Your ISP / network observer** | Connection metadata to your instance (who, when, how much). Use Tor or I2P to remove it. |
 | **External price sources** | None from your browser: prices are fetched server-side by the indexer. |
@@ -137,7 +139,7 @@ DASH, CoinShuffle++ for DCR, shielded pools for ZEC/ARRR.
 | "DEX" with KYC | All of the above + the marketing word "decentralized" |
 | Bisq desktop | Tor IP if Tor isn't running; full local trade DB; Tor bandwidth signature |
 | Haveno desktop | Same as Bisq + Monero RPC traffic |
-| **Morphit** | Public orders, reviews, blocks and chat metadata (who, when, which order, read receipts) on chain; your IP in the operator's memory for at most 24 hours; your push endpoint if you enable push. **No KYC, no analytics, no access logs.** |
+| **Morphit** | Public orders, reviews, blocks and chat metadata (who, when, which order, read receipts) on chain; your IP in the operator's memory for at most 24 hours; your push endpoint if you enable push; the addresses you give for offline notices (encrypted) if you turn them on. **No KYC, no analytics, no access logs.** |
 
 ---
 
@@ -147,6 +149,7 @@ This catalog began as the Audit 2026-05 metadata-leak enumeration and was
 completed in the 2026-10 audit (read receipts, order permlinks in chat,
 stranger-fee memos, blocks, feedback and completion linkage, order language
 and operator tag, BTC/XMR fee data, encrypted records, push subscriptions,
-address history, IP retention, drafts, fast chat). If you find a surface it
+address history, IP retention, drafts, fast chat), and extended for offline
+notices (v1.21.9). If you find a surface it
 doesn't cover, report it — privately, as `SECURITY.md` describes, if it is
 exploitable; otherwise in the public room `#agorise:matrix.org`.

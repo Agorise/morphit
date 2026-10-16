@@ -92,6 +92,23 @@ const ALLOW_LIST: AllowEntry[] = [
 	// v1.21.3: the /run-a-node subtitle links only the word "instance", which
 	// French spells the same.
 	{ key: 'run_a_node.subtitle_link', locale: 'fr', reason: '(b) same spelling — French "instance" is spelled as in English' },
+	// ─── Settings → Offline Notifications: the app names (proper nouns, kept
+	//     as-is in every language, like contact_protocol below) and "Code",
+	//     which is the ordinary German and French word for a verification code.
+	{ key: 'settings.offline_notify.channel.matrix', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.matrix', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.matrix', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.session', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.session', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.session', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.telegram', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.telegram', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.telegram', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.xmpp', locale: 'de', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.xmpp', locale: 'es', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.channel.xmpp', locale: 'fr', reason: '(c) invariant — messenger/protocol brand name, identical in every language' },
+	{ key: 'settings.offline_notify.code_label', locale: 'de', reason: '(b) same spelling — German "Code" is spelled as in English' },
+	{ key: 'settings.offline_notify.code_label', locale: 'fr', reason: '(b) same spelling — French "Code" is spelled as in English' },
 	// ─── v1.16.2 contact_protocol labels: messenger/protocol brand names.
 	//     These are proper nouns that stay identical in every language (you
 	//     do not translate "Signal" or "Telegram"), plus "Web" which is the

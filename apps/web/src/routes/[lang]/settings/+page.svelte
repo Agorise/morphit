@@ -22,6 +22,7 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import NotificationSettings from '$components/NotificationSettings.svelte';
+	import OfflineNotificationsCard from '$components/OfflineNotificationsCard.svelte';
 	// byte-budget: HardwareKeyCard is lazy-imported below.
 	// It's only rendered for unlocked users with a persisted
 	// keystore (excludes paired-readonly + seed-only + locked
@@ -2380,6 +2381,12 @@
 	<div id="notifications">
 		<NotificationSettings />
 	</div>
+
+	<!-- ─── Offline Notifications ─── -->
+	<!-- A short note to her own email / Matrix / XMPP / Telegram / Session
+	     when a chat message arrives while she is away. Self-contained; shown
+	     only when this site's operator set up at least one channel. -->
+	<OfflineNotificationsCard />
 
 	<!-- ─── Install as app ─────────────────────────────────────
 	     Item 16 phase 5.  Surfaces the "install Morphit on this

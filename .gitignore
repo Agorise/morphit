@@ -41,3 +41,6 @@ coverage/
 # Install-time state written by the Ansible roles.
 /.npm-cache/
 /ops/postgres/.init.applied
+
+# Working files i18n-translator-diff.ts writes for a translator (never committed).
+/apps/web/scripts/translator-output/

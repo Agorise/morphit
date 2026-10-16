@@ -1258,7 +1258,7 @@
 			},
 			"data_collection": {
 				"q": "What data does {brand} collect about me?",
-				"a": "Very little, and nothing about who you are. No email, phone number, ID, cookies, analytics or tracking.\n\nWhat does exist:\n• **Your IP address.** It reaches the server as on any website. Morphit's code keeps it in memory only, for rate limits (at most 24 hours), and never writes it to disk.\n• **What your browser asks for.** Orders, chats and the things you send go through this site's server, so its operator can see which accounts and orders you look at, and your signed actions before the blockchain does.\n• **What you publish.** Orders, reviews and chat messages (encrypted, but with sender, recipient and time) are public on the Blurt chain.\n• **Push notifications**, if you turn them on: the site keeps your account name with your browser's push address until you turn them off."
+				"a": "Very little, and nothing about who you are. No phone number, ID, cookies, analytics or tracking, and no email address unless you give one for Offline Notifications.\n\nWhat does exist:\n• **Your IP address.** It reaches the server as on any website. Morphit's code keeps it in memory only, for rate limits (at most 24 hours), and never writes it to disk.\n• **What your browser asks for.** Orders, chats and the things you send go through this site's server, so its operator can see which accounts and orders you look at, and your signed actions before the blockchain does.\n• **What you publish.** Orders, reviews and chat messages (encrypted, but with sender, recipient and time) are public on the Blurt chain.\n• **Push notifications**, if you turn them on: the site keeps your account name with your browser's push address until you turn them off.\n• **Offline Notifications**, if you turn them on: the site keeps the address you gave for them (email, Matrix, Session, XMPP or Telegram), encrypted, until you delete it."
 			},
 			"lost_keys": {
 				"q": "What if I lose my password or recovery seed?",
@@ -1582,7 +1582,11 @@
 			},
 			"notifications_overview": {
 				"q": "How does {brand} let me know when something happens — a new message, an order filling, feedback arriving?",
-				"a": "{brand} tells you about new things in a few ways. The quiet ones are always on; the louder ones are your choice, in **Settings → Notifications**.\n\n**Always on (no permission needed):**\n• The browser tab title starts with the unread count, like \"(3)\".\n• The site icon in the tab gets a small dot with the count.\n• If you installed {brand} as an app, its icon gets a badge (where your system supports it).\nThese work while you are signed in and unlocked.\n\n**Your choice (off until you turn them on):**\n• **Desktop notifications** — a pop-up when the {brand} tab isn't in front. Your browser asks permission the first time one would show.\n• **Sound** — a short chime.\n• **Vibration** — a short buzz, on phones that support it.\n• **Push notifications** — alerts even when {brand} is closed. They travel through your browser maker's push service; see 'How do push notifications work with my privacy?'.\n\n**What you're told about:** orders and trade steps, chat messages, and feedback. All three are on by default; switch off any you don't want.\n\n**Quiet hours** and **Silence everything** stop pop-ups and sounds. Push notifications still appear (browsers require it), but silently.\n\nFor the chat inbox, see \"How does the chat inbox work? Can I mute or unmute someone?\"."
+				"a": "{brand} tells you about new things in a few ways. The quiet ones are always on; the louder ones are your choice, in **Settings → Notifications**.\n\n**Always on (no permission needed):**\n• The browser tab title starts with the unread count, like \"(3)\".\n• The site icon in the tab gets a small dot with the count.\n• If you installed {brand} as an app, its icon gets a badge (where your system supports it).\nThese work while you are signed in and unlocked.\n\n**Your choice (off until you turn them on):**\n• **Desktop notifications** — a pop-up when the {brand} tab isn't in front. Your browser asks permission the first time one would show.\n• **Sound** — a short chime.\n• **Vibration** — a short buzz, on phones that support it.\n• **Push notifications** — alerts even when {brand} is closed. They travel through your browser maker's push service; see 'How do push notifications work with my privacy?'.\n\n**What you're told about:** orders and trade steps, chat messages, and feedback. All three are on by default; switch off any you don't want.\n\n**Quiet hours** and **Silence everything** stop pop-ups and sounds. Push notifications still appear (browsers require it), but silently.\n\n**While you're away:** if this site offers it, {brand} can also send a short note to an app you use, like email or Telegram. See \"How do offline notifications work, and how is my address kept private?\".\n\nFor the chat inbox, see \"How does the chat inbox work? Can I mute or unmute someone?\"."
+			},
+			"offline_notifications": {
+				"q": "How do offline notifications work, and how is my address kept private?",
+				"a": "If someone sends you a chat message while you're away, {brand} can send you a short note on an app you already use, so you don't miss it. It's off until you turn it on, in **Settings → Offline Notifications**.\n\n**Turning it on.** Pick one of the apps this site offers: Matrix, Session, XMPP, Telegram or email. Each site chooses which ones it offers. Type your address for that app and we send a code to it. Type the code in, and it's on. For Telegram it works the other way round: you send our bot a code, and the button does that for you. The code proves the address is yours, so nobody can sign up someone else.\n\n**What the note says.** Only \"Someone just sent you a chat message on {brand}\", with a link. It never says who wrote or what they wrote. The link opens that conversation, and only for you; anyone else who gets hold of it gets nothing. It stops working after 7 days.\n\n**When it comes.** Not right away: 10 to 60 minutes after the message, and always on the hour, quarter past, half past or quarter to. (Why is explained below.) You don't get one if you're already on the site, or once you've read the conversation or replied. You get one note per conversation until you look at it, and at most one a day from someone you've never written to.\n\n**How your address is kept private.**\n• It is stored encrypted, and the key that unlocks it is kept apart from the database. A copy of the database alone opens nothing.\n• It is never shown to anyone. It isn't on your profile, it isn't shown to the people you trade with, and it's never shared with other sites. Once it's saved, even you only see \"On\".\n• It is left out of the site's backups and logs.\n• Only you can add or change it, because every change is signed with your key.\n• **Turn off** removes one app; **Delete all my addresses** removes everything. Your address is deleted right away. If the site stops offering an app, the addresses saved for it are deleted, or the card shows a button to delete yours.\n\n**The honest part.**\n• The app that brings you the note can read it, the same as any message you get there: it can see that you use this site and when a note came, never who wrote or what. Only Session encrypts it from end to end. That's why notes go out after a random wait, at times shared by everyone: from the moment one arrives, it's much harder to tell which chat message it was about.\n• To deliver a note, the service the site sends it through (its email, Matrix, XMPP, Session or Telegram account) has to be given your address, as with any message sent to you.\n• The people who run this site run the server that holds the key, so you're trusting them with your address, as with any service you give an address to. Nothing on the site shows it to them, but whoever controls the server could get at it.\n\n**Tip:** for the most privacy, use an address you don't use for anything else. Session needs no phone number or email address at all."
 			},
 			"chat_key_changed": {
 				"q": "What does \"We couldn't safely send\" mean?",
@@ -4149,7 +4153,7 @@
 			"broadcast_ok_detail": "Your short bio is now published for everyone to see."
 		},
 		"title": "Settings",
-		"subtitle": "Your identity, your rules. Stored on your device, never on our servers.",
+		"subtitle": "Your identity, your rules. Your keys never leave your device.",
 		"display_name": {
 			"heading": "Display name",
 			"explain": "A friendly label that shows up next to your avatar. It does NOT replace your public key — that's always shown in parentheses, and that's the part people should trust.",
@@ -4658,7 +4662,9 @@
 			"device": "This device only",
 			"public_detail": "Saved openly on the blockchain — anyone can read it, permanently.",
 			"private_detail": "Encrypted before it leaves your device. Not even the operator can read it.",
-			"device_detail": "Stays in this browser. Never sent anywhere."
+			"device_detail": "Stays in this browser. Never sent anywhere.",
+			"instance": "Kept by this site only",
+			"instance_detail": "Encrypted on this site's server and used only to send you these notes. Never public."
 		},
 		"preferred_language": {
 			"title": "Preferred languages",
@@ -4666,7 +4672,62 @@
 			"primary_label": "Primary (default for your posts)",
 			"additional_label": "Also show orders in"
 		},
-		"profile_load_failed": "Your published profile couldn't be loaded, so publishing changes is paused: a field this page didn't load would be sent empty and erase it. You can still save on this device."
+		"profile_load_failed": "Your published profile couldn't be loaded, so publishing changes is paused: a field this page didn't load would be sent empty and erase it. You can still save on this device.",
+		"offline_notify": {
+			"title": "Offline Notifications",
+			"intro": "When someone sends you a chat message while you are away, {site} can send you a short note on one of the apps below. The note only says that someone wrote to you, with a link to read it — never who wrote or what they said.",
+			"privacy_title": "Your addresses stay private",
+			"privacy": "They are kept by {site}, encrypted, and used for nothing but these notes. To deliver a note, the service the site sends it through has to be given your address. They never appear on your profile, are never shown to anyone (not even here, once saved) and are never shared with other sites. Delete them whenever you like.",
+			"tip": "For the most privacy, use an address you don't use for anything else.",
+			"timing": "The app you choose can read your notes and see when they arrive.",
+			"signin": "Sign in to turn on offline notifications.",
+			"zero_clearnet": "This site uses no clearnet internet, so it only offers apps it can reach through Tor.",
+			"channel": {
+				"email": "Email",
+				"matrix": "Matrix",
+				"xmpp": "XMPP (Jabber)",
+				"telegram": "Telegram",
+				"session": "Session"
+			},
+			"from_bot": "Notes come from {bot}.",
+			"send_code": "Send me a code",
+			"sending": "Sending…",
+			"code_sent": {
+				"email": "We sent a code to the address you typed. Check your inbox (and your spam folder).",
+				"matrix": "We sent a code from {bot}. Accept its invitation in your Matrix app to read it.",
+				"xmpp": "We sent a code from {bot}. You will find it in your XMPP app.",
+				"session": "We sent a code from {site}. In Session it arrives under Message Requests: accept it to read the code."
+			},
+			"code_label": "Code",
+			"confirm": "Confirm",
+			"cancel": "Cancel",
+			"on": "On",
+			"change": "Use a different address",
+			"change_hint": "A new address replaces the current one.",
+			"turn_off": "Turn off",
+			"not_offered": "This site no longer sends notes here.",
+			"telegram_connect": "Connect Telegram",
+			"telegram_steps": "Open @{bot} in Telegram and send it this code (the button below does it for you).",
+			"telegram_open": "Open Telegram",
+			"telegram_waiting": "Waiting for your code to reach the bot…",
+			"telegram_check_again": "Check again",
+			"delete_all": "Delete all my addresses",
+			"deleted": "Deleted. This site no longer keeps any of your addresses.",
+			"link_gone": "That link has expired or belongs to another account. All your chats are here.",
+			"link_retry": "This link could not be opened right now. Please try it again in a few minutes.",
+			"errors": {
+				"invalid_address": "That does not look like a valid address for this app.",
+				"too_many_codes": "Too many codes today. Please try again tomorrow.",
+				"send_failed": "The code could not be sent right now. Check the address and try again in a few minutes.",
+				"wrong": "That code is not right. Please try again.",
+				"expired": "That code has expired. Please send a new one.",
+				"none": "There is no code waiting. Please send a new one.",
+				"rate_limited": "Too many tries. Please wait a few minutes.",
+				"unavailable": "Offline notifications are not available on this site right now.",
+				"failed": "Something went wrong. Please try again.",
+				"locked_session": "Unlock your account first."
+			}
+		}
 	},
 	"shipment_modal": {
 		"heading": "Record a shipment",

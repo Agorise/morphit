@@ -336,4 +336,58 @@ describe.skipIf(!INTEGRATION_ENABLED)('the fast path never writes the database',
 		for (let i = 0; i < 50; i++) await new Promise((r) => setTimeout(r, 0));
 		expect(await pending(), 'a second delivery of the same message enqueued another push').toBe(1);
 	});
+
+	/**
+	 * Settings → Offline Notifications. Behind the same gate as the push, a
+	 * recipient with a CONFIRMED offline-notice address also gets one
+	 * `offline_notify_pending` row — per thread, not per message. Pinned the
+	 * same way: these two tables and no others, and a second message in the
+	 * thread adds a push but no second notice.
+	 */
+	it('with a confirmed offline address, also exactly one offline_notify_pending row per thread', async () => {
+		// Builds on the case above: bob has written to alice and has a push
+		// subscription. Now he also confirmed an offline-notice address.
+		await fx.db.query(
+			`INSERT INTO offline_notify_channels (account, channel, address_sealed, verified_at)
+			 VALUES ($1, 'email', '\\x00'::bytea, now())`,
+			[RECIPIENT]
+		);
+		const offline = async (): Promise<number> =>
+			Number(
+				(
+					await fx.db.query<{ n: string }>(
+						'SELECT count(*)::text AS n FROM offline_notify_pending WHERE account = $1',
+						[RECIPIENT]
+					)
+				).rows[0]?.n ?? '0'
+			);
+		const before = await snapshot(fx);
+		const seen: unknown[] = [];
+		const off = chatEventBus.onFast((e) => seen.push(e));
+		const send = (tag: string) =>
+			app.request('http://local/v1/federation/chat-fast', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ trx: signedChatTx(tag) })
+			});
+		expect((await send(`offline-1-${Date.now()}`)).status).toBe(202);
+		await drain(() => seen.length > 0);
+		for (let i = 0; i < 500 && (await offline()) === 0; i++)
+			await new Promise((r) => setTimeout(r, 0));
+
+		expect(seen.length, 'setup: the message must have been delivered').toBeGreaterThan(0);
+		expect(
+			diff(before, await snapshot(fx)).sort(),
+			'offline_notify_pending and push_pending are the ONLY tables the fast path writes'
+		).toEqual(['offline_notify_pending', 'push_pending']);
+		expect(await offline(), 'one notice queued for the thread').toBe(1);
+
+		// A second message in the same thread: the notice is per thread.
+		const seenBefore = seen.length;
+		expect((await send(`offline-2-${Date.now()}`)).status).toBe(202);
+		await drain(() => seen.length > seenBefore);
+		for (let i = 0; i < 50; i++) await new Promise((r) => setTimeout(r, 0));
+		expect(await offline(), 'a second message in the thread queued a second notice').toBe(1);
+		off();
+	});
 });

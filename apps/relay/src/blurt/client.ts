@@ -790,6 +790,50 @@ export class BlurtClient {
 		}
 	}
 	/**
+	 * An account's posting key as at least two RPC OPERATORS agree it is (one,
+	 * when only one is configured): `{ key }` (null: no such account, or no
+	 * posting key), or null when they could not be asked or did not agree.
+	 *
+	 * For Settings → Offline Notifications, where the key decides who may read
+	 * and change a user's notice settings: a single node answering first
+	 * (getAccount hedges) could hand back a key of its own choosing and let
+	 * its operator act as anyone. The key must meet the posting authority's
+	 * threshold on its own: of a multi-key authority (two of two keys), no
+	 * single key is hers to sign with, so none is returned.
+	 */
+	async postingKeyAgreed(name: string): Promise<{ key: string | null } | null> {
+		const need = Math.min(2, Math.max(1, this.pool.operatorCount()));
+		const r = await this.pool.quorumCall<string>(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const accts = (await withSignal(client.condenser.getAccounts([name]), signal)) as unknown;
+				const acct = Array.isArray(accts)
+					? (accts as Array<Record<string, unknown>>).find((a) => a && a.name === name)
+					: undefined;
+				if (acct === undefined) return 'absent';
+				// A key that alone meets the posting threshold: with a multi-key
+				// authority (two of two keys, say), no single key speaks for her.
+				const posting = acct.posting as
+					| { weight_threshold?: unknown; key_auths?: unknown }
+					| undefined;
+				const threshold = Number(posting?.weight_threshold ?? 1);
+				const keys = Array.isArray(posting?.key_auths) ? posting.key_auths : [];
+				const alone = keys.find(
+					(k): k is [string, number] =>
+						Array.isArray(k) &&
+						typeof k[0] === 'string' &&
+						Number.isFinite(threshold) &&
+						Number(k[1]) >= threshold
+				);
+				return alone ? `key:${alone[0]}` : 'nokey';
+			},
+			{ equivalenceKey: (v) => v, minAgree: need, maxOperators: 3 }
+		);
+		if (r.agreedKey === undefined) return null;
+		return { key: r.agreedKey.startsWith('key:') ? r.agreedKey.slice(4) : null };
+	}
+
+	/**
 	 * Did our account_create land? Asked of several OPERATORS at once (a node's
 	 * accounts and head read together, on one connection):
 	 *   'landed' — any node shows the name with OUR owner key;

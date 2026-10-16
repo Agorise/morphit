@@ -537,7 +537,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				sender: ctx.signer,
 				orderPermlink: typeof claimedPermlink === 'string' ? claimedPermlink : null,
 				sourceTrxId: ctx.trxId,
-				eventAt: ctx.blockTime
+				eventAt: ctx.blockTime,
+				inTransaction: true
 			})
 		).catch((err: unknown) => {
 			log.warn('push_enqueue_failed', {

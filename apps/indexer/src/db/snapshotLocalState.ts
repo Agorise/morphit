@@ -26,6 +26,16 @@ export const LOCAL_ONLY_TABLES: readonly string[] = [
 	// Relay push: device endpoints + keys + user agents, and the delivery queue.
 	'push_subscriptions',
 	'push_pending',
+	// Offline notices: the addresses users gave this instance (sealed), their
+	// code counters, the notices waiting their delay, the links sent, and
+	// which key sealed them.
+	'offline_notify_channels',
+	'offline_notify_code_log',
+	'offline_notify_address_log',
+	'offline_notify_pending',
+	'offline_notify_links',
+	'offline_notify_key',
+	'offline_notify_leave',
 	// Relay payout queue: THIS operator's wallet's pending transfers.
 	'relay_pending_transfers',
 	// Local view counters served by this instance's API.

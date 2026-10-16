@@ -97,6 +97,7 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 51. [Optional: censorship-resistant chain reads over hidden-service RPC](#51-optional-censorship-resistant-chain-reads-over-hidden-service-rpc)
 52. [Fast-sync and the federation snapshot mirror](#52-fast-sync-and-the-federation-snapshot-mirror)
 53. [Per-instance branding — your logo, icons and site name](#53-per-instance-branding--your-logo-icons-and-site-name)
+54. [Offline notifications — the accounts your users' notes come from](#54-offline-notifications--the-accounts-your-users-notes-come-from)
 
 ---
 
@@ -7016,7 +7017,7 @@ each BunkerWeb package upgrade. BunkerWeb then contacts no one. The antibot chal
 site-wide in BunkerWeb 1.5, so it would challenge every visitor and break
 the JSON API.
 
-Tune `LIMIT_REQ_RATE` for your traffic. Default `10r/s` is conservative — typical Morphit instances see a handful of orderbook fetches per second per browser, which fits.
+Tune `LIMIT_REQ_RATE` for your traffic. The `10r/s` in the example above is conservative — typical Morphit instances see a handful of orderbook fetches per second per browser, which fits. BunkerWeb counts it per visitor AND per file, on every address no other rule matches: never set it below `3r/s` there, because a first visit fetches some script files three times within a second (the page, the offline cache, the tamper check). The standard install leaves the site's own files unlimited and keeps `2r/s` only for IPFS, RSS and MCP (`ops/bunkerweb/README.md`).
 
 ### Docker install
 
@@ -14072,3 +14073,208 @@ your own PNGs in `/etc/morphit/branding/` (launch screens under `static/splash/`
 (`MORPHIT_WEB_ROOT`, default `/var/www/morphit-frontend`), `branding apply` copies the
 changed files there too. A container frontend bind-mounts the build, so it is
 live at once.
+
+---
+
+## 54. Offline notifications — the accounts your users' notes come from
+
+**What your users get.** In *Settings → Offline Notifications* a user can give
+one or more of her own addresses — Matrix, Session, XMPP, Telegram, email — and
+confirm each with a code sent to it (for Telegram the other way round: she
+sends the bot a code). When someone sends her a chat message
+while she is away, your site sends her a short note there, in her language:
+
+> Someone just sent you a chat message on Vigilante Trading. Open it here to read it and reply: https://vigilante.trading/es/chat?n=…
+
+It names your site (your brand name, else your instance name), never who wrote
+or what they wrote. The link opens that conversation — scoped to its order
+when the thread is about one — and works only for her account (opening it asks
+your relay, signed with her key; a forwarded link opens nothing). The link
+uses the address she set her notes up from — your `.onion`, `.i2p` or `.loki`
+address if she was on one of them, else your clearnet address. Links expire
+after 7 days.
+
+**When a note is sent.** A random 10 to 60 minutes after the message, and
+always on a quarter hour (:00, :15, :30, :45 UTC) — the same moments for
+every user and every message. The app that carries the note (her mail
+provider, Telegram, a Matrix or XMPP server) sees when it arrives, and chat
+messages are public on the chain; this way the note's time does not point at
+one message. The card tells her that app can read her notes and see when
+they arrive. A note
+goes only if she still has not seen the message: none while she has your
+site open (her browser tells the relay once a minute; kept in the relay's
+memory for three minutes, never written down), none once she has replied or
+read the thread. One note per thread until she has read it or replied,
+however many messages; someone she has never written to earns her at most
+one note a day; at most 20 notes a day per user. A message older than 30
+minutes never gets one (a node catching up after an outage stays quiet), nor
+one from someone she has blocked since. A
+failed send is retried twice, each on the next quarter hour at least five
+minutes later; a note that reached none of her apps does not count as one
+she was given.
+
+**She can only choose the apps you set up here.** With none set up (and no
+addresses still saved from before), the card is not shown at all.
+
+### 54.1 Set it up
+
+```sh
+sudo morphit-ops offline-notify          # guided; also in the sudo morphit-ops menu
+sudo morphit-ops offline-notify status   # what is on, nothing changed
+```
+
+For each app it asks for the account your site sends from, **tests it** — a
+real note to an address you type (yours; it is not saved), or for Telegram the
+token checked with Telegram; for Session the test note is optional, and
+without one the wizard says the account was not tested — saves it, restarts the relay and asks the running
+relay whether the app is now offered. A failed test saves nothing unless you
+say so. Use accounts made for this, never your personal ones:
+
+| App | What you need | Notes |
+| --- | --- | --- |
+| Matrix | an account on any homeserver (username + password, or an access token) | Users get its invitation the first time; the notes then arrive in that chat. An `http://` homeserver address is accepted only for a homeserver on this server or an `.onion` address (the bot's password and token never cross the internet unencrypted). |
+| Session | nothing — the wizard makes a new Session account for your site (or takes the 13 recovery words of one you have) | Sent through Tor, which a standard install runs (on by default; the relay reaches it at `MORPHIT_RELAY_TOR_SOCKS`). Users find the first note under *Message Requests*. The account's display name is your site's name. |
+| XMPP | an account (address + password); the server name only if it differs from the address's domain | STARTTLS or direct TLS; it never logs in without encryption. |
+| Telegram | a bot: in Telegram open **@BotFather**, send `/newbot`, copy the token | Users link their Telegram by sending the bot a code (the card has a button for it). Telegram sees which users the bot writes to and when, and can read the note (it names your site and carries the link). |
+| Email | an SMTP login allowed to send (your mail provider's settings) | Send **from an address at that provider**. If you published the "this domain sends no email" DNS records ([RUN-A-MORPHIT-NODE.md §13](RUN-A-MORPHIT-NODE.md)), mail from your site's own domain is refused unless you change them first. |
+
+**Tor-only (zero-clearnet) sites.** Only servers at an `.onion` address work
+(Matrix, XMPP, email); Telegram and Session cannot be offered; the link in a
+note is your `.onion` address. The relay refuses a clearnet server before it
+connects, and the wizard says so. An `.onion` server needs no certificate
+from a public authority (none issues them for `.onion` names): its address is
+its key, so Tor proves who answers and encrypts the connection end to end.
+The relay therefore does not check the certificate of an `.onion` mail or
+XMPP server, and a mail server there without STARTTLS is accepted. A
+clearnet server's certificate is always checked.
+
+### 54.2 Where everything is kept
+
+- **Your accounts' settings:** `/etc/morphit/relay-notify.env`,
+  `root:morphit-relay 0640` — the relay reads it, the indexer cannot. It holds
+  passwords, tokens and the Session recovery words, so it is not in the shared
+  service group, and the relay's pre-start helper puts it back if anything
+  widens it. The relay unit sources it with bash; the wizard writes every
+  value single-quoted, so a password with a space, a `$` or a quote is safe. To
+  edit it by hand keep that form (`KEY='value'`, a `'` written as `'\''`), then
+  `sudo systemctl restart morphit-relay`. The wizard changes only the lines
+  of the settings it changes: your comments, and any line it cannot read the
+  way bash would, are kept as they are. The keys:
+  - Matrix: `MORPHIT_NOTIFY_MATRIX_HOMESERVER`, `MORPHIT_NOTIFY_MATRIX_TOKEN`, `MORPHIT_NOTIFY_MATRIX_USER_ID`
+  - Session: `MORPHIT_NOTIFY_SESSION_MNEMONIC`
+  - XMPP: `MORPHIT_NOTIFY_XMPP_JID`, `MORPHIT_NOTIFY_XMPP_PASSWORD`, `MORPHIT_NOTIFY_XMPP_HOST`, `MORPHIT_NOTIFY_XMPP_PORT`, `MORPHIT_NOTIFY_XMPP_SECURITY`
+  - Telegram: `MORPHIT_NOTIFY_TELEGRAM_TOKEN`, `MORPHIT_NOTIFY_TELEGRAM_USERNAME`
+  - Email: `MORPHIT_NOTIFY_EMAIL_HOST`, `MORPHIT_NOTIFY_EMAIL_PORT`, `MORPHIT_NOTIFY_EMAIL_SECURITY`, `MORPHIT_NOTIFY_EMAIL_USER`, `MORPHIT_NOTIFY_EMAIL_PASSWORD`, `MORPHIT_NOTIFY_EMAIL_FROM`
+- **Your users' addresses:** in the database (`offline_notify_channels`), each
+  sealed with AES-256-GCM under a key that is **not** in the database:
+  `/var/lib/morphit-relay/offline-notify.key` (the relay's own 0700 state
+  directory, made on first use). The database alone — a stolen dump, a copy on
+  another box — opens none of them. A relay that finds its key missing or
+  replaced never makes a new one over the saved addresses: offline notices
+  stay off (`offline_notify_unavailable` in its log) until the key file is
+  back, or you choose *Start over* in `sudo morphit-ops offline-notify`, which
+  deletes every user's saved addresses, waiting notes and links, and the key
+  file, then restarts the relay (it makes the new key as it starts) and
+  checks that it did. Start over is offered only when the key file is gone
+  or is another key — not when it merely cannot be read (for example after
+  the relay moved to another user) or the database does not answer; the
+  wizard then says what to check, and the addresses are kept. Lookups use keyed hashes
+  of the address, never the address. Nothing ever sends an address back to a
+  browser — not even to her: once saved, the card shows only "On".
+- **Backups and snapshots leave all seven tables' rows out**
+  (`offline_notify_channels`, `_code_log`, `_address_log`, `_pending`,
+  `_links`, `_leave`, `_key`): after a restore or a reinstall users set their
+  addresses up again. Moving to a new server is the same. The Matrix bot is
+  then still in the chats it had (nothing lists them any more): sign in to
+  the bot's account in a Matrix app and leave them all, or set up a new bot
+  account.
+- **The accounts your notes come from** must not keep a list either. The
+  wizard reminds you to turn off the mail provider's copy of every sent mail
+  ("Sent") and the XMPP server's message archive (MAM) for that account —
+  either would list your users' addresses. The Matrix bot leaves and forgets
+  every chat no saved address holds any more — when she removes or changes
+  her address, when a code is never confirmed (it expires, or is guessed wrong
+  five times), and when its first message fails. The relay queues each
+  such room (`offline_notify_leave`, in the same database transaction as
+  whatever stopped holding it), and works through the queue, trying again for about two
+  days when your homeserver does not answer. Session keeps no
+  copy of what it sends (the copy Session apps normally sync to their own
+  account is not made).
+- **What the apps in between see.** Apart from Session (end-to-end
+  encrypted), a note is readable by the servers that carry it: your mail
+  provider and hers, the bot's homeserver and hers (the bot's chats are not
+  encrypted), the XMPP servers, Telegram. They learn that she uses your site,
+  when a note arrived and its link — never who wrote or what. To deliver
+  anything at all, her address goes to the provider of the account your notes
+  come from. The FAQ tells users the same.
+- **Logs** never contain an address, a code or a link: the relay logs which app
+  and what kind of error, nothing else, and its access log does not read the
+  answers to these requests at all (the answer to "Connect Telegram" carries
+  the code she is about to send the bot). BunkerWeb's ModSecurity rule for
+  the relay's paths turns ModSecurity's rules off for them and, belt and
+  braces, also turns its audit log and request-body reading off explicitly,
+  so the WAF does not record what she typed whatever ModSecurity version
+  BunkerWeb runs (`sudo morphit-ops upgrade` brings the older rule up to this
+  one; on libmodsecurity 3.0.12 the older rule already kept these requests
+  out of the audit log).
+- **Requests are bound to her key and to your site.** Each change she makes
+  is signed with her Blurt posting key — as two of your RPC nodes agree it
+  is, when you have more than one — for your relay only (a signature for another site's relay
+  does nothing here), and each signature works once, within five minutes.
+  A user can ask for at most 6 codes a day, at most 3 of them for one
+  address, and one address gets at most 5 a day whoever asks (counted per UTC
+  day; `+tags` and Gmail dots count as the same address), so your accounts
+  cannot be turned into a spam cannon. Past those 5 the card still says the
+  code was sent (nothing is), and every "send me a code" is answered eight
+  seconds after it arrived whatever happened (a send still running finishes
+  in the background): neither the answer nor its timing tells anyone
+  whether someone else used that address today. The posting key must sign
+  for her on its own (a key that is only one of several required ones is
+  refused). Per IP, only failed requests that cost the relay a chain lookup
+  or a signature check count (one IP may be every Tor visitor). Once an IP
+  has used those up, a request from it is still checked if the user's key
+  was seen on the chain within a day — within a small shared budget per
+  second, so a flood cannot make the relay work without limit (during one,
+  a user may have to try again a moment later). Per account, taking an
+  address back (delete, cancel) has a generous limit of its own, and a
+  refused request takes no room in the memory of used signatures.
+
+### 54.3 Turning an app off, and users' own controls
+
+`sudo morphit-ops offline-notify` → *Turn an app off* first deletes every
+address users saved for that app (the Matrix bot also leaves their chats),
+then deletes that account's settings and restarts the relay. Users who chose
+it stop getting notes there; their other apps keep working. If you turn the
+app back on, they set that address up again. For Matrix, if the bot cannot
+leave every chat right away (your homeserver does not answer), the wizard
+says how many are left and keeps Matrix set up, so the relay goes on trying;
+run *Turn an app off* again later. (If an app's settings go away
+any other way — the file edited by hand — users who had it see it on the card
+as no longer offered, with a button to delete what they saved.) A user can delete every address she
+gave your site at any time (*Delete all my addresses*), which also drops her
+waiting notes and links. When she changes an address, the one she had is
+kept (still sealed, and still getting her notes) until she confirms the new
+one: if she cancels, or the
+new code cannot be sent, expires or is guessed wrong five times, her old
+address comes back, so a change never leaves her without notes.
+
+### 54.4 When something is not working
+
+- `sudo morphit-ops offline-notify status` — each app's state, and why one with
+  settings is off (incomplete settings, a clearnet server on a Tor-only site,
+  no Tor for Session), and whether the saved addresses can be opened (the
+  key file is fine, missing, another key, or cannot be read; or the database
+  did not answer).
+- `sudo morphit-ops offline-notify` → *Send a test note* — through the relay's
+  own code and network rules; on failure it shows the stage and the server's
+  code (for example `SmtpError: mail server refused at AUTH (535)`).
+- `journalctl -u morphit-relay | grep -E 'offline_notify|notice_'` —
+  `offline_notify_code_failed` (a code could not be sent: the user sees "could
+  not be sent right now"), `notice_channel_failed` (one app failed for one
+  note; the others still went), `notice_failed`. Each names the app and the
+  error kind only.
+- A user whose code "could not be sent" usually typed an address that does not
+  exist, or (Matrix) one whose homeserver refuses invitations from yours.
+- "Too many codes today": the limits above; they reset at midnight UTC.
+- A Telegram chat that sends the bot five wrong codes is ignored for a day
+  (a relay restart forgets this); the bot never answers a wrong code.

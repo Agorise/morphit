@@ -1258,7 +1258,7 @@
 			},
 			"data_collection": {
 				"q": "Quali dati raccoglie {brand} su di me?",
-				"a": "Molto poco, e niente su chi sei. Niente email, numero di telefono, documento d'identità, cookie, analytics o tracciamento.\n\nCiò che esiste:\n• **Il tuo indirizzo IP.** Arriva al server come per qualsiasi sito web. Il codice di Morphit lo tiene solo in memoria, per limitare la frequenza (al massimo 24 ore), e non lo scrive mai su disco.\n• **Ciò che il tuo browser chiede.** Ordini, chat e ciò che invii passano dal server di questo sito, quindi il suo operatore può vedere quali account e ordini guardi, e le tue azioni firmate prima ancora che arrivino sulla blockchain.\n• **Ciò che pubblichi.** Ordini, recensioni e messaggi di chat (cifrati, ma con mittente, destinatario e ora) sono pubblici sulla catena Blurt.\n• **Notifiche push**, se le attivi: il sito conserva il nome del tuo account insieme all'indirizzo push del tuo browser finché non le disattivi."
+				"a": "Molto poco, e niente su chi sei. Niente numero di telefono, documento d'identità, cookie, analytics o tracciamento, e niente email a meno che tu non ne dia una per le Notifiche offline.\n\nCiò che esiste:\n• **Il tuo indirizzo IP.** Arriva al server come per qualsiasi sito web. Il codice di Morphit lo tiene solo in memoria, per limitare la frequenza (al massimo 24 ore), e non lo scrive mai su disco.\n• **Ciò che il tuo browser chiede.** Ordini, chat e ciò che invii passano dal server di questo sito, quindi il suo operatore può vedere quali account e ordini guardi, e le tue azioni firmate prima ancora che arrivino sulla blockchain.\n• **Ciò che pubblichi.** Ordini, recensioni e messaggi di chat (cifrati, ma con mittente, destinatario e ora) sono pubblici sulla catena Blurt.\n• **Notifiche push**, se le attivi: il sito conserva il nome del tuo account insieme all'indirizzo push del tuo browser finché non le disattivi.\n• **Notifiche offline**, se le attivi: il sito conserva l'indirizzo che hai dato per riceverle (email, Matrix, Session, XMPP o Telegram), cifrato, finché non lo cancelli."
 			},
 			"lost_keys": {
 				"q": "E se perdo la password o la frase di recupero?",
@@ -1582,7 +1582,11 @@
 			},
 			"notifications_overview": {
 				"q": "Come mi avvisa {brand} quando succede qualcosa — un messaggio nuovo, un ordine che si chiude, un feedback?",
-				"a": "{brand} ti avvisa delle novità in vari modi. Quelli discreti sono sempre attivi; quelli più evidenti li scegli tu, in **Impostazioni → Notifiche**.\n\n**Sempre attivi (nessun permesso necessario):**\n• Il titolo della scheda del browser inizia con il numero di non letti, come \"(3)\".\n• L'icona del sito nella scheda riceve un puntino con il numero.\n• Se hai installato {brand} come app, la sua icona riceve un badge (dove il tuo sistema lo supporta).\nFunzionano mentre hai fatto l'accesso e la sessione è sbloccata.\n\n**A tua scelta (disattivati finché non li attivi):**\n• **Notifiche desktop** — un popup quando la scheda di {brand} non è in primo piano. Il browser chiede il permesso la prima volta che ne dovrebbe comparire uno.\n• **Segnale sonoro** — un breve suono.\n• **Vibrazione** — una breve vibrazione, sui telefoni che la supportano.\n• **Notifiche push** — avvisi anche quando {brand} è chiuso. Passano attraverso il servizio push del produttore del tuo browser; vedi 'Come funzionano le notifiche push con la mia privacy?'.\n\n**Di cosa vieni avvisato:** ordini e passaggi dello scambio, messaggi di chat e feedback. Tutti e tre sono attivi per impostazione predefinita; disattiva quelli che non vuoi.\n\n**Ore di silenzio** e **Silenzia tutto** fermano popup e suoni. Le notifiche push compaiono comunque (i browser lo richiedono), ma in silenzio.\n\nPer la casella della chat, vedi \"Come funziona la casella di chat? Posso silenziare o riattivare qualcuno?\"."
+				"a": "{brand} ti avvisa delle novità in vari modi. Quelli discreti sono sempre attivi; quelli più evidenti li scegli tu, in **Impostazioni → Notifiche**.\n\n**Sempre attivi (nessun permesso necessario):**\n• Il titolo della scheda del browser inizia con il numero di non letti, come \"(3)\".\n• L'icona del sito nella scheda riceve un puntino con il numero.\n• Se hai installato {brand} come app, la sua icona riceve un badge (dove il tuo sistema lo supporta).\nFunzionano mentre hai fatto l'accesso e la sessione è sbloccata.\n\n**A tua scelta (disattivati finché non li attivi):**\n• **Notifiche desktop** — un popup quando la scheda di {brand} non è in primo piano. Il browser chiede il permesso la prima volta che ne dovrebbe comparire uno.\n• **Segnale sonoro** — un breve suono.\n• **Vibrazione** — una breve vibrazione, sui telefoni che la supportano.\n• **Notifiche push** — avvisi anche quando {brand} è chiuso. Passano attraverso il servizio push del produttore del tuo browser; vedi 'Come funzionano le notifiche push con la mia privacy?'.\n\n**Di cosa vieni avvisato:** ordini e passaggi dello scambio, messaggi di chat e feedback. Tutti e tre sono attivi per impostazione predefinita; disattiva quelli che non vuoi.\n\n**Ore di silenzio** e **Silenzia tutto** fermano popup e suoni. Le notifiche push compaiono comunque (i browser lo richiedono), ma in silenzio.\n\n**Mentre non ci sei:** se questo sito lo offre, {brand} può anche mandarti un breve avviso su un'app che usi, come l'email o Telegram. Vedi \"Come funzionano le notifiche offline, e come resta privato il mio indirizzo?\".\n\nPer la casella della chat, vedi \"Come funziona la casella di chat? Posso silenziare o riattivare qualcuno?\"."
+			},
+			"offline_notifications": {
+				"q": "Come funzionano le notifiche offline, e come resta privato il mio indirizzo?",
+				"a": "Se qualcuno ti manda un messaggio in chat mentre non ci sei, {brand} può mandarti un breve avviso su un'app che usi già, così non te lo perdi. È spento finché non lo accendi, in **Impostazioni → Notifiche offline**.\n\n**Come attivarlo.** Scegli una delle app offerte da questo sito: Matrix, Session, XMPP, Telegram o email. Ogni sito sceglie quali offrire. Scrivi il tuo indirizzo per quell'app e ti mandiamo lì un codice. Scrivi il codice, ed è attivo. Con Telegram funziona al contrario: sei tu a mandare un codice al nostro bot, e il pulsante lo fa per te. Il codice dimostra che l'indirizzo è tuo, così nessuno può iscrivere qualcun altro.\n\n**Cosa dice l'avviso.** Solo \"Qualcuno ti ha appena inviato un messaggio in chat su {brand}\", con un link. Non dice mai chi ha scritto né cosa. Il link apre quella conversazione, e solo per te; se qualcun altro lo trova, non gli apre niente. Smette di funzionare dopo 7 giorni.\n\n**Quando arriva.** Non subito: tra 10 e 60 minuti dopo il messaggio, e sempre all'ora esatta, e un quarto, e mezza o meno un quarto. (Il perché è spiegato più sotto.) Non ti arriva se sei già sul sito, né dopo che hai letto la conversazione o risposto. Ricevi un avviso per conversazione finché non la guardi, e al massimo uno al giorno da qualcuno a cui non hai mai scritto.\n\n**Come resta privato il tuo indirizzo.**\n• È salvato cifrato, e la chiave che lo apre è tenuta separata dal database. Una copia del database, da sola, non apre niente.\n• Non viene mai mostrato a nessuno. Non è sul tuo profilo, le persone con cui scambi non lo vedono e non viene mai condiviso con altri siti. Una volta salvato, perfino tu vedi solo \"Attivo\".\n• È escluso dai backup e dai log del sito.\n• Solo tu puoi aggiungerlo o cambiarlo, perché ogni modifica è firmata con la tua chiave.\n• **Disattiva** toglie un'app; **Cancella tutti i miei indirizzi** toglie tutto. Il tuo indirizzo viene cancellato subito. Se il sito smette di offrire un'app, gli indirizzi salvati per quella vengono cancellati, oppure la scheda mostra un pulsante per cancellare il tuo.\n\n**La parte onesta.**\n• L'app che ti porta l'avviso può leggerlo, come qualsiasi messaggio che ricevi lì: può vedere che usi questo sito e quando è arrivato un avviso, mai chi ha scritto né cosa. Solo Session lo cifra end-to-end. Per questo gli avvisi partono dopo un'attesa casuale, a orari comuni a tutti: in base al momento in cui ne arriva uno è molto più difficile capire a quale messaggio di chat si riferisca.\n• Per consegnare un avviso, il servizio con cui il sito lo invia (il suo account email, Matrix, XMPP, Session o Telegram) deve ricevere il tuo indirizzo, come per qualsiasi messaggio che ti viene inviato.\n• Le persone che gestiscono questo sito gestiscono anche il server che tiene la chiave, quindi affidi loro il tuo indirizzo, come a qualsiasi servizio a cui dai un indirizzo. Niente sul sito glielo mostra, ma chi controlla il server potrebbe arrivarci.\n\n**Consiglio:** per la massima privacy, usa un indirizzo che non usi per nient'altro. Session non chiede né numero di telefono né indirizzo email."
 			},
 			"chat_key_changed": {
 				"q": "Cosa significa \"Non abbiamo potuto inviare in sicurezza\"?",
@@ -4149,7 +4153,7 @@
 			"broadcast_ok_detail": "La tua breve bio è ora pubblicata e visibile a tutti."
 		},
 		"title": "Impostazioni",
-		"subtitle": "La tua identità, le tue regole. Salvate sul tuo dispositivo, mai sui nostri server.",
+		"subtitle": "La tua identità, le tue regole. Le tue chiavi non lasciano mai il tuo dispositivo.",
 		"display_name": {
 			"heading": "Nome visibile",
 			"explain": "Un'etichetta amichevole che appare accanto al tuo avatar. NON sostituisce la tua chiave pubblica — quella è sempre mostrata tra parentesi, ed è la parte di cui le persone devono fidarsi.",
@@ -4658,7 +4662,9 @@
 			"device": "Solo questo dispositivo",
 			"public_detail": "Salvato in chiaro sulla blockchain: chiunque può leggerlo, per sempre.",
 			"private_detail": "Cifrato prima di lasciare il tuo dispositivo. Nemmeno l'operatore può leggerlo.",
-			"device_detail": "Resta in questo browser. Non viene mai inviato altrove."
+			"device_detail": "Resta in questo browser. Non viene mai inviato altrove.",
+			"instance": "Conservato solo da questo sito",
+			"instance_detail": "Cifrato sul server di questo sito e usato solo per mandarti questi avvisi. Mai pubblico."
 		},
 		"preferred_language": {
 			"title": "Lingue preferite",
@@ -4666,7 +4672,62 @@
 			"primary_label": "Principale (predefinita per i tuoi annunci)",
 			"additional_label": "Mostra anche ordini in"
 		},
-		"profile_load_failed": "Non è stato possibile caricare il tuo profilo pubblicato, quindi la pubblicazione delle modifiche è in pausa: un campo che questa pagina non ha caricato verrebbe inviato vuoto e cancellato. Puoi comunque salvare su questo dispositivo."
+		"profile_load_failed": "Non è stato possibile caricare il tuo profilo pubblicato, quindi la pubblicazione delle modifiche è in pausa: un campo che questa pagina non ha caricato verrebbe inviato vuoto e cancellato. Puoi comunque salvare su questo dispositivo.",
+		"offline_notify": {
+			"title": "Notifiche offline",
+			"intro": "Quando qualcuno ti invia un messaggio in chat mentre non ci sei, {site} può mandarti un breve avviso su una delle app qui sotto. L'avviso dice solo che qualcuno ti ha scritto, con un link per leggerlo: mai chi ha scritto né cosa ha detto.",
+			"privacy_title": "I tuoi indirizzi restano privati",
+			"privacy": "Li conserva {site}, cifrati, e li usa solo per questi avvisi. Per consegnare un avviso, il servizio con cui il sito lo invia deve ricevere il tuo indirizzo. Non compaiono mai sul tuo profilo, non vengono mai mostrati a nessuno (nemmeno qui, una volta salvati) e non vengono mai condivisi con altri siti. Cancellali quando vuoi.",
+			"tip": "Per la massima privacy, usa un indirizzo che non usi per nient'altro.",
+			"timing": "L'app che scegli può leggere i tuoi avvisi e vedere quando arrivano.",
+			"signin": "Accedi per attivare le notifiche offline.",
+			"zero_clearnet": "Questo sito non usa l'internet aperto (clearnet), quindi offre solo le app che può raggiungere tramite Tor.",
+			"channel": {
+				"email": "Email",
+				"matrix": "Matrix",
+				"xmpp": "XMPP (Jabber)",
+				"telegram": "Telegram",
+				"session": "Session"
+			},
+			"from_bot": "Gli avvisi arrivano da {bot}.",
+			"send_code": "Inviami un codice",
+			"sending": "Invio…",
+			"code_sent": {
+				"email": "Abbiamo inviato un codice all'indirizzo che hai scritto. Controlla la posta in arrivo (e lo spam).",
+				"matrix": "Abbiamo inviato un codice da {bot}. Accetta il suo invito nella tua app Matrix per leggerlo.",
+				"xmpp": "Abbiamo inviato un codice da {bot}. Lo trovi nella tua app XMPP.",
+				"session": "Abbiamo inviato un codice da {site}. In Session arriva tra le Richieste di messaggio: accetta la richiesta per leggere il codice."
+			},
+			"code_label": "Codice",
+			"confirm": "Conferma",
+			"cancel": "Annulla",
+			"on": "Attivo",
+			"change": "Usa un altro indirizzo",
+			"change_hint": "Un nuovo indirizzo sostituisce quello attuale.",
+			"turn_off": "Disattiva",
+			"not_offered": "Questo sito non manda più avvisi qui.",
+			"telegram_connect": "Collega Telegram",
+			"telegram_steps": "Apri @{bot} in Telegram e inviagli questo codice (il pulsante qui sotto lo fa per te).",
+			"telegram_open": "Apri Telegram",
+			"telegram_waiting": "In attesa che il tuo codice arrivi al bot…",
+			"telegram_check_again": "Controlla di nuovo",
+			"delete_all": "Cancella tutti i miei indirizzi",
+			"deleted": "Cancellati. Questo sito non conserva più nessuno dei tuoi indirizzi.",
+			"link_gone": "Questo link è scaduto o appartiene a un altro account. Tutte le tue chat sono qui.",
+			"link_retry": "Non è stato possibile aprire questo link adesso. Riprova tra qualche minuto.",
+			"errors": {
+				"invalid_address": "Non sembra un indirizzo valido per questa app.",
+				"too_many_codes": "Troppi codici oggi. Riprova domani.",
+				"send_failed": "Al momento non è stato possibile inviare il codice. Controlla l'indirizzo e riprova tra qualche minuto.",
+				"wrong": "Il codice non è corretto. Riprova.",
+				"expired": "Il codice è scaduto. Richiedine uno nuovo.",
+				"none": "Nessun codice in attesa. Richiedine uno nuovo.",
+				"rate_limited": "Troppi tentativi. Attendi qualche minuto.",
+				"unavailable": "Le notifiche offline non sono disponibili su questo sito al momento.",
+				"failed": "Qualcosa è andato storto. Riprova.",
+				"locked_session": "Prima sblocca il tuo account."
+			}
+		}
 	},
 	"shipment_modal": {
 		"heading": "Registra una spedizione",

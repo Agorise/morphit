@@ -306,13 +306,14 @@ If someone reviews you unfairly, you can post a public reply under it. The revie
 
 **FAQ key:** `data_collection`
 
-Very little, and nothing about who you are. No email, phone number, ID, cookies, analytics or tracking.
+Very little, and nothing about who you are. No phone number, ID, cookies, analytics or tracking, and no email address unless you give one for Offline Notifications.
 
 What does exist:
 • **Your IP address.** It reaches the server as on any website. Morphit's code keeps it in memory only, for rate limits (at most 24 hours), and never writes it to disk.
 • **What your browser asks for.** Orders, chats and the things you send go through this site's server, so its operator can see which accounts and orders you look at, and your signed actions before the blockchain does.
 • **What you publish.** Orders, reviews and chat messages (encrypted, but with sender, recipient and time) are public on the Blurt chain.
 • **Push notifications**, if you turn them on: the site keeps your account name with your browser's push address until you turn them off.
+• **Offline Notifications**, if you turn them on: the site keeps the address you gave for them (email, Matrix, Session, XMPP or Telegram), encrypted, until you delete it.
 
 ---
 
@@ -1571,7 +1572,37 @@ These work while you are signed in and unlocked.
 
 **Quiet hours** and **Silence everything** stop pop-ups and sounds. Push notifications still appear (browsers require it), but silently.
 
+**While you're away:** if this site offers it, Morphit can also send a short note to an app you use, like email or Telegram. See "How do offline notifications work, and how is my address kept private?".
+
 For the chat inbox, see "How does the chat inbox work? Can I mute or unmute someone?".
+
+---
+
+## How do offline notifications work, and how is my address kept private?
+
+**FAQ key:** `offline_notifications`
+
+If someone sends you a chat message while you're away, Morphit can send you a short note on an app you already use, so you don't miss it. It's off until you turn it on, in **Settings → Offline Notifications**.
+
+**Turning it on.** Pick one of the apps this site offers: Matrix, Session, XMPP, Telegram or email. Each site chooses which ones it offers. Type your address for that app and we send a code to it. Type the code in, and it's on. For Telegram it works the other way round: you send our bot a code, and the button does that for you. The code proves the address is yours, so nobody can sign up someone else.
+
+**What the note says.** Only "Someone just sent you a chat message on Morphit", with a link. It never says who wrote or what they wrote. The link opens that conversation, and only for you; anyone else who gets hold of it gets nothing. It stops working after 7 days.
+
+**When it comes.** Not right away: 10 to 60 minutes after the message, and always on the hour, quarter past, half past or quarter to. (Why is explained below.) You don't get one if you're already on the site, or once you've read the conversation or replied. You get one note per conversation until you look at it, and at most one a day from someone you've never written to.
+
+**How your address is kept private.**
+• It is stored encrypted, and the key that unlocks it is kept apart from the database. A copy of the database alone opens nothing.
+• It is never shown to anyone. It isn't on your profile, it isn't shown to the people you trade with, and it's never shared with other sites. Once it's saved, even you only see "On".
+• It is left out of the site's backups and logs.
+• Only you can add or change it, because every change is signed with your key.
+• **Turn off** removes one app; **Delete all my addresses** removes everything. Your address is deleted right away. If the site stops offering an app, the addresses saved for it are deleted, or the card shows a button to delete yours.
+
+**The honest part.**
+• The app that brings you the note can read it, the same as any message you get there: it can see that you use this site and when a note came, never who wrote or what. Only Session encrypts it from end to end. That's why notes go out after a random wait, at times shared by everyone: from the moment one arrives, it's much harder to tell which chat message it was about.
+• To deliver a note, the service the site sends it through (its email, Matrix, XMPP, Session or Telegram account) has to be given your address, as with any message sent to you.
+• The people who run this site run the server that holds the key, so you're trusting them with your address, as with any service you give an address to. Nothing on the site shows it to them, but whoever controls the server could get at it.
+
+**Tip:** for the most privacy, use an address you don't use for anything else. Session needs no phone number or email address at all.
 
 ---
 
@@ -2311,7 +2342,7 @@ Anyone with the ID can look the payment up on a public block explorer. On open c
 
 ## Metadata
 
-Total FAQ entries: 146
+Total FAQ entries: 147
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

@@ -53,25 +53,33 @@ export function accessLog(): MiddlewareHandler {
 		// context after the handler returns; we read it
 		// non-destructively.
 		let code: string | undefined;
-		try {
-			const respClone = c.res.clone();
-			const text = await respClone.text();
-			// Cheap shape check before parsing — most responses
-			// either start with `{` (JSON) or aren't.
-			if (text.length > 0 && text.length < 4096 && text.startsWith('{')) {
-				const parsed = JSON.parse(text) as { code?: unknown; status?: unknown };
-				if (typeof parsed.code === 'string') {
-					code = parsed.code;
-				} else if (typeof parsed.status === 'string') {
-					// Health endpoint uses `status: 'ok'` / 'rejected'
-					// instead of a `code` field.  Fall back.
-					code = parsed.status;
+		// Never read an offline-notice answer (Settings → Offline
+		// Notifications): "Connect Telegram" returns the code she is about to
+		// send the bot in a field named `code`, and whoever read it from this
+		// log first could link their own Telegram to her account. Method,
+		// path, status and duration are logged as for every request.
+		const noticeAnswer = c.req.path.startsWith('/v1/notify/');
+		if (!noticeAnswer) {
+			try {
+				const respClone = c.res.clone();
+				const text = await respClone.text();
+				// Cheap shape check before parsing — most responses
+				// either start with `{` (JSON) or aren't.
+				if (text.length > 0 && text.length < 4096 && text.startsWith('{')) {
+					const parsed = JSON.parse(text) as { code?: unknown; status?: unknown };
+					if (typeof parsed.code === 'string') {
+						code = parsed.code;
+					} else if (typeof parsed.status === 'string') {
+						// Health endpoint uses `status: 'ok'` / 'rejected'
+						// instead of a `code` field.  Fall back.
+						code = parsed.status;
+					}
 				}
+			} catch {
+				// Non-JSON response, malformed JSON, or stream-read
+				// failure.  Skip the code field; the path + status are
+				// still useful.
 			}
-		} catch {
-			// Non-JSON response, malformed JSON, or stream-read
-			// failure.  Skip the code field; the path + status are
-			// still useful.
 		}
 
 		const path = c.req.path;

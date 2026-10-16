@@ -95,7 +95,10 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // v1.21.8: 67 → 68. v68 = fee_payments + fee_payment_legs (every operator's
 // earnings on the Operators page), present in BOTH schema.sql (banner at the
 // end) and MIGRATIONS[] — checked.
-const SCHEMA_HEAD_VERSION = 68;
+// Next release: 68 → 69. v69 = the offline-notice tables (offline_notify_*:
+// users' sealed addresses, code logs, the queue, links, the key check), in
+// BOTH schema.sql (banner at the end) and MIGRATIONS[] — checked.
+const SCHEMA_HEAD_VERSION = 69;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  bumped 27 → 35 when
@@ -112,7 +115,8 @@ const SCHEMA_HEAD_VERSION = 68;
 // 65 → 66, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.21.1: 66 → 67, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.21.8: 67 → 68, in lockstep with SCHEMA_HEAD_VERSION above.
-const MIGRATIONS_COVERAGE_HIGH = 68;
+// Next release: 68 → 69, in lockstep with SCHEMA_HEAD_VERSION above.
+const MIGRATIONS_COVERAGE_HIGH = 69;
 
 interface ScenarioResult {
 	readonly name: string;

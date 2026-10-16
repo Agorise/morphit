@@ -32,6 +32,12 @@
  *   above never reached it; it now asserts that `push_pending` is the only
  *   table touched, and by one row.
  *
+ *   AND ITS TWIN (Settings → Offline Notifications): behind the same gate, a
+ *   recipient with a confirmed offline-notice address also gets one
+ *   `offline_notify_pending` row per thread (primary key account, sender,
+ *   thread — a second message or a second route adds nothing). The same test
+ *   pins it: those two tables and no others.
+ *
  * ANYONE CAN CALL IT, and that is fine, because it is not authorisation that
  * makes it safe. A caller must present a transaction signed by the sender's
  * posting key; without that key nothing can be injected, whoever they are and

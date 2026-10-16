@@ -849,7 +849,11 @@ try 'T91 a relay that does not come back is left on the new settings' "$HEAL" \
 	'		void 0;'
 
 try 'T88 the relay file list drifts from the unit' "$HEAL" \
-	"	'/etc/morphit/relay-vapid.env'" \
+	"	'/etc/morphit/relay-vapid.env'," \
+	''
+
+try 'T88b the relay file list drops the offline-notice file the unit sources' "$HEAL" \
+	"	'/etc/morphit/relay-notify.env'" \
 	''
 
 # ── The final review's transport findings (S5, S3) ──────────────────────

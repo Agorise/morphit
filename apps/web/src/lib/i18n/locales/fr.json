@@ -1258,7 +1258,7 @@
 			},
 			"data_collection": {
 				"q": "Quelles données {brand} recueille-t-il sur moi ?",
-				"a": "Très peu, et rien sur qui vous êtes. Pas d'e-mail, de numéro de téléphone, de pièce d'identité, de cookies, d'analytique ni de pistage.\n\nCe qui existe :\n• **Votre adresse IP.** Elle parvient au serveur comme pour tout site web. Le code de Morphit ne la garde qu'en mémoire, pour limiter le débit (24 heures au plus), et ne l'écrit jamais sur disque.\n• **Ce que demande votre navigateur.** Les ordres, les chats et ce que vous envoyez passent par le serveur de ce site, donc son opérateur peut voir quels comptes et quels ordres vous consultez, ainsi que vos actions signées avant la blockchain.\n• **Ce que vous publiez.** Les ordres, les avis et les messages de chat (chiffrés, mais avec expéditeur, destinataire et heure) sont publics sur la chaîne Blurt.\n• **Les notifications push**, si vous les activez : le site garde votre nom de compte avec l'adresse push de votre navigateur jusqu'à ce que vous les désactiviez."
+				"a": "Très peu, et rien sur qui vous êtes. Pas de numéro de téléphone, de pièce d'identité, de cookies, d'analytique ni de pistage, et pas d'adresse e-mail, sauf si vous en donnez une pour les Notifications hors ligne.\n\nCe qui existe :\n• **Votre adresse IP.** Elle parvient au serveur comme pour tout site web. Le code de Morphit ne la garde qu'en mémoire, pour limiter le débit (24 heures au plus), et ne l'écrit jamais sur disque.\n• **Ce que demande votre navigateur.** Les ordres, les chats et ce que vous envoyez passent par le serveur de ce site, donc son opérateur peut voir quels comptes et quels ordres vous consultez, ainsi que vos actions signées avant la blockchain.\n• **Ce que vous publiez.** Les ordres, les avis et les messages de chat (chiffrés, mais avec expéditeur, destinataire et heure) sont publics sur la chaîne Blurt.\n• **Les notifications push**, si vous les activez : le site garde votre nom de compte avec l'adresse push de votre navigateur jusqu'à ce que vous les désactiviez.\n• **Notifications hors ligne**, si vous les activez : le site garde l'adresse que vous avez donnée pour elles (e-mail, Matrix, Session, XMPP ou Telegram), chiffrée, jusqu'à ce que vous la supprimiez."
 			},
 			"lost_keys": {
 				"q": "Et si je perds mon mot de passe ou ma phrase de récupération ?",
@@ -1582,7 +1582,11 @@
 			},
 			"notifications_overview": {
 				"q": "Comment {brand} me prévient-il quand quelque chose se passe — nouveau message, ordre rempli, retour reçu ?",
-				"a": "{brand} vous signale les nouveautés de plusieurs façons. Les discrètes sont toujours actives ; les plus voyantes sont à votre choix, dans **Paramètres → Notifications**.\n\n**Toujours actives (aucune permission nécessaire) :**\n• Le titre de l'onglet du navigateur commence par le nombre de non-lus, comme « (3) ».\n• L'icône du site dans l'onglet reçoit un petit point avec le nombre.\n• Si vous avez installé {brand} comme application, son icône reçoit une pastille (si votre système le permet).\nCela fonctionne tant que vous êtes connecté et déverrouillé.\n\n**À votre choix (désactivées tant que vous ne les activez pas) :**\n• **Notifications bureau** — une fenêtre surgissante quand l'onglet {brand} n'est pas au premier plan. Votre navigateur demande la permission la première fois qu'une notification doit s'afficher.\n• **Signal sonore** — un court carillon.\n• **Vibration** — une courte vibration, sur les téléphones qui le permettent.\n• **Notifications push** — des alertes même quand {brand} est fermé. Elles passent par le service push de l'éditeur de votre navigateur ; voir « Comment les notifications push fonctionnent-elles avec ma vie privée ? ».\n\n**Ce qu'on vous signale :** les ordres et étapes d'échange, les messages de chat et les avis. Les trois sont activés par défaut ; désactivez ceux dont vous ne voulez pas.\n\n**Heures calmes** et **Tout silencer** arrêtent les fenêtres et les sons. Les notifications push s'affichent toujours (les navigateurs l'exigent), mais en silence.\n\nPour la boîte de réception du chat, voir « Comment fonctionne la boîte de réception du chat ? Puis-je masquer ou réactiver quelqu'un ? »."
+				"a": "{brand} vous signale les nouveautés de plusieurs façons. Les discrètes sont toujours actives ; les plus voyantes sont à votre choix, dans **Paramètres → Notifications**.\n\n**Toujours actives (aucune permission nécessaire) :**\n• Le titre de l'onglet du navigateur commence par le nombre de non-lus, comme « (3) ».\n• L'icône du site dans l'onglet reçoit un petit point avec le nombre.\n• Si vous avez installé {brand} comme application, son icône reçoit une pastille (si votre système le permet).\nCela fonctionne tant que vous êtes connecté et déverrouillé.\n\n**À votre choix (désactivées tant que vous ne les activez pas) :**\n• **Notifications bureau** — une fenêtre surgissante quand l'onglet {brand} n'est pas au premier plan. Votre navigateur demande la permission la première fois qu'une notification doit s'afficher.\n• **Signal sonore** — un court carillon.\n• **Vibration** — une courte vibration, sur les téléphones qui le permettent.\n• **Notifications push** — des alertes même quand {brand} est fermé. Elles passent par le service push de l'éditeur de votre navigateur ; voir « Comment les notifications push fonctionnent-elles avec ma vie privée ? ».\n\n**Ce qu'on vous signale :** les ordres et étapes d'échange, les messages de chat et les avis. Les trois sont activés par défaut ; désactivez ceux dont vous ne voulez pas.\n\n**Heures calmes** et **Tout silencer** arrêtent les fenêtres et les sons. Les notifications push s'affichent toujours (les navigateurs l'exigent), mais en silence.\n\n**Pendant votre absence :** si ce site le propose, {brand} peut aussi vous envoyer une courte notification sur une application que vous utilisez, comme l'e-mail ou Telegram. Voir « Comment fonctionnent les notifications hors ligne, et comment mon adresse reste-t-elle privée ? ».\n\nPour la boîte de réception du chat, voir « Comment fonctionne la boîte de réception du chat ? Puis-je masquer ou réactiver quelqu'un ? »."
+			},
+			"offline_notifications": {
+				"q": "Comment fonctionnent les notifications hors ligne, et comment mon adresse reste-t-elle privée ?",
+				"a": "Si quelqu'un vous envoie un message de chat pendant votre absence, {brand} peut vous envoyer une courte notification sur une application que vous utilisez déjà, pour que vous ne le manquiez pas. C'est désactivé tant que vous ne l'activez pas, dans **Paramètres → Notifications hors ligne**.\n\n**Pour l'activer.** Choisissez l'une des applications proposées par ce site : Matrix, Session, XMPP, Telegram ou e-mail. Chaque site choisit celles qu'il propose. Saisissez votre adresse pour cette application et nous vous y envoyons un code. Saisissez le code, et c'est activé. Pour Telegram, c'est l'inverse : c'est vous qui envoyez un code à notre bot, et le bouton le fait pour vous. Le code prouve que l'adresse est bien la vôtre, donc personne ne peut inscrire quelqu'un d'autre.\n\n**Ce que dit la notification.** Seulement « Quelqu'un vient de vous envoyer un message de chat sur {brand} », avec un lien. Elle ne dit jamais qui a écrit ni ce qui a été écrit. Le lien ouvre cette conversation, et seulement pour vous ; si quelqu'un d'autre le récupère, il n'ouvre rien. Il cesse de fonctionner au bout de 7 jours.\n\n**Quand elle arrive.** Pas tout de suite : 10 à 60 minutes après le message, et toujours à l'heure pile, à l'heure et quart, à l'heure et demie ou à l'heure moins le quart. (Pourquoi ? C'est expliqué plus bas.) Vous n'en recevez pas si vous êtes déjà sur le site, ni une fois que vous avez lu la conversation ou répondu. Vous recevez une notification par conversation jusqu'à ce que vous la regardiez, et au plus une par jour de la part de quelqu'un à qui vous n'avez jamais écrit.\n\n**Comment votre adresse reste privée.**\n• Elle est enregistrée chiffrée, et la clé qui l'ouvre est gardée à part de la base de données. Une copie de la base de données, à elle seule, n'ouvre rien.\n• Elle n'est jamais montrée à personne. Elle n'est pas sur votre profil, les personnes avec qui vous échangez ne la voient pas, et elle n'est jamais partagée avec d'autres sites. Une fois enregistrée, même vous ne voyez que « Activé ».\n• Elle est exclue des sauvegardes et des journaux du site.\n• Vous seul pouvez l'ajouter ou la modifier, car chaque modification est signée avec votre clé.\n• **Désactiver** retire une application ; **Supprimer toutes mes adresses** retire tout. Votre adresse est supprimée immédiatement. Si le site cesse de proposer une application, les adresses enregistrées pour elle sont supprimées, ou la carte affiche un bouton pour supprimer la vôtre.\n\n**La partie honnête.**\n• L'application qui vous apporte la notification peut la lire, comme n'importe quel message que vous y recevez : elle peut voir que vous utilisez ce site et quand une notification est arrivée, jamais qui a écrit ni quoi. Seul Session la chiffre de bout en bout. C'est pour cela que les notifications partent après une attente au hasard, à des heures communes à tous : d'après le moment où l'une d'elles arrive, il est bien plus difficile de savoir de quel message de chat il s'agit.\n• Pour vous faire parvenir une notification, le service par lequel le site l'envoie (son compte e-mail, Matrix, XMPP, Session ou Telegram) doit recevoir votre adresse, comme pour tout message qu'on vous envoie.\n• Les personnes qui gèrent ce site gèrent aussi le serveur qui garde la clé : vous leur confiez donc votre adresse, comme à tout service à qui vous donnez une adresse. Rien sur le site ne la leur montre, mais quiconque contrôle le serveur pourrait y accéder.\n\n**Astuce :** pour un maximum de confidentialité, utilisez une adresse qui ne vous sert à rien d'autre. Session ne demande ni numéro de téléphone ni adresse e-mail."
 			},
 			"chat_key_changed": {
 				"q": "Que veut dire « Envoi sécurisé impossible » ?",
@@ -2720,7 +2724,7 @@
 				"confirm": "Quitter quand même",
 				"cancel": "Rester sur cette page"
 			},
-			"have_account_link": "Tu as déjà un compte Blurt ? Indique-le dans les Réglages"
+			"have_account_link": "Tu as déjà un compte Blurt ? Indique-le dans les Paramètres"
 		},
 		"unlock_mode": {
 			"heading": "Comment voulez-vous déverrouiller la prochaine fois ?",
@@ -4148,8 +4152,8 @@
 			"hint": "Ça semble bon.",
 			"broadcast_ok_detail": "Votre courte bio est désormais publiée et visible par tous."
 		},
-		"title": "Réglages",
-		"subtitle": "Votre identité, vos règles. Stocké sur votre appareil, jamais sur nos serveurs.",
+		"title": "Paramètres",
+		"subtitle": "Votre identité, vos règles. Vos clés ne quittent jamais votre appareil.",
 		"display_name": {
 			"heading": "Nom d'affichage",
 			"explain": "Une étiquette amicale affichée à côté de votre avatar. Elle NE remplace PAS votre clé publique — celle-ci apparaît toujours entre parenthèses, et c'est à elle qu'il faut faire confiance.",
@@ -4658,7 +4662,9 @@
 			"device": "Cet appareil uniquement",
 			"public_detail": "Enregistré en clair sur la blockchain : lisible par tous, de façon permanente.",
 			"private_detail": "Chiffré avant de quitter votre appareil. Même l'opérateur ne peut pas le lire.",
-			"device_detail": "Reste dans ce navigateur. N'est jamais envoyé ailleurs."
+			"device_detail": "Reste dans ce navigateur. N'est jamais envoyé ailleurs.",
+			"instance": "Gardé par ce site uniquement",
+			"instance_detail": "Chiffré sur le serveur de ce site et utilisé seulement pour vous envoyer ces notifications. Jamais public."
 		},
 		"preferred_language": {
 			"title": "Langues préférées",
@@ -4666,7 +4672,62 @@
 			"primary_label": "Principale (par défaut pour vos annonces)",
 			"additional_label": "Afficher aussi les ordres en"
 		},
-		"profile_load_failed": "Votre profil publié n'a pas pu être chargé, la publication des modifications est donc suspendue : un champ que cette page n'a pas chargé serait envoyé vide et l'effacerait. Vous pouvez toujours enregistrer sur cet appareil."
+		"profile_load_failed": "Votre profil publié n'a pas pu être chargé, la publication des modifications est donc suspendue : un champ que cette page n'a pas chargé serait envoyé vide et l'effacerait. Vous pouvez toujours enregistrer sur cet appareil.",
+		"offline_notify": {
+			"title": "Notifications hors ligne",
+			"intro": "Quand quelqu'un vous envoie un message de chat pendant votre absence, {site} peut vous envoyer une courte notification sur l'une des applications ci-dessous. La notification dit seulement que quelqu'un vous a écrit, avec un lien pour le lire — jamais qui a écrit ni ce qui a été dit.",
+			"privacy_title": "Vos adresses restent privées",
+			"privacy": "Elles sont gardées par {site}, chiffrées, et ne servent qu'à ces notifications. Pour vous faire parvenir une notification, le service par lequel le site l'envoie doit recevoir votre adresse. Elles n'apparaissent jamais sur votre profil, ne sont jamais montrées à personne (même pas ici, une fois enregistrées) et ne sont jamais partagées avec d'autres sites. Supprimez-les quand vous voulez.",
+			"tip": "Pour un maximum de confidentialité, utilisez une adresse que vous n'utilisez pour rien d'autre.",
+			"timing": "L'application que vous choisissez peut lire vos notifications et voir quand elles arrivent.",
+			"signin": "Connectez-vous pour activer les notifications hors ligne.",
+			"zero_clearnet": "Ce site n'utilise pas l'internet ouvert (clearnet) : il ne propose que les applications qu'il peut joindre par Tor.",
+			"channel": {
+				"email": "E-mail",
+				"matrix": "Matrix",
+				"xmpp": "XMPP (Jabber)",
+				"telegram": "Telegram",
+				"session": "Session"
+			},
+			"from_bot": "Les notifications viennent de {bot}.",
+			"send_code": "M'envoyer un code",
+			"sending": "Envoi…",
+			"code_sent": {
+				"email": "Nous avons envoyé un code à l'adresse saisie. Regardez votre boîte de réception (et vos spams).",
+				"matrix": "Nous avons envoyé un code depuis {bot}. Acceptez son invitation dans votre application Matrix pour le lire.",
+				"xmpp": "Nous avons envoyé un code depuis {bot}. Vous le trouverez dans votre application XMPP.",
+				"session": "Nous avons envoyé un code depuis {site}. Dans Session, il arrive dans les demandes de message : acceptez la demande pour lire le code."
+			},
+			"code_label": "Code",
+			"confirm": "Confirmer",
+			"cancel": "Annuler",
+			"on": "Activé",
+			"change": "Utiliser une autre adresse",
+			"change_hint": "Une nouvelle adresse remplace l'actuelle.",
+			"turn_off": "Désactiver",
+			"not_offered": "Ce site n'envoie plus de notifications ici.",
+			"telegram_connect": "Connecter Telegram",
+			"telegram_steps": "Ouvrez @{bot} dans Telegram et envoyez-lui ce code (le bouton ci-dessous le fait pour vous).",
+			"telegram_open": "Ouvrir Telegram",
+			"telegram_waiting": "En attente de votre code auprès du bot…",
+			"telegram_check_again": "Vérifier à nouveau",
+			"delete_all": "Supprimer toutes mes adresses",
+			"deleted": "Supprimées. Ce site ne garde plus aucune de vos adresses.",
+			"link_gone": "Ce lien a expiré ou appartient à un autre compte. Toutes vos discussions sont ici.",
+			"link_retry": "Ce lien n'a pas pu être ouvert pour le moment. Réessayez dans quelques minutes.",
+			"errors": {
+				"invalid_address": "Cela ne ressemble pas à une adresse valide pour cette application.",
+				"too_many_codes": "Trop de codes aujourd'hui. Réessayez demain.",
+				"send_failed": "Le code n'a pas pu être envoyé pour l'instant. Vérifiez l'adresse et réessayez dans quelques minutes.",
+				"wrong": "Ce code n'est pas le bon. Réessayez.",
+				"expired": "Ce code a expiré. Demandez-en un nouveau.",
+				"none": "Aucun code en attente. Demandez-en un nouveau.",
+				"rate_limited": "Trop d'essais. Patientez quelques minutes.",
+				"unavailable": "Les notifications hors ligne ne sont pas disponibles sur ce site pour le moment.",
+				"failed": "Une erreur s'est produite. Réessayez.",
+				"locked_session": "Déverrouillez d'abord votre compte."
+			}
+		}
 	},
 	"shipment_modal": {
 		"heading": "Enregistrer un envoi",

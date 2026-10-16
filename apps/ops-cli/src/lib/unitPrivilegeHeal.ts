@@ -93,7 +93,8 @@ export const SERVICES: readonly ServiceSpec[] = [
 			'/opt/morphit/morphit.env',
 			'/opt/morphit/morphit.config.env',
 			'/etc/morphit/relay.env',
-			'/etc/morphit/relay-vapid.env'
+			'/etc/morphit/relay-vapid.env',
+			'/etc/morphit/relay-notify.env'
 		],
 		portKey: 'MORPHIT_RELAY_LISTEN_PORT',
 		defaultPort: 8080,

@@ -36,6 +36,7 @@
 		refreshTradeEventListener
 	} from '$lib/trades/tradeEventListener';
 	import { crossPageTradeEventsEnabled } from '$lib/notifications/crossPageTradeEvents';
+	import { offlinePresenceWhileUnlocked } from '$lib/notifications/offlinePresence';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { currentLocale } from '$i18n';
@@ -195,6 +196,16 @@
 	$effect(() => {
 		if (!$isUnlocked) return;
 		return initSettingsSync();
+	});
+
+	// Settings → Offline Notifications: while she is signed in with offline
+	// notices on, tell this site's relay once a minute that the site is open, so
+	// it does not send her a notice about a message she can see arrive. Memory
+	// only on the relay; stops on lock or sign-out (also while its first
+	// answers are on their way). Loaded on demand. See offlinePresence.ts.
+	$effect(() => {
+		if (!$isUnlocked) return;
+		return offlinePresenceWhileUnlocked();
 	});
 
 	// Phase F.5 — Global trade-event listener.  Opens chat SSE

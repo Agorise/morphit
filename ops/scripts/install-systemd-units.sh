@@ -160,5 +160,10 @@ echo "        | sudo tee /etc/morphit/relay-vapid.env >/dev/null"
 echo "      sudo chmod 640 /etc/morphit/relay-vapid.env"
 echo "      sudo systemctl restart morphit-relay"
 echo
+echo "  - Offline notifications (optional): let your users get a short note on"
+echo "    Matrix, Session, XMPP, Telegram or email when a chat message arrives"
+echo "    while they are away. Guided, each account tested before it is saved:"
+echo "      sudo morphit-ops offline-notify"
+echo
 echo "If any of these were running manually (not under systemd), stop those"
 echo "processes first so the systemd-managed ones can bind their ports."

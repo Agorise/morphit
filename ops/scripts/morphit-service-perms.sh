@@ -7,6 +7,7 @@
 #   indexer:  the env files it sources              → root:morphit 0640
 #   relay:    the env files it sources              → root:morphit 0640
 #             its keystore (MORPHIT_RELAY_ACTIVE_KEY_FILE) → root:morphit-relay 0640
+#             /etc/morphit/relay-notify.env (offline notices) → root:morphit-relay 0640
 #
 # Why at every start: a tool that rewrites one of these files atomically (a
 # temp file renamed over it) leaves it root:root 0600, and the service would
@@ -36,6 +37,10 @@ case "${1:-}" in
 		;;
 	relay)
 		FILES=(/opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/relay.env /etc/morphit/relay-vapid.env)
+		# Sourced last, but readable by the relay alone (its group, not the
+		# service group the indexer is in too): the offline-notice accounts'
+		# passwords, tokens and Session recovery words. See below.
+		RELAY_ONLY=(/etc/morphit/relay-notify.env)
 		;;
 	*)
 		log "usage: $0 indexer|relay"
@@ -81,8 +86,12 @@ done
 if [ "$1" = relay ]; then
 	# The keystore path, read as text (never sourced): the last assignment wins,
 	# as when the relay's start-up sources these files.
+	for f in "${RELAY_ONLY[@]}"; do
+		[ -e "$ROOT_DIR$f" ] || continue
+		own_for "$ROOT_DIR$f" "$GROUP_KEY"
+	done
 	key=""
-	for f in "${FILES[@]}"; do
+	for f in "${FILES[@]}" "${RELAY_ONLY[@]}"; do
 		[ -f "$ROOT_DIR$f" ] || continue
 		v="$(sed -n 's/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}MORPHIT_RELAY_ACTIVE_KEY_FILE=//p' -- "$ROOT_DIR$f" | tail -n 1)"
 		v="${v%\"}"

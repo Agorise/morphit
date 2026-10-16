@@ -158,7 +158,7 @@ tmux new -s morphit
 
 ```sh
 # on the server
-V=1.21.8
+V=1.21.9
 mkdir -p ~/morphit && cd ~/morphit
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz"
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz.sha256"
@@ -366,7 +366,7 @@ Every `morphit-ops upgrade` re-applies it automatically — set it up once.
 
 ## 12. Going further (optional)
 
-Two things you might do later. Both have full walkthroughs elsewhere, so here's just the gist:
+A few things you might do later. Each has a full walkthrough elsewhere, so here's just the gist:
 
 **Switch between Tor-only and clearnet** (either direction, any time). Re-run the guided install — `sudo morphit-ops` → **Install / set up a new node** — and pick the other mode. It's non-destructive: your database and keys are kept, and your on-chain registration re-publishes with the new address for you. **A once-clearnet node cannot become anonymous by switching:** its old domain, its `.onion` (advertised by the clearnet site), its I2P address and its operator account are already publicly linked. When you switch a former clearnet box to Tor-only, the installer warns you and offers fresh onion and I2P keys (the old ones are moved aside as `*.linked-<time>`); use them, and register a NEW operator account, if anonymity is the point. Full details: `docs/SWITCHING-NETWORKS.md`. (Just want to *add* a Tor/I2P/Lokinet address without switching your main mode? Use `sudo morphit-ops` → **Set up a Tor / Lokinet / I2P address**.)
 
@@ -377,6 +377,14 @@ sudo systemctl start morphit-backup.service
 ```
 
 — then copy the newest `.sql.gz` off the server. Reinstall like a fresh node, restore the dump, and the chain index rebuilds itself. For a canonical instance, rehearse on a throwaway box first. Full procedure: `OPERATIONS.md` and `docs/SWITCHING-NETWORKS.md`.
+
+**Offline notifications for your users.** Let them get a short note on Matrix, Session, XMPP, Telegram or email when a chat message arrives while they are away ("Someone just sent you a chat message on *your site*", with a link to it — never who wrote or what). You set up an account for each app you want to offer; users then choose in *Settings*. Guided, each account tested before it is saved (Session when you let it send you a test note):
+
+```sh
+sudo morphit-ops offline-notify
+```
+
+Your users' addresses are kept encrypted, never shown on a profile or anywhere else, and they can delete them any time. On a Tor-only node only `.onion` servers work, and Telegram and Session cannot be offered. Full details: `OPERATIONS.md` §54. For email, send **from an address at your mail provider**, not at your own domain — see §13 below.
 
 **Exporting a Tor/I2P key to a file.** `sudo morphit-ops export-altnet-key --network=tor --out=PATH` (or `--network=i2p` / `lokinet`, on the server) only ever creates a new file. If something is already at `PATH`, it writes nothing and tells you; delete the old file first. (That stops another user on the box from setting up the file in advance to read your key.)
 
@@ -401,7 +409,7 @@ dig +short TXT yourdomain.tld            # expect: "v=spf1 -all"
 dig +short TXT _dmarc.yourdomain.tld     # expect: "v=DMARC1; p=reject; ..."
 ```
 
-**Only if you later add a real mailbox, or configure alert mail through an SMTP relay,** on this domain (most operators won't) do you replace `v=spf1 -all` with one that lists your actual sender, e.g. `v=spf1 include:_spf.google.com -all`, and relax DMARC to `p=quarantine` while you test.
+**Only if you later add a real mailbox, or configure alert mail through an SMTP relay,** on this domain (most operators won't) — or send your users' offline notifications (§12) from an address at this domain instead of one at your mail provider — do you replace `v=spf1 -all` with one that lists your actual sender, e.g. `v=spf1 include:_spf.google.com -all`, and relax DMARC to `p=quarantine` while you test.
 
 ---
 

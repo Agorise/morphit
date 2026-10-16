@@ -20,7 +20,7 @@
  * and this fails on at least 3 queries.
  */
 
-import { searchEntries, type FaqEntry } from '../src/lib/utils/faqIndex';
+import { FAQ_KEYS, FAQ_RELATED, searchEntries, type FaqEntry } from '../src/lib/utils/faqIndex';
 import enRaw from '../src/lib/i18n/locales/en.json' with { type: 'json' };
 import { applyBrandToString } from '../../../packages/operator-config/src/brand.ts';
 
@@ -116,6 +116,45 @@ const CASES: readonly Case[] = [
 	{
 		query: 'how do I sell monero',
 		acceptableTopHits: ['how_to_sell', 'how_to_trade_walkthrough']
+	},
+	// Settings → Offline Notifications. A question about the feature by name,
+	// or about the address she gave it, lands on its own article; a general
+	// "tell me by email / on Telegram" may land on the notifications overview,
+	// which points to it. ("notify me by email" found nothing at all until
+	// "notify" had synonyms and "by"/"me" were filler words.)
+	{ query: 'offline notifications', acceptableTopHits: ['offline_notifications'] },
+	{ query: 'is my email address private', acceptableTopHits: ['offline_notifications'] },
+	{ query: 'how do i stop the notes', acceptableTopHits: ['offline_notifications'] },
+	{
+		query: 'notify me by email',
+		acceptableTopHits: ['notifications_overview', 'offline_notifications']
+	},
+	{
+		query: 'telegram notifications',
+		acceptableTopHits: ['notifications_overview', 'offline_notifications']
+	},
+	{
+		query: 'get a message on telegram when someone writes',
+		acceptableTopHits: ['notifications_overview', 'offline_notifications']
+	},
+	// "notified" and "writes" once also expanded to "note", a word common
+	// enough ("a short note about using it" on profiles) that these landed on
+	// the iPhone, profile and blocking answers.
+	{
+		query: 'how do i get notified',
+		acceptableTopHits: ['notifications_overview', 'offline_notifications']
+	},
+	{
+		query: 'someone writes to me',
+		acceptableTopHits: ['notifications_overview', 'offline_notifications']
+	},
+	{
+		query: 'when someone writes',
+		acceptableTopHits: ['notifications_overview', 'offline_notifications']
+	},
+	{
+		query: 'how do i know if someone writes to me',
+		acceptableTopHits: ['notifications_overview', 'offline_notifications']
 	}
 ];
 
@@ -232,6 +271,56 @@ for (const [list, name, query, want] of [
 	const site = name === undefined ? 'unbranded' : `branded "${name}"`;
 	if (top?.entry.key === want) pass(`${site}: "${query}" → [${want}]`);
 	else fail(`${site}: "${query}" top hit is [${top?.entry.key ?? 'none'}]`, `Expected ${want}.`);
+}
+
+// Filler words ("by", "me", "am", "at"): no answer needs them to match, and
+// counted as words they push the right answer down or out. "notify me by
+// email" kept only the overview while "by" was a word (the offline
+// notifications answer never says "by"), and put an unrelated answer second
+// while "me" was one; "i am lost" found a stablecoin network answer, and "how
+// do i pay at the bank" the page about where to buy BLURT.
+for (const [query, wantTop] of [
+	['notify me by email', ['notifications_overview', 'offline_notifications']],
+	['notify me by telegram', ['notifications_overview', 'offline_notifications']],
+	['i am lost', ['lost_keys']],
+	['how do i pay at the bank', ['in_person_vs_online']]
+] as const) {
+	for (const [site, list, name] of [
+		['unbranded', entries, undefined],
+		[`branded "${BRANDED}"`, brandedEntries, BRANDED]
+	] as const) {
+		const got = searchEntries(list, query, wantTop.length, name).map((h) => h.entry.key as string);
+		if (wantTop.every((k) => got.includes(k)))
+			pass(`${site}: "${query}" → [${got.join(', ')}] (filler words ignored)`);
+		else
+			fail(
+				`${site}: "${query}" top ${wantTop.length} is [${got.join(', ')}]`,
+				`Expected ${wantTop.join(' and ')}: is a filler word (by/me/am/at) missing from STOPWORDS_EN?`
+			);
+	}
+}
+
+// Every key the FAQ links between (FAQ_RELATED) and every key it lists
+// (FAQ_KEYS) is an entry of en.json: a "See also" chip or a search hit that
+// names a missing entry shows a raw key, or nothing.
+{
+	const enKeys = new Set(Object.keys(en.faq.entries));
+	const missing = new Set<string>();
+	for (const k of FAQ_KEYS) if (!enKeys.has(k)) missing.add(`FAQ_KEYS:${k}`);
+	for (const [k, rel] of Object.entries(FAQ_RELATED)) {
+		if (!enKeys.has(k)) missing.add(`FAQ_RELATED:${k}`);
+		for (const r of rel ?? []) if (!enKeys.has(r)) missing.add(`FAQ_RELATED.${k}→${r}`);
+	}
+	if (missing.size === 0)
+		pass(`every FAQ_KEYS and FAQ_RELATED key (${FAQ_KEYS.length} entries) exists in en.json`);
+	else fail(`FAQ keys missing from en.json: ${[...missing].join(', ')}`);
+	const offline = FAQ_RELATED.offline_notifications ?? [];
+	if (
+		offline.includes('notifications_overview') &&
+		(FAQ_RELATED.notifications_overview ?? []).includes('offline_notifications')
+	)
+		pass('offline notifications and the notifications overview link to each other');
+	else fail('offline_notifications ↔ notifications_overview "See also" link is missing');
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

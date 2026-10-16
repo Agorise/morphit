@@ -26,6 +26,31 @@
 import { spawnSync } from 'node:child_process';
 
 export const RULE_ID = '1990001';
+
+/**
+ * The exemption itself: the JSON APIs (/v1/ indexer, /relay/ relay) get no
+ * ModSecurity rules (their base64 payloads trip the Core Rule Set). The audit
+ * log matters for privacy: its defaults write the BODY of every request
+ * answered with a 4xx or 5xx — and a Settings → Offline Notifications request
+ * carries a user's own address (a mistyped one is a 400, a code that could not
+ * be sent a 502). The earlier rule (`ctl:ruleEngine=Off` alone) already kept
+ * these requests out of the audit log on libmodsecurity 3.0.12 (review R5,
+ * checked with BunkerWeb's audit defaults). Belt and braces: this one also
+ * turns the audit log and request-body reading off for them explicitly, so
+ * that holds whatever ModSecurity version or audit settings BunkerWeb runs.
+ */
+export const MODSEC_RULE = `SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:${RULE_ID},phase:1,t:none,nolog,pass,ctl:ruleEngine=Off,ctl:auditEngine=Off,ctl:requestBodyAccess=Off"`;
+/** What earlier releases shipped; an upgrade replaces exactly these. */
+export const OLD_MODSEC_RULES: readonly string[] = [
+	`SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:${RULE_ID},phase:1,t:none,nolog,pass,ctl:ruleEngine=Off"`
+];
+
+/** The value the setting should have, or null to leave it: added when
+ *  missing, an earlier release's rule replaced, an operator's own kept. PURE. */
+export function modsecRuleFix(current: string | null): string | null {
+	if (current === null) return MODSEC_RULE;
+	return OLD_MODSEC_RULES.includes(current.trim()) ? MODSEC_RULE : null;
+}
 /** The custom config BunkerWeb makes from CUSTOM_CONF_MODSEC_morphit_json_api_off. */
 export const KEEP_NAME = 'morphit_json_api_off';
 
