@@ -51,6 +51,12 @@ import {
 import { ask, askYesNo, askChoice, step, explain, isAbortError } from '../init/prompt.ts';
 import { REGISTER_DECLINED, runRegister } from './register.ts';
 import { sanitizeForTerm } from '../render/term.ts';
+import {
+	liveConfigPath,
+	liveServiceEnvs,
+	restartWithWritten,
+	type ServiceUnit
+} from '../lib/laterEnvShadow.ts';
 import { offerRestart } from '../lib/restartServices.ts';
 import { syncInstanceOrigin } from '../lib/instanceOrigin.ts';
 import { startDotsSpinner } from '../init/spinner.ts';
@@ -499,9 +505,26 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	// it.  e.g. setting the Tor/Lokinet/I2P footer address here lights up
 	// the footer pill with no further steps.  Origin changes also touch
 	// the relay; RPC changes are indexer-only.
-	const unitsToRestart = ['morphit-indexer'];
-	if (originChanged) unitsToRestart.push('morphit-relay');
-	const restarted = await offerRestart(unitsToRestart);
+	//
+	// A file a service reads AFTER these can undo what was just written: an
+	// install from before v1.12.20 still has the contact link, name and tagline
+	// in /etc/morphit/indexer.env, and the Ansible files carry the operator tag
+	// and the Blurt node lists. Those copies are removed first, so the restart
+	// really brings the new values — and the running services are then checked.
+	const unitsToRestart: ServiceUnit[] = ['morphit-indexer'];
+	if (originChanged || envUpdates.has('MORPHIT_RELAY_BLURT_RPC'))
+		unitsToRestart.push('morphit-relay');
+	const restarted = await restartWithWritten(
+		[...configUpdates.keys(), ...envUpdates.keys()],
+		unitsToRestart,
+		{
+			offer: (units) => offerRestart(units),
+			print: (line) => console.log(line === '' ? '' : `  ${sanitizeForTerm(line)}`),
+			// Only the installed settings file is what the services read; an edit
+			// of another copy (--out) has nothing to clear or check against.
+			envs: resolve(configPath) === resolve(liveConfigPath()) ? liveServiceEnvs() : []
+		}
+	);
 
 	// The site brand name lives in the SERVED frontend (re-branded in place,
 	// docs/BRANDING.md), so it also needs `branding apply` — offer it now.

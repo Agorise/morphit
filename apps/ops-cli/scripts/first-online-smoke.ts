@@ -297,6 +297,22 @@ process.exit(7);
 		`${r.out.slice(0, 300)} | ${clearnet(r.curls).join(' ')}`
 	);
 
+	// v1.21.10: the empty list written the other ways bash also reads as empty —
+	// a comment after it, quoted, `export` — is zero-clearnet too (the indexer
+	// gets an empty list from each), so still not one clearnet curl.
+	for (const line of [
+		'MORPHIT_INDEXER_RPC_ENDPOINTS=   # tor-only: no clearnet\n',
+		'MORPHIT_INDEXER_RPC_ENDPOINTS=""  # none\n',
+		'export MORPHIT_INDEXER_RPC_ENDPOINTS=\n'
+	]) {
+		r = runFo(hiddenEnv.replace('MORPHIT_INDEXER_RPC_ENDPOINTS=\n', line), {});
+		check(
+			`hidden-only written as ${JSON.stringify(line.trim())}: NO clearnet curl`,
+			r.exit === 0 && clearnet(r.curls).length === 0,
+			`${r.out.slice(0, 200)} | ${clearnet(r.curls).join(' ')}`
+		);
+	}
+
 	// Control: the key ABSENT still means "unconfigured" → the clearnet fallback,
 	// which also proves the recorder sees a clearnet probe when one happens.
 	r = runFo('MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=\n', {});
@@ -454,7 +470,9 @@ check(
 check(
 	'first-online does NOT source indexer.env with `.` (set -e abort risk); reads the endpoint value inertly with sed',
 	!/\.[ \t]+["']?\$\{INDEXER_ENV\}/.test(src) &&
-		/sed -n [^\n]*MORPHIT_INDEXER_RPC_ENDPOINTS=/.test(src)
+		// read through indexer_env_value (sed, inert) since v1.21.10
+		/eps="\$\(indexer_env_value MORPHIT_INDEXER_RPC_ENDPOINTS\b/.test(src) &&
+		/^indexer_env_value\(\) \{(?:(?!^\})[\s\S])*?\bsed -n /m.test(src)
 );
 // the two env files first-online DOES need loaded whole (its own config +
 // relay.env for the register step) must be sourced with errexit OFF — a single

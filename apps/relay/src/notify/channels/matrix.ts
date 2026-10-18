@@ -53,11 +53,13 @@ async function call(
 	policy: NetPolicy,
 	method: string,
 	path: string,
-	body?: unknown
+	body?: unknown,
+	timeoutMs?: number
 ): Promise<Record<string, unknown>> {
 	const base = cfg.homeserver.replace(/\/+$/, '');
 	const r = await httpRequest(`${base}${path}`, policy, {
 		method,
+		...(timeoutMs !== undefined ? { timeoutMs } : {}),
 		headers: {
 			Authorization: `Bearer ${cfg.accessToken}`,
 			'Content-Type': 'application/json',
@@ -150,20 +152,91 @@ export async function sendMatrix(
 export async function leaveRoom(
 	cfg: MatrixConfig,
 	policy: NetPolicy,
-	roomId: string
+	roomId: string,
+	timeoutMs?: number
 ): Promise<void> {
 	const room = encodeURIComponent(roomId);
 	try {
-		await call(cfg, policy, 'POST', `/_matrix/client/v3/rooms/${room}/leave`, {});
+		await call(cfg, policy, 'POST', `/_matrix/client/v3/rooms/${room}/leave`, {}, timeoutMs);
 	} catch (err) {
 		if (!(err instanceof MatrixError) || (err.status !== 403 && err.status !== 404)) throw err;
 	}
 	try {
-		await call(cfg, policy, 'POST', `/_matrix/client/v3/rooms/${room}/forget`, {});
+		await call(cfg, policy, 'POST', `/_matrix/client/v3/rooms/${room}/forget`, {}, timeoutMs);
 	} catch (err) {
 		// Already forgotten (or never known): nothing is left to forget.
 		if (!(err instanceof MatrixError) || (err.status !== 403 && err.status !== 404)) throw err;
 	}
+}
+
+/** Whether `userId` has joined `roomId` (asked of the bot's homeserver). */
+export async function hasJoined(
+	cfg: MatrixConfig,
+	policy: NetPolicy,
+	roomId: string,
+	userId: string,
+	timeoutMs?: number
+): Promise<boolean> {
+	const r = await call(
+		cfg,
+		policy,
+		'GET',
+		`/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/joined_members`,
+		undefined,
+		timeoutMs
+	);
+	const joined = r.joined;
+	return typeof joined === 'object' && joined !== null && Object.hasOwn(joined as object, userId);
+}
+
+/** How long an operator's test chat waits for them to join it. */
+export const TEST_JOIN_WAIT_MS = 100_000;
+const TEST_JOIN_POLL_MS = 3_000;
+/** One join check, and each of leave and forget, may take this long at most. */
+const TEST_CALL_MS = 15_000;
+
+/**
+ * After a test note: wait until the operator has joined the chat (or
+ * `waitMs` passed), then leave and forget it. Once the bot has left, the
+ * invitation can no longer be accepted ("the person who invited you has
+ * already left"), so leaving at once would leave the note unreadable; once
+ * they have joined, the note stays with them. Returns whether they joined.
+ */
+export async function leaveTestRoom(
+	cfg: MatrixConfig,
+	policy: NetPolicy,
+	roomId: string,
+	userId: string,
+	opts: {
+		readonly waitMs?: number;
+		readonly pollMs?: number;
+		readonly now?: () => number;
+		readonly sleep?: (ms: number) => Promise<void>;
+		/** When everything, the leave included, must be done (by `now`): the
+		 *  caller's own time limit. The checks stop early enough for the leave. */
+		readonly deadline?: number;
+	} = {}
+): Promise<boolean> {
+	const now = opts.now ?? Date.now;
+	const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+	const deadline = opts.deadline ?? Infinity;
+	// Leave and forget each get up to TEST_CALL_MS (a quarter of the time when
+	// less is left), so checking stops that much earlier.
+	const reserve = Math.min(TEST_CALL_MS, (deadline - now()) / 4);
+	const lastCheck = deadline - 2 * reserve;
+	const until = Math.min(now() + (opts.waitMs ?? TEST_JOIN_WAIT_MS), lastCheck);
+	const callMs = (end: number): number => Math.max(1_000, Math.min(TEST_CALL_MS, end - now()));
+	let joined = false;
+	for (;;) {
+		if (now() >= lastCheck) break;
+		joined = await hasJoined(cfg, policy, roomId, userId, callMs(lastCheck)).catch(() => false);
+		if (joined || now() >= until) break;
+		await sleep(Math.min(opts.pollMs ?? TEST_JOIN_POLL_MS, Math.max(0, until - now())));
+	}
+	// Leave and forget share what is left (each at most TEST_CALL_MS).
+	const leaveMs = Math.max(1_000, Math.min(TEST_CALL_MS, (deadline - now()) / 2));
+	await leaveRoom(cfg, policy, roomId, leaveMs).catch(() => undefined);
+	return joined;
 }
 
 /** The bot's own user id, from its token (operator setup check). */

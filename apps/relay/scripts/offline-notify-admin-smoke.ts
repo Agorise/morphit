@@ -9,12 +9,18 @@
  *     which must never be mistaken for a lost key;
  *   - `reset` deletes the saved addresses AND the key file, so the relay's
  *     next start really makes a new key;
- *   - `purge-channel matrix` says how many rooms the bot could not leave yet.
+ *   - `purge-channel matrix` says how many rooms the bot could not leave yet;
+ *   - `send matrix` (the operator's test note) leaves its chat only once they
+ *     have joined it — before that, the invitation could no longer be accepted;
+ *   - `register xmpp` makes the site's XMPP account: a picture check is asked on
+ *     stdout and answered on stdin, in the same stream; `archive-off xmpp`
+ *     turns the account's message archive off.
  *
  * Needs TEST_DATABASE_URL (skips without it); the "cannot read" case needs
  * root and setpriv (skipped otherwise).
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import http from 'node:http';
 import {
 	chmodSync,
 	chownSync,
@@ -31,6 +37,7 @@ import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { PrivateKey } from '@beblurt/dblurt';
 import { openSealedStore } from '../src/notify/store.ts';
+import { TEST_CERT, fakeXmpp } from '../test/notifyFakes.ts';
 import { VAULT_KEY_FILE } from '../src/notify/vault.ts';
 
 let n = 0;
@@ -96,6 +103,47 @@ const run = (
 		return { unparsed: r.stdout, stderr: r.stderr };
 	}
 };
+/** `run`, without blocking this process (a stand-in server here must answer).
+ *  `answer`: the tool asked a question ({"ask":…}); its reply goes on stdin. */
+const runAsync = (
+	args: string[],
+	stdin: Record<string, string>,
+	opts: {
+		answer?: (q: Record<string, unknown>) => Record<string, string>;
+		extraEnv?: NodeJS.ProcessEnv;
+	} = {}
+): Promise<Record<string, unknown>> =>
+	new Promise((resolve) => {
+		const child = spawn(TSX, [join(RELAY, 'src/notify/adminCli.ts'), ...args], {
+			env: { ...env(), ...opts.extraEnv }
+		});
+		let stdout = '';
+		let scanned = 0;
+		child.stdout.on('data', (d: Buffer) => {
+			stdout += d.toString('utf8');
+			for (let nl = stdout.indexOf('\n', scanned); nl >= 0; nl = stdout.indexOf('\n', scanned)) {
+				const line = stdout.slice(scanned, nl);
+				scanned = nl + 1;
+				try {
+					const q = JSON.parse(line) as Record<string, unknown>;
+					if ('ask' in q && opts.answer) child.stdin.write(`${JSON.stringify(opts.answer(q))}\n`);
+				} catch {
+					/* not JSON */
+				}
+			}
+		});
+		const timer = setTimeout(() => child.kill('SIGKILL'), 120_000);
+		child.on('close', () => {
+			clearTimeout(timer);
+			try {
+				resolve(JSON.parse(stdout.trim().split('\n').at(-1) ?? '') as Record<string, unknown>);
+			} catch {
+				resolve({ unparsed: stdout });
+			}
+		});
+		if (opts.answer) child.stdin.write(`${JSON.stringify(stdin)}\n`);
+		else child.stdin.end(JSON.stringify(stdin));
+	});
 const pool = new pg.Pool({ connectionString: withSchema(url), max: 2 });
 const db = {
 	query: (t: string, p?: readonly unknown[]) => pool.query(t, p as unknown[]),
@@ -200,6 +248,110 @@ try {
 		'turning Matrix off: its addresses go, and the rooms not left yet are counted',
 		purged.ok === true && purged.removed === 1 && purged.waiting === 1,
 		JSON.stringify(purged)
+	);
+
+	// The operator's Matrix test note: the bot stays in the test chat until they
+	// have joined it, then leaves (and forgets it).
+	const order: string[] = [];
+	let checks = 0;
+	const hs = http.createServer((req, res) => {
+		const path = req.url ?? '';
+		let body: unknown = { errcode: 'M_UNRECOGNIZED' };
+		let status = 404;
+		if (path === '/_matrix/client/v3/createRoom') {
+			order.push('createRoom');
+			[status, body] = [200, { room_id: '!test:hs' }];
+		} else if (/\/rooms\/!test%3Ahs\/send\//.test(path)) {
+			order.push('send');
+			[status, body] = [200, { event_id: '$e' }];
+		} else if (path === '/_matrix/client/v3/rooms/!test%3Ahs/joined_members') {
+			checks++;
+			order.push('check');
+			const joined: Record<string, unknown> = { '@notices:hs': {} };
+			if (checks >= 2) joined['@operator:hs.org'] = {};
+			[status, body] = [200, { joined }];
+		} else if (/\/rooms\/!test%3Ahs\/(leave|forget)$/.test(path)) {
+			order.push(path.endsWith('leave') ? 'leave' : 'forget');
+			[status, body] = [200, {}];
+		}
+		req.resume();
+		req.on('end', () => {
+			res.writeHead(status, { 'Content-Type': 'application/json' });
+			res.end(JSON.stringify(body));
+		});
+	});
+	await new Promise<void>((r) => hs.listen(0, '127.0.0.1', () => r()));
+	const hsPort = (hs.address() as { port: number }).port;
+	const sent = await runAsync(['send', 'matrix'], {
+		MORPHIT_NOTIFY_MATRIX_HOMESERVER: `http://127.0.0.1:${hsPort}`,
+		MORPHIT_NOTIFY_MATRIX_TOKEN: 'tok',
+		MORPHIT_NOTIFY_MATRIX_USER_ID: '@notices:hs',
+		to: '@operator:hs.org'
+	});
+	hs.close();
+	check(
+		'Matrix test note: the bot leaves its chat only after the operator joined it',
+		sent.ok === true &&
+			sent.joined === true &&
+			order.join(' ') === 'createRoom send check check leave forget',
+		`${JSON.stringify(sent)} ${order.join(' ')}`
+	);
+
+	// The site's XMPP account, made from morphit-ops: a server that wants a
+	// picture check (its form as ejabberd 23.10 sends it).
+	const caFile = join(work, 'ca.pem');
+	writeFileSync(caFile, TEST_CERT);
+	const submitted: string[] = [];
+	const xmppServer = await fakeXmpp({
+		password: 'Tr4in-Lamp-Stone',
+		iq: (iq, authed) => {
+			if (/jabber:iq:register/.test(iq) && /type='get'/.test(iq))
+				return "<iq type='result' id='reg1'><query xmlns='jabber:iq:register'><x type='form' xmlns='jabber:x:data'><field var='FORM_TYPE' type='hidden'><value>jabber:iq:register</value></field><field var='username' type='text-single'><required/></field><field var='password' type='text-private'><required/></field><field var='captcha-fallback-url' type='text-single'><value>https://xmpp.example/captcha/7/image</value></field><field var='challenge' type='hidden'><value>7</value></field><field var='ocr' type='text-single'><required/></field></x></query></iq>";
+			if (/jabber:iq:register/.test(iq)) {
+				submitted.push(iq);
+				return "<iq type='result' id='reg2'/>";
+			}
+			if (authed && /<prefs xmlns='urn:xmpp:mam:2' default='never'\/>/.test(iq))
+				return "<iq type='result' id='mam1'/>";
+			// Reading the setting back, as Prosody and ejabberd answer it.
+			if (authed && /type='get' id='mam2'><prefs xmlns='urn:xmpp:mam:2'\/>/.test(iq))
+				return "<iq type='result' id='mam2'><prefs default='never' xmlns='urn:xmpp:mam:2'><always/><never/></prefs></iq>";
+			return null;
+		}
+	});
+	const xmppSettings = {
+		MORPHIT_NOTIFY_XMPP_JID: 'morphitio@localhost',
+		MORPHIT_NOTIFY_XMPP_PASSWORD: 'Tr4in-Lamp-Stone',
+		MORPHIT_NOTIFY_XMPP_HOST: '127.0.0.1',
+		MORPHIT_NOTIFY_XMPP_PORT: String(xmppServer.port),
+		MORPHIT_NOTIFY_XMPP_SECURITY: 'starttls'
+	};
+	const trust = { NODE_EXTRA_CA_CERTS: caFile };
+	const form = await runAsync(['register-form', 'xmpp'], xmppSettings, { extraEnv: trust });
+	const asked: Array<Record<string, unknown>> = [];
+	const made = await runAsync(['register', 'xmpp'], xmppSettings, {
+		extraEnv: trust,
+		answer: (q) => {
+			asked.push(q);
+			return { answer: 'K7Q2X' };
+		}
+	});
+	const archived = await runAsync(['archive-off', 'xmpp'], xmppSettings, { extraEnv: trust });
+	await xmppServer.close();
+	check(
+		'XMPP account: the picture check is asked and answered on the same stream; the archive is turned off',
+		form.ok === true &&
+			form.status === 'captcha' &&
+			form.url === 'https://xmpp.example/captcha/7/image' &&
+			made.ok === true &&
+			JSON.stringify(asked) ===
+				JSON.stringify([{ ask: 'captcha', url: 'https://xmpp.example/captcha/7/image' }]) &&
+			submitted.length === 1 &&
+			submitted[0]!.includes("<field var='ocr'><value>K7Q2X</value></field>") &&
+			submitted[0]!.includes("<field var='username'><value>morphitio</value></field>") &&
+			archived.ok === true &&
+			archived.archive === 'off',
+		`${JSON.stringify({ form, made, asked, archived })} ${submitted.join(' ')}`
 	);
 
 	// Start over: addresses and the key file go; the next start makes a new key.

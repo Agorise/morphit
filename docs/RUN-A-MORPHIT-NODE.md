@@ -158,7 +158,7 @@ tmux new -s morphit
 
 ```sh
 # on the server
-V=1.21.9
+V=1.21.10
 mkdir -p ~/morphit && cd ~/morphit
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz"
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz.sha256"
@@ -384,7 +384,7 @@ sudo systemctl start morphit-backup.service
 sudo morphit-ops offline-notify
 ```
 
-Your users' addresses are kept encrypted, never shown on a profile or anywhere else, and they can delete them any time. On a Tor-only node only `.onion` servers work, and Telegram and Session cannot be offered. Full details: `OPERATIONS.md` §54. For email, send **from an address at your mail provider**, not at your own domain — see §13 below.
+Make each app's account first (the wizard signs in to it; for a Matrix account on matrix.org: https://app.element.io → *Create account*, with an email address and a password of at least 10 characters) — except Session, whose account the wizard makes, and XMPP, whose account the wizard can make for you on a free public server, no email address needed. Your users' addresses are kept encrypted, never shown on a profile or anywhere else, and they can delete them any time. On a Tor-only node only `.onion` servers work, and Telegram and Session cannot be offered. Full details: `OPERATIONS.md` §54. For email, send **from an address at your mail provider**, not at your own domain — see §13 below.
 
 **Exporting a Tor/I2P key to a file.** `sudo morphit-ops export-altnet-key --network=tor --out=PATH` (or `--network=i2p` / `lokinet`, on the server) only ever creates a new file. If something is already at `PATH`, it writes nothing and tells you; delete the old file first. (That stops another user on the box from setting up the file in advance to read your key.)
 

@@ -13,6 +13,12 @@
  *                                                     the Matrix bot leaves their rooms)
  *   tsx src/notify/adminCli.ts reset                  (start over: forget every address,
  *                                                     and which key sealed them)
+ *   tsx src/notify/adminCli.ts register-form xmpp     (what a server asks of a new account)
+ *   tsx src/notify/adminCli.ts register xmpp          (make the account: XEP-0077; a picture
+ *                                                     check is asked on stdout as
+ *                                                     {"ask":"captcha",…} and answered on
+ *                                                     the next stdin line {"answer":"…"})
+ *   tsx src/notify/adminCli.ts archive-off xmpp       (the account's server keeps no copies)
  *
  * Settings being tried out, not saved yet, come in on stdin as one JSON
  * object of MORPHIT_NOTIFY_* values (and "to", the test address) — never on
@@ -29,10 +35,11 @@ import { createDatabase } from '../db/pool.ts';
 import { normalizeAddress, type AddressChannel, type Channel } from './addresses.ts';
 import { notifyConfigFromEnv, offeredChannels, type NotifyConfig } from './config.ts';
 import { dispatch } from './dispatch.ts';
-import { leaveRoom, MatrixRoomLeftOpen, whoAmI } from './channels/matrix.ts';
+import { leaveRoom, leaveTestRoom, MatrixRoomLeftOpen, whoAmI } from './channels/matrix.ts';
 import { drainLeavesWithin } from './leaves.ts';
 import { newSessionIdentity } from './channels/session.ts';
 import { telegramBotName } from './channels/telegram.ts';
+import { registerXmpp, xmppArchiveOff, xmppRegistrationForm } from './channels/xmpp.ts';
 import type { NetPolicy } from './net.ts';
 import { openSealedStore, resetOfflineNotify } from './store.ts';
 import { VAULT_KEY_FILE, VaultUnavailableError } from './vault.ts';
@@ -41,18 +48,59 @@ const CHANNELS: readonly Channel[] = ['matrix', 'session', 'xmpp', 'telegram', '
 /** purge-channel stops starting to leave rooms after this (morphit-ops stops
  *  waiting for this tool after 180 s; one leave may take about 30 s). */
 export const LEAVE_BUDGET_MS = 100_000;
+/** `send matrix` is done, the test chat left, this long after the tool started
+ *  (morphit-ops stops it at 180 s; starting tsx takes a few seconds). */
+export const SEND_BUDGET_MS = 150_000;
+const STARTED = Date.now();
 
 function out(o: Record<string, unknown>): never {
 	process.stdout.write(`${JSON.stringify(o)}\n`);
 	process.exit(o.ok === true ? 0 : 1);
 }
 
+// stdin, one line at a time: the settings (one JSON object, with or without a
+// line break after it), then — for `register` only — the answer to a question
+// this tool asked on stdout.
+const stdinLines: string[] = [];
+let stdinPending = '';
+let stdinEnded = false;
+let stdinWake: (() => void) | null = null;
+function listenStdin(): void {
+	process.stdin.setEncoding('utf8');
+	process.stdin.on('data', (c: string) => {
+		stdinPending += c;
+		for (let i = stdinPending.indexOf('\n'); i >= 0; i = stdinPending.indexOf('\n')) {
+			stdinLines.push(stdinPending.slice(0, i));
+			stdinPending = stdinPending.slice(i + 1);
+		}
+		stdinWake?.();
+	});
+	process.stdin.on('end', () => {
+		if (stdinPending.trim() !== '') stdinLines.push(stdinPending);
+		stdinPending = '';
+		stdinEnded = true;
+		stdinWake?.();
+	});
+}
+async function nextLine(): Promise<string | null> {
+	for (;;) {
+		const l = stdinLines.shift();
+		if (l !== undefined) return l;
+		if (stdinEnded) return null;
+		await new Promise<void>((r) => {
+			stdinWake = () => {
+				stdinWake = null;
+				r();
+			};
+		});
+	}
+}
+
 /** MORPHIT_NOTIFY_* string values, and "to", from stdin. */
 async function input(): Promise<{ env: Record<string, string>; to: string }> {
 	if (process.stdin.isTTY) return { env: {}, to: '' };
-	const chunks: Buffer[] = [];
-	for await (const c of process.stdin) chunks.push(c as Buffer);
-	const raw = Buffer.concat(chunks).toString('utf8').trim();
+	listenStdin();
+	const raw = ((await nextLine()) ?? '').trim();
 	if (raw === '') return { env: {}, to: '' };
 	let parsed: unknown;
 	try {
@@ -239,6 +287,54 @@ async function main(): Promise<void> {
 	if (off) out({ ok: false, error: off, ...site });
 	if (cfg[channel] === null) out({ ok: false, error: 'not_set', ...site });
 
+	if (
+		channel === 'xmpp' &&
+		(cmd === 'register-form' || cmd === 'register' || cmd === 'archive-off')
+	) {
+		const x = cfg.xmpp!;
+		const at = x.jid.indexOf('@');
+		const server = {
+			domain: x.jid.slice(at + 1),
+			host: x.host,
+			port: x.port,
+			security: x.security
+		};
+		try {
+			if (cmd === 'register-form') {
+				const f = await xmppRegistrationForm(server, net);
+				out({
+					ok: true,
+					status: f.status,
+					...(f.url !== undefined ? { url: f.url } : {}),
+					...(f.fields !== undefined ? { fields: f.fields } : {})
+				});
+			}
+			if (cmd === 'archive-off') out({ ok: true, archive: await xmppArchiveOff(x, net) });
+			const r = await registerXmpp(server, net, x.jid.slice(0, at), x.password, async (f) => {
+				process.stdout.write(`${JSON.stringify({ ask: 'captcha', url: f.url ?? null })}\n`);
+				const line = await nextLine();
+				try {
+					const a = (JSON.parse(line ?? '') as { answer?: unknown }).answer;
+					return typeof a === 'string' ? a : null;
+				} catch {
+					return null;
+				}
+			});
+			if (r.ok) out({ ok: true });
+			if ('form' in r)
+				out({
+					ok: false,
+					error: 'form',
+					status: r.form.status,
+					...(r.form.url !== undefined ? { url: r.form.url } : {}),
+					...(r.form.fields !== undefined ? { fields: r.form.fields } : {})
+				});
+			out({ ok: false, error: 'refused', why: r.why, text: r.text });
+		} catch (err) {
+			out({ ok: false, error: 'failed', reason: reason(err) });
+		}
+	}
+
 	if (cmd === 'check') {
 		try {
 			if (channel === 'telegram')
@@ -264,9 +360,17 @@ async function main(): Promise<void> {
 				subject: `Test from ${cfg.siteName}`,
 				text
 			});
-			// The test's Matrix room is not kept: the bot leaves and forgets it.
-			if (route !== null && channel === 'matrix' && cfg.matrix !== null)
-				await leaveRoom(cfg.matrix, net, route).catch(() => undefined);
+			// The test's Matrix room is not kept: the bot leaves and forgets it —
+			// once the operator has joined it (or after a while), so the note can
+			// still be read (an invitation from a room everyone left cannot be accepted).
+			if (route !== null && channel === 'matrix' && cfg.matrix !== null) {
+				out({
+					ok: true,
+					joined: await leaveTestRoom(cfg.matrix, net, route, address, {
+						deadline: STARTED + SEND_BUDGET_MS
+					})
+				});
+			}
 			out({ ok: true });
 		} catch (err) {
 			// A room opened for the test whose message failed: not kept either.

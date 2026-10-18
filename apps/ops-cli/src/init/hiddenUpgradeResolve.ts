@@ -37,6 +37,7 @@ import {
 } from './hiddenUpgradeWait.ts';
 import { makeHiddenTarballFetcher } from './hiddenUpgradeTransport.js';
 import { localCondenser } from '../lib/hiddenOnly.ts';
+import { parseShellValue } from '../lib/offlineNotifyEnv.ts';
 import {
 	findSignedReleaseAnchor,
 	type CondenserRead,
@@ -79,16 +80,22 @@ export function isHiddenOnlyFromEnvFile(candidatePaths: readonly string[]): bool
 		} catch {
 			continue;
 		}
-		// [ \t]* (NOT \s*) around/after '=' — \s* matches newlines, so an empty
-		// `MORPHIT_INDEXER_RPC_ENDPOINTS=` would greedily capture the NEXT line and
-		// read as non-empty, mis-detecting a hidden-only node as clearnet (v1.16.6).
-		const m = text.match(/^[ \t]*MORPHIT_INDEXER_RPC_ENDPOINTS[ \t]*=[ \t]*(.*)$/m);
-		if (!m) return false; // key absent → treat as clearnet (safe default)
-		const val = (m[1] ?? '')
-			.trim()
-			.replace(/^["']|["']$/g, '')
-			.trim();
-		return val === ''; // empty clearnet pool ⇒ hidden-only
+		// The value as bash gives it (the unit sources this file): the LAST
+		// assignment, `export` allowed, quotes removed, and a `# comment` after
+		// a blank is not part of it — `MORPHIT_INDEXER_RPC_ENDPOINTS=   # tor-only`
+		// is empty for the indexer, so it must be hidden-only here too. [ \t]*
+		// (NOT \s*): \s* would run on into the next line (v1.16.6).
+		let raw: string | undefined;
+		for (const m of text.matchAll(
+			/^[ \t]*(?:export[ \t]+)?MORPHIT_INDEXER_RPC_ENDPOINTS[ \t]*=(.*)$/gm
+		))
+			raw = m[1] ?? '';
+		if (raw === undefined) return false; // key absent → treat as clearnet (safe default)
+		const val = parseShellValue(raw.replace(/\r$/, ''));
+		// Only running the file would tell: never take that for clearnet.
+		if (val === null) return true;
+		// empty clearnet pool ⇒ hidden-only (the indexer splits on commas and trims)
+		return val.split(',').every((e) => e.trim() === '');
 	}
 	return false; // no config found → not hidden-only (safe default)
 }

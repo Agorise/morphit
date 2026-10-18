@@ -480,17 +480,138 @@ export function writeConfigMxid(mxid: string, path: string): boolean {
 		return false;
 	}
 }
-export async function mintMatrixToken(
+/** Why a Matrix sign-in did not work, in a form the wizards can explain. */
+export type MatrixSignInFailure =
+	/** The homeserver says the username or password is wrong (403 M_FORBIDDEN). */
+	| 'wrong_password'
+	/** Too many attempts: the homeserver asks to wait (429 M_LIMIT_EXCEEDED). */
+	| 'rate_limited'
+	/** The homeserver does not offer password sign-in. */
+	| 'no_password_login'
+	/** Nothing at that address answers as a Matrix client API. */
+	| 'not_homeserver'
+	/** No answer at all (DNS, connection, timeout). */
+	| 'unreachable'
+	| 'other';
+
+export type MatrixSignIn =
+	| { readonly ok: true; readonly token: string; readonly homeserver: string }
+	| {
+			readonly ok: false;
+			readonly why: MatrixSignInFailure;
+			/** The homeserver's own errcode/error (or the network error), for the operator. */
+			readonly detail: string;
+			readonly homeserver: string;
+	  };
+
+type Fetch = typeof fetch;
+
+async function getJson(
+	url: string,
+	f: Fetch
+): Promise<{ status: number; body: Record<string, unknown> } | null> {
+	try {
+		const res = await f(url, { signal: AbortSignal.timeout(15000) });
+		let body: Record<string, unknown> = {};
+		try {
+			const j: unknown = await res.json();
+			if (typeof j === 'object' && j !== null) body = j as Record<string, unknown>;
+		} catch {
+			/* not JSON */
+		}
+		return { status: res.status, body };
+	} catch {
+		return null;
+	}
+}
+
+/** Whether `base` answers as a Matrix client API (GET /_matrix/client/versions). */
+async function isClientApi(base: string, f: Fetch): Promise<boolean> {
+	const r = await getJson(`${base}/_matrix/client/versions`, f);
+	return r !== null && r.status === 200 && Array.isArray(r.body.versions);
+}
+
+/**
+ * The address to sign in at. Usually what the operator typed; when nothing
+ * there answers as a client API, the address the homeserver itself names in
+ * its /.well-known/matrix/client (matrix.org → matrix-client.matrix.org), if
+ * it is https:// and does answer.
+ */
+export async function matrixClientBase(homeserver: string, f: Fetch = fetch): Promise<string> {
+	const typed = homeserver.replace(/\/+$/, '');
+	if (await isClientApi(typed, f)) return typed;
+	const wk = await getJson(`${typed}/.well-known/matrix/client`, f);
+	const raw = (wk?.body['m.homeserver'] as { base_url?: unknown } | undefined)?.base_url;
+	if (typeof raw !== 'string') return typed;
+	let found: string;
+	try {
+		const u = new URL(raw);
+		// Only a plain https:// address: no user:password@, query or fragment
+		// (the sign-in and the password would be sent with them).
+		if (u.protocol !== 'https:' || u.username !== '' || u.password !== '') return typed;
+		if (u.search !== '' || u.hash !== '') return typed;
+		found = u.toString().replace(/\/+$/, '');
+	} catch {
+		return typed;
+	}
+	return found !== typed && (await isClientApi(found, f)) ? found : typed;
+}
+
+/**
+ * Whether an account with this name exists on the homeserver, asked the
+ * standard way (GET /_matrix/client/v3/register/available): "missing" when
+ * the name is free, "exists" when it is taken, "unknown" when the homeserver
+ * does not say (registration closed, endpoint not offered, no answer). Only
+ * "missing" is ever acted on.
+ */
+export async function matrixAccountCheck(
 	homeserver: string,
 	user: string,
-	password: string
-): Promise<string | null> {
+	f: Fetch = fetch
+): Promise<'exists' | 'missing' | 'unknown'> {
 	const base = homeserver.replace(/\/+$/, '');
+	const r = await getJson(
+		`${base}/_matrix/client/v3/register/available?username=${encodeURIComponent(user)}`,
+		f
+	);
+	if (r === null) return 'unknown';
+	if (r.status === 200 && r.body.available === true) return 'missing';
+	if (r.body.errcode === 'M_USER_IN_USE') return 'exists';
+	return 'unknown';
+}
+
+/**
+ * Sign in with a username and password for a FRESH device and an access
+ * token that does not expire (no refresh token is asked for, so a homeserver
+ * running the Matrix Authentication Service hands out a non-expiring
+ * compatibility token). On failure, says why, with the homeserver's words.
+ */
+export async function matrixSignIn(
+	homeserver: string,
+	user: string,
+	password: string,
+	opts: { readonly discover?: boolean; readonly fetch?: Fetch } = {}
+): Promise<MatrixSignIn> {
+	const f = opts.fetch ?? fetch;
+	const base =
+		opts.discover === false
+			? homeserver.replace(/\/+$/, '')
+			: await matrixClientBase(homeserver, f);
+	const fail = (why: MatrixSignInFailure, detail: string): MatrixSignIn => ({
+		ok: false,
+		why,
+		detail: detail.slice(0, 300),
+		homeserver: base
+	});
+	let res: Response;
 	try {
-		const res = await fetch(`${base}/_matrix/client/v3/login`, {
+		res = await f(`${base}/_matrix/client/v3/login`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			signal: AbortSignal.timeout(15000),
+			// Never followed: a 307/308 would send the password again, to
+			// wherever it points — another host, or http:// in the clear.
+			redirect: 'manual',
 			body: JSON.stringify({
 				type: 'm.login.password',
 				identifier: { type: 'm.id.user', user },
@@ -498,12 +619,52 @@ export async function mintMatrixToken(
 				initial_device_display_name: `morphit-alerts-${Date.now()}`
 			})
 		});
-		if (!res.ok) return null;
-		const data = (await res.json()) as { access_token?: unknown };
-		return typeof data.access_token === 'string' && data.access_token.length > 0
-			? data.access_token
-			: null;
-	} catch {
-		return null;
+	} catch (e) {
+		return fail('unreachable', e instanceof Error ? e.message : String(e));
 	}
+	if (res.status >= 300 && res.status < 400) {
+		const to = res.headers.get('location') ?? '';
+		return fail(
+			'not_homeserver',
+			`it sends the sign-in elsewhere (HTTP ${res.status}${to !== '' ? ` to ${to}` : ''}); type the homeserver's own address`
+		);
+	}
+	let body: Record<string, unknown> = {};
+	try {
+		const j: unknown = await res.json();
+		if (typeof j === 'object' && j !== null) body = j as Record<string, unknown>;
+	} catch {
+		/* not JSON */
+	}
+	const errcode = typeof body.errcode === 'string' ? body.errcode : '';
+	const error = typeof body.error === 'string' ? body.error : '';
+	const detail = [errcode, error].filter((x) => x !== '').join(': ') || `HTTP ${res.status}`;
+	if (res.ok) {
+		return typeof body.access_token === 'string' && body.access_token.length > 0
+			? { ok: true, token: body.access_token, homeserver: base }
+			: fail('other', 'the homeserver answered without an access token');
+	}
+	if (res.status === 429 || errcode === 'M_LIMIT_EXCEEDED') return fail('rate_limited', detail);
+	if (res.status === 403 || errcode === 'M_FORBIDDEN') return fail('wrong_password', detail);
+	if (errcode === 'M_UNKNOWN' && /login type|unsupported/i.test(error))
+		return fail('no_password_login', detail);
+	if (!(await isClientApi(base, f))) return fail('not_homeserver', detail);
+	const flows = await getJson(`${base}/_matrix/client/v3/login`, f);
+	const types = Array.isArray(flows?.body.flows)
+		? (flows.body.flows as Array<{ type?: unknown }>).map((x) => x.type)
+		: [];
+	if (types.length > 0 && !types.includes('m.login.password'))
+		return fail('no_password_login', detail);
+	return fail('other', detail);
+}
+
+/** The token from `matrixSignIn`, or null (the matrix-bot wizard's form). */
+export async function mintMatrixToken(
+	homeserver: string,
+	user: string,
+	password: string
+): Promise<string | null> {
+	// The matrix-bot wizard saves the address as typed, so it signs in there.
+	const r = await matrixSignIn(homeserver, user, password, { discover: false });
+	return r.ok ? r.token : null;
 }

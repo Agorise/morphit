@@ -10,8 +10,10 @@ import {
 	NO_LINK,
 	runOfflineNotify,
 	type AdminAnswer,
+	type AskHandler,
 	type OfflineNotifyDeps
 } from '../src/commands/offlineNotify.ts';
+import { checkXmppPassword } from '../src/lib/xmppAccount.ts';
 
 interface Run {
 	readonly code: number;
@@ -35,7 +37,11 @@ async function wizard(
 		status?: Partial<AdminAnswer>;
 		/** Successive `status` answers (the last one repeats), over `status`. */
 		statuses?: Array<Partial<AdminAnswer>>;
-		admin?: (args: readonly string[], input: Record<string, string>) => AdminAnswer;
+		admin?: (
+			args: readonly string[],
+			input: Record<string, string>,
+			onAsk?: AskHandler
+		) => AdminAnswer | Promise<AdminAnswer>;
 		deps?: Partial<OfflineNotifyDeps>;
 		positional?: string[];
 	} = {}
@@ -78,7 +84,7 @@ async function wizard(
 				}
 				return Number(a.slice(1));
 			},
-			admin: async (args, input) => {
+			admin: async (args, input, onAsk) => {
 				adminCalls.push({ args, input });
 				steps.push(`admin ${args.join(' ')}`);
 				if (args[0] === 'status')
@@ -93,7 +99,7 @@ async function wizard(
 						...opts.status,
 						...(statuses.length > 1 ? statuses.shift() : statuses[0])
 					};
-				return opts.admin?.(args, input) ?? { ok: true };
+				return (await opts.admin?.(args, input, onAsk)) ?? { ok: true };
 			},
 			readEnv: () => ({ ...file }),
 			writeEnv: (v, o) => {
@@ -107,9 +113,14 @@ async function wizard(
 				steps.push('restart');
 				return ['email'];
 			},
-			mintMatrix: async (hs) => {
+			signInMatrix: async (hs) => {
 				mints.push(hs);
-				return 'syt_minted_token';
+				return { ok: true, token: 'syt_minted_token', homeserver: hs };
+			},
+			matrixAccount: async () => 'unknown',
+			// No DNS in tests: an XMPP domain is its own server unless a test says otherwise.
+			resolveSrv: async () => {
+				throw new Error('no DNS in tests');
 			},
 			...opts.deps
 		}
@@ -184,6 +195,12 @@ describe('morphit-ops offline-notify', () => {
 		expect(r.restarts).toBe(1);
 		expect(r.printed).toMatch(/Email is on/);
 		expect(r.printed).not.toContain('pa$$');
+		// Plain words: no mail server to run here, and what the four answers are.
+		expect(r.printed).toMatch(/nothing extra runs on this server/);
+		expect(r.printed).toMatch(
+			/outgoing mail server[\s\S]*587 \(STARTTLS\) or 465 \(TLS\)[\s\S]*login[\s\S]*app password/
+		);
+		expect(r.printed).toMatch(/not one at your site’s domain/);
 	});
 
 	it('a failed test saves nothing — unless the operator says so', async () => {
@@ -284,12 +301,13 @@ describe('morphit-ops offline-notify', () => {
 			MORPHIT_NOTIFY_EMAIL_HOST: 'keep.example.org'
 		};
 		const r = await wizard(
-			['#label Change XMPP (Jabber)', 'bot@new.org', 'pw', '', '#0', '', 'me@new.org', '#last'],
+			['#label Change XMPP (Jabber)', '#1', 'bot@new.org', 'pw', 'y', 'me@new.org', '#last'],
 			{ file }
 		);
 		const send = r.adminCalls.find((c) => c.args[0] === 'send')!;
-		expect(send.input.MORPHIT_NOTIFY_XMPP_HOST).toBe('');
-		expect(r.saved[0]!.MORPHIT_NOTIFY_XMPP_HOST).toBe('');
+		// The new account's own server — never the old setting's.
+		expect(send.input.MORPHIT_NOTIFY_XMPP_HOST).toBe('new.org');
+		expect(r.saved[0]!.MORPHIT_NOTIFY_XMPP_HOST).toBe('new.org');
 		expect(r.saved[0]!.MORPHIT_NOTIFY_EMAIL_HOST).toBe('keep.example.org');
 	});
 
@@ -593,6 +611,606 @@ describe('morphit-ops offline-notify', () => {
 		expect(adminInput({ MORPHIT_NOTIFY_TELEGRAM_TOKEN: 't', OTHER: 'x' }, 'telegram')).toEqual({
 			MORPHIT_NOTIFY_TELEGRAM_TOKEN: 't',
 			MORPHIT_NOTIFY_TELEGRAM_USERNAME: ''
+		});
+	});
+
+	describe('Matrix sign-in: the operator is told what the homeserver said', () => {
+		const SETUP = ['#label Set up Matrix', 'https://matrix.org', '#0', 'morphitio', 'pw'];
+		const signedIn = (args: readonly string[]): AdminAnswer =>
+			args[0] === 'check' ? { ok: true, userId: '@morphitio:matrix.org' } : { ok: true };
+		const failing =
+			(why: string, detail: string, homeserver = 'https://matrix.org') =>
+			async () =>
+				({ ok: false, why, detail, homeserver }) as never;
+
+		it('says the account must already exist, and how to make one on matrix.org', async () => {
+			const r = await wizard([...SETUP, '', '#last'], { admin: signedIn });
+			expect(r.saved).toHaveLength(1);
+			expect(r.printed).toMatch(/must exist already: this signs in to it, it does not create it/);
+			expect(r.printed).toMatch(/app\.element\.io → Create account/);
+			expect(r.printed).toMatch(/email address and emails a code/);
+			expect(r.printed).toMatch(/at least 10 characters/);
+		});
+
+		it('a refused sign-in for a name the homeserver calls free: "there is no account yet"', async () => {
+			const asked: string[] = [];
+			const r = await wizard([...SETUP, '#last'], {
+				deps: {
+					signInMatrix: failing('wrong_password', 'M_FORBIDDEN: Invalid username/password'),
+					matrixAccount: async (hs, user) => {
+						asked.push(`${hs} ${user}`);
+						return 'missing';
+					}
+				}
+			});
+			expect(asked).toEqual(['https://matrix.org morphitio']);
+			expect(r.printed).toMatch(
+				/There is no account called “morphitio” on https:\/\/matrix\.org yet/
+			);
+			expect(r.printed).toMatch(/Make it first/);
+			expect(r.printed).not.toMatch(/username or password is wrong/);
+			expect(r.saved).toHaveLength(0);
+			expect(r.adminCalls.filter((c) => c.args[0] !== 'status')).toHaveLength(0);
+		});
+
+		it('an account that exists but a wrong password: the homeserver’s words, and the Google/GitHub hint', async () => {
+			const r = await wizard([...SETUP, '#last'], {
+				deps: {
+					signInMatrix: failing('wrong_password', 'M_FORBIDDEN: Invalid username/password'),
+					matrixAccount: async () => 'exists'
+				}
+			});
+			expect(r.printed).toMatch(
+				/https:\/\/matrix\.org says the username or password is wrong \(M_FORBIDDEN: Invalid username\/password\)/
+			);
+			expect(r.printed).toMatch(/Continue with Google\/Apple\/GitHub” has no password/);
+			expect(r.printed).not.toMatch(/no account called/);
+			expect(r.saved).toHaveLength(0);
+		});
+
+		it('the account is looked up only after a refusal for a wrong password', async () => {
+			let looked = 0;
+			const deps = {
+				matrixAccount: async () => {
+					looked++;
+					return 'missing' as const;
+				}
+			};
+			await wizard([...SETUP, '', '#last'], { deps, admin: signedIn });
+			expect(looked).toBe(0);
+			const r = await wizard([...SETUP, '#last'], {
+				deps: { ...deps, signInMatrix: failing('rate_limited', 'M_LIMIT_EXCEEDED') }
+			});
+			expect(looked).toBe(0);
+			expect(r.printed).toMatch(/Too many sign-in attempts: https:\/\/matrix\.org asks to wait/);
+		});
+
+		it.each([
+			[
+				'no_password_login',
+				/does not allow signing in with a password[\s\S]*Paste an access token/
+			],
+			['not_homeserver', /does not answer as a Matrix homeserver/],
+			['unreachable', /Could not reach https:\/\/matrix\.org from this server \(boom\)/],
+			['other', /Sign-in failed at https:\/\/matrix\.org: boom/]
+		])('%s is explained, and nothing is saved', async (why, says) => {
+			const r = await wizard([...SETUP, '#last'], {
+				deps: { signInMatrix: failing(why, 'boom') }
+			});
+			expect(r.printed).toMatch(says);
+			expect(r.printed).toMatch(/Nothing was changed/);
+			expect(r.saved).toHaveLength(0);
+		});
+
+		it('a full Matrix ID typed as the username is cut to its name', async () => {
+			const users: string[] = [];
+			await wizard(
+				[
+					'#label Set up Matrix',
+					'https://matrix.org',
+					'#0',
+					'@morphitio:matrix.org',
+					'pw',
+					'',
+					'#last'
+				],
+				{
+					admin: signedIn,
+					deps: {
+						signInMatrix: async (hs, user) => {
+							users.push(user);
+							return { ok: true, token: 't', homeserver: hs };
+						}
+					}
+				}
+			);
+			expect(users).toEqual(['morphitio']);
+		});
+
+		it('the address the sign-in worked at is the one saved; only a clearnet homeserver may be swapped', async () => {
+			const discover: Array<boolean | undefined> = [];
+			const r = await wizard(
+				['#label Set up Matrix', 'https://example.org', '#0', 'notices', 'pw', '', '#last'],
+				{
+					admin: (args) =>
+						args[0] === 'check' ? { ok: true, userId: '@notices:example.org' } : { ok: true },
+					deps: {
+						signInMatrix: async (_hs, _u, _p, o) => {
+							discover.push(o?.discover);
+							return { ok: true, token: 't', homeserver: 'https://matrix-client.example.org' };
+						}
+					}
+				}
+			);
+			expect(r.saved[0]?.MORPHIT_NOTIFY_MATRIX_HOMESERVER).toBe(
+				'https://matrix-client.example.org'
+			);
+			await wizard(
+				['#label Set up Matrix', 'http://127.0.0.1:8008', '#0', 'notices', 'pw', '', '#last'],
+				{
+					admin: signedIn,
+					deps: {
+						signInMatrix: async (hs, _u, _p, o) => {
+							discover.push(o?.discover);
+							return { ok: true, token: 't', homeserver: hs };
+						}
+					}
+				}
+			);
+			expect(discover).toEqual([true, false]);
+		});
+	});
+
+	describe('Matrix test note: the operator is told to accept the invitation', () => {
+		const SEND = [
+			'#label Set up Matrix',
+			'https://matrix.org',
+			'#0',
+			'morphitio',
+			'pw',
+			'@operator:matrix.org'
+		];
+		const relay =
+			(joined: boolean) =>
+			(args: readonly string[]): AdminAnswer =>
+				args[0] === 'check'
+					? { ok: true, userId: '@morphitio:matrix.org' }
+					: args[0] === 'send'
+						? { ok: true, joined }
+						: { ok: true };
+
+		it('before the send: accept the invitation from the bot; after: you joined', async () => {
+			const r = await wizard([...SEND, '#last'], { admin: relay(true) });
+			const hint = r.printed.indexOf(
+				'accept the invitation from @morphitio:matrix.org that brings the test note'
+			);
+			const sent = r.printed.indexOf('Test note sent to @operator:matrix.org');
+			expect(hint).toBeGreaterThan(-1);
+			expect(sent).toBeGreaterThan(hint);
+			expect(r.printed).toMatch(/You joined; the bot has left the test chat/);
+			expect(r.printed).not.toMatch(/did not join in time/);
+			expect(r.saved).toHaveLength(1);
+		});
+
+		it('not joined in time: told the invitation can no longer be accepted', async () => {
+			const r = await wizard([...SEND, '#last'], { admin: relay(false) });
+			expect(r.printed).toMatch(/did not join in time[\s\S]*can no longer be accepted: decline it/);
+			expect(r.printed).not.toMatch(/You joined/);
+		});
+
+		it('the hint is not shown for other apps, nor for a Matrix check without a test note', async () => {
+			const email = await wizard([...EMAIL, '#last']);
+			expect(email.printed).not.toMatch(/accept the invitation/);
+			const check = await wizard(
+				['#label Set up Matrix', 'https://matrix.org', '#0', 'morphitio', 'pw', '', '#last'],
+				{ admin: relay(true) }
+			);
+			expect(check.printed).not.toMatch(/accept the invitation/);
+		});
+
+		it('“Send a test note” from the menu says the same, naming the bot the relay uses', async () => {
+			const r = await wizard(['#label Send a test note', '#0', '@operator:matrix.org', '#last'], {
+				status: { offered: ['matrix'], matrix: '@notices:vigilante.trading' },
+				admin: (args) => (args[0] === 'send' ? { ok: true, joined: false } : { ok: true })
+			});
+			expect(r.printed).toMatch(/accept the invitation from @notices:vigilante\.trading/);
+			expect(r.printed).toMatch(/did not join in time/);
+		});
+	});
+
+	describe('XMPP: making the site’s account on a public server', () => {
+		type Reg = { ok: boolean; [k: string]: unknown };
+		/** A relay whose XMPP servers answer as told: register-form per domain,
+		 *  register (a list of answers, one per try), archive-off, send. */
+		function xmppRelay(o: {
+			forms?: Record<string, Reg>;
+			register?: Array<Reg | ((onAsk?: AskHandler) => Promise<Reg>)>;
+			archive?: Reg;
+			send?: Reg;
+		}) {
+			const regs = [...(o.register ?? [{ ok: true }])];
+			const registered: Array<Record<string, string>> = [];
+			const formsAsked: string[] = [];
+			const admin = async (
+				args: readonly string[],
+				input: Record<string, string>,
+				onAsk?: AskHandler
+			): Promise<AdminAnswer> => {
+				const domain = (input.MORPHIT_NOTIFY_XMPP_JID ?? '').split('@')[1] ?? '';
+				if (args[0] === 'register-form') {
+					formsAsked.push(domain);
+					return (o.forms?.[domain] ?? { ok: true, status: 'open' }) as AdminAnswer;
+				}
+				if (args[0] === 'register') {
+					registered.push({ ...input });
+					const next = regs.length > 1 ? regs.shift()! : regs[0]!;
+					return (typeof next === 'function' ? await next(onAsk) : next) as AdminAnswer;
+				}
+				if (args[0] === 'archive-off')
+					return (o.archive ?? { ok: true, archive: 'off' }) as AdminAnswer;
+				if (args[0] === 'send') return (o.send ?? { ok: true }) as AdminAnswer;
+				return { ok: true };
+			};
+			return { admin, registered, formsAsked };
+		}
+		const FORMS = {
+			'og.im': { ok: true, status: 'open' },
+			'openim.nl': { ok: true, status: 'captcha', url: 'https://openim.nl/captcha/1' },
+			'jabber.de': { ok: true, status: 'closed' }
+		};
+		const NEW = ['#label Set up XMPP (Jabber)', '#0'];
+
+		it('asks the suggested servers live, offers those that take accounts, and makes it on og.im', async () => {
+			const x = xmppRelay({ forms: FORMS });
+			const srv: string[] = [];
+			const r = await wizard([...NEW, '#0', 'MorphitIO', '', 'me@example.org', '#last'], {
+				admin: x.admin,
+				deps: {
+					resolveSrv: async (name) => {
+						srv.push(name);
+						if (name === '_xmpp-client._tcp.og.im')
+							return [{ name: 'xmpp.og.im', port: 5222, priority: 0, weight: 0 }];
+						throw new Error('ENOTFOUND');
+					}
+				}
+			});
+			expect([...x.formsAsked].sort()).toEqual(['jabber.de', 'og.im', 'openim.nl']);
+			expect(r.printed).toMatch(/og\.im\s+takes new accounts\n/);
+			expect(r.printed).toMatch(/openim\.nl\s+takes new accounts after a picture check/);
+			expect(r.printed).toMatch(/jabber\.de\s+takes no new accounts this way/);
+			const menu = r.menus.find((m) => m.includes('Another server…'))!;
+			expect(menu).toEqual(['og.im (recommended)', 'openim.nl', 'Another server…', 'Cancel']);
+			expect(srv).toContain('_xmpp-client._tcp.og.im');
+			// The name lower-cased; a strong password made (never printed).
+			const reg = x.registered[0]!;
+			expect(reg.MORPHIT_NOTIFY_XMPP_JID).toBe('morphitio@og.im');
+			expect(reg.MORPHIT_NOTIFY_XMPP_HOST).toBe('xmpp.og.im');
+			const pw = reg.MORPHIT_NOTIFY_XMPP_PASSWORD!;
+			expect(pw).toHaveLength(24);
+			expect(checkXmppPassword(pw, 'morphitio')).toBeNull();
+			expect(r.printed).not.toContain(pw);
+			expect(r.printed).toMatch(/Account morphitio@og\.im made/);
+			expect(r.printed).toMatch(/message archive off/);
+			// Archive off and the test note come before the save, with the same settings.
+			expect(r.steps.filter((s) => s.startsWith('admin ') && !s.endsWith('status'))).toEqual([
+				'admin register-form xmpp',
+				'admin register-form xmpp',
+				'admin register-form xmpp',
+				'admin register xmpp',
+				'admin archive-off xmpp',
+				'admin send xmpp'
+			]);
+			expect(r.saved[0]).toMatchObject({
+				MORPHIT_NOTIFY_XMPP_JID: 'morphitio@og.im',
+				MORPHIT_NOTIFY_XMPP_PASSWORD: pw,
+				MORPHIT_NOTIFY_XMPP_HOST: 'xmpp.og.im',
+				MORPHIT_NOTIFY_XMPP_PORT: '5222',
+				MORPHIT_NOTIFY_XMPP_SECURITY: 'starttls'
+			});
+		});
+
+		it('checks the username before anything is sent', async () => {
+			const x = xmppRelay({ forms: FORMS });
+			const r = await wizard(
+				[
+					...NEW,
+					'#0',
+					'morphitio@og.im',
+					'a',
+					'bad name!',
+					'x..y',
+					'morphitio',
+					'',
+					'me@example.org',
+					'#last'
+				],
+				{ admin: x.admin }
+			);
+			expect(r.printed).toMatch(/Just the name, without @/);
+			expect(r.printed).toMatch(/Use 2 to 32 characters/);
+			expect(r.printed).toMatch(/Use only letters a–z, digits/);
+			expect(r.printed).toMatch(/No two of \. _ - in a row/);
+			expect(x.registered).toHaveLength(1);
+			expect(x.registered[0]!.MORPHIT_NOTIFY_XMPP_JID).toBe('morphitio@og.im');
+		});
+
+		it('checks a typed password: length, the username in it, the mix, typed twice', async () => {
+			const x = xmppRelay({ forms: FORMS });
+			const good = 'Tr4in-Lamp-Stone';
+			const r = await wizard(
+				[
+					...NEW,
+					'#0',
+					'morphitio',
+					'short1A!',
+					'xMorphitIO-2026!',
+					'alllowercaseletters',
+					good,
+					'Tr4in-Lamp-Stonx',
+					good,
+					good,
+					'me@example.org',
+					'#last'
+				],
+				{ admin: x.admin }
+			);
+			expect(r.printed).toMatch(/Use at least 12 characters \(it has 8\)/);
+			expect(r.printed).toMatch(/It cannot contain the username/);
+			expect(r.printed).toMatch(/Mix at least three of/);
+			expect(r.printed).toMatch(/The two did not match/);
+			expect(x.registered).toHaveLength(1);
+			expect(x.registered[0]!.MORPHIT_NOTIFY_XMPP_PASSWORD).toBe(good);
+			expect(r.printed).not.toContain(good);
+		});
+
+		it('a taken name: asked for another; a refused password: the server’s words, then asked again', async () => {
+			const x = xmppRelay({
+				forms: FORMS,
+				register: [
+					{ ok: false, error: 'refused', why: 'taken', text: 'User already exists' },
+					{ ok: false, error: 'refused', why: 'not_acceptable', text: 'The password is too weak' },
+					{ ok: true }
+				]
+			});
+			const r = await wizard(
+				[
+					...NEW,
+					'#0',
+					'morphitio',
+					'',
+					'morphitio2',
+					'',
+					'Better-Pass-2026x',
+					'Better-Pass-2026x',
+					'me@example.org',
+					'#last'
+				],
+				{ admin: x.admin }
+			);
+			expect(r.printed).toMatch(/The name “morphitio” is taken on og\.im/);
+			expect(r.printed).toMatch(
+				/og\.im did not accept that name or password \(“The password is too weak”\)/
+			);
+			expect(x.registered.map((g) => g.MORPHIT_NOTIFY_XMPP_JID)).toEqual([
+				'morphitio@og.im',
+				'morphitio2@og.im',
+				'morphitio2@og.im'
+			]);
+			expect(x.registered[2]!.MORPHIT_NOTIFY_XMPP_PASSWORD).toBe('Better-Pass-2026x');
+			expect(r.saved).toHaveLength(1);
+		});
+
+		it('a picture check: its page is shown and the answer goes back; a wrong one is tried again', async () => {
+			const answers: Array<Record<string, string>> = [];
+			const x = xmppRelay({
+				forms: FORMS,
+				register: [
+					async (onAsk) => {
+						answers.push(
+							await onAsk!({ ok: true, ask: 'captcha', url: 'https://openim.nl/captcha/1' })
+						);
+						return {
+							ok: false,
+							error: 'refused',
+							why: 'captcha_wrong',
+							text: 'The CAPTCHA verification has failed'
+						};
+					},
+					async (onAsk) => {
+						answers.push(
+							await onAsk!({ ok: true, ask: 'captcha', url: 'https://openim.nl/captcha/2' })
+						);
+						return { ok: true };
+					}
+				]
+			});
+			const r = await wizard(
+				[...NEW, '#label openim.nl', 'morphitio', '', 'WRONG', 'K7Q2X', 'me@example.org', '#last'],
+				{ admin: x.admin }
+			);
+			expect(r.printed).toMatch(
+				/openim\.nl wants a picture check[^\n]*\n\s+https:\/\/openim\.nl\/captcha\/1/
+			);
+			expect(r.printed).toMatch(/The picture answer was not right/);
+			expect(answers).toEqual([{ answer: 'WRONG' }, { answer: 'K7Q2X' }]);
+			expect(x.registered[0]!.MORPHIT_NOTIFY_XMPP_PASSWORD).toBe(
+				x.registered[1]!.MORPHIT_NOTIFY_XMPP_PASSWORD
+			);
+			expect(r.saved).toHaveLength(1);
+		});
+
+		it('the server stopped waiting for the picture answer: a new picture, tried again', async () => {
+			const x = xmppRelay({
+				forms: FORMS,
+				register: [
+					async (onAsk) => {
+						await onAsk!({ ok: true, ask: 'captcha', url: 'https://openim.nl/captcha/1' });
+						return { ok: false, error: 'refused', why: 'captcha_expired', text: '' };
+					},
+					async (onAsk) => {
+						await onAsk!({ ok: true, ask: 'captcha', url: 'https://openim.nl/captcha/2' });
+						return { ok: true };
+					}
+				]
+			});
+			const r = await wizard(
+				[...NEW, '#label openim.nl', 'morphitio', '', 'SLOW', 'K7Q2X', 'me@example.org', '#last'],
+				{ admin: x.admin }
+			);
+			expect(x.registered).toHaveLength(2);
+			expect(r.saved).toHaveLength(1);
+		});
+
+		it.each([
+			['rate_limited', /too many new accounts from this server lately/],
+			['not_allowed', /takes no new account now/]
+		])('%s: stops, nothing saved', async (why, says) => {
+			const x = xmppRelay({
+				forms: FORMS,
+				register: [{ ok: false, error: 'refused', why, text: 'no' }]
+			});
+			const r = await wizard([...NEW, '#0', 'morphitio', '', '#last'], { admin: x.admin });
+			expect(r.printed).toMatch(says);
+			expect(x.registered).toHaveLength(1);
+			expect(r.saved).toHaveLength(0);
+		});
+
+		it('another server: its name is checked, and it is asked live; one that takes none is explained', async () => {
+			const x = xmppRelay({
+				forms: {
+					...FORMS,
+					'closed.example': { ok: true, status: 'web', url: 'https://closed.example/register' },
+					'open.example': { ok: true, status: 'open' }
+				}
+			});
+			const r = await wizard(
+				[
+					...NEW,
+					'#label Another server…',
+					'https://open.example',
+					'closed.example',
+					'open.example',
+					'morphitio',
+					'',
+					'me@example.org',
+					'#last'
+				],
+				{ admin: x.admin }
+			);
+			expect(r.printed).toMatch(/That is not a server name/);
+			expect(r.printed).toMatch(/closed\.example makes new accounts only on its website/);
+			expect(r.printed).toMatch(/Its page: https:\/\/closed\.example\/register/);
+			expect(x.registered[0]!.MORPHIT_NOTIFY_XMPP_JID).toBe('morphitio@open.example');
+		});
+
+		it('a zero-clearnet site: no public server suggested, no DNS asked, an .onion server only', async () => {
+			const onion = `${'b'.repeat(56)}.onion`;
+			const x = xmppRelay({ forms: { [onion]: { ok: true, status: 'open' } } });
+			let dns = 0;
+			const r = await wizard([...NEW, 'og.im', onion, 'morphitio', '', `me@${onion}`, '#last'], {
+				status: { hiddenOnly: true, link: 'http://x.onion' },
+				admin: x.admin,
+				deps: {
+					resolveSrv: async () => {
+						dns++;
+						return [];
+					}
+				}
+			});
+			expect(x.formsAsked).toEqual([onion]);
+			expect(dns).toBe(0);
+			expect(r.printed).toMatch(/give the server’s \.onion address/);
+			expect(x.registered[0]!.MORPHIT_NOTIFY_XMPP_HOST).toBe(onion);
+		});
+
+		it('archive: off, not a setting there, or failed — said plainly, and the setup goes on', async () => {
+			for (const [archive, says] of [
+				[{ ok: true, archive: 'unsupported' }, /has no message-archive setting to turn off/],
+				[
+					{ ok: false, error: 'failed', reason: 'XmppError: XMPP server refused at login' },
+					/Could not turn its message archive off/
+				]
+			] as const) {
+				const x = xmppRelay({ forms: FORMS, archive });
+				const r = await wizard([...NEW, '#0', 'morphitio', '', 'me@example.org', '#last'], {
+					admin: x.admin
+				});
+				expect(r.printed).toMatch(says);
+				expect(r.saved).toHaveLength(1);
+			}
+		});
+
+		it('the test address is checked', async () => {
+			const x = xmppRelay({ forms: FORMS });
+			const r = await wizard(
+				[...NEW, '#0', 'morphitio', '', 'not an address', 'me@example', 'me@example.org', '#last'],
+				{ admin: x.admin }
+			);
+			expect(r.printed.match(/That is not an XMPP address/g)).toHaveLength(2);
+			expect(r.saved).toHaveLength(1);
+		});
+	});
+
+	describe('XMPP: an account that already exists', () => {
+		it('checks the address, finds its server in DNS, and lets the operator change it', async () => {
+			const steps: string[] = [];
+			const r = await wizard(
+				[
+					'#label Set up XMPP (Jabber)',
+					'#1',
+					'not-a-jid',
+					'Bot@Jabber.Example',
+					'pw',
+					'n',
+					'bad host!',
+					'#last'
+				],
+				{
+					deps: {
+						resolveSrv: async (name) => {
+							steps.push(name);
+							return name === '_xmpps-client._tcp.jabber.example'
+								? [{ name: 'tls.jabber.example.', port: 5223, priority: 0, weight: 0 }]
+								: [];
+						}
+					}
+				}
+			);
+			expect(r.printed).toMatch(/That is not an XMPP address/);
+			expect(r.printed).toMatch(/Its server: tls\.jabber\.example, port 5223, TLS/);
+			expect(r.printed).toMatch(/That is not a server name\. Nothing was changed/);
+			expect(steps).toEqual([
+				'_xmpp-client._tcp.jabber.example',
+				'_xmpps-client._tcp.jabber.example'
+			]);
+			expect(r.saved).toHaveLength(0);
+			const ok = await wizard([
+				'#label Set up XMPP (Jabber)',
+				'#1',
+				'bot@jabber.example',
+				'pw',
+				'n',
+				'xmpp.jabber.example',
+				'#0',
+				'99999',
+				'#last'
+			]);
+			expect(ok.printed).toMatch(/A port is a number from 1 to 65535/);
+			const saved = await wizard([
+				'#label Set up XMPP (Jabber)',
+				'#1',
+				'bot@jabber.example',
+				'pw',
+				'y',
+				'me@example.org',
+				'#last'
+			]);
+			expect(saved.saved[0]).toMatchObject({
+				MORPHIT_NOTIFY_XMPP_JID: 'bot@jabber.example',
+				MORPHIT_NOTIFY_XMPP_HOST: 'jabber.example',
+				MORPHIT_NOTIFY_XMPP_PORT: '5222',
+				MORPHIT_NOTIFY_XMPP_SECURITY: 'starttls'
+			});
 		});
 	});
 });

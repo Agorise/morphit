@@ -79,7 +79,7 @@ rpc_endpoints() {
 	# MORPHIT_INDEXER_RPC_ENDPOINTS (no "BLURT" — matches apps/indexer + indexer.env.j2).
 	eps=''
 	if [ -f "${INDEXER_ENV}" ]; then
-		eps="$(sed -n 's/^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=//p' "${INDEXER_ENV}" 2>/dev/null | tail -n1 | tr -d "\"'" | tr ',' ' ')"
+		eps="$(indexer_env_value MORPHIT_INDEXER_RPC_ENDPOINTS | tr ',' ' ')"
 	fi
 	# ALWAYS emit a non-empty list: if the config yielded nothing usable (unset, empty,
 	# or whitespace-only), use the baked defaults.  check_online must never get zero
@@ -93,7 +93,10 @@ rpc_endpoints() {
 # One value from indexer.env, read inertly (never sourced; see rpc_endpoints).
 indexer_env_value() {
 	[ -f "${INDEXER_ENV}" ] || return 0
-	sed -n "s/^[[:space:]]*$1=//p" "${INDEXER_ENV}" 2>/dev/null | tail -n1 | tr -d "\"'" | tr -d ' \t\r'
+	# As bash reads it: the last line wins, `export` allowed, and a `# comment`
+	# after a blank is not part of the value (`KEY=   # tor-only` is empty).
+	sed -n "s/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}$1=//p" "${INDEXER_ENV}" 2>/dev/null | tail -n1 \
+		| sed 's/[[:space:]]\{1,\}#.*$//' | tr -d "\"'" | tr -d ' \t\r'
 }
 
 # HIDDEN-ONLY node: the clearnet pool key is PRESENT but EMPTY — exactly what a
@@ -104,8 +107,8 @@ indexer_env_value() {
 # An ABSENT key still means "unconfigured" and keeps the clearnet fallback.
 hidden_only() {
 	[ -f "${INDEXER_ENV}" ] || return 1
-	grep -q '^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=' "${INDEXER_ENV}" 2>/dev/null || return 1
-	[ -z "$(indexer_env_value MORPHIT_INDEXER_RPC_ENDPOINTS)" ]
+	grep -Eq '^[[:space:]]*(export[[:space:]]+)?MORPHIT_INDEXER_RPC_ENDPOINTS=' "${INDEXER_ENV}" 2>/dev/null || return 1
+	[ -z "$(indexer_env_value MORPHIT_INDEXER_RPC_ENDPOINTS | tr -d ',')" ]
 }
 
 # The gate for a hidden-only node: a hidden Blurt RPC answering THROUGH the

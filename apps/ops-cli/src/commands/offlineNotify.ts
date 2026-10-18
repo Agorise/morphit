@@ -32,17 +32,19 @@ import {
 	ask as realAsk,
 	askChoice as realAskChoice,
 	askPassword as realAskPassword,
-	askYesNo as realAskYesNo
+	askYesNo as realAskYesNo,
+	isAbortError
 } from '../init/prompt.ts';
-import { cleanLabel, withSpinner } from '../init/spinner.ts';
+import { cleanLabel, startDotsSpinner, withSpinner } from '../init/spinner.ts';
 import { relayHealthUrl, waitForAnswers } from '../lib/afterRestartHeal.ts';
-import { homeserverRoute, mintMatrixToken } from '../lib/matrixBot.ts';
+import { homeserverRoute, matrixAccountCheck, matrixSignIn } from '../lib/matrixBot.ts';
 import {
 	CHANNEL_KEYS,
 	CHANNEL_MAIN_KEY,
 	NOTIFY_CHANNELS,
 	NOTIFY_ENV_PATH,
 	readNotifyEnv,
+	relayReadsSame,
 	withoutChannel,
 	writableValue,
 	writeNotifyEnv,
@@ -50,6 +52,16 @@ import {
 } from '../lib/offlineNotifyEnv.ts';
 import { RELAY_ENV_FILES } from '../lib/relayHiddenHeal.ts';
 import { runAsync } from '../lib/spinRun.ts';
+import {
+	XMPP_PASSWORD_MIN,
+	XMPP_SUGGESTED_SERVERS,
+	checkXmppPassword,
+	checkXmppUsername,
+	makeXmppPassword,
+	validJid,
+	validXmppDomain,
+	xmppEndpoint
+} from '../lib/xmppAccount.ts';
 
 export interface OfflineNotifyCtx {
 	readonly positional: readonly string[];
@@ -57,6 +69,9 @@ export interface OfflineNotifyCtx {
 	/** The Morphit checkout (/opt/morphit). */
 	readonly repoRoot: string;
 }
+
+/** A question the relay's admin tool asks while it works (a picture check). */
+export type AskHandler = (question: AdminAnswer) => Promise<Record<string, string>>;
 
 /** One JSON line from the relay's adminCli. */
 export interface AdminAnswer {
@@ -71,15 +86,23 @@ export interface OfflineNotifyDeps {
 	readonly askPassword?: (q: string) => Promise<string>;
 	readonly askChoice?: (q: string, options: readonly string[]) => Promise<number>;
 	readonly askYesNo?: (q: string, defaultYes: boolean) => Promise<boolean>;
-	/** Run the relay's adminCli with these args, settings on stdin. */
-	readonly admin?: (args: readonly string[], input: Record<string, string>) => Promise<AdminAnswer>;
+	/** Run the relay's adminCli with these args, settings on stdin. `onAsk`:
+	 *  the tool asked a question ({"ask":…}) — its answer goes back on stdin. */
+	readonly admin?: (
+		args: readonly string[],
+		input: Record<string, string>,
+		onAsk?: AskHandler
+	) => Promise<AdminAnswer>;
 	readonly readEnv?: () => Record<string, string>;
 	/** Write the file: the `owned` channels' keys exactly as in `values`,
 	 *  every other line as it was (lib/offlineNotifyEnv.ts). */
 	readonly writeEnv?: (values: Record<string, string>, owned: readonly NotifyChannel[]) => void;
 	/** Restart the relay, wait for it, and return the apps it offers (null: no answer). */
 	readonly restartRelay?: () => Promise<string[] | null>;
-	readonly mintMatrix?: typeof mintMatrixToken;
+	readonly signInMatrix?: typeof matrixSignIn;
+	readonly matrixAccount?: typeof matrixAccountCheck;
+	/** DNS SRV lookups (an XMPP domain's server). */
+	readonly resolveSrv?: Parameters<typeof xmppEndpoint>[1];
 	readonly isRoot?: () => boolean;
 	readonly isTTY?: boolean;
 	readonly print?: (line: string) => void;
@@ -262,11 +285,15 @@ export function adminRunAs(unitUser: string, relayAccountExists: boolean): strin
  *  starts run in a process group of their own, so the time limit stops all of
  *  them. */
 export function realAdmin(repoRoot: string, opts: { readonly timeoutMs?: number } = {}) {
-	return async (args: readonly string[], input: Record<string, string>): Promise<AdminAnswer> => {
+	return async (
+		args: readonly string[],
+		input: Record<string, string>,
+		onAsk?: AskHandler
+	): Promise<AdminAnswer> => {
 		// Asked without blocking: the spinner around this keeps turning.
 		const unit = await relayUnitUser();
 		const runAs = adminRunAs(unit, unit === '' && (await userExists('morphit-relay')));
-		return new Promise((resolve) => {
+		return new Promise((resolve, reject) => {
 			const tsx = join(repoRoot, 'node_modules/.bin/tsx');
 			const script =
 				'set -a; for f in "${@:1:' +
@@ -284,12 +311,33 @@ export function realAdmin(repoRoot: string, opts: { readonly timeoutMs?: number 
 			let out = '';
 			let grace: NodeJS.Timeout | null = null;
 			let child: ReturnType<typeof spawn>;
+			/** A question still on the operator's screen (its answer pending). */
+			let asking: Promise<void> | null = null;
+			/** The operator pressed Ctrl+C at a question. */
+			let stopped: unknown = undefined;
 			const killGroup = (): void => {
 				if (child?.pid === undefined) return;
 				try {
 					process.kill(-child.pid, 'SIGKILL');
 				} catch {
 					/* already gone */
+				}
+			};
+			const settle = (answer: AdminAnswer | null): void => {
+				// Ctrl+C reaches the caller as Ctrl+C at any other prompt does.
+				if (stopped !== undefined) return reject(stopped);
+				if (answer !== null) return resolve(answer);
+				const line = out.trim().split('\n').at(-1) ?? '';
+				try {
+					const j = JSON.parse(line) as AdminAnswer;
+					// A question it never got the answer to is not its answer.
+					resolve(
+						j !== null && typeof j === 'object' && !('ask' in j)
+							? j
+							: { ok: false, error: 'no_answer' }
+					);
+				} catch {
+					resolve({ ok: false, error: 'no_answer' });
 				}
 			};
 			const finish = (answer: AdminAnswer | null): void => {
@@ -300,18 +348,17 @@ export function realAdmin(repoRoot: string, opts: { readonly timeoutMs?: number 
 				process.removeListener('exit', killGroup);
 				// Whatever the tool left behind (still holding its output open) goes too.
 				if (!outEnded) killGroup();
-				if (answer !== null) return resolve(answer);
-				const line = out.trim().split('\n').at(-1) ?? '';
-				try {
-					resolve(JSON.parse(line) as AdminAnswer);
-				} catch {
-					resolve({ ok: false, error: 'no_answer' });
-				}
+				// The tool ended while a question is still open: the caller waits for
+				// that answer (thrown away), so no other prompt opens beside it.
+				if (asking !== null) void asking.then(() => settle(answer));
+				else settle(answer);
 			};
-			const timer = setTimeout(() => {
+			const limit = opts.timeoutMs ?? ADMIN_TIMEOUT_MS;
+			const expire = (): void => {
 				killGroup();
 				finish({ ok: false, error: 'timed_out' });
-			}, opts.timeoutMs ?? ADMIN_TIMEOUT_MS);
+			};
+			let timer = setTimeout(expire, limit);
 			try {
 				child = spawn(cmd, full, {
 					cwd: join(repoRoot, 'apps/relay'),
@@ -324,7 +371,40 @@ export function realAdmin(repoRoot: string, opts: { readonly timeoutMs?: number 
 			}
 			// morphit-ops exiting (Ctrl-C under the spinner) takes the tool with it.
 			process.on('exit', killGroup);
-			child.stdout?.on('data', (d: Buffer) => (out += d.toString('utf8')));
+			// A question from the tool: the time limit waits while the operator
+			// answers (a picture check takes a browser and some reading).
+			let scanned = 0;
+			child.stdout?.on('data', (d: Buffer) => {
+				out += d.toString('utf8');
+				if (onAsk === undefined) return;
+				for (let nl = out.indexOf('\n', scanned); nl >= 0; nl = out.indexOf('\n', scanned)) {
+					const line = out.slice(scanned, nl);
+					scanned = nl + 1;
+					let q: AdminAnswer | null = null;
+					try {
+						const j: unknown = JSON.parse(line);
+						if (j !== null && typeof j === 'object' && 'ask' in j) q = j as unknown as AdminAnswer;
+					} catch {
+						/* not a question */
+					}
+					if (q === null) continue;
+					clearTimeout(timer);
+					asking = onAsk(q).then(
+						(a) => {
+							asking = null;
+							if (done) return;
+							child.stdin?.write(`${JSON.stringify(a)}\n`);
+							timer = setTimeout(expire, limit);
+						},
+						(err: unknown) => {
+							asking = null;
+							if (isAbortError(err)) stopped = err;
+							killGroup();
+							finish({ ok: false, error: 'cancelled' });
+						}
+					);
+				}
+			});
 			child.stdout?.on('end', () => {
 				outEnded = true;
 				if (exited) finish(null);
@@ -338,7 +418,10 @@ export function realAdmin(repoRoot: string, opts: { readonly timeoutMs?: number 
 			});
 			child.on('error', () => finish({ ok: false, error: 'no_answer' }));
 			child.stdin?.on('error', () => undefined);
-			child.stdin?.end(JSON.stringify(input));
+			// With questions to answer, stdin stays open for the answers (it closes
+			// when the tool exits); otherwise the settings are all it reads.
+			if (onAsk === undefined) child.stdin?.end(JSON.stringify(input));
+			else child.stdin?.write(`${JSON.stringify(input)}\n`);
 		});
 	};
 }
@@ -394,7 +477,8 @@ export async function runOfflineNotify(
 		((v: Record<string, string>, owned: readonly NotifyChannel[]) =>
 			writeNotifyEnv(v, undefined, undefined, owned));
 	const restartRelay = deps.restartRelay ?? realRestartRelay;
-	const mint = deps.mintMatrix ?? mintMatrixToken;
+	const signIn = deps.signInMatrix ?? matrixSignIn;
+	const accountCheck = deps.matrixAccount ?? matrixAccountCheck;
 
 	if (!(deps.isRoot ?? (() => process.getuid?.() === 0))()) {
 		print('  Run this with sudo: sudo morphit-ops offline-notify');
@@ -471,16 +555,16 @@ export async function runOfflineNotify(
 		values: Record<string, string>,
 		channel: NotifyChannel | null,
 		owned: readonly NotifyChannel[]
-	): Promise<void> => {
+	): Promise<boolean> => {
 		try {
 			writeEnv(values, owned);
 		} catch (err) {
 			print(yellow(`  ✗ Not saved: ${clean((err as Error).message)}`));
-			return;
+			return false;
 		}
 		print(green(`  ✓ Saved to ${NOTIFY_ENV_PATH}.`));
 		const offered = await restart('Restarting the relay so it uses the new settings…');
-		if (offered === null) return;
+		if (offered === null) return true;
 		if (channel === null) {
 			print(green('  ✓ The relay is back.'));
 		} else if (offered.includes(channel)) {
@@ -488,6 +572,7 @@ export async function runOfflineNotify(
 		} else {
 			print(yellow(`  ⚠ The relay is back, but it does not offer ${LABEL[channel]}.`));
 		}
+		return true;
 	};
 
 	/** Notes carry the site's link: without one nothing can be tested, so no
@@ -500,24 +585,58 @@ export async function runOfflineNotify(
 	};
 
 	/** Test, then save if it worked (or if the operator insists). */
+	// A Matrix test note comes in a chat the bot leaves once the operator has
+	// joined it (relay adminCli send): it can be read only if they join first.
+	const matrixTestHint = (bot: unknown): void => {
+		const from = typeof bot === 'string' && bot.startsWith('@') ? ` from ${clean(bot)}` : '';
+		print(dim(`  In your Matrix app, accept the invitation${from} that brings the test note,`));
+		print(dim('  within about a minute and a half: the bot leaves the test chat once you have'));
+		print(
+			dim('  joined (or then), and after that it can no longer be joined. Users’ chats stay open.')
+		);
+	};
+	const matrixTestOutcome = (r: AdminAnswer): void => {
+		if (r.joined === true)
+			print(dim('    You joined; the bot has left the test chat, and the note stays with you.'));
+		else if (r.joined === false)
+			print(
+				yellow(
+					'    You did not join in time, so the bot has left the test chat and its invitation can no longer be accepted: decline it.'
+				)
+			);
+	};
+	const MATRIX_SENDING = 'Sending a test note — accept the invitation in your Matrix app…';
+
 	const testAndSave = async (
 		channel: NotifyChannel,
 		candidate: Record<string, string>,
 		test: { kind: 'send'; to: string } | { kind: 'check' }
-	): Promise<void> => {
+	): Promise<boolean> => {
 		// Only what will be saved: the channel's old settings are not mixed in.
 		const merged = { ...withoutChannel(readEnv(), channel), ...candidate };
 		for (const [k, v] of Object.entries(candidate)) {
 			if (!writableValue(v)) {
 				print(yellow(`  ✗ ${k} cannot contain a line break. Nothing was changed.`));
-				return;
+				return false;
+			}
+			if (!relayReadsSame(v)) {
+				print(
+					yellow(
+						`  ✗ ${k} cannot start or end with a space, nor be wrapped in quotes (the relay would use it without them). Nothing was changed.`
+					)
+				);
+				return false;
 			}
 		}
+		if (test.kind === 'send' && channel === 'matrix')
+			matrixTestHint(candidate.MORPHIT_NOTIFY_MATRIX_USER_ID);
 		const label =
 			test.kind === 'send'
 				? channel === 'session'
 					? 'Sending a test note through Tor (this can take a minute)…'
-					: 'Sending a test note…'
+					: channel === 'matrix'
+						? MATRIX_SENDING
+						: 'Sending a test note…'
 				: `Checking the ${LABEL[channel]} account…`;
 		const r = await withSpinner(label, () =>
 			admin(
@@ -538,6 +657,7 @@ export async function runOfflineNotify(
 							: `  ✓ The ${LABEL[channel]} settings are complete (not tested: only a test note tests them).`
 				)
 			);
+			if (test.kind === 'send' && channel === 'matrix') matrixTestOutcome(r);
 			if (channel === 'telegram' && typeof r.username === 'string') {
 				merged.MORPHIT_NOTIFY_TELEGRAM_USERNAME = r.username;
 				print(dim(`    Notes will come from @${clean(r.username)}.`));
@@ -547,10 +667,10 @@ export async function runOfflineNotify(
 			print(yellow(`  ✗ The test did not work: ${why}`));
 			if (!(await askYesNo('  Save these settings anyway?', false))) {
 				print('  Nothing was changed.');
-				return;
+				return false;
 			}
 		}
-		await save(merged, channel, [channel]);
+		return save(merged, channel, [channel]);
 	};
 
 	const askNonEmpty = async (q: string, dflt?: string): Promise<string | null> => {
@@ -563,21 +683,25 @@ export async function runOfflineNotify(
 	};
 
 	const setupEmail = async (): Promise<void> => {
-		print(dim('  Use a mailbox made for this — never your personal one. Your mail provider’s'));
-		print(dim('  “SMTP” settings: the server, and a login that is allowed to send.'));
-		print(dim('  Send FROM an address at that mail provider. If you published the “this domain'));
-		print(dim('  sends no email” DNS records (docs/RUN-A-MORPHIT-NODE.md §13), mail from your'));
-		print(dim('  site’s own domain will be refused unless you change those records first.'));
-		print(dim('  Many providers keep a copy of every sent mail in “Sent”: turn that off for this'));
-		print(dim('  mailbox if you can, or empty it now and then — it lists your users’ addresses.'));
-		const host = await askNonEmpty('Mail server (SMTP host, e.g. smtp.example.com)');
+		print(dim('  Notes are sent through an email account, the way a mail app sends mail —'));
+		print(dim('  nothing extra runs on this server. Make a new mailbox just for this site'));
+		print(dim('  (not your personal one) at a mail provider that lets programs send mail'));
+		print(dim('  (“SMTP”). Its help pages give the four things asked next:'));
+		print(dim('    • its outgoing mail server (e.g. smtp.example.com)'));
+		print(dim('    • the port: 587 (STARTTLS) or 465 (TLS)'));
+		print(dim('    • the login: usually the mailbox’s own address'));
+		print(dim('    • the password: often an “app password” made in the mailbox’s settings'));
+		print(dim('  Notes go out from the mailbox’s own address, not one at your site’s domain'));
+		print(dim('  (docs/RUN-A-MORPHIT-NODE.md §13). If the provider keeps a copy of sent mail,'));
+		print(dim('  turn that off for this mailbox: the copies would list your users’ addresses.'));
+		const host = await askNonEmpty('Outgoing mail server (e.g. smtp.example.com)');
 		if (host === null) return;
 		const sec = await askChoice('How does it want the connection secured?', [
 			'STARTTLS on port 587 (the usual)',
 			'Direct TLS on port 465'
 		]);
 		const port = await ask('Port', sec === 0 ? '587' : '465');
-		const user = await askNonEmpty('Login (username)');
+		const user = await askNonEmpty('Login (usually the mailbox’s address)');
 		if (user === null) return;
 		const password = await askPassword('Password');
 		if (password === '') {
@@ -585,7 +709,7 @@ export async function runOfflineNotify(
 			return;
 		}
 		const from = await askNonEmpty(
-			'The address notes come from',
+			'The address notes come from (the mailbox’s own address)',
 			user.includes('@') ? user : undefined
 		);
 		if (from === null) return;
@@ -608,6 +732,11 @@ export async function runOfflineNotify(
 	const setupMatrix = async (): Promise<void> => {
 		print(dim('  A Matrix account just for this site’s notes (not your own). Users get its'));
 		print(dim('  invitation the first time; after that the notes arrive in that chat.'));
+		print(dim('  The account must exist already: this signs in to it, it does not create it.'));
+		print(dim('  To make one on matrix.org: open https://app.element.io → Create account. It'));
+		print(dim('  asks for an email address and emails a code to type in, and wants a password'));
+		print(dim('  of at least 10 characters. Do not use “Continue with Google/Apple/GitHub”:'));
+		print(dim('  that account has no password to type here.'));
 		const homeserver = (
 			(await askNonEmpty('Its homeserver (e.g. https://matrix.org)')) ?? ''
 		).replace(/\/+$/, '');
@@ -649,20 +778,61 @@ export async function runOfflineNotify(
 				])
 			: 1;
 		let token = '';
+		let savedHomeserver = homeserver;
 		if (method === 0) {
-			const user = (await askNonEmpty('Username (just the name, no @ or :server)')) ?? '';
+			const user = ((await askNonEmpty('Username (just the name, no @ or :server)')) ?? '')
+				.replace(/^@/, '')
+				.replace(/:.*$/, '');
 			if (user === '') return;
 			const password = await askPassword('Password');
-			const minted = await withSpinner('Signing in…', () => mint(homeserver, user, password));
-			if (minted === null) {
-				print(
-					yellow(
-						'  ✗ Sign-in failed. Check the homeserver, username and password. Nothing was changed.'
-					)
-				);
+			// Only a clearnet homeserver may be swapped for the address its
+			// /.well-known names (that one is always https://, and clearnet).
+			const r = await withSpinner('Signing in…', () =>
+				signIn(homeserver, user, password, { discover: route === 'clearnet' })
+			);
+			if (!r.ok) {
+				// A refused sign-in for a name the homeserver calls free: the account
+				// was never made (the usual reason). Asked only after a refusal, so a
+				// homeserver that answers this question wrongly never blocks a setup.
+				const known =
+					r.why === 'wrong_password'
+						? await withSpinner('Looking for that account…', () => accountCheck(r.homeserver, user))
+						: 'unknown';
+				if (known === 'missing') {
+					print(
+						yellow(`  ✗ There is no account called “${clean(user)}” on ${clean(r.homeserver)} yet.`)
+					);
+					print(yellow('    Make it first (see above), then choose Set up Matrix again.'));
+					print('    Nothing was changed.');
+					return;
+				}
+				const where = clean(r.homeserver);
+				const said = clean(r.detail);
+				const why: Record<typeof r.why, string[]> = {
+					wrong_password: [
+						`  ✗ ${where} says the username or password is wrong (${said}).`,
+						'    An account made with “Continue with Google/Apple/GitHub” has no password:',
+						'    set one in its account settings first (matrix.org: https://account.matrix.org).'
+					],
+					rate_limited: [
+						`  ✗ Too many sign-in attempts: ${where} asks to wait (${said}). Try again later.`
+					],
+					no_password_login: [
+						`  ✗ ${where} does not allow signing in with a password (${said}).`,
+						'    Choose “Paste an access token” instead.'
+					],
+					not_homeserver: [
+						`  ✗ ${where} does not answer as a Matrix homeserver (${said}). Check the address.`
+					],
+					unreachable: [`  ✗ Could not reach ${where} from this server (${said}).`],
+					other: [`  ✗ Sign-in failed at ${where}: ${said}.`]
+				};
+				for (const line of why[r.why]) print(yellow(line));
+				print('    Nothing was changed.');
 				return;
 			}
-			token = minted;
+			token = r.token;
+			savedHomeserver = r.homeserver;
 		} else {
 			token = await askPassword('Access token');
 			if (token.trim() === '') {
@@ -671,7 +841,7 @@ export async function runOfflineNotify(
 			}
 		}
 		const candidate = {
-			MORPHIT_NOTIFY_MATRIX_HOMESERVER: homeserver,
+			MORPHIT_NOTIFY_MATRIX_HOMESERVER: savedHomeserver,
 			MORPHIT_NOTIFY_MATRIX_TOKEN: token.trim(),
 			MORPHIT_NOTIFY_MATRIX_USER_ID: '@pending:check'
 		};
@@ -696,41 +866,398 @@ export async function runOfflineNotify(
 		await testAndSave('matrix', candidate, to === '' ? { kind: 'check' } : { kind: 'send', to });
 	};
 
-	const setupXmpp = async (): Promise<void> => {
-		print(
-			dim('  An XMPP (Jabber) account just for this site’s notes. If its server keeps a message')
+	// ─── XMPP ───────────────────────────────────────────────────────────────
+	const XMPP_FORM_SAYS: Record<string, string> = {
+		open: 'takes new accounts',
+		captcha: 'takes new accounts after a picture check (you open a web page)',
+		captcha_no_page: 'wants a picture check that only an XMPP app can show',
+		web: 'makes new accounts only on its website',
+		needs_more: 'asks for more than a name and a password',
+		closed: 'takes no new accounts this way'
+	};
+	type XmppPick = {
+		readonly domain: string;
+		readonly host: string;
+		readonly port: number;
+		readonly security: 'starttls' | 'tls';
+	};
+	const xmppInput = (pick: XmppPick, user: string, password: string): Record<string, string> =>
+		adminInput(
+			{
+				MORPHIT_NOTIFY_XMPP_JID: `${user}@${pick.domain}`,
+				MORPHIT_NOTIFY_XMPP_PASSWORD: password,
+				MORPHIT_NOTIFY_XMPP_HOST: pick.host,
+				MORPHIT_NOTIFY_XMPP_PORT: String(pick.port),
+				MORPHIT_NOTIFY_XMPP_SECURITY: pick.security
+			},
+			'xmpp'
 		);
-		print(
-			dim('  archive (MAM), turn it off for this account: it would list your users’ addresses.')
+	/** Where the domain's server is: its DNS records, or the domain itself (an
+	 *  .onion address: no DNS, and none on a zero-clearnet box). */
+	const xmppWhere = async (domain: string): Promise<XmppPick> => {
+		const e =
+			st.hiddenOnly === true || domain.endsWith('.onion')
+				? { host: domain, port: 5222, security: 'starttls' as const }
+				: await xmppEndpoint(domain, deps.resolveSrv);
+		return { domain, host: e.host, port: e.port, security: e.security };
+	};
+	/** What the server asks of a new account (one word), asked live. */
+	const xmppFormOf = async (pick: XmppPick): Promise<AdminAnswer> =>
+		admin(['register-form', 'xmpp'], xmppInput(pick, 'new', 'not-the-password'));
+	const xmppSays = (f: AdminAnswer): string => {
+		if (!f.ok) return `did not answer (${plainWhy(f, { channel: 'xmpp' })})`;
+		const key =
+			f.status === 'captcha' && typeof f.url !== 'string' ? 'captcha_no_page' : String(f.status);
+		return XMPP_FORM_SAYS[key] ?? 'answered something this cannot use';
+	};
+	const usable = (f: AdminAnswer): boolean =>
+		f.ok === true && (f.status === 'open' || (f.status === 'captcha' && typeof f.url === 'string'));
+
+	/** The server to make the account on: the suggested ones (asked live
+	 *  whether they take new accounts), or one the operator names. */
+	const chooseXmppServer = async (): Promise<XmppPick | null> => {
+		const named = async (q: string): Promise<XmppPick | null> => {
+			for (;;) {
+				const raw = (await ask(q)).trim().toLowerCase();
+				if (raw === '') {
+					print('  Nothing entered — nothing was changed.');
+					return null;
+				}
+				if (!validXmppDomain(raw) || (st.hiddenOnly === true && !raw.endsWith('.onion'))) {
+					print(
+						yellow(
+							st.hiddenOnly === true
+								? '  ✗ This site uses no clearnet: give the server’s .onion address.'
+								: '  ✗ That is not a server name: it looks like example.org (no https://, no @).'
+						)
+					);
+					continue;
+				}
+				const pick = await withSpinner(`Asking ${raw} whether it takes new accounts…`, async () => {
+					const p = await xmppWhere(raw);
+					return { p, f: await xmppFormOf(p) };
+				});
+				if (usable(pick.f)) return pick.p;
+				print(yellow(`  ✗ ${raw} ${xmppSays(pick.f)}.`));
+				if (pick.f.status === 'web' && typeof pick.f.url === 'string')
+					print(
+						dim(
+							`    Its page: ${clean(pick.f.url)} — then choose “Use an account that already exists”.`
+						)
+					);
+				print(dim('    Try another server (Enter to stop).'));
+			}
+		};
+		if (st.hiddenOnly === true) {
+			print(dim('  This site uses no clearnet: the server must have an .onion address.'));
+			return named('The XMPP server’s .onion address');
+		}
+		const checked = await withSpinner(
+			`Asking ${XMPP_SUGGESTED_SERVERS.join(', ')} whether they take new accounts…`,
+			() =>
+				Promise.all(
+					XMPP_SUGGESTED_SERVERS.map(async (d) => {
+						const p = await xmppWhere(d);
+						return { p, f: await xmppFormOf(p) };
+					})
+				)
 		);
-		const jid = await askNonEmpty('Its address (e.g. notices@jabber.example)');
-		if (jid === null) return;
+		for (const c of checked) print(`    ${c.p.domain.padEnd(12)} ${xmppSays(c.f)}`);
+		const offer = checked.filter((c) => usable(c.f));
+		const options = [
+			...offer.map((c, i) => `${c.p.domain}${i === 0 ? ' (recommended)' : ''}`),
+			'Another server…',
+			'Cancel'
+		];
+		const i = await askChoice('Make the account on which server?', options);
+		if (i < offer.length) return offer[i]!.p;
+		if (i === offer.length)
+			return named('The server’s name (e.g. example.org — see providers.xmpp.net)');
+		return null;
+	};
+
+	const askNewXmppPassword = async (
+		user: string
+	): Promise<{ pw: string; made: boolean } | null> => {
+		for (;;) {
+			const pw = await askPassword(
+				`Password (at least ${XMPP_PASSWORD_MIN} characters; Enter: make a strong one for you)`
+			);
+			if (pw === '') return { pw: makeXmppPassword(user), made: true };
+			const why = checkXmppPassword(pw, user);
+			if (why !== null) {
+				print(yellow(`  ✗ ${why}`));
+				continue;
+			}
+			if ((await askPassword('The same password again')) !== pw) {
+				print(yellow('  ✗ The two did not match. Once more.'));
+				continue;
+			}
+			return { pw, made: false };
+		}
+	};
+
+	const askXmppUsername = async (dflt?: string): Promise<string | null> => {
+		for (;;) {
+			const raw = (await ask('Username for the account (e.g. morphitio)', dflt)).trim();
+			if (raw === '') {
+				print('  Nothing entered — nothing was changed.');
+				return null;
+			}
+			const u = checkXmppUsername(raw);
+			if (u.ok) return u.value;
+			print(yellow(`  ✗ ${u.why}`));
+		}
+	};
+
+	/** Archive off, test note, save — for a new account and an existing one.
+	 *  `made`: the account was made just now (its password made for you or not). */
+	const finishXmpp = async (
+		candidate: Record<string, string>,
+		made: { readonly password: 'made' | 'typed' } | null = null
+	): Promise<void> => {
+		const jid = clean(candidate.MORPHIT_NOTIFY_XMPP_JID);
+		/** A new account the operator chose not to save: it stays on its server. */
+		const leftOnServer = (): void => {
+			if (made === null) return;
+			print(
+				yellow(
+					`  ⚠ The account ${jid} was made and stays on its server, but it is not saved here.`
+				)
+			);
+			print(
+				dim(
+					made.password === 'made'
+						? '    Its password was made for you and is kept nowhere, so the account cannot be used: make another one (with a new name — this one is taken now).'
+						: '    To use it later, choose “Use an account that already exists” and type its address and password.'
+				)
+			);
+		};
+		const arch = await withSpinner('Turning its message archive off…', () =>
+			admin(['archive-off', 'xmpp'], candidate)
+		);
+		if (arch.ok && arch.archive === 'off')
+			print(green('  ✓ Its server keeps no copies of the notes it sends (message archive off).'));
+		else if (arch.ok)
+			print(dim('  Its server has no message-archive setting to turn off (it may keep none).'));
+		else
+			print(
+				yellow(`  ✗ Could not turn its message archive off: ${plainWhy(arch, { channel: 'xmpp' })}`)
+			);
+		// Ctrl+C at one of the prompts below comes before anything is saved: a new
+		// account still stays on its server, and the operator is told so.
+		try {
+			let to = '';
+			for (;;) {
+				to = (
+					await ask(
+						'Send a test note to which XMPP address? (yours, e.g. you@example.org; not saved)'
+					)
+				).trim();
+				if (to === '') {
+					// A new account exists now: save it untested rather than lose it.
+					if (made !== null && (await askYesNo(`  Save ${jid} without a test note?`, true))) {
+						if (!(await testAndSave('xmpp', candidate, { kind: 'check' }))) leftOnServer();
+						return;
+					}
+					print('  Nothing entered — nothing was changed here.');
+					leftOnServer();
+					return;
+				}
+				if (validJid(to)) break;
+				print(yellow('  ✗ That is not an XMPP address: it looks like you@example.org.'));
+			}
+			if (!(await testAndSave('xmpp', candidate, { kind: 'send', to }))) leftOnServer();
+		} catch (err) {
+			if (isAbortError(err)) leftOnServer();
+			throw err;
+		}
+	};
+
+	const setupNewXmpp = async (): Promise<void> => {
+		const pick = await chooseXmppServer();
+		if (pick === null) return;
+		let user = await askXmppUsername();
+		if (user === null) return;
+		let pass = await askNewXmppPassword(user);
+		if (pass === null) return;
+		for (let attempt = 0; attempt < 6; attempt++) {
+			const input = xmppInput(pick, user, pass.pw);
+			let stopSpin = startDotsSpinner(`Making ${user}@${pick.domain}…`);
+			let r: AdminAnswer;
+			try {
+				r = await admin(['register', 'xmpp'], input, async (q) => {
+					stopSpin();
+					print(
+						dim(
+							`  ${pick.domain} wants a picture check — it waits only about half a minute. Open this page in your browser:`
+						)
+					);
+					print(`    ${clean(q.url)}`);
+					const answer = (await ask('The letters or numbers you see there')).trim();
+					stopSpin = startDotsSpinner(`Making ${user}@${pick.domain}…`);
+					return { answer };
+				});
+			} finally {
+				stopSpin();
+			}
+			if (r.ok) {
+				print(green(`  ✓ Account ${clean(user)}@${clean(pick.domain)} made.`));
+				if (pass.made)
+					print(
+						dim(
+							`    Its password was made for you and is kept with the site’s settings (${NOTIFY_ENV_PATH}, root only).`
+						)
+					);
+				await finishXmpp(input, { password: pass.made ? 'made' : 'typed' });
+				return;
+			}
+			const said = typeof r.text === 'string' && r.text !== '' ? ` (“${clean(r.text)}”)` : '';
+			if (r.error === 'refused' && r.why === 'taken') {
+				print(yellow(`  ✗ The name “${clean(user)}” is taken on ${pick.domain}. Pick another.`));
+				user = await askXmppUsername();
+				if (user === null) return;
+				// The password must not contain the new name either.
+				const why = checkXmppPassword(pass.pw, user);
+				if (why !== null) {
+					if (pass.made) pass = { pw: makeXmppPassword(user), made: true };
+					else {
+						print(yellow(`  ✗ ${why}`));
+						pass = await askNewXmppPassword(user);
+						if (pass === null) return;
+					}
+				}
+				continue;
+			}
+			if (r.error === 'refused' && r.why === 'not_acceptable') {
+				print(yellow(`  ✗ ${pick.domain} did not accept that name or password${said}.`));
+				user = await askXmppUsername(user);
+				if (user === null) return;
+				pass = await askNewXmppPassword(user);
+				if (pass === null) return;
+				continue;
+			}
+			if (r.error === 'refused' && r.why === 'captcha_expired') {
+				print(
+					yellow(
+						`  ✗ ${pick.domain} stopped waiting for the picture answer. A new picture comes with the next try — answer it within half a minute.`
+					)
+				);
+				continue;
+			}
+			if (r.error === 'refused' && r.why === 'captcha_wrong') {
+				print(
+					yellow('  ✗ The picture answer was not right. A new picture comes with the next try.')
+				);
+				continue;
+			}
+			if (r.error === 'refused' && r.why === 'rate_limited') {
+				print(
+					yellow(
+						`  ✗ ${pick.domain} has had too many new accounts from this server lately${said}. Try again later, or another server.`
+					)
+				);
+				return;
+			}
+			if (r.error === 'refused' && r.why === 'not_allowed') {
+				print(yellow(`  ✗ ${pick.domain} takes no new account now${said}. Try another server.`));
+				return;
+			}
+			if (r.error === 'form') {
+				print(
+					yellow(`  ✗ ${pick.domain} ${xmppSays({ ok: true, status: r.status, url: r.url })}.`)
+				);
+				if (r.status === 'captcha' && typeof r.url === 'string')
+					print(dim('    Nothing was answered, so nothing was made.'));
+				return;
+			}
+			print(
+				yellow(
+					`  ✗ The account was not made: ${r.error === 'refused' ? `the server refused it${said}` : plainWhy(r, { channel: 'xmpp' })}`
+				)
+			);
+			return;
+		}
+		print(yellow('  ✗ Too many tries — nothing was made. Run this again when you are ready.'));
+	};
+
+	const setupExistingXmpp = async (): Promise<void> => {
+		let jid = '';
+		for (;;) {
+			jid = (await ask('Its address (e.g. morphitio@og.im)')).trim().toLowerCase();
+			if (jid === '') {
+				print('  Nothing entered — nothing was changed.');
+				return;
+			}
+			if (validJid(jid) && (st.hiddenOnly !== true || jid.endsWith('.onion'))) break;
+			print(
+				yellow(
+					st.hiddenOnly === true
+						? '  ✗ This site uses no clearnet: the account must be on an .onion server.'
+						: '  ✗ That is not an XMPP address: it looks like name@example.org.'
+				)
+			);
+		}
 		const password = await askPassword('Its password');
 		if (password === '') {
 			print('  No password — nothing was changed.');
 			return;
 		}
-		const host = (await ask('Server to connect to (Enter: the address’s own domain)')).trim();
-		const sec = await askChoice('How does it want the connection secured?', [
-			'STARTTLS on port 5222 (the usual)',
-			'Direct TLS on port 5223'
+		if (!relayReadsSame(password)) {
+			print(
+				yellow(
+					'  ✗ The relay cannot use a password that starts or ends with a space, or is wrapped in quotes. Nothing was changed.'
+				)
+			);
+			return;
+		}
+		const where = await withSpinner('Looking up its server…', () =>
+			xmppWhere(jid.slice(jid.indexOf('@') + 1))
+		);
+		print(
+			dim(
+				`  Its server: ${clean(where.host)}, port ${where.port}, ${where.security === 'tls' ? 'TLS' : 'STARTTLS'}.`
+			)
+		);
+		let pick: XmppPick = where;
+		if (!(await askYesNo('  Use that?', true))) {
+			const host = (await ask('Server to connect to', where.host)).trim().toLowerCase();
+			if (!validXmppDomain(host)) {
+				print(yellow('  ✗ That is not a server name. Nothing was changed.'));
+				return;
+			}
+			if (st.hiddenOnly === true && !host.endsWith('.onion')) {
+				print(
+					yellow(
+						'  ✗ This site uses no clearnet: the server must be an .onion address. Nothing was changed.'
+					)
+				);
+				return;
+			}
+			const sec = await askChoice('How does it want the connection secured?', [
+				'STARTTLS (usually port 5222)',
+				'TLS from the start (usually port 5223)'
+			]);
+			const portRaw = (await ask('Port', sec === 0 ? '5222' : '5223')).trim();
+			const port = Number(portRaw);
+			if (!/^\d{1,5}$/.test(portRaw) || port < 1 || port > 65535) {
+				print(yellow('  ✗ A port is a number from 1 to 65535. Nothing was changed.'));
+				return;
+			}
+			pick = { domain: where.domain, host, port, security: sec === 0 ? 'starttls' : 'tls' };
+		}
+		await finishXmpp(xmppInput(pick, jid.slice(0, jid.indexOf('@')), password));
+	};
+
+	const setupXmpp = async (): Promise<void> => {
+		print(dim('  An XMPP (Jabber) account just for this site’s notes — no email address needed.'));
+		print(dim('  Nothing extra runs on this server: notes go out through that account.'));
+		const how = await askChoice('Which account?', [
+			'Make a new one for this site on a free public XMPP server (recommended)',
+			'Use an account that already exists'
 		]);
-		const port = await ask('Port', sec === 0 ? '5222' : '5223');
-		const to = await askNonEmpty(
-			'Send a test note to which XMPP address? (yours; it is not saved)'
-		);
-		if (to === null) return;
-		await testAndSave(
-			'xmpp',
-			{
-				MORPHIT_NOTIFY_XMPP_JID: jid,
-				MORPHIT_NOTIFY_XMPP_PASSWORD: password,
-				MORPHIT_NOTIFY_XMPP_HOST: host,
-				MORPHIT_NOTIFY_XMPP_PORT: port.trim(),
-				MORPHIT_NOTIFY_XMPP_SECURITY: sec === 0 ? 'starttls' : 'tls'
-			},
-			{ kind: 'send', to }
-		);
+		if (how === 0) await setupNewXmpp();
+		else await setupExistingXmpp();
 	};
 
 	const setupTelegram = async (): Promise<void> => {
@@ -824,12 +1351,17 @@ export async function runOfflineNotify(
 					const ch = testable[i]!;
 					const to = await askNonEmpty(`To which ${LABEL[ch]} address? (yours; it is not saved)`);
 					if (to === null) return;
-					const r = await withSpinner('Sending a test note…', () => admin(['send', ch], { to }));
+					if (ch === 'matrix') matrixTestHint(st.matrix);
+					const r = await withSpinner(
+						ch === 'matrix' ? MATRIX_SENDING : 'Sending a test note…',
+						() => admin(['send', ch], { to })
+					);
 					print(
 						r.ok
 							? green(`  ✓ Sent to ${clean(to)} — have a look.`)
 							: yellow(`  ✗ It did not work: ${plainWhy(r, { channel: ch, to })}`)
 					);
+					if (r.ok && ch === 'matrix') matrixTestOutcome(r);
 				}
 			});
 		const set = NOTIFY_CHANNELS.filter(has);

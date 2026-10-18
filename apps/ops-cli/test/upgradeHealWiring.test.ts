@@ -32,6 +32,7 @@ for (const [mod, name] of [
 	['../src/lib/relayHealthEnvHeal.ts', 'relayHealth'],
 	['../src/lib/pgRoleHeal.ts', 'pgRole'],
 	['../src/lib/indexerEnvShadowHeal.ts', 'shadow'],
+	['../src/lib/displayShadowHeal.ts', 'display'],
 	['../src/lib/torPowHeal.ts', 'pow'],
 	['../src/lib/etcPermHeal.ts', 'etcPerm'],
 	['../src/lib/mailRelayHeal.ts', 'mail'],
@@ -163,6 +164,8 @@ describe('heal wiring in the self-heal phase', () => {
 			'relayHealth',
 			'pgRole',
 			'shadow',
+			// v1.21.10: the Instances card settings, after the asset-policy one.
+			'display',
 			'vapid',
 			'logLevel',
 			'releaseMonitor',
@@ -172,7 +175,7 @@ describe('heal wiring in the self-heal phase', () => {
 			'egress'
 		]);
 		expect(out).toMatch(
-			/HIDDENRPC-DETAIL[\s\S]*SHADOW-DETAIL[\s\S]*VAPID-DETAIL[\s\S]*LOGLEVEL-DETAIL[\s\S]*RELEASEMONITOR-DETAIL[\s\S]*TORBRIDGES-DETAIL[\s\S]*EGRESS-DETAIL/
+			/HIDDENRPC-DETAIL[\s\S]*SHADOW-DETAIL[\s\S]*DISPLAY-DETAIL[\s\S]*VAPID-DETAIL[\s\S]*LOGLEVEL-DETAIL[\s\S]*RELEASEMONITOR-DETAIL[\s\S]*TORBRIDGES-DETAIL[\s\S]*EGRESS-DETAIL/
 		);
 	});
 

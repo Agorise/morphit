@@ -175,6 +175,7 @@ import { healReleaseMonitor, realReleaseMonitorRuntime } from '../lib/releaseMon
 import { closeQuietly, codeHostAgent } from '../lib/codeHostAgent.ts';
 import { heal as healPgRoles } from '../lib/pgRoleHeal.ts';
 import { heal as healIndexerEnvShadow } from '../lib/indexerEnvShadowHeal.ts';
+import { heal as healDisplayShadow } from '../lib/displayShadowHeal.ts';
 import { heal as healTorPow } from '../lib/torPowHeal.ts';
 import { heal as healTorBridges } from '../lib/torBridgesHeal.ts';
 import { heal as healEtcPerms } from '../lib/etcPermHeal.ts';
@@ -5540,7 +5541,7 @@ function healCtx(): { info: typeof info; warn: typeof warn; spinner: (l: string)
  * Heals that need the indexer / relay already running this release (each
  * restarts what it changes, then verifies against the running service):
  * hidden RPC list, relay health gate, database roles,
- * indexer.env shadows, Web Push keys, log level; and the
+ * indexer.env shadows, Instances card settings, Web Push keys, log level; and the
  * tor-only egress rule, which needs more time than the self-heal phase
  * has. Run by the background unit after the restarts.
  */
@@ -5550,6 +5551,9 @@ export function afterRestartHealSteps(): Array<[string, () => Promise<void>]> {
 		['the relay health heal', () => reportHeal(healRelayHealthEnv(healCtx()))],
 		['the database role heal', () => reportHeal(healPgRoles(healCtx()))],
 		['the indexer.env heal', () => reportHeal(healIndexerEnvShadow(healCtx()))],
+		// v1.21.10: install-time copies of the name / contact link in indexer.env
+		// no longer override morphit.config.env (the Instances card).
+		['the Instances card settings heal', () => reportHeal(healDisplayShadow(healCtx()))],
 		// an empty relay-vapid.env is generated again; checked against
 		// the restarted relay's local health.
 		['the Web Push key heal', () => reportHeal(healVapid(healCtx()))],

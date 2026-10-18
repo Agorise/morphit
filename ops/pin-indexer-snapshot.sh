@@ -158,8 +158,10 @@ ok "kubo reachable (strategy: $IPFS_STRATEGY, IPFS_PATH=$IPFS_PATH)"
 HIDDEN_ONLY=no
 [ "$(IPFS config Routing.Type 2>/dev/null || true)" = "none" ] && HIDDEN_ONLY=yes
 _idxenv="${MORPHIT_INDEXER_ENV:-/etc/morphit/indexer.env}"
-if [ -r "$_idxenv" ] && grep -q '^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=' "$_idxenv" \
-	&& [ -z "$(sed -n 's/^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=//p' "$_idxenv" | tail -n1 | tr -d "\"' \t\r")" ]; then
+# As bash reads the file: last line wins, `export` allowed, a `# comment` after
+# a blank is not part of the value (`…=   # tor-only` is empty), commas alone are empty.
+if [ -r "$_idxenv" ] && grep -Eq '^[[:space:]]*(export[[:space:]]+)?MORPHIT_INDEXER_RPC_ENDPOINTS=' "$_idxenv" \
+	&& [ -z "$(sed -n 's/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}MORPHIT_INDEXER_RPC_ENDPOINTS=//p' "$_idxenv" | tail -n1 | sed 's/[[:space:]]\{1,\}#.*$//' | tr -d "\"' \t\r,")" ]; then
 	HIDDEN_ONLY=yes
 fi
 [ "$HIDDEN_ONLY" = yes ] && ok "hidden-only node: nothing is announced to the public IPFS network or fetched over clearnet"

@@ -251,6 +251,9 @@ export interface FakeXmppOptions {
 	/** SCRAM-SHA-256: 'bad' answers with a server signature that is wrong (a
 	 *  server that does not know the password). */
 	readonly scramProof?: 'good' | 'bad';
+	/** Answer an <iq> before the built-in answers (bind, ping): return the reply,
+	 *  or null to fall through. `authed`: after the login. */
+	readonly iq?: (iq: string, authed: boolean, secure: boolean) => string | null;
 }
 
 /**
@@ -346,6 +349,14 @@ export async function fakeXmpp(
 						w("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
 					} else w("<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-authorized/></failure>");
 					continue;
+				}
+				if (o.iq && (m = /<iq\b[^>]*\/>|<iq\b[\s\S]*?<\/iq>/.exec(buf))) {
+					const reply = o.iq(m[0], authed, isSecure);
+					if (reply !== null) {
+						buf = buf.slice(m.index + m[0].length);
+						w(reply);
+						continue;
+					}
 				}
 				if ((m = /<iq[^>]*type='set'[\s\S]*?<\/iq>/.exec(buf))) {
 					buf = buf.slice(m.index + m[0].length);

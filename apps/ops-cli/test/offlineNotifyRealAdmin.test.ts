@@ -80,6 +80,13 @@ beforeEach(() => {
 			'printf "%s\\n" "$@" > "$NOTIFY_LOG/argv"',
 			'echo "${FAKE_RUNAS:-root}" > "$NOTIFY_LOG/user"',
 			'pwd > "$NOTIFY_LOG/cwd"',
+			// Asks one question (a picture check) and waits for its answer on stdin.
+			'if [ "$FAKE_MODE" = ask ]; then',
+			'  IFS= read -r first; printf "%s" "$first" > "$NOTIFY_LOG/stdin"',
+			'  echo \'{"ask":"captcha","url":"https://xmpp.example/captcha/1"}\'',
+			'  IFS= read -r second; printf "%s" "$second" > "$NOTIFY_LOG/answer"',
+			'  echo \'{"ok":true,"registered":1}\'; exit 0',
+			'fi',
 			'cat > "$NOTIFY_LOG/stdin"',
 			'case "$FAKE_MODE" in',
 			'  hang) sleep 300 & echo $! > "$NOTIFY_LOG/grandchild"; sleep 300 ;;',
@@ -106,6 +113,40 @@ afterEach(() => {
 });
 
 describe('realAdmin: the relay’s admin tool, as the relay', () => {
+	it('a question from the tool is answered on its stdin; the time limit waits while the operator answers', async () => {
+		setEnv('FAKE_MODE', 'ask');
+		const asked: unknown[] = [];
+		const r = await realAdmin(join(dir, 'repo'), { timeoutMs: 1_500 })(
+			['register', 'xmpp'],
+			{ MORPHIT_NOTIFY_XMPP_PASSWORD: 'pa$$ s3cret' },
+			async (q) => {
+				asked.push(q);
+				// Longer than the time limit: answering is not counted.
+				await new Promise((res) => setTimeout(res, 2_500));
+				return { answer: 'K7Q2X' };
+			}
+		);
+		expect(r).toEqual({ ok: true, registered: 1 });
+		expect(asked).toEqual([{ ask: 'captcha', url: 'https://xmpp.example/captcha/1' }]);
+		expect(JSON.parse(read('stdin'))).toEqual({ MORPHIT_NOTIFY_XMPP_PASSWORD: 'pa$$ s3cret' });
+		expect(JSON.parse(read('answer'))).toEqual({ answer: 'K7Q2X' });
+		// Still nothing on a command line.
+		expect(read('argv')).not.toMatch(/s3cret|K7Q2X/);
+	});
+
+	it('an operator who gives up on the question: the tool is stopped, nothing is answered', async () => {
+		setEnv('FAKE_MODE', 'ask');
+		const r = await realAdmin(join(dir, 'repo'), { timeoutMs: 5_000 })(
+			['register', 'xmpp'],
+			{},
+			async () => {
+				throw new Error('aborted');
+			}
+		);
+		expect(r).toEqual({ ok: false, error: 'cancelled' });
+		expect(read('answer')).toBe('');
+	});
+
 	it('runs as the user the relay unit runs as, in apps/relay', async () => {
 		setEnv('FAKE_UNIT_USER', 'svc-relay');
 		const r = await realAdmin(join(dir, 'repo'))(['status'], {});

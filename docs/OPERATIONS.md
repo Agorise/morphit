@@ -5579,6 +5579,25 @@ a systemd `Environment=` line:
 So keep each operator-editable key in exactly one file —
 `morphit.config.env` — and keep it out of `indexer.env`.
 
+`morphit-ops edit` and `morphit-ops alt-address` see to this for what
+they save in the installed `morphit.config.env` / `morphit.env` (v1.21.10;
+not for another copy given with `--out`): a setting just saved that
+`/etc/morphit/indexer.env` or `/etc/morphit/relay.env` also sets is
+removed from there (a copy of the file is kept next to it,
+`….bak-<number>`), the restart is offered (the relay too when its file
+changed, or when its Blurt node list, the site's name, origin or
+Tor/I2P/Lokinet address changed — its offline notes carry the name and
+addresses), and after it the running services are checked for the new
+values. A Blurt node list in one of those files that keeps the server
+off public nodes (empty, or hidden `.onion`/`.i2p` nodes only) is kept,
+and named: the list just saved is not used there. Each upgrade also
+removes the
+install-time copies of the site's name, tagline, contact link and
+addresses that a server installed before v1.12.20 still has in
+`indexer.env`, where `morphit.config.env` sets them too. After a
+restart the indexer refreshes this site's own card on the Instances
+page at once.
+
 ### What's in the file
 
 The allowlist accepts **41 keys** — the complete set is
@@ -14132,11 +14151,11 @@ say so. Use accounts made for this, never your personal ones:
 
 | App | What you need | Notes |
 | --- | --- | --- |
-| Matrix | an account on any homeserver (username + password, or an access token) | Users get its invitation the first time; the notes then arrive in that chat. An `http://` homeserver address is accepted only for a homeserver on this server or an `.onion` address (the bot's password and token never cross the internet unencrypted). |
+| Matrix | an account that **already exists** on any homeserver (username + password, or an access token): the wizard signs in to it, it does not make one. On matrix.org, make it at https://app.element.io → *Create account*: it asks for an email address, emails a code to type in, and wants a password of at least 10 characters. Not with *Continue with Google/Apple/GitHub* — that account has no password to type in the wizard. | Users get its invitation the first time; the notes then arrive in that chat. A refused sign-in shows what the homeserver answered (wrong username or password, no such account yet, too many attempts, no password sign-in); for an address whose own `/.well-known` names another (matrix.org → matrix-client.matrix.org) the wizard signs in, and saves, that one. Its token does not expire (no refresh token is asked for). A homeserver that answers the sign-in with a redirect is refused: the password is never sent on. A test note comes with an invitation: accept it within about a minute and a half — the bot leaves the test chat once you have joined (or then), and after that it can no longer be joined ("the person who invited you has already left"); users' chats stay open. An `http://` homeserver address is accepted only for a homeserver on this server or an `.onion` address (the bot's password and token never cross the internet unencrypted). |
 | Session | nothing — the wizard makes a new Session account for your site (or takes the 13 recovery words of one you have) | Sent through Tor, which a standard install runs (on by default; the relay reaches it at `MORPHIT_RELAY_TOR_SOCKS`). Users find the first note under *Message Requests*. The account's display name is your site's name. |
-| XMPP | an account (address + password); the server name only if it differs from the address's domain | STARTTLS or direct TLS; it never logs in without encryption. |
+| XMPP | nothing — the wizard can **make the account** on a free public server (no email address needed), or take one you have (address + password) | *Make a new one*: it asks og.im, openim.nl and jabber.de (or a server you name) live whether they take new accounts, and offers only those that do. It checks the username (2–32 of a–z, 0–9, `.` `_` `-`) and the password (12–128 characters, not containing the username, three kinds of characters or 20+ characters, plain characters — no space at either end, no quotes around it, no special or invisible spaces — typed twice) before anything is sent — or makes a strong 24-character one if you press Enter (kept only in the settings file). A server that wants a picture check shows a web page; you type what it shows, within about half a minute (the server stops waiting then; the next try brings a new picture). A refusal shows the server's own reason (name taken, password too weak, too many new accounts lately). Then it turns the account's message archive off, sends a test note and saves; with no test address it offers to save the new account untested. A new account you choose not to save stays on its server, and the wizard says so (a name taken from then on; a password made for you is kept nowhere). The server's address comes from the domain's DNS records (`_xmpp-client._tcp`, else `_xmpps-client._tcp`); on a zero-clearnet site only an `.onion` server, and no DNS is asked. STARTTLS or direct TLS; it never logs in, or registers, without encryption. |
 | Telegram | a bot: in Telegram open **@BotFather**, send `/newbot`, copy the token | Users link their Telegram by sending the bot a code (the card has a button for it). Telegram sees which users the bot writes to and when, and can read the note (it names your site and carries the link). |
-| Email | an SMTP login allowed to send (your mail provider's settings) | Send **from an address at that provider**. If you published the "this domain sends no email" DNS records ([RUN-A-MORPHIT-NODE.md §13](RUN-A-MORPHIT-NODE.md)), mail from your site's own domain is refused unless you change them first. |
+| Email | a mailbox made for this site at a mail provider that lets programs send mail (SMTP): its outgoing server, port (587 STARTTLS or 465 TLS), login (usually the mailbox's address) and password (often an app password) | Nothing extra runs on your server: notes go out through that mailbox, as a mail app would send them. Send **from an address at that provider**. If you published the "this domain sends no email" DNS records ([RUN-A-MORPHIT-NODE.md §13](RUN-A-MORPHIT-NODE.md)), mail from your site's own domain is refused unless you change them first. |
 
 **Tor-only (zero-clearnet) sites.** Only servers at an `.onion` address work
 (Matrix, XMPP, email); Telegram and Session cannot be offered; the link in a
@@ -14190,8 +14209,9 @@ clearnet server's certificate is always checked.
   account.
 - **The accounts your notes come from** must not keep a list either. The
   wizard reminds you to turn off the mail provider's copy of every sent mail
-  ("Sent") and the XMPP server's message archive (MAM) for that account —
-  either would list your users' addresses. The Matrix bot leaves and forgets
+  ("Sent"), and turns the XMPP account's message archive (MAM) off itself
+  (it says so when the server has no such setting) — either would list your
+  users' addresses. The Matrix bot leaves and forgets
   every chat no saved address holds any more — when she removes or changes
   her address, when a code is never confirmed (it expires, or is guessed wrong
   five times), and when its first message fails. The relay queues each

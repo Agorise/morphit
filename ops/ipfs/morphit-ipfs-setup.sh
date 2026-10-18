@@ -78,8 +78,10 @@ sudo -u "$IPFS_USER" env IPFS_PATH="$IPFS_REPO" sh -c '
 # joined the public DHT from its home IP until its next upgrade.
 HIDDEN_ONLY=no
 IDX_ENV="${MORPHIT_INDEXER_ENV:-/etc/morphit/indexer.env}"
-if [ -f "$IDX_ENV" ] && grep -q '^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=' "$IDX_ENV" \
-	&& [ -z "$(sed -n 's/^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=//p' "$IDX_ENV" | tail -n1 | tr -d "\"' \t\r")" ]; then
+# As bash reads the file: last line wins, `export` allowed, a `# comment` after
+# a blank is not part of the value (`…=   # tor-only` is empty), commas alone are empty.
+if [ -f "$IDX_ENV" ] && grep -Eq '^[[:space:]]*(export[[:space:]]+)?MORPHIT_INDEXER_RPC_ENDPOINTS=' "$IDX_ENV" \
+	&& [ -z "$(sed -n 's/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}MORPHIT_INDEXER_RPC_ENDPOINTS=//p' "$IDX_ENV" | tail -n1 | sed 's/[[:space:]]\{1,\}#.*$//' | tr -d "\"' \t\r,")" ]; then
 	HIDDEN_ONLY=yes
 fi
 PRIV_MODE=base

@@ -26,6 +26,7 @@ import { resolve } from 'node:path';
 
 import { ask, askChoice, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
+import { liveConfigPath, liveServiceEnvs, restartWithWritten } from '../lib/laterEnvShadow.ts';
 import { offerRestart } from '../lib/restartServices.ts';
 import { atomicEnvWrite } from './edit.ts';
 import {
@@ -37,6 +38,17 @@ import {
 	ENS_ENV_KEY,
 	GEN_SCRIPT
 } from '../lib/altAddressValidate.ts';
+
+/** Restart the indexer for a saved address — after removing any old copy in a
+ *  file it reads last (/etc/morphit/indexer.env), which would keep it. Only
+ *  when the file saved is the installed one: another copy (--out) has nothing
+ *  on this server to clear or check against. */
+const restartAfterSave = (configPath: string, written: readonly string[]): Promise<boolean> =>
+	restartWithWritten(written, ['morphit-indexer'], {
+		offer: (units) => offerRestart(units),
+		print: (line) => console.log(line === '' ? '' : `  ${sanitizeForTerm(line)}`),
+		envs: resolve(configPath) === resolve(liveConfigPath()) ? liveServiceEnvs() : []
+	});
 
 export interface AltAddressCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -425,7 +437,7 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 			}
 			console.log(`\n  ✓ removed from ${configPath}`);
 			console.log(`  ✓ backed up the old version to ${result.backupPath}`);
-			await offerRestart(['morphit-indexer']);
+			await restartAfterSave(configPath, [...updates.keys()]);
 			console.log('  Reload your site; the pill is gone from the footer.\n');
 			continue;
 		}
@@ -477,7 +489,7 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 			}
 			console.log(`\n  ✓ saved to ${configPath}`);
 			console.log(`  ✓ backed up the old version to ${result.backupPath}`);
-			await offerRestart(['morphit-indexer']);
+			await restartAfterSave(configPath, [...updates.keys()]);
 			console.log('  Reload your site; the new pill appears in the footer.');
 			console.log('');
 		}

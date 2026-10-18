@@ -98,6 +98,14 @@ export function writableValue(value: string): boolean {
 	return !/[\r\n\0\u2028\u2029]/.test(value);
 }
 
+/** Whether the relay reads the value back as it is: it trims every value and
+ *  drops one pair of matching quotes around it (apps/relay/src/notify/config.ts),
+ *  so a password with a space at an end, or wrapped in quotes, would be used —
+ *  and registered — without them. PURE. */
+export function relayReadsSame(value: string): boolean {
+	return value.trim().replace(/^(['"])(.*)\1$/, '$2') === value;
+}
+
 /**
  * The value bash gives the right-hand side of an assignment line, or null
  * when it cannot be known without running something (`$…`, a backtick, a

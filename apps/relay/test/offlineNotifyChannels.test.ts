@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import net from 'node:net';
 import { displayName, sendMail, quotedPrintable } from '../src/notify/channels/smtp.ts';
-import { sendMatrix } from '../src/notify/channels/matrix.ts';
+import { leaveTestRoom, sendMatrix } from '../src/notify/channels/matrix.ts';
 import { codeInTelegramText, pollTelegram, sendTelegram } from '../src/notify/channels/telegram.ts';
 import { sendXmpp } from '../src/notify/channels/xmpp.ts';
 import { newSessionIdentity, sendSession, sessionIdOf } from '../src/notify/channels/session.ts';
@@ -175,6 +175,81 @@ describe('Matrix', () => {
 		const r3 = await sendMatrix(cfg, direct, '@grandma:hs.org', r1, 'note 2');
 		expect(r3).not.toBe(r1);
 		expect(JSON.parse(hs.hits.at(-1)!.body)).toEqual({ msgtype: 'm.text', body: 'note 2' });
+	});
+});
+
+describe('Matrix: the operator’s test chat', () => {
+	// A homeserver where she joins after `joinAfter` membership checks (never: -1).
+	async function homeserver(joinAfter: number, failChecks = 0) {
+		let checks = 0;
+		let left = false;
+		const hs = keep(
+			await fakeHttp((h) => {
+				if (h.method === 'GET' && h.path === '/_matrix/client/v3/rooms/!t%3Ahs/joined_members') {
+					checks++;
+					if (checks <= failChecks) return { status: 502, body: { errcode: 'M_UNKNOWN' } };
+					const joined: Record<string, unknown> = { '@bot:hs': {} };
+					if (!left && joinAfter >= 0 && checks > joinAfter) joined['@operator:hs.org'] = {};
+					return { status: 200, body: { joined } };
+				}
+				if (h.path === '/_matrix/client/v3/rooms/!t%3Ahs/leave') {
+					left = true;
+					return { status: 200, body: {} };
+				}
+				if (h.path === '/_matrix/client/v3/rooms/!t%3Ahs/forget') return { status: 200, body: {} };
+				return { status: 404, body: { errcode: 'M_UNRECOGNIZED' } };
+			})
+		);
+		const cfg = {
+			homeserver: `http://127.0.0.1:${hs.port}`,
+			accessToken: 'tok',
+			userId: '@bot:hs'
+		};
+		return { hs, cfg, checks: () => checks };
+	}
+	const clock = () => {
+		let t = 0;
+		return { now: () => t, sleep: async (ms: number) => void (t += ms) };
+	};
+
+	it('the bot leaves only once she has joined — so the note can still be read', async () => {
+		const { hs, cfg, checks } = await homeserver(2);
+		const c = clock();
+		expect(
+			await leaveTestRoom(cfg, direct, '!t:hs', '@operator:hs.org', { ...c, pollMs: 3000 })
+		).toBe(true);
+		expect(checks()).toBe(3);
+		const paths = hs.hits.map((h) => h.path.replace(/^.*\/rooms\/[^/]+\//, ''));
+		// Every check comes before the leave, and the leave is followed by forget.
+		expect(paths).toEqual([
+			'joined_members',
+			'joined_members',
+			'joined_members',
+			'leave',
+			'forget'
+		]);
+	});
+
+	it('she never joins: the bot leaves when the wait is over, and says so', async () => {
+		const { hs, cfg } = await homeserver(-1);
+		const c = clock();
+		expect(
+			await leaveTestRoom(cfg, direct, '!t:hs', '@operator:hs.org', {
+				...c,
+				waitMs: 9000,
+				pollMs: 3000
+			})
+		).toBe(false);
+		expect(c.now()).toBe(9000);
+		expect(hs.hits.at(-2)?.path).toMatch(/\/leave$/);
+	});
+
+	it('a homeserver hiccup while checking does not end the wait', async () => {
+		const { cfg } = await homeserver(0, 2);
+		const c = clock();
+		expect(
+			await leaveTestRoom(cfg, direct, '!t:hs', '@operator:hs.org', { ...c, pollMs: 3000 })
+		).toBe(true);
 	});
 });
 

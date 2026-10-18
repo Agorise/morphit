@@ -330,10 +330,26 @@ export interface ProbeOutcome {
 	readonly confirmedOwner?: string;
 }
 
+/** The columns a probe needs from known_instances (as `ki`) and operators (as
+ *  `o`), with `rival_claimants`: other registrants of the same origin. */
+const DUE_COLUMNS = `ki.origin, ki.operator_account, ki.registered_at_time,
+	        ki.last_probed_at, ki.last_probe_status, ki.last_probe_error, ki.consecutive_failures,
+	        ki.cached_indexed_block,
+	        o.reg_alt_networks, o.last_action_block_num,
+	        ARRAY(SELECT o2.account FROM operators o2
+	               WHERE o2.origin = ki.origin AND o2.account <> ki.operator_account
+	               ORDER BY o2.registered_in_block, o2.account) AS rival_claimants`;
+
 export class FederationProbeScheduler {
 	private lastScanAt = 0;
 	private inFlight = false;
 	private readonly concurrency: number;
+	/** The first scan after a start refreshes this site's own card whether or
+	 *  not it is due. A restart is how a changed name, tagline, contact link or
+	 *  address reaches the indexer (`morphit-ops edit` restarts it), and the card
+	 *  only learned it at the next ordinary check — so after a contact change
+	 *  the footer showed the new link while /instances kept the old one. */
+	private selfRefreshedSinceStart = false;
 
 	constructor(
 		private readonly db: Database,
@@ -364,8 +380,15 @@ export class FederationProbeScheduler {
 		// Step 1: drop instances dead for too long.
 		const dropped = await this.dropFailedInstances();
 
-		// Step 2: pick instances due for probing.
-		const due = await this.pickDueInstances();
+		// Step 2: pick instances due for probing (and, once after a start, our
+		// own card even when it is not due).
+		let due = await this.pickDueInstances();
+		if (!this.selfRefreshedSinceStart) {
+			due = [...(await this.selfRowIfNotDue(due)), ...due];
+			// Done once our card is written (probePool), or when there is none
+			// to write; a write that failed is tried again at the next scan.
+			if (!due.some((r) => this.isSelf(r.origin))) this.selfRefreshedSinceStart = true;
+		}
 		if (due.length === 0) return { probed: 0, dropped };
 
 		// Step 3: probe with bounded concurrency.
@@ -403,6 +426,31 @@ export class FederationProbeScheduler {
 		return result.rowCount ?? 0;
 	}
 
+	private isSelf(origin: string): boolean {
+		return (
+			this.config.selfOrigin !== undefined &&
+			normalizeOrigin(origin) === normalizeOrigin(this.config.selfOrigin)
+		);
+	}
+
+	/** This site's own row, when it exists and is not already in `due`. */
+	private async selfRowIfNotDue(
+		due: readonly KnownInstanceRow[]
+	): Promise<readonly KnownInstanceRow[]> {
+		if (this.config.selfOrigin === undefined) return [];
+		const self = normalizeOrigin(this.config.selfOrigin);
+		if (self === '' || due.some((r) => normalizeOrigin(r.origin) === self)) return [];
+		const r = await this.db.query<KnownInstanceRow>(
+			`SELECT ${DUE_COLUMNS}
+			 FROM known_instances ki
+			 LEFT JOIN operators o ON o.account = ki.operator_account
+			 WHERE lower(regexp_replace(btrim(ki.origin), '/+$', '')) = $1
+			 LIMIT 1`,
+			[self]
+		);
+		return r.rows;
+	}
+
 	private async pickDueInstances(): Promise<readonly KnownInstanceRow[]> {
 		// Probe-due query: rows where the time-since-last-probe exceeds
 		// the per-status interval.  We compute the per-status threshold
@@ -417,13 +465,7 @@ export class FederationProbeScheduler {
 		// origin) so the probe can hand the row to the one the origin names.
 		const goodMs = PROBE_INTERVAL_MS.good;
 		const failMs = PROBE_INTERVAL_MS.unreachable;
-		const cols = `ki.origin, ki.operator_account, ki.registered_at_time,
-			        ki.last_probed_at, ki.last_probe_status, ki.last_probe_error, ki.consecutive_failures,
-			        ki.cached_indexed_block,
-			        o.reg_alt_networks, o.last_action_block_num,
-			        ARRAY(SELECT o2.account FROM operators o2
-			               WHERE o2.origin = ki.origin AND o2.account <> ki.operator_account
-			               ORDER BY o2.registered_in_block, o2.account) AS rival_claimants`;
+		const cols = DUE_COLUMNS;
 		const fresh = await this.db.query<KnownInstanceRow>(
 			`SELECT ${cols}
 			 FROM known_instances ki
@@ -493,12 +535,10 @@ export class FederationProbeScheduler {
 				// network (fragile — needs hairpin NAT/loopback). We are
 				// demonstrably up (we're the one running this probe), so
 				// mark the directory row reachable locally instead.
-				if (
-					this.config.selfOrigin !== undefined &&
-					normalizeOrigin(inst.origin) === normalizeOrigin(this.config.selfOrigin)
-				) {
+				if (this.isSelf(inst.origin)) {
 					try {
 						await this.persistSelfReachable(inst);
+						this.selfRefreshedSinceStart = true;
 					} catch (err) {
 						log.error('self_persist_threw', { origin: inst.origin }, err);
 					}
