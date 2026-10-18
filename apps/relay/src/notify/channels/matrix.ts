@@ -189,6 +189,19 @@ export async function hasJoined(
 	return typeof joined === 'object' && joined !== null && Object.hasOwn(joined as object, userId);
 }
 
+/** `adminCli send matrix` (the operator's test note) is done, the test chat
+ *  left, this long after the tool started: morphit-ops stops it at 180 s, and
+ *  starting tsx takes a few seconds. */
+export const TEST_NOTE_BUDGET_MS = 150_000;
+
+/** The budget in use: MORPHIT_NOTIFY_SEND_BUDGET_MS may only make it SHORTER
+ *  (at least 1 s) — so its test runs in seconds against a homeserver slowed in
+ *  proportion, not two and a half minutes on every CI run. PURE. */
+export function testNoteBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
+	const v = Number(env.MORPHIT_NOTIFY_SEND_BUDGET_MS);
+	return Number.isFinite(v) && v >= 1_000 && v < TEST_NOTE_BUDGET_MS ? v : TEST_NOTE_BUDGET_MS;
+}
+
 /** How long an operator's test chat waits for them to join it. */
 export const TEST_JOIN_WAIT_MS = 100_000;
 const TEST_JOIN_POLL_MS = 3_000;

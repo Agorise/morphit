@@ -35,7 +35,13 @@ import { createDatabase } from '../db/pool.ts';
 import { normalizeAddress, type AddressChannel, type Channel } from './addresses.ts';
 import { notifyConfigFromEnv, offeredChannels, type NotifyConfig } from './config.ts';
 import { dispatch } from './dispatch.ts';
-import { leaveRoom, leaveTestRoom, MatrixRoomLeftOpen, whoAmI } from './channels/matrix.ts';
+import {
+	leaveRoom,
+	leaveTestRoom,
+	MatrixRoomLeftOpen,
+	testNoteBudgetMs,
+	whoAmI
+} from './channels/matrix.ts';
 import { drainLeavesWithin } from './leaves.ts';
 import { newSessionIdentity } from './channels/session.ts';
 import { telegramBotName } from './channels/telegram.ts';
@@ -48,9 +54,7 @@ const CHANNELS: readonly Channel[] = ['matrix', 'session', 'xmpp', 'telegram', '
 /** purge-channel stops starting to leave rooms after this (morphit-ops stops
  *  waiting for this tool after 180 s; one leave may take about 30 s). */
 export const LEAVE_BUDGET_MS = 100_000;
-/** `send matrix` is done, the test chat left, this long after the tool started
- *  (morphit-ops stops it at 180 s; starting tsx takes a few seconds). */
-export const SEND_BUDGET_MS = 150_000;
+/** When this tool started: `send matrix` is done by then + testNoteBudgetMs(). */
 const STARTED = Date.now();
 
 function out(o: Record<string, unknown>): never {
@@ -367,7 +371,7 @@ async function main(): Promise<void> {
 				out({
 					ok: true,
 					joined: await leaveTestRoom(cfg.matrix, net, route, address, {
-						deadline: STARTED + SEND_BUDGET_MS
+						deadline: STARTED + testNoteBudgetMs()
 					})
 				});
 			}

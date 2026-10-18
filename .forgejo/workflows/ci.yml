@@ -16,6 +16,7 @@
 #      against a REAL Postgres 16, so cross-table SQL + migration
 #      regressions surface in CI instead of only in manual runs.
 #   6. run-smokes      — the full smoke suite, triple-pulsed for flakes
+#      (pulses 1–2 in `smokes`, pulse 3 in `smokes-pulse-3` after it)
 #
 # If any gate fails, the run fails.  Gates 1–5 run in parallel;
 # the smokes gate is the longest-running and effectively serial.
@@ -274,15 +275,19 @@ jobs:
         run: ansible-lint --offline --strict playbook.yml
 
   smokes:
-    name: Smoke suite (run-smokes.sh, triple-pulse)
+    name: Smoke suite (run-smokes.sh, pulses 1–2 of 3)
     runs-on: ubuntu-24.04
-    # One pulse took about 20 minutes on this runner, so triple-pulse is about
-    # 60 minutes. the per-smoke 240s timeout caps any
+    # The suite runs three times to catch flakes, in two jobs: pulses 1 and 2
+    # here, pulse 3 in `smokes-pulse-3` right after (`needs`, so the two never
+    # share the runner). One pulse took about 20 minutes on this runner when
+    # the three ran in one job; by 2026-10-17 a pulse took 32 minutes (31m51s,
+    # 32m01s) and pulse 3 was stopped by the 90-minute ceiling. Two pulses fit
+    # it with room (about 65 minutes). The per-smoke 240s timeout caps any
     # single hung smoke; this job-level ceiling caps the whole battery in case
     # a non-smoke step (npm ci, build, ansible-lint install, ansible-galaxy
-    # collection install) hangs, or the outer `for i in 1 2 3` loop wedges.
-    # 90 is the ceiling ci-workflow-hardening-smoke allows (1.5× the observed
-    # runtime); if the pulses outgrow it, cut the pulse count, not the cap.
+    # collection install) hangs, or the outer `for i in 1 2` loop wedges.
+    # 90 is the ceiling ci-workflow-hardening-smoke allows; if the pulses
+    # outgrow it again, move a pulse to its own job, never raise the cap.
     timeout-minutes: 90
     # The container executor gives V8 a ~2 GB default old-space heap; the memory
     # stress smoke (orderbook-provisional-removal-memory) allocates near that and
@@ -358,13 +363,105 @@ jobs:
         # will keep this list and the smokes in sync.
         run: npm run build -w apps/mcp-server
 
-      - name: Run smokes (triple-pulse)
-        # We run the suite three times to catch flakes (~20 minutes a pulse).
+      - name: Run smokes (pulses 1 and 2 of 3)
+        # The suite three times to catch flakes (about 32 minutes a pulse):
+        # pulses 1 and 2 here, pulse 3 in smokes-pulse-3.
         env:
           # The `postgres` service sidecar (declared above), reachable by name.
           TEST_DATABASE_URL: postgres://morphit_test:test@postgres:5432/morphit_test
         run: |
-          for i in 1 2 3; do
+          for i in 1 2; do
             echo "=== Pulse $i ==="
             bash scripts/run-smokes.sh
           done
+
+  smokes-pulse-3:
+    name: Smoke suite (run-smokes.sh, pulse 3 of 3)
+    # Only after pulses 1 and 2 passed, and never beside them on the runner.
+    needs: smokes
+    runs-on: ubuntu-24.04
+    # The third pulse of the suite (see the smokes job): about 35 minutes with
+    # its setup, under the same 90-minute ceiling.
+    timeout-minutes: 90
+    # The container executor gives V8 a ~2 GB default old-space heap; the memory
+    # stress smoke (orderbook-provisional-removal-memory) allocates near that and
+    # OOM'd on the CI container (it has more headroom locally). Raise the heap for
+    # every smoke subprocess in this job so a legitimate memory test doesn't crash.
+    env:
+      NODE_OPTIONS: --max-old-space-size=3072
+    # A few smokes drive REAL Postgres (the relay's drainer no-double-pay and
+    # adversarial-RPC smokes). Without a database they print a skip line and no
+    # `✓ all N` line, which run-smokes.sh counts as a failure — on purpose: a
+    # guard that silently skips in CI is a guard that never runs. Same sidecar
+    # as the integration job; each smoke works in its own schema and drops it.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: morphit_test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: morphit_test
+        options: >-
+          --health-cmd "pg_isready -U morphit_test -d morphit_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Node.js 22 LTS
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: 22
+
+      - name: Install build tools
+        run: |
+          # see the ansible-lint job: plain apt-get as root in the
+          # node:20-bookworm container (no sudo, no source-list overrides).
+          for i in 1 2 3; do
+            apt-get update -qq && break
+            echo "apt-get update attempt $i failed; retrying in 5s..."
+            sleep 5
+          done
+          apt-get install -y --no-install-recommends \
+            build-essential python3
+
+      - name: Install workspace dependencies (with the Matrix bot's native add-ons)
+        # No install scripts run. The matrix-bot smokes load two native add-ons;
+        # they are downloaded and checked against pinned SHA-256s
+        # (scripts/fetch-matrix-bot-natives.mjs, the pins Ansible installs use).
+        run: |
+          set -eu
+          npm ci --ignore-scripts --no-audit --no-fund
+          node scripts/fetch-matrix-bot-natives.mjs .
+
+      - name: Install ansible-lint (for ansible-lint-smoke; pinned, hash-checked)
+        run: |
+          apt-get install -y --no-install-recommends \
+            python3-pip
+          pip3 install --break-system-packages --quiet --require-hashes \
+            -r .forgejo/ansible-lint-requirements.txt
+
+      - name: Build workspaces that ship compiled artifacts
+        # `apps/mcp-server` is the only workspace whose `bin`
+        # points into `dist/` and therefore needs `tsc -p
+        # tsconfig.build.json` to run before its smoke spawns
+        # `node dist/main.js`.  The smoke is self-healing as of
+        # (will lazy-build if missing), but doing the
+        # build here makes the failure mode legible — a build
+        # break surfaces as this step failing, not as a
+        # mystery hang inside the smoke runner.
+        #
+        # If a future workspace adds a similar dist-bin, add
+        # it here and the matching `spawn-dist-prebuild-coverage-smoke`
+        # will keep this list and the smokes in sync.
+        run: npm run build -w apps/mcp-server
+
+      - name: Run smokes (pulse 3 of 3)
+        # The third run of the suite, to catch flakes.
+        env:
+          # The `postgres` service sidecar (declared above), reachable by name.
+          TEST_DATABASE_URL: postgres://morphit_test:test@postgres:5432/morphit_test
+        run: |
+          echo "=== Pulse 3 ==="
+          bash scripts/run-smokes.sh

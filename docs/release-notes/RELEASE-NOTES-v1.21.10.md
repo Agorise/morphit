@@ -80,6 +80,8 @@ later before 2026-11-01 00:00 UTC.**
   written with a comment after it (`…=   # tor-only`), quoted, or with `export` is empty, and the last
   line wins. Before, such a line read as clearnet: first-online could ask public RPC nodes and IPFS
   could join the public network from the server's own address.
+- **CI:** the third run of the smoke suite is now its own job, started after the first two: a run of
+  the suite had grown to about 32 minutes, and three in one job no longer fit its 90-minute limit.
 - Smaller: a malformed name refused by the server asks for another name; a registration form that also
   needs an email address is reported as such; a character split across two network packets is no
   longer garbled; a server repeating the password in a refusal no longer puts it on the screen; Ctrl+C
