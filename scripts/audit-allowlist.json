@@ -123,8 +123,8 @@
       "severity": "moderate",
       "category": "dev-build-only",
       "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
-      "lastReviewed": "2026-10-05",
-      "rationale": "postcss-selector-parser 6.1.4 is used by tailwindcss, postcss-nested and eslint-plugin-svelte (devDependencies) while the frontend is built and linted in CI, on the project's own CSS; nodes serve the prebuilt frontend and never run it. The fix needs tailwindcss 4 (a major); patch with that upgrade."
+      "lastReviewed": "2026-10-19",
+      "rationale": "postcss-selector-parser 6.1.5 (2026-10-19) is the fix for the 6.x line: it backports 7.1.6's linear-time parsing (its changelog names this advisory; the published diff replaces the indexOf scans with Sets and changes nothing else). The advisory database still lists every version below 7.1.6, so npm keeps reporting it; remove this entry once the advisory names 6.1.5 as patched. Used only by tailwindcss, postcss-nested and eslint-plugin-svelte (devDependencies) while the frontend is built and linted in CI, on the project's own CSS; nodes serve the prebuilt frontend and never run it."
     },
     "GHSA-v6wh-96g9-6wx3": {
       "package": "vite",

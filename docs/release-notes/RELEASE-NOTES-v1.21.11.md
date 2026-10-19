@@ -89,3 +89,10 @@ the record first, on any computer: `getent ahosts www.<domain>` should list the 
   page a visitor is on. It never did: BunkerWeb sends the header exactly as written, and Docker
   Compose dropped the `$request_uri` it ended with. The header names the onion (as it always did in
   practice), and the page's own `onion-location` tag keeps carrying the page for Tor Browser.
+
+## Build tooling
+
+- **postcss-selector-parser 6.1.5**, published today as the fix for the 6.x line of a CPU-exhaustion
+  advisory (GHSA-rj75-hqrm-r3gf). It is used only while the frontend's CSS is built and linted, never
+  on a node. The advisory database still lists it until it names 6.1.5 as patched, so it stays in
+  the project's reviewed list until then.
