@@ -83,7 +83,7 @@
 		getReputationReceipt,
 		getFeedbackGiven
 	} from '$lib/indexer/client';
-	import { chatMoneyFlow } from '$lib/chat/orderRole';
+	import { chatMoneyFlow, orderCanShip as orderShipsPhysicalItem } from '$lib/chat/orderRole';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -105,7 +105,6 @@
 	import { getPrice, liveUsd, priceStore, type PricedSymbol } from '$lib/prices';
 	import { newChatExportPdf } from '$lib/ui/chatExportPdf';
 	import type { FxResponse } from '@morphit/indexer-client';
-	import { orderUsesShippableMethod } from '$lib/payments/registry';
 	import {
 		isUsdtNetwork,
 		type UsdtNetwork,
@@ -1598,9 +1597,10 @@
 	// metals, and cash-by-mail. It maps straight onto the crypto-direction
 	// gating above: crypto receiver (showShareAddressButton) ships; crypto
 	// sender (showPayNowButton) shares a mailing address.
-	const orderCanShip = $derived(
-		orderRecord !== null && orderUsesShippableMethod(orderRecord.payment_methods)
-	);
+	// A BARTER order counts too: its payment_methods are only the
+	// `pay_<coin>` rails of the accepted coins, so the method check alone
+	// never lit these buttons on a goods/services listing (orderRole.orderCanShip).
+	const orderCanShip = $derived(orderShipsPhysicalItem(orderRecord));
 	/** I RECEIVE crypto ⇒ I'm paying with the physical item ⇒ I ship it. */
 	const showRecordShipmentButton = $derived(orderCanShip && showShareAddressButton);
 	/** I SEND crypto ⇒ I'm receiving the physical payment ⇒ I share where. */

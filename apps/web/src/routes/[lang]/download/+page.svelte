@@ -167,16 +167,19 @@
 	}
 </script>
 
-<Head routeKey="download" />
+<!-- v1.21.11 — about the software, so no " — <site>" after the title on any site. -->
+<Head routeKey="download" siteSuffix={false} />
 
 <div class="mx-auto max-w-4xl px-4 py-12 md:py-16">
 	<header class="mb-10 text-center">
 		<h1 class="font-display text-4xl font-extrabold md:text-5xl">
 			<span class="brand-gradient-text">{$_('download.title')}</span>
 		</h1>
-		<!-- v1.21.5 — the intro links "instance" and "Federation directory" to
-		     /instances and "run your own node" to /run-a-node ([text](/path) in
-		     the copy; renderFaqInline escapes first and locale-prefixes them). -->
+		<!-- v1.21.11 — not branded: the title is "Download Morphit" on every
+		     site, and the intro says the site runs on Morphit, linking "run their
+		     own" to /run-a-node and "the Federation directory" to /instances
+		     ([text](/path) in the copy; renderFaqInline escapes first and
+		     locale-prefixes them). -->
 		<p class="mx-auto mt-4 max-w-2xl text-ink-600 dark:text-ink-300">
 			{@html renderFaqInline($_('download.subtitle'), lp)}
 		</p>
@@ -279,10 +282,9 @@
 		</p>
 	</section>
 
-	<!-- Visual divider — everything above is for END USERS who want to
-	     trade.  Everything below is for OPERATORS who want to run their
-	     own Morphit instance.  These are different audiences with
-	     different needs (PWA install vs. server deployment). -->
+	<!-- Visual divider — everything above is about the source code
+	     (where to get it); everything below is for OPERATORS
+	     who want to run their own Morphit instance. -->
 	<div class="mt-12 border-t border-ink-200 pt-12 dark:border-ink-800">
 		<header class="mb-8 text-center">
 			<h2 class="font-display text-3xl font-extrabold md:text-4xl">

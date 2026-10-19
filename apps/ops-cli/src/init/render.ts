@@ -38,6 +38,7 @@ import { i2pTunnelStanza, I2P_KEYFILE_NAME, HIDDEN_FRONTEND_PORT } from './i2pGe
 import { join, isAbsolute, resolve } from 'node:path';
 import { MORPHIT_GENESIS_BLOCK } from '@morphit/operator-config';
 import { safeCwd } from '../lib/repoRoot.ts';
+import { wwwAliasFor } from '../lib/bunkerwebWww.ts';
 import type {
 	RelayAccountResult,
 	ActiveKeyResult,
@@ -481,6 +482,14 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 	if (bw) {
 		L.push(`- [ ] **Point DNS first.**  Make the A/AAAA record for \`${domain}\` resolve to`);
 		L.push('      this server before requesting a certificate.');
+		const www = wwwAliasFor(domain);
+		if (www !== null) {
+			L.push(
+				`- [ ] **And \`${www}\`.**  Add a CNAME record \`www\` → \`${domain}\`; once it points`
+			);
+			L.push(`      here, \`sudo morphit-ops upgrade\` sets it up: BunkerWeb sends ${www} to`);
+			L.push(`      https://${domain}, and the certificate names it.`);
+		}
 		L.push("- [ ] **Issue a Let's Encrypt certificate with this server's certbot**, before");
 		L.push('      BunkerWeb starts (it needs port 80 free):');
 		L.push(`      \`sudo certbot certonly --standalone -d ${domain}\``);

@@ -990,15 +990,15 @@
 		}
 	},
 	"download": {
-		"title": "Get {brand}",
-		"subtitle": "You can “install” a {brand} [instance](/instances) on your device with an “app” icon, or [run your own node](/run-a-node) via the source code below and get it auto-listed in the [Federation directory](/instances) so you can start earning from it.",
+		"title": "Download Morphit",
+		"subtitle": "This website runs on open source software called Morphit. It enables anyone to [run their own](/run-a-node) Morphit-powered website like this one and get auto-listed in [the Federation directory](/instances) so you can start earning from it.",
 		"operator_section_title": "Run your own Morphit instance",
 		"operator_section_subtitle": "Anyone can run a Morphit node — your own brand, your own users, your own fee revenue. The federation finds you automatically.",
 		"operator_distros_heading": "Supported systems",
 		"operator_distros_body": "Ubuntu 24.04 LTS is the best-tested choice, and the one-command installer also accepts its derivatives — it reads the Ubuntu 'noble' base, so the edition doesn't matter: Linux Mint 22, Pop!_OS, Zorin OS 17, KDE neon, and elementary OS all work. Debian 12+ and hardened-Debian bases like Kicksecure work via the manual setup steps — both make excellent lean, security-focused servers. Any modern Linux with Node.js 22+ and Postgres 15+ should run it (Arch, Alpine, NixOS — you're more on your own there); FreeBSD works with minor adjustments. Hardware: any 2-core ARM64 or x86-64 machine with 4 GB RAM and 80 GB SSD — most operators run on a Raspberry Pi 4, an Intel mini-PC, or a spare laptop.",
 		"operator_distros_faq_cta": "See full hardware/OS requirements",
 		"mirrors_heading": "Source code & mirrors",
-		"mirrors_body": "Morphit is 100% free and open source. The canonical repository lives on our own Forgejo server and is mirrored across the web, so the code stays reachable even if one host is blocked or disappears.",
+		"mirrors_body": "Morphit is 100% free and open source. The canonical repository lives on the Agorise server and is mirrored across the web, so the code stays reachable even if one host is blocked or disappears.",
 		"mirror_primary": "Primary repository",
 		"mirror_open": "Open repository",
 		"mirror_banned": "Crypto projects banned",
@@ -4053,8 +4053,8 @@
 			"description": "Compare what two Morphit instances show. See at a glance if an instance is hiding orders that another has."
 		},
 		"download": {
-			"title": "Get {brand}",
-			"description": "Install {brand} as an app straight from your browser — on Android, iPhone, iPad, or desktop. No app store, no APK, no sign-up. The open-source code is mirrored across many independent code hosts and verifiable by SHA-256 on the blockchain."
+			"title": "Download Morphit",
+			"description": "Morphit is the free, open source software this website runs on. Anyone can use it to run their own Morphit-powered website. Its code is mirrored across many independent code hosts and verifiable by SHA-256 on the blockchain."
 		},
 		"backup_keys": {
 			"title": "Back up your {brand} keys — no recovery without them",

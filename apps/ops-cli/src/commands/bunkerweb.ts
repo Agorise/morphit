@@ -269,11 +269,18 @@ export function installDirFromEnv(env: { MORPHIT_INSTALL_DIR?: string }): string
 	return v === '' ? DEFAULT_INSTALL_DIR : v;
 }
 
-/** Read the SERVER_NAME value from a bunkerweb.env text, or null if the
+/** The domain SERVER_NAME serves (its first name: the one the certificate is
+ *  for; `morphit-ops upgrade` may add www.<domain> after it), or null if the
  *  key is absent. PURE. */
 export function currentServerName(envText: string): string | null {
 	const m = envText.match(/^SERVER_NAME=(.*)$/m);
-	return m ? (m[1] ?? '').trim() : null;
+	return m
+		? ((m[1] ?? '')
+				.trim()
+				.replace(/^["']|["']$/g, '')
+				.trim()
+				.split(/\s+/)[0] ?? '')
+		: null;
 }
 
 /** Is a SERVER_NAME value the shipped placeholder / unset / an obvious
@@ -306,7 +313,9 @@ export function validateServerName(domain: string): { ok: boolean; reason?: stri
 }
 
 /** Replace (or insert) the SERVER_NAME line in a bunkerweb.env text. PURE.
- *  Returns the new text, whether anything changed, and the previous value. */
+ *  Returns the new text, whether anything changed, and the previous domain.
+ *  The same domain keeps the line as it is (www.<domain> after it stays); a
+ *  new domain replaces the whole line (the old domain's www with it). */
 export function setServerName(
 	envText: string,
 	domain: string
@@ -314,11 +323,15 @@ export function setServerName(
 	const previous = currentServerName(envText);
 	if (previous !== null) {
 		if (previous === domain) return { text: envText, changed: false, previous };
-		return {
-			text: envText.replace(/^SERVER_NAME=.*$/m, `SERVER_NAME=${domain}`),
-			changed: true,
-			previous
-		};
+		// The certificate files follow the domain: `morphit-ops upgrade` writes
+		// the domain itself into CUSTOM_SSL_CERT/KEY when it adds www.<domain>.
+		const old = `/etc/letsencrypt/live/${previous}/`;
+		const text = envText
+			.replace(/^SERVER_NAME=.*$/m, `SERVER_NAME=${domain}`)
+			.replace(/^(\s*(?:export\s+)?CUSTOM_SSL_(?:CERT|KEY)\s*=.*)$/gm, (line) =>
+				line.split(old).join(`/etc/letsencrypt/live/${domain}/`)
+			);
+		return { text, changed: true, previous };
 	}
 	// Key absent (non-canonical file): prepend it.
 	return { text: `SERVER_NAME=${domain}\n${envText}`, changed: true, previous: null };

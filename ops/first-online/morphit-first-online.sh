@@ -59,6 +59,7 @@ log() { logger -t "${LOG_TAG}" -- "$*" 2>/dev/null || true; printf '[%s] %s\n' "
 # reachability probe.  Disable errexit only for the read, then restore it.
 if [ -f "${ENV_FILE}" ]; then set +e; . "${ENV_FILE}"; set -e; fi
 MORPHIT_DOMAIN="${MORPHIT_DOMAIN:-}"
+MORPHIT_WWW_ALIAS="${MORPHIT_WWW_ALIAS:-}"
 MORPHIT_ACME_EMAIL="${MORPHIT_ACME_EMAIL:-}"
 MORPHIT_AUTO_REGISTER="${MORPHIT_AUTO_REGISTER:-no}"
 MORPHIT_TLS_STAGING="${MORPHIT_TLS_STAGING:-no}"
@@ -250,8 +251,25 @@ if [ -n "${MORPHIT_DOMAIN}" ] && [ ! -f "${LE_LIVE}/${MORPHIT_DOMAIN}/fullchain.
 		fi
 		log "requesting Let's Encrypt certificate for ${MORPHIT_DOMAIN} ${_how}"
 		if certbot certonly "$@" --non-interactive --agree-tos \
-			--email "${MORPHIT_ACME_EMAIL}" --server "${_server}" -d "${MORPHIT_DOMAIN}" >/dev/null 2>&1 \
+			--email "${MORPHIT_ACME_EMAIL}" --server "${_server}" --cert-name "${MORPHIT_DOMAIN}" \
+			-d "${MORPHIT_DOMAIN}" >/dev/null 2>&1 \
 			&& [ -f "${LE_LIVE}/${MORPHIT_DOMAIN}/fullchain.pem" ]; then
+			# Then www.<domain> on the same certificate, once the domain has its
+			# own: a refusal (www not pointing here yet) costs only www a failed
+			# check, the domain's certificate stays, and `morphit-ops upgrade` adds
+			# www once it points here.  (Both names in one request would charge the
+			# domain a failed check too at every attempt while it does not point
+			# here, and the back-off below would no longer keep it under Let's
+			# Encrypt's five failed checks per hour.)
+			if [ -n "${MORPHIT_WWW_ALIAS}" ]; then
+				if certbot certonly "$@" --non-interactive --agree-tos \
+					--email "${MORPHIT_ACME_EMAIL}" --server "${_server}" --cert-name "${MORPHIT_DOMAIN}" \
+					-d "${MORPHIT_DOMAIN}" -d "${MORPHIT_WWW_ALIAS}" >/dev/null 2>&1; then
+					log "the certificate names ${MORPHIT_WWW_ALIAS} too"
+				else
+					log "${MORPHIT_WWW_ALIAS} could not be checked (it may not point here yet) — the certificate names ${MORPHIT_DOMAIN}; morphit-ops upgrade adds ${MORPHIT_WWW_ALIAS} once it points here"
+				fi
+			fi
 			log 'certificate obtained — fixing perms + reloading BunkerWeb'
 			rm -f "${TLS_NEXT}" "${TLS_TRIES}"
 			# certbot writes the cert root-only (0700 archive), but

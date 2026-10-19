@@ -48,7 +48,7 @@ interface Box {
 		certbot: string[];
 	};
 }
-const box = (): Box => {
+const box = (www = ''): Box => {
 	const dir = mkdtempSync(join(tmpdir(), 'fo-tls-'));
 	const bin = join(dir, 'bin');
 	mkdirSync(bin);
@@ -59,7 +59,7 @@ const box = (): Box => {
 	for (const s of ['rpc.done', 'canary.done']) writeFileSync(join(dir, 'state', s), '');
 	writeFileSync(
 		join(dir, 'first-online.env'),
-		`MORPHIT_DOMAIN=trade.example.org\nMORPHIT_ACME_EMAIL=ops@example.org\nMORPHIT_AUTO_REGISTER=no\nMORPHIT_OPS_DIR=${dir}\nMORPHIT_CANARY_SERVE_DIR=${join(dir, 'build')}\n`
+		`MORPHIT_DOMAIN=trade.example.org\n${www ? `MORPHIT_WWW_ALIAS=${www}\n` : ''}MORPHIT_ACME_EMAIL=ops@example.org\nMORPHIT_AUTO_REGISTER=no\nMORPHIT_OPS_DIR=${dir}\nMORPHIT_CANARY_SERVE_DIR=${join(dir, 'build')}\n`
 	);
 	const stub = (name: string, body: string): void => {
 		writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`);
@@ -74,7 +74,7 @@ const box = (): Box => {
 	stub('date', `[ "$1" = "+%s" ] && cat "${join(dir, 'now')}" && exit 0; exec /bin/date "$@"`);
 	stub(
 		'certbot',
-		`echo "$*" >> "${join(dir, 'certbot.log')}"\n[ -f "${join(dir, 'certbot-ok')}" ] || exit 1\nmkdir -p "${join(dir, 'live', 'trade.example.org')}" && : > "${join(dir, 'live', 'trade.example.org', 'fullchain.pem')}"\nexit 0`
+		`echo "$*" >> "${join(dir, 'certbot.log')}"\n[ -f "${join(dir, 'certbot-ok')}" ] || exit 1\ncase " $* " in *" -d www."*) [ -f "${join(dir, 'www-unreachable')}" ] && exit 1 ;; esac\nmkdir -p "${join(dir, 'live', 'trade.example.org')}" && : > "${join(dir, 'live', 'trade.example.org', 'fullchain.pem')}"\nexit 0`
 	);
 	return {
 		dir,
@@ -146,6 +146,56 @@ const T0 = 1_800_000_000;
 	check(
 		'port 80 free: certbot uses its own server (--standalone)',
 		r.certbot.length === 1 && r.certbot[0]!.includes('--standalone')
+	);
+	rmSync(b.dir, { recursive: true, force: true });
+}
+{
+	// www.<domain> (a site's own domain): the domain first, then www added
+	const b = box('www.trade.example.org');
+	const r = b.run({ port80: true, certbotOk: true, now: T0 });
+	check(
+		'www: the domain alone first, then the same certificate with www added',
+		r.certbot.length === 2 &&
+			/--cert-name trade\.example\.org -d trade\.example\.org$/.test(r.certbot[0]!) &&
+			r.certbot[1]!.includes(
+				'--cert-name trade.example.org -d trade.example.org -d www.trade.example.org'
+			) &&
+			existsSync(join(b.dir, 'live', 'trade.example.org', 'fullchain.pem')) &&
+			/names www\.trade\.example\.org too/.test(r.out),
+		r.certbot.join(' | ')
+	);
+	rmSync(b.dir, { recursive: true, force: true });
+}
+{
+	// www does not point here yet: the domain's certificate stays, no back-off
+	const b = box('www.trade.example.org');
+	writeFileSync(join(b.dir, 'www-unreachable'), '');
+	const r = b.run({ port80: true, certbotOk: true, now: T0 });
+	check(
+		'www not pointing here: the domain’s certificate is in place, said, no back-off',
+		r.certbot.length === 2 &&
+			existsSync(join(b.dir, 'live', 'trade.example.org', 'fullchain.pem')) &&
+			existsSync(join(b.dir, 'state', 'tls.done')) &&
+			!existsSync(join(b.dir, 'state', 'tls.next')) &&
+			/www\.trade\.example\.org could not be checked/.test(r.out),
+		`${r.certbot.join(' | ')} ${r.out.slice(-300)}`
+	);
+	rmSync(b.dir, { recursive: true, force: true });
+}
+{
+	// the domain does not point here yet: ONE request per attempt (one failed
+	// check for the domain), so the back-off keeps it under 5 per hour
+	const b = box('www.trade.example.org');
+	let t = T0;
+	let calls = 0;
+	for (let k = 0; k < 4; k++) {
+		calls += b.run({ port80: true, certbotOk: false, now: t }).certbot.length;
+		t = Number(readFileSync(join(b.dir, 'state', 'tls.next'), 'utf8'));
+	}
+	check(
+		'the domain not pointing here: one request per attempt; four attempts in the first hour',
+		calls === 4 && t - T0 === 300 + 600 + 1200 + 2400,
+		`calls ${calls}, next at +${t - T0}s`
 	);
 	rmSync(b.dir, { recursive: true, force: true });
 }

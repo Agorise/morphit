@@ -27,8 +27,13 @@ check('BunkerWeb emits the Onion-Location HTTP header (Brave reads only the head
 	/CUSTOM_HEADER=Onion-Location:\s*http:\/\/\{\{\s*morphit_instance_tor_address\s*\}\}/.test(bw));
 check('the header is gated on the onion actually existing (no empty/garbage header)',
 	/\{%\s*if morphit_instance_tor_address[^%]*length > 0\s*%\}/.test(bw));
-check('the header is path-preserving ($request_uri → same page on the onion)',
-	/CUSTOM_HEADER=Onion-Location:[^\n]*\$request_uri/.test(bw));
+// BunkerWeb sends CUSTOM_HEADER as written (its headers plugin sets it from
+// Lua: no nginx variables), and `docker compose` replaces an unquoted $name in
+// an env file with nothing: a $request_uri here was always dropped, and quoted
+// it would reach visitors as a literal "$request_uri" (a broken onion URL).
+// The meta tag carries the page's path.
+check('the header names the onion with no $variable (BunkerWeb would send it literally)',
+	/CUSTOM_HEADER=Onion-Location: http:\/\/\{\{ morphit_instance_tor_address \}\}\n/.test(bw));
 // Don't regress Tor Browser: the frontend must still emit the meta tag too.
 const head = read('apps/web/src/lib/components/Head.svelte');
 check('the frontend STILL emits the <meta http-equiv="onion-location"> tag (Tor Browser)',

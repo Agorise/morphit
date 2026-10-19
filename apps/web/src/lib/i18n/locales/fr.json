@@ -990,15 +990,15 @@
 		}
 	},
 	"download": {
-		"title": "Obtenez {brand}",
-		"subtitle": "Vous pouvez « installer » une [instance](/instances) {brand} sur votre appareil avec une icône d’« app », ou [faire tourner votre propre nœud](/run-a-node) grâce au code source ci-dessous et le voir listé automatiquement dans l’[annuaire de la Fédération](/instances) pour commencer à en tirer des revenus.",
+		"title": "Télécharger Morphit",
+		"subtitle": "Ce site fonctionne grâce à un logiciel open source appelé Morphit. Il permet à chacun de [faire tourner son propre](/run-a-node) site propulsé par Morphit comme celui-ci et d’être listé automatiquement dans l’[annuaire de la Fédération](/instances) pour commencer à en tirer des revenus.",
 		"operator_section_title": "Exécutez votre propre instance Morphit",
 		"operator_section_subtitle": "Tout le monde peut exécuter un nœud Morphit — votre propre marque, vos propres utilisateurs, vos propres revenus de frais. La fédération vous trouve automatiquement.",
 		"operator_distros_heading": "Systèmes pris en charge",
 		"operator_distros_body": "Ubuntu 24.04 LTS est le choix le mieux testé, et l'installateur en une commande accepte aussi ses dérivés — il lit la base « noble » d'Ubuntu, donc l'édition n'a pas d'importance : Linux Mint 22, Pop!_OS, Zorin OS 17, KDE neon et elementary OS fonctionnent. Debian 12+ et les bases Debian durcies comme Kicksecure fonctionnent via les étapes d'installation manuelle — toutes deux font d'excellents serveurs légers et axés sur la sécurité. Tout Linux moderne avec Node.js 22+ et Postgres 15+ devrait le faire tourner (Arch, Alpine, NixOS — vous êtes alors plus livré à vous-même) ; FreeBSD fonctionne avec de légers ajustements. Matériel : n'importe quelle machine ARM64 ou x86-64 à 2 cœurs avec 4 Go de RAM et 80 Go de SSD — la plupart des opérateurs utilisent un Raspberry Pi 4, un mini-PC Intel ou un vieux portable.",
 		"operator_distros_faq_cta": "Voir les exigences matériel/OS complètes",
 		"mirrors_heading": "Code source et miroirs",
-		"mirrors_body": "Morphit est 100 % gratuit et open source. Le dépôt canonique se trouve sur notre propre serveur Forgejo et est mis en miroir sur tout le web, afin que le code reste accessible même si un hôte est bloqué ou disparaît.",
+		"mirrors_body": "Morphit est 100 % gratuit et open source. Le dépôt canonique se trouve sur le serveur d’Agorise et est mis en miroir sur tout le web, afin que le code reste accessible même si un hôte est bloqué ou disparaît.",
 		"mirror_primary": "Dépôt principal",
 		"mirror_open": "Ouvrir le dépôt",
 		"mirror_banned": "Projets crypto interdits",
@@ -4053,8 +4053,8 @@
 			"description": "Comparez ce que montrent deux instances Morphit. Voyez d'un coup d'œil si une instance cache des ordres qu'une autre a."
 		},
 		"download": {
-			"title": "Obtenir {brand}",
-			"description": "Installez {brand} comme une app directement depuis votre navigateur — sur Android, iPhone, iPad ou ordinateur. Sans store, sans APK, sans inscription. Le code open source est dupliqué sur de nombreux hébergeurs de code indépendants et vérifiable par SHA-256 sur la blockchain."
+			"title": "Télécharger Morphit",
+			"description": "Morphit est le logiciel open source et gratuit qui fait fonctionner ce site. Il permet à chacun de faire tourner son propre site propulsé par Morphit. Le code est dupliqué sur de nombreux hébergeurs de code indépendants et vérifiable par SHA-256 sur la blockchain."
 		},
 		"backup_keys": {
 			"title": "Sauvegardez vos clés {brand} — sans elles, aucune récupération",

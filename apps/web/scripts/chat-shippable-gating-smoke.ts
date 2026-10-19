@@ -25,6 +25,7 @@
  */
 
 import { orderUsesShippableMethod } from '../src/lib/payments/registry.ts';
+import { orderCanShip, chatMoneyFlow } from '../src/lib/chat/orderRole.ts';
 
 let failures = 0;
 let count = 0;
@@ -97,6 +98,19 @@ check('10 — unknown key ignored ⇒ not shippable', !orderUsesShippableMethod(
 		'17 — cash-in-person shows neither shipping control (either party)',
 		!buyer.showRecordShipment && !buyer.showShareMailing && !seller.showRecordShipment && !seller.showShareMailing
 	);
+}
+
+// ── BARTER listings: methods are only pay_<coin>, yet the goods still ship ──
+{
+	const banana = { side: 'sell', status: 'live', asset: 'BARTER', payment_methods: ['pay_xmr', 'pay_blurt'] };
+	check('18 — a BARTER listing can ship (pay_<coin> methods only)', orderCanShip(banana));
+	check('19 — a crypto order paid only on-chain cannot ship', !orderCanShip({ asset: 'XMR', payment_methods: ['pay_xmr'] }));
+	// The goods seller (listing owner) receives crypto ⇒ records the shipment;
+	// the goods buyer sends crypto ⇒ shares their mailing address.
+	const seller = chatMoneyFlow(banana, true);
+	const buyer = chatMoneyFlow(banana, false);
+	check('20 — goods seller: Record shipment, not Share mailing address', orderCanShip(banana) && seller.shareAddress && !seller.payNow);
+	check('21 — goods buyer: Share mailing address (and Pay now)', orderCanShip(banana) && buyer.payNow && !buyer.shareAddress);
 }
 
 console.log(`\n${count} scenarios, ${failures} failed`);

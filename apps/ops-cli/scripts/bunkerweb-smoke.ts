@@ -266,6 +266,32 @@ expect(
 			'trade.example.org'
 	);
 	expect('installer: currentServerName null when absent', currentServerName('no key') === null);
+	// v1.21.11: `morphit-ops upgrade` puts www.<domain> after the domain; the
+	// installer still reads (and checks the certificate of) the domain.
+	expect(
+		'installer: currentServerName reads the domain when www follows it (quoted or not)',
+		currentServerName('SERVER_NAME=x.io www.x.io\n') === 'x.io' &&
+			currentServerName('SERVER_NAME="x.io www.x.io"\n') === 'x.io'
+	);
+	const withWww = 'SERVER_NAME=x.io www.x.io\nX=1\n';
+	expect(
+		'installer: keeping the same domain leaves its www in place',
+		setServerName(withWww, 'x.io').changed === false &&
+			setServerName(withWww, 'x.io').text === withWww &&
+			setServerName(withWww, 'x.io').previous === 'x.io'
+	);
+	expect(
+		"installer: a new domain replaces the line (the old domain's www with it)",
+		setServerName(withWww, 'y.org').text === 'SERVER_NAME=y.org\nX=1\n'
+	);
+	expect(
+		'installer: a new domain moves the certificate files the upgrade wrote out with it',
+		setServerName(
+			'SERVER_NAME=x.io www.x.io\nCUSTOM_SSL_CERT=/etc/letsencrypt/live/x.io/fullchain.pem\nCUSTOM_SSL_KEY=/etc/letsencrypt/live/x.io/privkey.pem\nNOTE=/etc/letsencrypt/live/x.io/\n',
+			'y.org'
+		).text ===
+			'SERVER_NAME=y.org\nCUSTOM_SSL_CERT=/etc/letsencrypt/live/y.org/fullchain.pem\nCUSTOM_SSL_KEY=/etc/letsencrypt/live/y.org/privkey.pem\nNOTE=/etc/letsencrypt/live/x.io/\n'
+	);
 
 	// isPlaceholderServerName
 	for (const ph of ['morphit.example.com', '', 'foo.example.net', 'x.example.org']) {

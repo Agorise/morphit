@@ -796,6 +796,7 @@ SMOKES=(
 	"apps/ops-cli:bunkerweb-privacy-settings-smoke"
 	"apps/ops-cli:ddns-config-parse-smoke"
 	"apps/ops-cli:first-online-tls-smoke"
+	"apps/ops-cli:bunkerweb-www-install-smoke"
 	"apps/ops-cli:gateway-firewall-frontend-smoke"
 	"apps/ops-cli:hardening-forwarding-smoke"
 	"apps/ops-cli:hidden-rpc-template-canon-smoke"

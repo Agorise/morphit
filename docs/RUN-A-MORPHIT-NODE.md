@@ -99,7 +99,9 @@ The fiddly extras — surviving power cuts, locking that local number in place, 
 
 ## 4. Get a web address
 
-Buy a domain from any registrar, then add a single **A record** pointing your domain at your server's public IP address. (Home setup? Point it at the public IP you found in §3; the guided installer then keeps that record updated automatically as your home address changes — see §3.) DNS **A records** can take up to an hour to take effect, so be patient.
+Buy a domain from any registrar, then add an **A record** pointing your domain at your server's public IP address. (Home setup? Point it at the public IP you found in §3; the guided installer then keeps that record updated automatically as your home address changes — see §3.) DNS **A records** can take up to an hour to take effect, so be patient.
+
+If your address is a domain of its own (like `example.com`, not a subdomain like `trade.example.com`), also add a **CNAME record** named `www` pointing to your domain, so visitors who type `www.example.com` reach your site too. Morphit sends them to `https://example.com` and puts `www.example.com` on your security certificate once that record points at your server (at install, or with the next `sudo morphit-ops upgrade`). A subdomain gets no `www`.
 
 ---
 
@@ -158,7 +160,7 @@ tmux new -s morphit
 
 ```sh
 # on the server
-V=1.21.10
+V=1.21.11
 mkdir -p ~/morphit && cd ~/morphit
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz"
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz.sha256"

@@ -15,6 +15,13 @@
 # in the frontend's <link rel="canonical">.
 morphit_domain: morphit.example.com
 
+# www.<your domain>, when your domain is a site's own domain (example.com,
+# example.com.mx — not a subdomain such as trade.example.org).  `morphit-ops
+# install` sets it.  BunkerWeb answers for it and sends every visitor to
+# https://<your domain>, and the certificate names it when www points at this
+# server (a CNAME record "www" → your domain).  Empty → no www.
+morphit_www_alias: ""
+
 # ─── Dynamic DNS (HOME nodes only) ───────────────────────────────
 # A home box behind a router usually has a public IP that CHANGES.  Turn this
 # on to keep your domain pointed at it automatically (the `ddns` role installs

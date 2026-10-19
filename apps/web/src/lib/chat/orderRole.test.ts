@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { chatMoneyFlow, peerCryptoSide } from './orderRole';
+import { chatMoneyFlow, cryptoSideOfOrder, orderCanShip, peerCryptoSide } from './orderRole';
 
 describe('peerCryptoSide', () => {
 	it("uses the owner's side as-is for the peer's order", () => {
@@ -104,5 +104,70 @@ describe('chatMoneyFlow', () => {
 			payNow: false,
 			shareAddress: false
 		});
+	});
+});
+
+/**
+ * BARTER orders store the GOODS direction in `side`, the inverse of the crypto
+ * direction. A banana seller (side 'sell', asset 'BARTER') is ACQUIRING crypto,
+ * so the goods buyer must get "Pay now" and the goods seller "Share crypto
+ * address", and the goods seller (who receives crypto) ships the goods.
+ */
+describe('barter orders', () => {
+	it('flips the crypto side for BARTER only', () => {
+		expect(cryptoSideOfOrder({ side: 'sell', asset: 'BARTER' })).toBe('buy');
+		expect(cryptoSideOfOrder({ side: 'buy', asset: 'BARTER' })).toBe('sell');
+		expect(cryptoSideOfOrder({ side: 'sell', asset: 'XMR' })).toBe('sell');
+		expect(cryptoSideOfOrder({ side: 'buy', asset: 'BTC' })).toBe('buy');
+		expect(cryptoSideOfOrder({ side: 'sell' })).toBe('sell');
+	});
+
+	it("goods buyer on a peer's SELL barter listing pays; the goods seller shares an address", () => {
+		// I am the goods buyer, chatting about the peer's banana listing.
+		expect(chatMoneyFlow({ side: 'sell', status: 'live', asset: 'BARTER' }, false)).toEqual({
+			payNow: true,
+			shareAddress: false
+		});
+		// I am the goods seller, the listing is mine.
+		expect(chatMoneyFlow({ side: 'sell', status: 'live', asset: 'BARTER' }, true)).toEqual({
+			payNow: false,
+			shareAddress: true
+		});
+	});
+
+	it('on a BUY barter listing the poster pays and the goods seller shares an address', () => {
+		expect(chatMoneyFlow({ side: 'buy', status: 'live', asset: 'BARTER' }, true)).toEqual({
+			payNow: true,
+			shareAddress: false
+		});
+		expect(chatMoneyFlow({ side: 'buy', status: 'live', asset: 'BARTER' }, false)).toEqual({
+			payNow: false,
+			shareAddress: true
+		});
+	});
+
+	it('still hides everything on a finished barter order', () => {
+		expect(chatMoneyFlow({ side: 'sell', status: 'completed', asset: 'BARTER' }, false)).toEqual({
+			payNow: false,
+			shareAddress: false
+		});
+	});
+});
+
+describe('orderCanShip', () => {
+	it('is true for a BARTER order even though its methods are only pay_<coin> rails', () => {
+		expect(orderCanShip({ asset: 'BARTER', payment_methods: ['pay_xmr', 'pay_blurt'] })).toBe(true);
+	});
+	it('follows the payment methods for crypto orders', () => {
+		expect(orderCanShip({ asset: 'XMR', payment_methods: ['cash_by_mail'] })).toBe(true);
+		expect(orderCanShip({ asset: 'BTC', payment_methods: ['barter_goods'] })).toBe(true);
+		expect(orderCanShip({ asset: 'XMR', payment_methods: ['precious_metals'] })).toBe(true);
+		expect(orderCanShip({ asset: 'XMR', payment_methods: ['cash_in_person', 'paypal'] })).toBe(
+			false
+		);
+		expect(orderCanShip({ asset: 'BTC', payment_methods: ['pay_btc'] })).toBe(false);
+	});
+	it('is false with no order', () => {
+		expect(orderCanShip(null)).toBe(false);
 	});
 });

@@ -73,6 +73,13 @@
 		 *   ]}
 		 */
 		feeds?: Array<{ title: string; href: string; type?: 'rss' | 'atom' | 'json' }>;
+		/**
+		 * false: the title is never followed by " — <instance name>" (an
+		 * unbranded site's suffix). For a page about the software rather than
+		 * the site: the download page reads "Download Morphit" everywhere
+		 * (v1.21.11). Default true.
+		 */
+		siteSuffix?: boolean;
 	}
 
 	let {
@@ -82,7 +89,8 @@
 		path,
 		jsonLd,
 		noindex = false,
-		feeds
+		feeds,
+		siteSuffix = true
 	}: Props = $props();
 
 	const resolvedPath = $derived(path ?? $page.url.pathname ?? '/');
@@ -111,8 +119,9 @@
 		// Per-instance brand (docs/BRANDING.md): a branded site already names
 		// itself in its titles ("Sign in to Vigilante Trading"), so the
 		// directory name is not appended as well ("… — vigilante-p2p"). An
-		// unbranded site keeps the suffix unless the title already carries it.
-		if ($brand.name !== DEFAULT_BRAND_NAME) return baseTitle;
+		// unbranded site keeps the suffix unless the title already carries it,
+		// or the page opts out (siteSuffix={false}: the download page).
+		if ($brand.name !== DEFAULT_BRAND_NAME || !siteSuffix) return baseTitle;
 		return $instance.name && !baseTitle.includes($instance.name)
 			? `${baseTitle} — ${$instance.name}`
 			: baseTitle;

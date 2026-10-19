@@ -990,15 +990,15 @@
 		}
 	},
 	"download": {
-		"title": "獲取 {brand}",
-		"subtitle": "你可以將一個 {brand} [實例](/instances)以「應用程式」圖示嘅形式「安裝」到裝置上，或者用下面嘅原始碼[營運你自己嘅節點](/run-a-node)，佢會自動列入[聯邦目錄](/instances)，等你開始從中賺取收入。",
+		"title": "下載 Morphit",
+		"subtitle": "本網站運行喺一個叫 Morphit 嘅開源軟件上。任何人都可以用佢[營運自己嘅](/run-a-node)、好似本站咁由 Morphit 驅動嘅網站，並自動列入[聯邦目錄](/instances)，從而開始從中賺取收入。",
 		"operator_section_title": "運行您自己的 Morphit 實例",
 		"operator_section_subtitle": "任何人都可以運行 Morphit 節點 — 您自己的品牌、您自己的用戶、您自己的費用收入。聯邦自動找到您。",
 		"operator_distros_heading": "支援嘅系統",
 		"operator_distros_body": "Ubuntu 24.04 LTS 係測試得最充分嘅選擇，一鍵安裝器都接受佢嘅衍生版——佢會讀取 Ubuntu 嘅「noble」基底，所以邊個版本都唔重要：Linux Mint 22、Pop!_OS、Zorin OS 17、KDE neon 同 elementary OS 都用得。Debian 12+ 同埋好似 Kicksecure 噉嘅加固型 Debian 基底可以透過手動安裝步驟運行——兩者都係出色嘅輕量、注重安全嘅伺服器。任何有 Node.js 22+ 同 Postgres 15+ 嘅現代 Linux 都應該行得到（Arch、Alpine、NixOS——嗰度就要你自己搞掂多啲）；FreeBSD 經少量調整可運作。硬件：任何有 4 GB RAM 同 80 GB SSD 嘅雙核 ARM64 或 x86-64 機器——大多數營運者用 Raspberry Pi 4、Intel 迷你電腦或者一部舊手提電腦。",
 		"operator_distros_faq_cta": "睇完整硬件/作業系統要求",
 		"mirrors_heading": "原始碼同鏡像",
-		"mirrors_body": "Morphit 100% 免費且開源。規範代碼庫託管喺我哋自己嘅 Forgejo 伺服器上，並喺全網鏡像，因此即使某個主機被封鎖或消失，代碼依然可以獲取。",
+		"mirrors_body": "Morphit 100% 免費且開源。規範代碼庫託管喺 Agorise 嘅伺服器上，並喺全網鏡像，因此即使某個主機被封鎖或消失，代碼依然可以獲取。",
 		"mirror_primary": "主代碼庫",
 		"mirror_open": "開啟代碼庫",
 		"mirror_banned": "禁止加密貨幣項目",
@@ -2539,7 +2539,7 @@
 			"print_card": {
 				"button": "列印備份卡",
 				"aria": "列印一張包含您12個單詞的紙質備份卡",
-				"helper_hint": "開啟瀏覽器的列印對話框。您可以列印到紙上或儲存為PDF。",
+				"helper_hint": "開啟瀏覽器的列印對話框。您可以列印到紙上或儲存為 PDF。",
 				"title": "我的 {brand} 備份卡",
 				"subtitle": "妥善保管此紙 — 這是回到您帳戶的唯一方法。",
 				"account_label": "帳戶",
@@ -4053,8 +4053,8 @@
 			"description": "比較兩個 Morphit 實例顯示的內容。一目了然地查看某實例是否在隱藏另一個擁有的訂單。"
 		},
 		"download": {
-			"title": "取得 {brand}",
-			"description": "直接從瀏覽器將 {brand} 安裝為應用程式 — 支援 Android、iPhone、iPad 和桌面。無需應用程式商店、無需 APK、無需註冊。開源程式碼鏡像在許多獨立的程式碼託管平台上,並可透過區塊鏈上的 SHA-256 驗證。"
+			"title": "下載 Morphit",
+			"description": "Morphit 係本網站所運行嘅免費開源軟件。任何人都可以用佢營運自己嘅、由 Morphit 驅動嘅網站。代碼鏡像喺好多獨立嘅代碼託管平台上，並可以透過區塊鏈上嘅 SHA-256 驗證。"
 		},
 		"backup_keys": {
 			"title": "備份你的 {brand} 金鑰 — 沒有它們就無法恢復",

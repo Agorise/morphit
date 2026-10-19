@@ -7104,6 +7104,15 @@ USE_PROXY_BUFFERING_3=no
 PROXY_BUFFERING_URL_3=^/v1/.*/stream$
 ```
 
+### www.(your domain)
+
+For a domain of its own (`vigilante.trading`, `example.com.mx` — not a subdomain such as `morphit.timeapp.foundation`), BunkerWeb also answers for `www.<domain>` and sends every request for it, on http and https, to `https://<domain>` with the same path (one `301`). Without it, `www.<domain>` reached the server and got BunkerWeb's "403 Forbidden" page: BunkerWeb serves only the names in `SERVER_NAME`, and refuses every other (`DISABLE_DEFAULT_SERVER=yes`).
+
+- **DNS.** A `CNAME` record `www` → `<domain>` (or A/AAAA records with the same addresses as the domain's). To check it, on any computer: `getent ahosts www.<domain>` should list the same addresses as `getent ahosts <domain>`.
+- **bunkerweb.env.** `SERVER_NAME=<domain> www.<domain>` (the domain first: BunkerWeb takes the first name for its certificate and settings) and `CUSTOM_CONF_SERVER_HTTP_morphit_www_redirect='if ($host = www.<domain>) { return 301 https://<domain>$request_uri; }'` — single-quoted, because Docker Compose replaces `$name` in an env file and `$host` / `$request_uri` would arrive empty. With two names, `CUSTOM_SSL_CERT` / `CUSTOM_SSL_KEY` must name the domain itself, not `${SERVER_NAME}`.
+- **Certificate.** The same Let's Encrypt certificate names both. Let's Encrypt checks `www` through the redirect (it follows it to `https://<domain>/.well-known/acme-challenge/…`, served from the web build), so it renews the same way the domain does, and checks every name at each renewal.
+- **Installs and upgrades.** The guided install sets it up: it asks Let's Encrypt for the domain, then adds `www` to the same certificate (while `www` does not point at the server yet, only that addition is refused). `sudo morphit-ops upgrade` does it on installed servers once `www` points at the server (looked up from DNS servers directly — systemd-resolved's upstream servers when it runs, not the hosts file): it writes the two settings (a copy of the old file is kept next to it, `bunkerweb.env.bak-<number>`), recreates BunkerWeb's services (a plain `docker restart` keeps a container's old settings), checks the redirect live, proves Let's Encrypt's path with a test file, adds `www` to the certificate — keeping the certificate's own deploy hook, preferred chain and key reuse (not OCSP Must-Staple, which Let's Encrypt no longer issues) — and checks `https://www.<domain>` passes a certificate check. When BunkerWeb refuses the settings, or the site stops answering, the old file goes back. A settings file that names `www` while the running containers do not is loaded by recreating them, once per version of the file; when the Compose service sets `SERVER_NAME` itself (`environment:`) or does not read the file, the file is left alone and the upgrade names what to change. When `www` has no DNS record, it says which record to add; when a certificate names `www` but `www` has no record any more, it is issued again without it (a renewal would fail otherwise). It runs in the upgrade's background part and leaves a step for the next upgrade rather than start one that would not finish in that run's time.
+
 ### What BunkerWeb does NOT do
 
 - It does NOT prevent name-squatting on Blurt — that's the protocol's account-creation cost (~100 BLURT) plus Morphit's signup-drain stack (§18). Note that **the relay pays this cost**, not the attacker — every signup costs your relay ~100 BLURT regardless of who's behind it. BunkerWeb stops a *web bot* hitting `/v1/account/create` 1000 times a minute, but a determined attacker who's willing to burn through your relay's balance one signup at a time is, by design, allowed to create accounts up to the daily ceiling.
@@ -7795,7 +7804,7 @@ sudo systemctl enable --now certbot.timer
 
 ### If you used BunkerWeb
 
-BunkerWeb's own Let's Encrypt client stays off (`AUTO_LETS_ENCRYPT=no`, §32): the host's certbot renews the certificate (its timer, above), and its deploy hook `/etc/letsencrypt/renewal-hooks/deploy/morphit-bunkerweb-reload.sh` (written by the Ansible `tls` role) makes the renewed files readable to BunkerWeb and reloads it. Verify:
+BunkerWeb's own Let's Encrypt client stays off (`AUTO_LETS_ENCRYPT=no`, §32): the host's certbot renews the certificate (its timer, above), and its deploy hook `/etc/letsencrypt/renewal-hooks/deploy/morphit-bunkerweb-reload.sh` (written by the Ansible `tls` role) makes the renewed files readable to BunkerWeb and reloads it. For a domain of its own the certificate also names `www.<domain>` (§32, "www.(your domain)"). Verify:
 
 ```sh
 systemctl list-timers | grep certbot

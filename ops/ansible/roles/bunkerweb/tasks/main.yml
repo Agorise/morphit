@@ -417,11 +417,13 @@
         - tls_renew_auth.stdout is search('standalone')
         - (tls_certbot_version.stdout | default('') | regex_search('[0-9]+\.[0-9]+') | default('0.0', true)) is version('2.3', '>=')
 
+    # No -d: certbot renews every name on the certificate (the domain, and
+    # www.<domain> when it has it); a -d list would replace them.
     - name: Renew once through the web build (certbot older than 2.3)
       ansible.builtin.command:
         cmd: >-
           certbot certonly --non-interactive --force-renewal --cert-name {{ morphit_domain }}
-          --webroot --webroot-path {{ tls_webroot | quote }} -d {{ morphit_domain }}
+          --webroot --webroot-path {{ tls_webroot | quote }}
       register: tls_webroot_renew
       changed_when: tls_webroot_renew.rc == 0
       failed_when: false

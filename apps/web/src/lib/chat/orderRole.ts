@@ -20,7 +20,38 @@
  * in the Svelte derived. Normalization matches orderTitle.ts: anything that
  * isn't exactly 'sell' is treated as 'buy'.
  */
+import { isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
+import { orderUsesShippableMethod } from '../payments/registry';
+
 export type CryptoSide = 'buy' | 'sell';
+
+/** the poster's side in CRYPTO terms. For a crypto/fiat order
+ *  `side` already is the crypto direction. A BARTER (goods/services) order
+ *  stores the GOODS direction, which is the inverse: selling goods = acquiring
+ *  crypto (buying it), buying goods = spending crypto (selling it). Same rule
+ *  as the indexer's orderbook filter (apps/indexer/src/api/shared.ts
+ *  cryptoFacingSideWhere). Without this flip a banana seller's chat offered
+ *  the goods SELLER "Pay now" and the goods BUYER "Share crypto address". */
+export function cryptoSideOfOrder(order: { side: string; asset?: string }): CryptoSide {
+	const raw: CryptoSide = order.side === 'sell' ? 'sell' : 'buy';
+	if (order.asset !== undefined && isGoodsAsset(order.asset as AssetTicker)) {
+		return raw === 'sell' ? 'buy' : 'sell';
+	}
+	return raw;
+}
+
+/** whether a trade moves a PHYSICAL thing that can be posted,
+ *  which unlocks the chat's "Share mailing address" / "Record shipment"
+ *  controls. True for a BARTER (goods/services) order, whose payment_methods
+ *  are only the `pay_<coin>` rails of its accepted coins, and for any order
+ *  paid with a shippable method (barter goods, precious metals, cash by mail). */
+export function orderCanShip(
+	order: { asset?: string; payment_methods: readonly string[] } | null
+): boolean {
+	if (!order) return false;
+	if (order.asset !== undefined && isGoodsAsset(order.asset as AssetTicker)) return true;
+	return orderUsesShippableMethod(order.payment_methods);
+}
 
 export function peerCryptoSide(rawOrderSide: string, orderIsMine: boolean): CryptoSide {
 	const ownerSide: CryptoSide = rawOrderSide === 'sell' ? 'sell' : 'buy';
@@ -60,13 +91,13 @@ export function peerCryptoSide(rawOrderSide: string, orderIsMine: boolean): Cryp
 const DEAD_ORDER_STATES: ReadonlySet<string> = new Set(['completed', 'cancelled', 'expired']);
 
 export function chatMoneyFlow(
-	order: { side: string; status?: string } | null,
+	order: { side: string; status?: string; asset?: string } | null,
 	orderIsMine: boolean
 ): { payNow: boolean; shareAddress: boolean } {
 	if (!order) return { payNow: false, shareAddress: false };
 	if (order.status !== undefined && DEAD_ORDER_STATES.has(order.status)) {
 		return { payNow: false, shareAddress: false };
 	}
-	const side = peerCryptoSide(order.side, orderIsMine);
+	const side = peerCryptoSide(cryptoSideOfOrder(order), orderIsMine);
 	return { payNow: side === 'buy', shareAddress: side === 'sell' };
 }

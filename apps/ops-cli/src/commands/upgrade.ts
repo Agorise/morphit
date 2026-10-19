@@ -160,6 +160,14 @@ import { healTorOnlyOs } from '../lib/torOnlyOsHeal.ts';
 import { heal as healServicePrivileges } from '../lib/unitPrivilegeHeal.ts';
 import { heal as healForwarding } from '../lib/sysctlForwardHeal.ts';
 import { heal as healTlsRenewalHeal } from '../lib/tlsRenewHeal.ts';
+import {
+	dnsLookup,
+	healBunkerWebWww,
+	applyWaitMs,
+	upstreamResolvers,
+	type ApplyResult,
+	type WwwRuntime
+} from '../lib/bunkerwebWww.ts';
 import type { HealCtx, HealResult } from '../lib/healTypes.ts';
 import {
 	healMatrixBotTorOnly,
@@ -250,6 +258,7 @@ import {
 	readWebHealState,
 	webHealLogPath,
 	webHealStatusRow,
+	WEB_HEAL_MAX_S,
 	WEB_HEAL_UNIT,
 	writeWebHealState,
 	type WebHealState
@@ -290,7 +299,7 @@ import {
 import { fileURLToPath } from 'node:url';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, X509Certificate } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
 import {
@@ -5946,6 +5955,22 @@ export async function runWebProxyHealsNow(opts: { readonly background: boolean }
 		// BunkerWeb box, never under the self-heal child's 300 s limit. A box
 		// without a running BunkerWeb scheduler is skipped in one line.
 		await reportHeal(healBunkerwebJobs({ info, warn, spinner: (l) => startDotsSpinner(l) }));
+		// v1.21.11 (lib/bunkerwebWww.ts): www.<domain> answers, goes to the
+		// domain, and is on the certificate. Last: it recreates BunkerWeb and asks
+		// Let's Encrypt, and it checks its rule against the settings the heals
+		// above left.
+		// Finished before the run that hosts it ends: the background unit's time
+		// limit, or the self-heal child's (a few minutes: never enough to recreate
+		// BunkerWeb, so there the heal only says what it finds).
+		await healBunkerWebWwwNow(installBuildDir(), {
+			background: opts.background,
+			deadline: wwwHealDeadline({
+				background: opts.background,
+				startedAtMs: Date.parse(startedAt),
+				nowMs: Date.now(),
+				uptimeS: process.uptime()
+			})
+		});
 	} catch (err) {
 		detail = err instanceof Error ? err.message : String(err);
 		throw err;
@@ -6938,6 +6963,272 @@ function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): 
 		}
 	}
 	return false;
+}
+
+/** When the www heal must be done (ms since the epoch): the background web
+ *  heal's time limit after its start, less a minute; or the self-heal child's,
+ *  counted from the process's start, less 25 s. PURE; exported for its test. */
+export function wwwHealDeadline(o: {
+	readonly background: boolean;
+	readonly startedAtMs: number;
+	readonly nowMs: number;
+	readonly uptimeS: number;
+}): number {
+	return o.background
+		? o.startedAtMs + WEB_HEAL_MAX_S * 1000 - 60_000
+		: o.nowMs - o.uptimeS * 1000 + SELF_HEAL_CHILD_TIMEOUT_MS - 25_000;
+}
+
+/** The www heal (lib/bunkerwebWww.ts) on this server's BunkerWeb, finished by
+ *  `deadline` (ms since the epoch: the end of the run that hosts it). Exported
+ *  for its wiring test. */
+export async function healBunkerWebWwwNow(
+	buildDir = installBuildDir(),
+	opts: { readonly deadline?: number; readonly background?: boolean } = {}
+): Promise<void> {
+	let stack: BunkerWebStack | null = null;
+	try {
+		stack = findBunkerWebStack(buildDir).stack;
+	} catch {
+		stack = null;
+	}
+	const deadline = opts.deadline ?? Date.now() + 30 * 60_000;
+	// No BunkerWeb running: the WAF heal before this one has said so, and the
+	// heal skips without a word (its settings file is "none").
+	const rt =
+		stack !== null
+			? realWwwRuntime(stack, buildDir, deadline, opts.background ?? true)
+			: {
+					...realWwwRuntime(
+						{
+							edge: { name: '' },
+							ref: null,
+							services: [],
+							scheduler: null
+						} as unknown as BunkerWebStack,
+						buildDir,
+						deadline,
+						opts.background ?? true
+					),
+					envFile: () => ({ path: null, note: null })
+				};
+	await reportHeal(healBunkerWebWww({ info, warn, spinner: (l) => startDotsSpinner(l) }, rt));
+}
+
+/** The box as the www heal sees it. Exported for its test
+ *  (test/bunkerwebWwwRuntime.test.ts) and the end-to-end run against real
+ *  certbot, nginx and an ACME server recorded in the audit. */
+export function realWwwRuntime(
+	stack: BunkerWebStack,
+	buildDir: string,
+	deadline: number,
+	background = true
+): WwwRuntime {
+	const sched = stack.scheduler?.name ?? null;
+	const ref = stack.ref;
+	const sh = (cmd: string, args: readonly string[], timeout = 30_000) => {
+		try {
+			const r = spawnSync(cmd, args as string[], {
+				encoding: 'utf8',
+				timeout,
+				maxBuffer: 16 * 1024 * 1024
+			});
+			return {
+				ok: r.status === 0,
+				status: r.status ?? -1,
+				out: r.stdout ?? '',
+				err: r.stderr ?? ''
+			};
+		} catch {
+			return { ok: false, status: -1, out: '', err: '' };
+		}
+	};
+	// Every connection to this server, with the name (Host, SNI) kept. A proxy
+	// in the environment would make curl ask somewhere else.
+	const curlBase = ['--noproxy', '*', '--connect-to', '::127.0.0.1:', '--max-time', '15'];
+	const readText = (p: string): string | null => {
+		try {
+			return readFileSync(p, 'utf8');
+		} catch {
+			return null;
+		}
+	};
+	return {
+		hiddenOnly: () => isHiddenOnlyNode(),
+		envFile: () => ({
+			path: bunkerWebEnvFile(stack, '/etc/bunkerweb/bunkerweb.env').path,
+			note: null
+		}),
+		readFile: readText,
+		writeFile: (p, text, mode = 0o644) => {
+			try {
+				mkdirSync(dirname(p), { recursive: true });
+				// In place: an existing file keeps its owner and mode.
+				writeFileSync(p, text, { encoding: 'utf8', mode });
+				return true;
+			} catch {
+				return false;
+			}
+		},
+		removeFile: (p) => {
+			try {
+				rmSync(p, { force: true });
+			} catch {
+				/* a stray probe file is harmless */
+			}
+		},
+		backup: (p, text) => {
+			const copy = `${p}.bak-${Date.now()}`;
+			try {
+				writeFileSync(copy, text, { encoding: 'utf8', mode: 0o600 });
+				return copy;
+			} catch {
+				return null;
+			}
+		},
+		composeAccepts: () =>
+			ref === null || sh('docker', composeArgs(ref, ['config', '-q']), 60_000).ok,
+		// systemd-resolved's own upstream servers when it runs (its stub would
+		// also answer from /etc/hosts); else the system's resolvers.
+		lookup: (name) =>
+			dnsLookup(name, upstreamResolvers(readText('/run/systemd/resolve/resolv.conf')) ?? undefined),
+		liveEnv: () => {
+			if (!stack.edge.name) return null;
+			const r = sh(
+				'docker',
+				['inspect', stack.edge.name, '--format', '{{json .Config.Env}}'],
+				15_000
+			);
+			if (!r.ok) return null;
+			try {
+				const list = JSON.parse(r.out) as string[];
+				const m = new Map<string, string>();
+				for (const kv of list) {
+					const i = kv.indexOf('=');
+					if (i > 0) m.set(kv.slice(0, i), kv.slice(i + 1));
+				}
+				return m;
+			} catch {
+				return null;
+			}
+		},
+		apply: (why, recreate): ApplyResult => {
+			const wait = applyWaitMs(deadline - Date.now());
+			if (wait === null) return 'no-time';
+			// A recreate only through Compose: a plain `docker restart` keeps a
+			// container's old environment, so it would load nothing.
+			if (recreate && ref === null) return 'not-restarted';
+			if (!recreate && sched === null) return 'not-restarted';
+			const since = new Date(Date.now() - 2_000).toISOString();
+			const stop = startDotsSpinner('Restarting BunkerWeb’s services…');
+			let started: boolean;
+			try {
+				started = recreate
+					? composeRun(
+							ref!,
+							['up', '-d', '--no-deps', '--force-recreate', ...stack.services],
+							180_000
+						)
+					: sh('docker', ['restart', sched!], 60_000).ok;
+			} finally {
+				stop();
+			}
+			if (!started) return 'not-restarted';
+			if (sched === null) return 'pending';
+			info(`www: ${why}; BunkerWeb is rebuilding its settings…`);
+			const spin = startPausableSpinner('Waiting for BunkerWeb to load its new settings…');
+			let c: ReturnType<typeof waitForSchedulerCycle>;
+			try {
+				c = waitForSchedulerCycle({
+					scheduler: sched,
+					edge: stack.edge.name,
+					sinceIso: since,
+					budgetMs: wait,
+					note: (m) => spin.say(() => info(`www: ${m}`))
+				});
+			} finally {
+				spin.stop();
+			}
+			return c.kind === 'loaded' ? 'loaded' : c.kind === 'refused' ? 'refused' : 'pending';
+		},
+		writeSchedulerConf: (name, conf) => {
+			if (sched === null) return 'failed';
+			const r = sh('docker', [
+				'exec',
+				'-e',
+				`MORPHIT_CONF=${conf}`,
+				sched,
+				'sh',
+				'-c',
+				`for d in /data/configs /etc/bunkerweb/configs; do [ -d "$d" ] || continue; f="$d/server-http/${name}.conf"; [ "$(cat "$f" 2>/dev/null)" = "$MORPHIT_CONF" ] && { echo unchanged; exit 0; }; mkdir -p "$d/server-http" && printf '%s\\n' "$MORPHIT_CONF" > "$f" && { echo written; exit 0; }; exit 1; done; exit 1`
+			]);
+			return !r.ok ? 'failed' : r.out.trim() === 'unchanged' ? 'unchanged' : 'written';
+		},
+		request: (url, o = {}) => {
+			const r = sh('curl', [
+				'-s',
+				...(o.verify ? [] : ['-k']),
+				...curlBase,
+				'-o',
+				'/dev/null',
+				...(o.headers ? ['-D', '-'] : []),
+				'-w',
+				'\n%{http_code}\n%{redirect_url}',
+				url
+			]);
+			const lines = r.out.split('\n');
+			const location = (lines.pop() ?? '').trim();
+			const code = (lines.pop() ?? '').trim();
+			// No answer, or a certificate check that failed (curl 35/51/58/60): '000'.
+			return {
+				code: r.ok ? code : '000',
+				location,
+				headers: lines.join('\n'),
+				exit: r.status
+			};
+		},
+		fetchFollow: (url) => {
+			const r = sh('curl', ['-skL', ...curlBase, url]);
+			return r.ok ? r.out : null;
+		},
+		certNames: (name) => {
+			try {
+				const pem = readFileSync(`/etc/letsencrypt/live/${name}/cert.pem`, 'utf8');
+				const san = new X509Certificate(pem).subjectAltName ?? '';
+				return [...san.matchAll(/DNS:([^,\s]+)/g)].map((m) => m[1]!.toLowerCase());
+			} catch {
+				return null;
+			}
+		},
+		certbotPresent: () => sh('certbot', ['--version']).ok,
+		certbot: (args) => {
+			const r = sh('certbot', args, 300_000);
+			return { ok: r.ok, out: `${r.out}${r.err}` };
+		},
+		certPermissions: () => {
+			sh('chgrp', ['-R', '101', '/etc/letsencrypt/live', '/etc/letsencrypt/archive']);
+			sh('chmod', ['-R', 'g+rX', '/etc/letsencrypt/live', '/etc/letsencrypt/archive']);
+		},
+		buildDir: () => buildDir,
+		timeLeftMs: () => deadline - Date.now(),
+		inBackground: () => background,
+		composeManaged: () => ref !== null,
+		edgeSettingsSource: () => {
+			if (ref === null) return null;
+			const envPath = bunkerWebEnvFile(stack, '/etc/bunkerweb/bunkerweb.env').path;
+			const r = sh(
+				'docker',
+				composeArgs(ref, ['config', '--format', 'json', '--no-env-resolution']),
+				30_000
+			);
+			const svc = r.ok ? parseComposeModel(r.out)?.get(ref.service) : undefined;
+			if (!svc || svc.envFiles === null) return null;
+			return {
+				readsFile: envPath !== null && svc.envFiles.includes(envPath),
+				overrides: [...svc.environment.keys()]
+			};
+		}
+	};
 }
 
 /** BunkerWeb's catch-all request limit (LIMIT_REQ_URL, default `/` at 2r/s,

@@ -20,6 +20,7 @@
  * apt-installing Ansible live in the install runner (validated on a real machine).
  */
 import { homeserverRoute, torSocksUrl } from '../lib/matrixRoute.ts';
+import { wwwAliasFor } from '../lib/bunkerwebWww.ts';
 import { randomBytes } from 'node:crypto';
 import {
 	isReservedTag,
@@ -327,6 +328,11 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, unknown> {
 	const vars: Record<string, unknown> = {
 		morphit_domain: inputs.torOnly ? '' : inputs.domain,
+		// www.<domain> for a site's own domain (never a subdomain): BunkerWeb answers
+		// for it and sends it to the domain; the certificate names it when www
+		// points here (lib/bunkerwebWww.ts; `morphit-ops upgrade` does the same on
+		// installed servers).
+		morphit_www_alias: inputs.torOnly ? '' : (wwwAliasFor(inputs.domain) ?? ''),
 		// Tor-only: reachable via the auto-generated onion (+ optional I2P/Lokinet)
 		// with NO clearnet domain. The tor role still generates + serves the onion;
 		// the tls role and BunkerWeb's clearnet TLS front are skipped, and the

@@ -533,11 +533,11 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 235. **GrapheneOS callout** as the recommended privacy-first Android. No Google relationship required.
 
-236. **iPhone PWA install instructions** in the `/download` page, in plain English, in 10 languages.
+236. **iPhone PWA install instructions** in the site's install banner ("In Safari, tap the Share button, then 'Add to Home Screen'"), in plain English, in 10 languages.
 
 237. **No native Apple Store app planned.** Apple's guidelines forbid non-KYC P2P crypto apps; Morphit doesn't pretend otherwise. The PWA path is the lasting answer.
 
-238. **Operator section on the `/download` page** shows the run-your-own-node path: source code, releases, setup walkthrough, supported systems, federation directory.
+238. **The `/download` page sends operators to `/run-a-node`** (setup steps, the latest release, getting listed in the federation directory) and lists the supported systems and hardware.
 
 239. **RSS feeds for the orderbook** — real-time updates in your existing RSS reader. Asset-filtered, account-filtered, full-orderbook variants.
 

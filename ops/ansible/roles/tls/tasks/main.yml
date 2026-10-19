@@ -70,6 +70,7 @@
          if (tls_port80.stdout | default('') | trim | length) > 0 else '--standalone' }}
       --email {{ tls_acme_email }}
       --server {{ tls_certbot_server }}
+      --cert-name {{ morphit_domain }}
       -d {{ morphit_domain }}
   register: tls_certbot_result
   # Non-fatal: if the domain does not resolve to this box yet, the install still
@@ -79,6 +80,30 @@
   when:
     - not tls_cert_stat.stat.exists
     - tls_acme_probe.status is defined
+
+# Then www.<domain> on the same certificate (a site's own domain:
+# morphit_www_alias), once the domain has its own.  A refusal (www does not point
+# here yet) costs only www a failed check and leaves the domain's certificate;
+# `morphit-ops upgrade` adds www once it points here.
+- name: Add www to the certificate (when www points here)
+  ansible.builtin.command:
+    cmd: >-
+      certbot certonly --non-interactive --agree-tos
+      {{ '--webroot --webroot-path ' ~ (morphit_repo_path ~ '/apps/web/build') | quote
+         if (tls_port80.stdout | default('') | trim | length) > 0 else '--standalone' }}
+      --email {{ tls_acme_email }}
+      --server {{ tls_certbot_server }}
+      --cert-name {{ morphit_domain }}
+      -d {{ morphit_domain }}
+      -d {{ morphit_www_alias }}
+  register: tls_certbot_www
+  failed_when: false
+  changed_when: tls_certbot_www.rc == 0
+  when:
+    - not tls_cert_stat.stat.exists
+    - tls_acme_probe.status is defined
+    - morphit_www_alias | default('') | length > 0
+    - tls_certbot_result.rc | default(1) == 0
 
 - name: Ensure certbot renewal timer is enabled
   ansible.builtin.systemd:

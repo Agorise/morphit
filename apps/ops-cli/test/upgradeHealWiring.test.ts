@@ -52,6 +52,13 @@ for (const [mod, name] of [
 		)
 	}));
 }
+vi.doMock('../src/lib/bunkerwebWww.ts', async () => ({
+	...((await vi.importActual('../src/lib/bunkerwebWww.ts')) as object),
+	healBunkerWebWww: async () => (
+		called.push('www'),
+		{ strategy: 'applied', verified: true, detail: 'WWW-DETAIL' }
+	)
+}));
 vi.doMock('../src/lib/releaseMonitorHeal.ts', async () => ({
 	...((await vi.importActual('../src/lib/releaseMonitorHeal.ts')) as object),
 	healReleaseMonitor: async () => (
@@ -269,11 +276,12 @@ describe('heal wiring in the self-heal phase', () => {
 		expect(out).toMatch(/QUIET-DETAIL/);
 	});
 
-	it('the BunkerWeb jobs heal runs right after the proxy-config heal, in the (background) web-proxy job', async () => {
+	it('the BunkerWeb jobs heal runs right after the proxy-config heal, then the www heal, in the (background) web-proxy job', async () => {
 		called.length = 0;
 		await upgrade.runWebProxyHealsNow({ background: true });
-		expect(called).toEqual(['proxy', 'jobs']);
+		expect(called).toEqual(['proxy', 'jobs', 'www']);
 		expect(out).toMatch(/JOBS-DETAIL/);
+		expect(out).toMatch(/WWW-DETAIL/);
 	});
 });
 
