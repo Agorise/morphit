@@ -22,6 +22,14 @@
       "lastReviewed": "2026-10-02",
       "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Dev server only."
     },
+    "GHSA-587h-7wmj-h5pm": {
+      "package": "vite",
+      "severity": "high",
+      "category": "dev-build-only",
+      "title": "launch-editor: `fs.existsSync()` existence check can be bypassed on Windows",
+      "lastReviewed": "2026-10-20",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). It is launch-editor bundled inside Vite, reached only through the Vite DEV server's /__open-in-editor endpoint (`vite dev`, which CI never starts; vitest and `vite build` do not serve it). Vite 5.4.21 is the newest 5.x; the fix is in Vite 6.4.4 and later, a major upgrade tied to SvelteKit and vitest 2. Windows only."
+    },
     "GHSA-5gmw-xhrv-c9v3": {
       "package": "tinypool",
       "severity": "critical",
@@ -45,6 +53,14 @@
       "title": "esbuild enables any website to send any requests to the development server and read the response",
       "lastReviewed": "2026-10-06",
       "rationale": "Affected copies: esbuild 0.19.12 at the top level and vite's 0.21.5 (dev). The top-level copy is apps/ops-cli's own devDependency pin (^0.19.12), used only by apps/ops-cli/scripts/build.mjs through build(); svelte-i18n 4.0.1 also declares ^0.19.2, but its shipped dist (cli.js, runtime) never loads esbuild. tsx's copy (0.28.2), the one that transpiles TypeScript on nodes, is outside the advisory range. The advisory needs esbuild's serve (dev server) mode, which nothing here starts; Vite's dev server is local development only. Raising the ops-cli pin would not clear it (svelte-i18n keeps 0.19.x; tried 2026-10-06), so the fix is a svelte-i18n release on a newer esbuild."
+    },
+    "GHSA-698v-4r3x-3vcv": {
+      "package": "vite",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "launch-editor: escapeCmdArgs() omits % escaping on Windows",
+      "lastReviewed": "2026-10-20",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). It is launch-editor bundled inside Vite, reached only through the Vite DEV server's /__open-in-editor endpoint (`vite dev`, which CI never starts; vitest and `vite build` do not serve it). Vite 5.4.21 is the newest 5.x; the fix is in Vite 6.4.4 and later, a major upgrade tied to SvelteKit and vitest 2. Windows only."
     },
     "GHSA-6rw7-vpxm-498p": {
       "package": "qs",
@@ -117,6 +133,14 @@
       "title": "cookie accepts cookie name, path, and domain with out of bounds characters",
       "lastReviewed": "2026-10-02",
       "rationale": "cookie 0.6 under @sveltejs/kit 2, used at build time only (the frontend is prerendered with adapter-static; nodes serve static files). The fix needs SvelteKit 3 (a major)."
+    },
+    "GHSA-r825-w8mm-5pxw": {
+      "package": "vite",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "launch-editor: Editor CLI flag misinterpretation causing arbitrary command execution for some editors",
+      "lastReviewed": "2026-10-20",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). It is launch-editor bundled inside Vite, reached only through the Vite DEV server's /__open-in-editor endpoint (`vite dev`, which CI never starts; vitest and `vite build` do not serve it). Vite 5.4.21 is the newest 5.x; the fix is in Vite 6.4.4 and later, a major upgrade tied to SvelteKit and vitest 2. Needs a request to a running dev server on a developer's machine."
     },
     "GHSA-rj75-hqrm-r3gf": {
       "package": "postcss-selector-parser",
