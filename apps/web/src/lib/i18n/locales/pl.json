@@ -899,7 +899,7 @@
 			"no_account_for_key": "Klucz w tej sesji nie kontroluje żadnego konta na blockchainie. Nic nie zostało rozgłoszone. Wyloguj się i zaloguj właściwym kluczem.",
 			"lookup_failed": "{brand} nie mógł połączyć się ze swoim indekserem, aby sprawdzić, jakim kontem zarządza ten klucz, więc nic nie rozgłosił. Sprawdź połączenie i spróbuj ponownie.",
 			"unreachable": "Nie udało się połączyć z {brand|Morphitem} — lub serwis {brand} nie mógł połączyć się z siecią Blurt. Serwis może być offline, wciąż się synchronizować, albo jego połączenie z łańcuchem jest blokowane (niektóre sieci lub kraje je filtrują). Upewnij się, że instancja jest online i ma dostęp do sieci, i spróbuj ponownie. (Szczegóły: {detail})",
-			"low_blurt": "Rozgłoszenie kosztuje małą opłatę w BLURT, a większe zmiany (na przykład awatar) kosztują więcej, bo opłata rośnie z rozmiarem. Płynne BLURT na twoim koncie nie wystarcza, by ją pokryć. Dodaj trochę płynnego BLURT na konto i spróbuj ponownie. (Łańcuch: {reason})",
+			"low_blurt": "Publikacja odrzucona z powodu niewystarczających środków. Kup BLURT, aby zapisać więcej danych w łańcuchu.",
 			"too_large": "To jest za duże dla blockchaina. Zmniejsz to (w przypadku obrazu wybierz mniejszy lub prostszy — kompaktowy SVG albo mniejsze zdjęcie) i spróbuj ponownie. (Łańcuch: {reason})",
 			"auth": "Twój klucz posting nie ma uprawnień do publikowania dla tego konta. Wyloguj się i zaloguj ponownie właściwym kluczem, po czym spróbuj ponownie. (Łańcuch: {reason})",
 			"generic_detail": "Nie udało się rozgłosić: {detail}. Spróbuj ponownie — jeśli problem się powtarza, ta wiadomość to dokładna przyczyna do zgłoszenia.",

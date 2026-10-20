@@ -899,7 +899,7 @@
 			"no_account_for_key": "La chiave di questa sessione non controlla alcun account sulla blockchain. Nulla è stato trasmesso. Esci e rientra con la chiave corretta.",
 			"lookup_failed": "{brand} non è riuscito a contattare il suo indexer per verificare quale account controlla questa chiave, quindi non ha trasmesso nulla. Controlla la connessione e riprova.",
 			"unreachable": "Impossibile raggiungere {brand} — o {brand} non ha potuto raggiungere la rete Blurt. Potrebbe essere offline, ancora in sincronizzazione, o la sua connessione alla catena potrebbe essere bloccata (alcune reti o paesi la filtrano). Assicurati che la tua istanza sia online e possa raggiungere la rete, poi riprova. (Dettagli: {detail})",
-			"low_blurt": "Trasmettere costa una piccola commissione in BLURT, e gli aggiornamenti più grandi (un avatar, per esempio) costano di più perché la commissione cresce con la dimensione. Il BLURT liquido del tuo account non basta a coprirla. Aggiungi un po' di BLURT liquido all'account e riprova. (Catena: {reason})",
+			"low_blurt": "Pubblicazione rifiutata per fondi insufficienti. Acquista BLURT per salvare altri dati sulla catena.",
 			"too_large": "È troppo grande per la blockchain. Rendilo più piccolo (per un'immagine, scegline una più piccola o più semplice — un SVG compatto o una foto più piccola) e riprova. (Catena: {reason})",
 			"auth": "La tua chiave di posting non è autorizzata a pubblicare per questo account. Esci e rientra con la chiave corretta, poi riprova. (Chain: {reason})",
 			"generic_detail": "Pubblicazione non riuscita: {detail}. Riprova — se continua, quel messaggio è la causa esatta da segnalare.",

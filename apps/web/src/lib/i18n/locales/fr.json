@@ -899,7 +899,7 @@
 			"no_account_for_key": "La clé de cette session ne contrôle aucun compte sur la blockchain. Rien n'a été diffusé. Déconnectez-vous et reconnectez-vous avec la bonne clé.",
 			"lookup_failed": "{brand} n'a pas pu joindre son indexeur pour vérifier quel compte cette clé contrôle, donc rien n'a été diffusé. Vérifiez votre connexion et réessayez.",
 			"unreachable": "Impossible de joindre {brand} — ou {brand} n'a pas pu atteindre le réseau Blurt. Le site est peut-être hors ligne, encore en synchronisation, ou sa connexion à la chaîne est bloquée (certains réseaux ou pays la filtrent). Assurez-vous que votre instance est en ligne et peut atteindre le réseau, puis réessayez. (Détails : {detail})",
-			"low_blurt": "La diffusion coûte de petits frais en BLURT, et les mises à jour volumineuses (un avatar, par exemple) coûtent plus cher car les frais dépendent de la taille. Le BLURT liquide de votre compte ne suffit pas à les couvrir. Ajoutez un peu de BLURT liquide à votre compte, puis réessayez. (Chaîne : {reason})",
+			"low_blurt": "Diffusion refusée : fonds insuffisants. Achetez des BLURT pour enregistrer davantage de données sur la chaîne.",
 			"too_large": "C'est trop volumineux pour la blockchain. Réduisez la taille (pour une image, choisissez-en une plus petite ou plus simple — un SVG compact ou une photo plus petite), puis réessayez. (Chaîne : {reason})",
 			"auth": "Votre clé de publication n'est pas autorisée à publier pour ce compte. Déconnectez-vous et reconnectez-vous avec la bonne clé, puis réessayez. (Chaîne : {reason})",
 			"generic_detail": "Échec de la diffusion : {detail}. Réessayez — si cela persiste, ce message est la cause exacte à signaler.",

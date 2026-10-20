@@ -50,6 +50,7 @@
 	} from '$blurt/sign';
 	import { signWithdrawVestingWithKey } from '$blurt/withdrawVestingSign';
 	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
+	import { classifyChainReason } from '$blurt/broadcastErrorClass';
 	import { floorToBlurtPrecision } from '$blurt/sendValidation';
 	import {
 		blurtPowerToVests,
@@ -220,7 +221,9 @@
 			onDone();
 		} catch (err) {
 			console.warn('[power] broadcast rejected:', err);
-			if (err instanceof ChainRejectedError) {
+			if (err instanceof ChainRejectedError && classifyChainReason(err.message) === 'low_blurt') {
+				phase = { kind: 'error', messageKey: 'common.broadcast_err.low_blurt' };
+			} else if (err instanceof ChainRejectedError) {
 				phase = { kind: 'error', messageKey: 'profile.wallet.error_chain_rejected', reason: err.message };
 			} else if (err instanceof BroadcastUnavailableError) {
 				phase = { kind: 'error', messageKey: 'profile.wallet.error_unreachable' };

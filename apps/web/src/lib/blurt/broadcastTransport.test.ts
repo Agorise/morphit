@@ -167,6 +167,35 @@ describe('broadcastTransport', () => {
 			await expect(submitSignedTransaction(SIGNED)).rejects.toBeInstanceOf(ChainRejectedError);
 		});
 
+		it('a firewall page in place of the reason says so (a chain refusal, never a reason-less line)', async () => {
+			// morphit.io, v1.21.10: a bio save on an account short of the fee reached
+			// the browser as BunkerWeb's page, and the user read only "the chain
+			// rejected the transaction".
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(
+					async () =>
+						new Response('<!doctype html><html></html>', {
+							status: 400,
+							headers: { 'content-type': 'text/html' }
+						})
+				)
+			);
+			const err = await submitSignedTransaction(SIGNED).catch((e: unknown) => e);
+			expect(err).toBeInstanceOf(ChainRejectedError);
+			expect((err as Error).message).toMatch(
+				/replaced by a page from your Morphit server's web firewall \(status 400\)/
+			);
+			// The indexer's own reason still wins whenever it arrives.
+			stubFetch({
+				status: 400,
+				body: { message: 'Account does not have sufficient funds for transaction fee.' }
+			});
+			await expect(submitSignedTransaction(SIGNED)).rejects.toThrow(
+				/sufficient funds for transaction fee/
+			);
+		});
+
 		it('treats a 5xx as "your instance could not do it right now"', async () => {
 			// Distinct from a rejection: nothing is wrong with the transaction, so
 			// this one IS worth retrying.

@@ -37,6 +37,7 @@
 	import sodium from 'libsodium-wrappers-sumo';
 	import { broadcastFeatureBid } from '$blurt/ops/featureBid';
 	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
+	import { classifyChainReason } from '$blurt/broadcastErrorClass';
 	import { getInstanceSnapshot } from '$stores/instance';
 	import { resolveFeeRecipient } from '$lib/orders/fee';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -265,6 +266,11 @@
 			} else if (kind === 'password_empty') {
 				passwordError = $_('feature_bid.error_password_required');
 				flashPasswordBorder();
+			} else if (
+				err instanceof ChainRejectedError &&
+				classifyChainReason(err.message) === 'low_blurt'
+			) {
+				errorMessage = $_('common.broadcast_err.low_blurt');
 			} else if (err instanceof ChainRejectedError) {
 				// the network rejected the tx. Surface the REAL reason
 				// (not enough liquid BLURT for the network fee, missing

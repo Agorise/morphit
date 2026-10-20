@@ -1,0 +1,539 @@
+# Morphit web frontend — nginx server block.
+#
+# This serves the SvelteKit-built static files from apps/web/build/
+# AND reverse-proxies the API paths to the loopback services, so the
+# whole instance lives under ONE hostname — the recommended single-host
+# ("colocated") topology (docs/RUN-A-MORPHIT-NODE.md §9):
+#   /v1/*    -> indexer  (127.0.0.1:8081)   read-only API + SSE streams
+#   /rss/*   -> indexer  (127.0.0.1:8081)   orderbook RSS/Atom feeds
+#   /relay/* -> relay    (127.0.0.1:8080)   account-creation funding
+# The frontend ships built for same-origin (MORPHIT_INDEXER_ORIGIN='',
+# MORPHIT_RELAY_ORIGIN='/relay'), so it calls these as same-origin
+# paths — you do NOT need separate indexer.* / relay.* DNS records or
+# server blocks. (A split-subdomain topology is possible but
+# discouraged; see the header of ops/nginx/indexer.conf for the extra
+# steps it requires.)
+#
+# What this config buys you:
+#   1. Strict Content-Security-Policy.  Scripts from this origin only (no
+#      inline script, no eval; WebAssembly allowed), no Google Fonts, no CDN,
+#      no analytics, no third-party anything.  Per Morphit's privacy-first
+#      philosophy.  Defense-in-depth against any future XSS regression.
+#   2. Other security headers (HSTS, X-Frame-Options, etc.)
+#      consistent with relay.conf and indexer.conf.
+#   3. Long-cache for hashed bundle files (immutable), no-cache
+#      for HTML (so deploys are seen immediately).
+#   4. A page link the build does not have as a file goes to the SvelteKit
+#      index (client-side routing sees the original URL); a missing FILE is a
+#      plain 404.
+#   5. No visitor address in any log: no access log, and the error log keeps
+#      only critical server errors (a failed upstream or a rate-limit hit
+#      would otherwise write the visitor's address and the full URL).
+
+# F-DOS-1 — per-IP concurrent-connection cap for the web vhost.
+limit_conn_zone $binary_remote_addr zone=web_conn:10m;
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name morphit.io;
+    # No access log (privacy #1, SECURITY.md §4): nginx would otherwise write
+    # every visitor's address to /var/log/nginx/access.log (v1.20.0, C1).
+    access_log off;
+    # Error log: critical errors only, to nginx's standard error (the journal
+    # under systemd).  At the default level every failed upstream ("connect()
+    # failed") and every rate-limit rejection is written with the visitor's
+    # address and the full request line, kept for weeks in
+    # /var/log/nginx/error.log.  The limit messages are logged at "info", below
+    # that.  `stderr` is nginx's own name for it; `/dev/stderr` would be opened
+    # as a path, which fails on the journal's socket and stops nginx starting.
+    error_log stderr crit;
+    limit_conn_log_level info;
+    # No nginx version in the Server header or on error pages.
+    server_tokens off;
+
+    root /var/www/morphit-frontend;
+    index index.html;
+
+    # F-DOS-1 / F-DOS-2 — connection cap + slowloris timeouts (mirrors relay.conf;
+    # the web vhost otherwise inherits nginx's 60s client timeouts).
+    # Over HTTP/2 the cap counts every download at once, and a first visit asks
+    # for every file of the site: a browser keeps up to 128 going per
+    # connection, so 40 turned the rest away with 429 on a slow line (v1.21.8).
+    # 256 = two full connections.
+    limit_conn web_conn 256;
+    limit_conn_status 429;
+    client_body_timeout 10s;
+    client_header_timeout 10s;
+    send_timeout 15s;
+
+    # ─── TLS ──────────────────────────────────────────────────
+    ssl_certificate     /etc/letsencrypt/live/morphit.io/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/morphit.io/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # ─── Security headers ─────────────────────────────────────
+    # Cross-Origin-Opener-Policy (v1.20.2): a window of another site that this
+    # page opens, or that opened it, gets no handle to it.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+
+    # ─── Content-Security-Policy ──────────────────────────────
+    # Strict default — nothing loads from anywhere except this
+    # origin.  In the single-host topology the indexer + relay are
+    # reached via same-origin paths (/v1/, /rss/, /relay/), so they
+    # need NO connect-src entry — 'self' already covers them.
+    # connect-src only needs the cross-origin endpoints the BROWSER
+    # talks to directly:
+    #   - The Blurt RPC nodes the browser reaches (DEFAULT_RPC_ENDPOINTS in
+    #     apps/web/src/lib/net/config.ts, pre-listed below; the pool's sixth
+    #     node, rpc.blurt.one, is server-only — no CORS — so the browser
+    #     never calls it).  Edit to match whatever RPC pool you ship.
+    #   - Split-subdomain topology ONLY: add your indexer/relay
+    #     subdomains here (and see ops/nginx/indexer.conf first).
+    #
+    # script-src: this origin only, plus 'wasm-unsafe-eval' — the keystore's
+    # argon2 KDF and signing run as in-browser WebAssembly, which CSP blocks
+    # without it (it allows WebAssembly compilation, not JavaScript eval).
+    # No 'unsafe-inline' and no 'unsafe-eval': the build carries no inline
+    # script (its bootstrap is a hashed file under /_app/immutable/) and
+    # fails if one appears, and no dependency needs eval.
+    # style-src 'unsafe-inline' — Svelte transitions and the branding theme
+    # use inline styles (styles, not script).
+    # worker-src 'self' blob: — the altcha proof-of-work worker is
+    # built from an in-memory blob: URL; without blob: the anti-bot
+    # challenge on registration fails to run.
+    #
+    # frame-ancestors 'none' duplicates X-Frame-Options DENY for
+    # browsers that prefer the modern CSP directive.
+    #
+    # If you serve over Tor (.onion mirror), that mirror needs
+    # its own server block; CSP applies per-host (its connect-src lists the
+    # .onion RPC nodes, as ops/bunkerweb/frontend/nginx.conf does).
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+
+    # ─── Compression (byte budget) ──────────────────────
+    # The SvelteKit build emits pre-compressed `.br` and `.gz`
+    # alongside every `.js` / `.css` / `.svg` / `.html` file.
+    # WITHOUT these directives, nginx happily serves the raw
+    # uncompressed file and ignores the pre-compressed siblings —
+    # so every page load ships 4-6× more bytes than necessary.
+    #
+    # `gzip_static on` makes nginx prefer `foo.js.gz` over
+    # `foo.js` when the client's `Accept-Encoding` includes gzip.
+    # Zero CPU cost — the compression happened once at build time.
+    #
+    # `brotli_static on` requires the ngx_brotli module
+    # (apt: nginx-module-brotli on most distros, or build from
+    # https://github.com/google/ngx_brotli).  Brotli compresses
+    # ~15-20% smaller than gzip on JS/CSS.  If you don't have the
+    # module, comment out the `brotli_static` line — the
+    # `gzip_static` line keeps you in good shape on its own.
+    gzip_static on;
+    brotli_static on;
+
+    # ─── Caching strategy ─────────────────────────────────────
+    # SvelteKit emits hashed bundle files under /_app/immutable/.
+    # These names change on every deploy, so they're safe to
+    # cache forever.  Everything else (HTML, manifests) gets a
+    # short cache so deploys are seen quickly.
+    #
+    # NGINX FOOTGUN: when a `location` block has any `add_header`,
+    # nginx completely drops inheritance of the server-level
+    # `add_header` directives.  We re-add EVERY security header
+    # in every location that uses add_header at all, otherwise
+    # those responses ship without HSTS/CSP/X-Frame/etc.
+    location /_app/immutable/ {
+        # (No `expires 1y` as well: it sent a SECOND Cache-Control header,
+        # "max-age=31536000", beside this one.)
+        add_header Cache-Control "public, immutable, max-age=31536000" always;
+        # Full security-header re-emission (server-block inheritance lost).
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+    }
+
+    # Service worker — must NOT be cached or it pins old clients.
+    location = /service-worker.js {
+        add_header Cache-Control "no-cache" always;
+        # Full security-header re-emission (server-block inheritance lost).
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+    }
+
+    # verify.json — this build's version + asset-hash manifest.  Must NOT
+    # be cached: the app's update-version poll and the "About this
+    # instance" page both read it, and a stale copy makes the app think it
+    # is already up to date (so the update snackbar never shows) and shows
+    # the wrong manifest.  Same add_header inheritance footgun as above —
+    # re-emit the security headers.  (If you gate the beta site behind HTTP
+    # Basic Auth, add `auth_basic off;` in THIS block so the poll can read
+    # verify.json without a credential prompt.)
+    location = /verify.json {
+        add_header Cache-Control "no-cache" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+    }
+    # SVGs are images, never pages — including the operator's own
+    # (`morphit-ops branding apply` puts logos, icons and any images under
+    # /etc/morphit/branding/static/ into the site, docs/BRANDING.md): if anyone
+    # opens one directly, nothing in it may run or load. The logo check in
+    # ops-cli already strips scripts; this strict policy (instead of the site's
+    # own, which allows this origin's scripts) is the second lock. no-cache like
+    # everything else outside the hashed bundles (/_app/ keeps its own block).
+    # Same add_header inheritance footgun — re-emit the other headers.
+    location ~* ^/(?!_app/).*\.svg$ {
+        add_header Cache-Control "no-cache" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox" always;
+        try_files $uri =404;
+    }
+    # Defense against attackers probing for .git, .env, etc.
+    # Even though apps/web/build/ shouldn't contain any of these,
+    # a misconfiguration shouldn't expose them.  Returns 404
+    # (not 403) to give no signal about whether the path exists.
+    location ~ /\.(?!well-known) {
+        return 404;
+    }
+    location ~* \.(env|git|sql|bak|old|orig|swp|tmp)$ {
+        return 404;
+    }
+
+    # ─── API reverse-proxy (single-host topology) ────────────
+    # The indexer + relay run on loopback; these blocks expose them
+    # under the SAME hostname as the SPA, so the frontend's same-origin
+    # /v1/, /rss/, /relay/ calls reach them. If you run the indexer or
+    # relay on a different machine, replace 127.0.0.1 with its address.
+    # (Longest-prefix match means these win over the `location /`
+    # fallback below regardless of ordering.) These blocks add no
+    # add_header, so they inherit the server-level security headers.
+    # Each clears the headers no upstream may receive from a visitor:
+    # X-Morphit-Local-Health (unlocks the operator-only health details; only
+    # the local ops-cli may send it) and the X-I2P-Dest* headers (i2pd adds
+    # the visitor's I2P destination to every request it tunnels here, if this
+    # vhost is ever behind an I2P tunnel: a stable per-visitor pseudonym).
+
+    # Relay — fund-spending endpoints. The frontend calls same-origin
+    # /relay/v1/* (e.g. /relay/v1/account/create); the rewrite strips
+    # the /relay prefix so the relay process sees /v1/account/create.
+    location /relay/ {
+        rewrite ^/relay/(.*)$ /$1 break;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header X-Morphit-Local-Health "";
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        # OVERWRITE, never append. The relay keys its
+        # per-IP signup limits on this, and $proxy_add_x_forwarded_for keeps
+        # whatever X-Forwarded-For the client sent — so anyone could claim a
+        # new address per request. nginx is the edge here: $remote_addr is the
+        # client (127.0.0.1 for every Tor/I2P visitor — one shared bucket).
+        proxy_set_header X-Forwarded-For $remote_addr;
+        client_max_body_size 64k;
+    }
+
+    # Broadcast write proxy (/v1/broadcast) — carries an avatar (base64
+    # image) + a signed tx, far larger than a read query. A LONGER prefix
+    # than /v1/, so nginx matches this first and it gets its own generous
+    # cap while reads stay tight below. This block mirrors the one the
+    # containerised frontend already had (ops/bunkerweb/frontend/nginx.conf);
+    # without it the 4 KB /v1/ cap 413s every avatar upload here, at the
+    # proxy, before the indexer's own route-aware bodyCap ever sees it.
+    location /v1/broadcast {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Morphit-Local-Health "";
+        client_max_body_size 128k;
+    }
+
+    # Federation chat fast-path intake (/v1/federation/*) — a peer instance
+    # pushes a BATCH of signed chat transactions here, up to BATCH_MAX = 64.
+    # Batching is the whole reason per-peer throughput is viable over a
+    # hidden transport, where one connection completes one round trip at a
+    # time. On the 4 KB read cap below, a batch of more than three messages
+    # is 413'd — and batches form precisely when a peer is already busy, so
+    # the fast path would work while idle and switch itself off under load.
+    # 256 KB matches MORPHIT_INDEXER_MAX_FEDERATION_BODY_BYTES; the sending
+    # side keeps itself under 200 KB so it never builds a request a peer
+    # with this cap would refuse. Longer prefix than /v1/, matched first.
+    location /v1/federation {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Morphit-Local-Health "";
+        client_max_body_size 256k;
+    }
+
+    # Indexer — read-only public API. Serves /v1/* as-is, so forward
+    # unchanged (no rewrite). /relay/v1/* is caught by the longer
+    # /relay/ prefix above, so it never falls into this block.
+    location /v1/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Operator-only per-source price-feed health (morphit-ops health)
+        # is gated on X-Morphit-Local-Health, which the local ops-cli
+        # sends over the bridge. Clear any client-supplied value so a
+        # public caller can never forge it and read the per-source block.
+        proxy_set_header X-Morphit-Local-Health "";
+        client_max_body_size 4k;
+    }
+
+    # SSE live-update streams (orderbook / chat / instances). The
+    # indexer sends a `:keepalive` comment every 25s; proxy buffering
+    # MUST be off or events arrive in laggy batches instead of live.
+    # This regex matches the .../stream paths ahead of the /v1/ prefix.
+    location ~ ^/v1/.*/stream$ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header X-Morphit-Local-Health "";
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+    }
+
+    # RSS/Atom orderbook feeds — same loopback indexer, under /rss/*
+    # (footer pill + <head> links to /rss/orderbook.xml, plus the
+    # by-asset / by-account feeds). Forward unchanged, like /v1/.
+    location /rss/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header X-Morphit-Local-Health "";
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # MCP — read-only AI-agent orderbook surface (/mcp), the loopback
+    # MCP HTTP transport on 8124. It is NOT virtual-hosted; it uses the
+    # Host header only for DNS-rebinding defense, whose default allowlist
+    # includes the loopback form — so present `Host: 127.0.0.1:8124`
+    # upstream (forwarding $host would be rejected 403). Responses can be
+    # long-running for federation queries.
+    location /mcp {
+        proxy_pass http://127.0.0.1:8124;
+        proxy_http_version 1.1;
+        proxy_set_header X-Morphit-Local-Health "";
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        proxy_set_header Connection "";
+        proxy_set_header Host 127.0.0.1:8124;
+        proxy_set_header X-Real-IP $remote_addr;
+        # Overwrite, never append: an appended header keeps the visitor's own
+        # claim on the left (same fix as /relay/).
+        proxy_set_header X-Forwarded-For $remote_addr;
+        client_max_body_size 256k;
+        proxy_read_timeout 120s;
+    }
+
+    # ─── IPFS gateway — serve THIS instance's pinned signed release ───
+    # Lets a clearnet-censored node fetch a release over OUR .onion/.i2p
+    # at /ipfs/<cid> (and /ipns/<name>) — no clearnet, no third-party
+    # pinning. The Kubo gateway runs with Gateway.NoFetch=true, so it
+    # serves ONLY content this node has pinned (its own ~12 MB release) —
+    # never an arbitrary CID, so this is NOT an open IPFS proxy. On a
+    # single host the gateway is reachable on loopback (127.0.0.1:8082)
+    # with the DEFAULT bind — no morphit_ipfs_gateway_expose needed here
+    # (that toggle is only for the containerised frontend, which reaches
+    # the gateway across the Docker bridge instead). If IPFS is disabled
+    # (enable_ipfs=false), 127.0.0.1:8082 refuses and proxy_intercept_
+    # errors turns the 502 into a clean 404 — these blocks stay inert.
+    # No add_header here, so the server-level security headers inherit;
+    # content addressing makes the release self-verifying.
+    location /ipfs/ {
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+        proxy_set_header X-Morphit-Local-Health "";
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        # An IP literal, never the visitor's Host: Kubo treats an unknown
+        # hostname as a possible DNSLink name and, with NoFetch, hangs on it
+        # (ops/bunkerweb/frontend/nginx.conf explains it in full).
+        proxy_set_header Host 127.0.0.1;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+        proxy_intercept_errors on;
+        error_page 502 503 504 = @ipfs_unavailable;
+    }
+    location /ipns/ {
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+        proxy_set_header X-Morphit-Local-Health "";
+        proxy_set_header X-I2P-DestB64 "";
+        proxy_set_header X-I2P-DestB32 "";
+        proxy_set_header X-I2P-DestHash "";
+        # An IP literal, never the visitor's Host: Kubo treats an unknown
+        # hostname as a possible DNSLink name and, with NoFetch, hangs on it
+        # (ops/bunkerweb/frontend/nginx.conf explains it in full).
+        proxy_set_header Host 127.0.0.1;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+        proxy_intercept_errors on;
+        error_page 502 503 504 = @ipfs_unavailable;
+    }
+    location @ipfs_unavailable {
+        return 404;
+    }
+
+    # ─── Files are files: a missing one is a 404 (v1.20.2) ─────────
+    # `location /` hands every unknown path to the app shell (index.html, 200,
+    # text/html) — right for a page link, wrong for a FILE. PageSpeed fetched
+    # /.well-known/ai-catalog.json, got the shell and reported "malformed JSON",
+    # and every crawler probing /.well-known/*, /ads.txt or /foo.json was told
+    # the file exists and is a web page. A path under /.well-known/, or a file
+    # name with a file extension at the top level or in the build's own asset
+    # folders, is now served if it exists and 404s if not. Page links never
+    # have such an extension, and the proxied paths (/v1/, /rss/, /ipfs/, …)
+    # are not matched. (scripts/static-soft-404-smoke.ts runs both configs.)
+    # The fonts (/fonts/*.woff2) never change within a release and every page
+    # uses them: a month in the browser's cache instead of a revalidation per
+    # page, a round trip that is slowest over Tor (PageSpeed: cache lifetimes).
+    location ^~ /fonts/ {
+        add_header Cache-Control "public, max-age=2592000" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+        try_files $uri =404;
+    }
+    location ^~ /.well-known/ {
+        add_header Cache-Control "no-cache" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+        try_files $uri =404;
+    }
+    location ~* ^/(?:(?:fonts|icons|splash|brand)/)?[^/]+\.(?:json|txt|xml|ico|png|jpe?g|gif|webp|avif|woff2?|ttf|otf|asc|sig|zip|gz|br|pdf|webmanifest|map|js|mjs|css|fingerprint|csv|md|wasm)$ {
+        add_header Cache-Control "no-cache" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+        try_files $uri =404;
+    }
+
+    # SvelteKit SPA fallback — any unknown path returns the
+    # index so client-side routing handles it. Routed through @spa so a
+    # missing index.html returns a clean 503 rather than an infinite
+    # /index.html→/index.html redirect loop (which 500s every request).
+    location / {
+        try_files $uri $uri.html $uri/index.html @spa;
+        add_header Cache-Control "no-cache" always;
+        # Full security-header re-emission (server-block inheritance lost).
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+    }
+    location @spa {
+        try_files /index.html =503;
+        # A deep link (/offers, /u/…) is answered HERE, not in `location /`,
+        # so it needs the same no-cache + full header set (v1.20.0, C14).
+        add_header Cache-Control "no-cache" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+    }
+
+    # ─── Body cap at the edge ─────────────────────────────────
+    # Static files only — no POST surface here.
+    client_max_body_size 1k;
+}
+
+# HTTP → HTTPS redirect.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name morphit.io;
+    # No access log (privacy #1, SECURITY.md §4): nginx would otherwise write
+    # every visitor's address to /var/log/nginx/access.log (v1.20.0, C1).
+    access_log off;
+    # No nginx version in the redirect's headers or body; error log as in the
+    # HTTPS server above (critical errors only).
+    server_tokens off;
+    error_log stderr crit;
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}

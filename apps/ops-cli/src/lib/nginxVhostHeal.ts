@@ -25,6 +25,10 @@
  *  - the IPFS gateway location asks for 127.0.0.1, not the visitor's Host.
  *  - the web vhost's `limit_conn web_conn 40;` (as shipped) becomes 256: it
  *    counts every HTTP/2 download, and a first visit asks for every file.
+ *  - the leftover-file and SVG rules as shipped before v1.21.12 matched the
+ *    API too: an account name ending like a file (bob.old, max.svg) got
+ *    nginx's own 404 for /v1/… (no chat key) and for its pages. They become
+ *    today's rules, with the language-path rule ahead of them.
  * Then `nginx -t` (on failure every file is put back byte for byte), a
  * graceful reload, and VERIFY in what nginx really loaded (`nginx -T`, the
  * sections of these files) and in a live answer from each vhost on this box
@@ -61,6 +65,14 @@ const HEADER_NAMES: Record<string, string> = {
 /** Downloads at once per visitor on the web vhost (ops/nginx/web.conf): two
  *  HTTP/2 connections of nginx's 128 streams. */
 export const WEB_CONN_MAX = 256;
+/** The leftover-file and SVG rules web.conf shipped before v1.21.12, and
+ *  today's (ops/nginx/web.conf; the frontend's nginx.conf has the same). */
+export const OLD_LEFTOVER_RE = '\\.(env|git|sql|bak|old|orig|swp|tmp)$';
+export const OLD_SVG_RE = '^/(?!_app/).*\\.svg$';
+const NEW_LEFTOVER_HEAD = 'location ~* ^/(?!v1/|relay/).*\\.(env|git|sql|bak|old|orig|swp|tmp)$ {';
+const NEW_SVG_HEAD = 'location ~* ^/(?!_app/|v1/|relay/).*\\.svg$ {';
+const LANG_RULE = (ind: string): string =>
+	`location ~* "^/[a-z]{2}(?:-[a-z]{2})?/.*\\.(?:env|git|sql|bak|old|orig|swp|tmp|svg)$" {\n${ind}    error_page 418 = @spa;\n${ind}    return 418;\n${ind}}\n${ind}`;
 export const OLD_SCRIPT_SRC = "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'";
 const NEW_SCRIPT_SRC = "script-src 'self' 'wasm-unsafe-eval'";
 
@@ -169,6 +181,7 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 	const inserts: Array<{ at: number; lines: string[] }> = [];
 	const hostFixes: Dir[] = [];
 	const connFixes: Dir[] = [];
+	const ruleFixes: Array<{ at: number; del: number; ins: string }> = [];
 	const changes = new Set<string>();
 	const addTo = (b: Blk, lines: string[]): void => {
 		if (lines.length > 0)
@@ -300,6 +313,31 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 			for (const k of b.kids) conn(k);
 		};
 		conn(s);
+		// The leftover-file and SVG rules of before v1.21.12, in a vhost that
+		// serves the API and the app (an @spa fallback): an account name that
+		// ends like a file is the app's or the API's, never nginx's 404.
+		const locs = s.kids.filter((k) => k.name === 'location');
+		const old = locs.filter(
+			(k) => k.args[0] === '~*' && (k.args[1] === OLD_LEFTOVER_RE || k.args[1] === OLD_SVG_RE)
+		);
+		const servesApp =
+			locs.some((k) => k.args[0] === '/v1/' || k.args[0] === '/relay/') &&
+			locs.some((k) => k.args[0] === '@spa');
+		if (old.length > 0 && servesApp) {
+			const hasLang = locs.some((k) => (k.args[1] ?? '').startsWith('^/[a-z]{2}'));
+			const firstAt = Math.min(...old.map((k) => k.start));
+			for (const k of old)
+				ruleFixes.push({
+					at: k.start,
+					del: k.end - k.start,
+					ins:
+						(!hasLang && k.start === firstAt ? LANG_RULE(indentOf(text, k.start)) : '') +
+						(k.args[1] === OLD_SVG_RE ? NEW_SVG_HEAD : NEW_LEFTOVER_HEAD)
+				});
+			changes.add(
+				"an account name ending like a file (such as bob.old) reaches the indexer and the app, not nginx's 404"
+			);
+		}
 		addTo(s, top);
 	}
 	let out = text;
@@ -314,7 +352,8 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 			at: d.start,
 			del: d.end - d.start,
 			ins: `limit_conn web_conn ${WEB_CONN_MAX};`
-		}))
+		})),
+		...ruleFixes
 	];
 	for (const e of edits.sort((a, b) => b.at - a.at))
 		out = `${out.slice(0, e.at)}${e.ins}${out.slice(e.at + e.del)}`;
@@ -369,6 +408,11 @@ export function vhostLoadedOk(section: string): { ok: boolean; why: string[] } {
 		loose.length > 0 ? 'a page CSP still allows inline script or eval' : '',
 		/^\s*limit_conn\s+web_conn\s+40\s*;/m.test(section)
 			? 'a visitor may still download only 40 files at once'
+			: '',
+		/^\s*location\s+~\*\s+(?:\\\.\(env\|git\|sql\|bak\|old\|orig\|swp\|tmp\)\$|\^\/\(\?!_app\/\)\.\*\\\.svg\$)\s*\{/m.test(
+			section
+		)
+			? "an account name ending like a file (such as bob.old) still gets nginx's 404"
 			: ''
 	].filter(Boolean);
 	return { ok: why.length === 0, why };

@@ -117,6 +117,30 @@ describe('FeatureBidForm', () => {
 		expect(target.textContent).toContain('feature_bid.blocked_not_live');
 	});
 
+	it('out of BLURT: the chain’s fee refusal reads "insufficient funds", any other refusal keeps its reason', async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const { ChainRejectedError } = await import('$blurt/broadcastTransport');
+		broadcastFeatureBid.mockImplementationOnce(async () => {
+			throw new ChainRejectedError(
+				'Assert Exception:acnt.balance >= fee: Account does not have sufficient funds for transaction fee.'
+			);
+		});
+		const { target } = await mountForm();
+		clickPay(target);
+		await vi.advanceTimersByTimeAsync(30);
+		expect(target.textContent).toContain('common.broadcast_err.low_blurt');
+		expect(target.textContent).not.toContain('feature_bid.error_chain_rejected');
+		document.body.innerHTML = '';
+		broadcastFeatureBid.mockImplementationOnce(async () => {
+			throw new ChainRejectedError('missing required active authority');
+		});
+		const second = await mountForm();
+		clickPay(second.target);
+		await vi.advanceTimersByTimeAsync(30);
+		expect(second.target.textContent).toContain('feature_bid.error_chain_rejected');
+		expect(second.target.textContent).not.toContain('common.broadcast_err.low_blurt');
+	});
+
 	it('after sending, it reports the bid the indexer recorded', async () => {
 		vi.useFakeTimers({ shouldAdvanceTime: true });
 		const onSuccess = vi.fn();

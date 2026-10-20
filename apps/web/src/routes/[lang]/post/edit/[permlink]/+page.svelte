@@ -49,6 +49,8 @@
 	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastOrderReplace, BroadcastError } from '$blurt/ops/order';
+	import { ChainRejectedError } from '$blurt/broadcastTransport';
+	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
 	import { KeystoreError } from '$crypto/keystore';
 	import { getOrder } from '$lib/indexer/client';
 	import { pendingOrders, mergePendingOrders } from '$lib/stores/pendingOrders';
@@ -648,6 +650,10 @@
 				errorMessage = $_('post_order.broadcast_error.body_bad_password');
 			} else if (err instanceof KeystoreError && err.kind === 'identity_mismatch') {
 				errorMessage = $_('crypto.error.identity_mismatch');
+			} else if (err instanceof ChainRejectedError) {
+				// The chain's reason, in the words every chain-write screen uses
+				// (out of BLURT: "Broadcast rejected due to insufficient funds…").
+				errorMessage = broadcastErrorMessage($_, err, blurtAccount ?? '');
 			} else {
 				errorMessage = $_('post_order.broadcast_error.body_generic');
 			}

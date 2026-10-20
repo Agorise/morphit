@@ -143,7 +143,8 @@ const SVG_IMAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src da
 const cspWebAll = nginxHeaderValues(webConf, 'Content-Security-Policy');
 const cspWeb = cspWebAll.filter((v) => v !== SVG_IMAGE_CSP);
 {
-	const svgBlock = /location ~\* \^\/\(\?!_app\/\)\.\*\\\.svg\$ \{([\s\S]*?)\n {4}\}/.exec(webConf)?.[1] ?? '';
+	// v1.21.12: the API (/v1/, /relay/) is no longer matched by it (dotted account names).
+	const svgBlock = /location ~\* \^\/\(\?!_app\/\|v1\/\|relay\/\)\.\*\\\.svg\$ \{([\s\S]*?)\n {4}\}/.exec(webConf)?.[1] ?? '';
 	const inBlock = nginxHeaderValues(svgBlock, 'Content-Security-Policy');
 	if (
 		cspWebAll.length - cspWeb.length === 1 &&
@@ -155,7 +156,7 @@ const cspWeb = cspWebAll.filter((v) => v !== SVG_IMAGE_CSP);
 	} else {
 		bad(
 			'SVG-image CSP misplaced',
-			`expected exactly one "${SVG_IMAGE_CSP}", inside \`location ~* ^/(?!_app/).*\\.svg$\` in ${WEB_CONF}`
+			`expected exactly one "${SVG_IMAGE_CSP}", inside \`location ~* ^/(?!_app/|v1/|relay/).*\\.svg$\` in ${WEB_CONF}`
 		);
 	}
 }

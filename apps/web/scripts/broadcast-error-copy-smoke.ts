@@ -30,6 +30,9 @@ const check = (name: string, cond: boolean, detail = ''): void => {
 // ── classifyChainReason: recognise the actionable causes ──
 check('fee-insufficiency reason → low_blurt', classifyChainReason('insufficient balance to pay operation fee') === 'low_blurt');
 check('unaffordable-fee reason → low_blurt', classifyChainReason('account does not have enough BLURT for the fee') === 'low_blurt');
+// Blurt's own words (libraries/chain/database.cpp, process_tx_fee), as the
+// node returns them: what a bio save on an account short of the fee gets back.
+check('blurtd fee assertion → low_blurt', classifyChainReason('Assert Exception:acnt.balance >= fee: Account does not have sufficient funds for transaction fee.') === 'low_blurt');
 check('size reason → too_large', classifyChainReason('custom_json payload too large, exceeds maximum size') === 'too_large');
 check('auth reason → auth', classifyChainReason('missing required posting authority') === 'auth');
 
@@ -70,8 +73,34 @@ const be = en.common.broadcast_err as Record<string, string>;
 for (const k of ['unreachable', 'offline', 'low_blurt', 'too_large', 'auth', 'tx_expired', 'duplicate', 'rejected', 'key_mismatch', 'locked', 'no_account', 'wrong_account', 'no_account_for_key', 'lookup_failed', 'generic', 'generic_detail'])
 	check(`i18n key exists: ${k}`, typeof be[k] === 'string' && be[k].length > 0);
 // the actionable messages must include a {placeholder} so the real cause shows
-for (const [k, ph] of [['unreachable', '{detail}'], ['low_blurt', '{reason}'], ['too_large', '{reason}'], ['generic_detail', '{detail}']] as const)
+for (const [k, ph] of [['unreachable', '{detail}'], ['too_large', '{reason}'], ['generic_detail', '{detail}']] as const)
 	check(`${k} surfaces the real cause (${ph})`, be[k].includes(ph));
+// Out of BLURT for the fee: the cause and the fix in plain words, the chain's
+// own wording not needed (v1.21.12, the maintainer's wording).
+check('low_blurt says insufficient funds and to buy BLURT', be.low_blurt === 'Broadcast rejected due to insufficient funds. Buy BLURT to save more data to the chain.');
+
+// ── every chain-write screen with its own error handling shows the same
+//    out-of-BLURT line (v1.21.12): a fee or balance refusal is classified, not
+//    shown as the screen's generic "rejected" copy ──
+for (const rel of [
+	'apps/web/src/lib/components/SendBlurtModal.svelte',
+	'apps/web/src/lib/components/PowerModal.svelte',
+	'apps/web/src/lib/components/FeatureBidForm.svelte',
+	'apps/web/src/lib/components/PayBlurtModal.svelte'
+]) {
+	const src = readFileSync(join(REPO, rel), 'utf8');
+	check(
+		`${rel.split('/').pop()}: a fee/balance refusal shows common.broadcast_err.low_blurt`,
+		/classifyChainReason\([^)]*\) === 'low_blurt'/.test(src) && src.includes("'common.broadcast_err.low_blurt'")
+	);
+}
+{
+	const src = readFileSync(join(REPO, 'apps/web/src/routes/[lang]/post/edit/[permlink]/+page.svelte'), 'utf8');
+	check(
+		'post/edit: a chain refusal goes through the shared resolver (not the generic line)',
+		/err instanceof ChainRejectedError\)\s*\{[^}]*broadcastErrorMessage\(/.test(src)
+	);
+}
 
 // ── settings routes through the classifier (no opaque generic-only path) ──
 const settings = readFileSync(join(REPO, 'apps/web/src/routes/[lang]/settings/+page.svelte'), 'utf8');

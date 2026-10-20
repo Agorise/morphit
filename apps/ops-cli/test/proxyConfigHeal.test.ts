@@ -43,6 +43,7 @@ import {
 	envFileEntries,
 	frontendEdgePort,
 	frontendFileMissesAre404,
+	frontendDottedNamesServed,
 	frontendForwardsOneAddress,
 	frontendCspStrict,
 	frontendHidesInternals,
@@ -1529,6 +1530,59 @@ describe('a tor-only box (frontend only, no BunkerWeb)', () => {
 		});
 		expect((await s.run()).kind).toBe('no-proxy');
 		expect(s.ups).toEqual([]);
+	});
+});
+
+/** The frontend as v1.21.11 shipped it: the leftover-file and SVG rules
+ *  matched every address, the API included. */
+const oldDottedRules = (conf: string): string =>
+	conf
+		.replace(/\n[^\n]*location ~\* "\^\/\[a-z\]\{2\}[^\n]*\{\n[^}]*\}\n/, '\n')
+		.replace(
+			'location ~* ^/(?!v1/|relay/).*\\.(env|git|sql|bak|old|orig|swp|tmp)$ {',
+			'location ~* \\.(env|git|sql|bak|old|orig|swp|tmp)$ {'
+		)
+		.replace('location ~* ^/(?!_app/|v1/|relay/).*\\.svg$ {', 'location ~* ^/(?!_app/).*\\.svg$ {');
+
+describe('an account name ending like a file reaches the indexer and the app (v1.21.12)', () => {
+	it('reads it from what nginx serves: the release config does, the v1.21.11 one does not', () => {
+		const old = oldDottedRules(SHIPPED_FE);
+		expect(old).not.toBe(SHIPPED_FE);
+		expect(old).not.toContain('error_page 418 = @spa');
+		expect(old).toContain('location ~* \\.(env|git|sql|bak|old|orig|swp|tmp)$ {');
+		expect(frontendDottedNamesServed(SERVED_OK)).toBe(true);
+		expect(frontendDottedNamesServed(dumpOf(old))).toBe(false);
+		// Only the API fixed: the pages still 404.
+		const apiOnly = SHIPPED_FE.replace(
+			/\n[^\n]*location ~\* "\^\/\[a-z\]\{2\}[^\n]*\{\n[^}]*\}\n/,
+			'\n'
+		);
+		expect(apiOnly).not.toBe(SHIPPED_FE);
+		expect(frontendDottedNamesServed(dumpOf(apiOnly))).toBe(false);
+		// No server with the API at all: nothing to say it is right.
+		expect(frontendDottedNamesServed('http { server { location / { } } }')).toBe(false);
+	});
+	it('an otherwise current frontend with the old rules is rebuilt from the release once, and says so', async () => {
+		const s = oldBox();
+		s.served = dumpOf(oldDottedRules(SHIPPED_FE));
+		const out = await s.run();
+		expect(out.forwarding).toBe('refreshed');
+		expect(s.refreshes).toBe(1);
+		const info = s.info.join(' ');
+		expect(info).toMatch(
+			/account name ending like a file \(such as bob\.old\) to the indexer and the app/
+		);
+		expect(info).not.toMatch(/missing file.*404/);
+	});
+	it('still the old rules after the rebuild: a calm warning naming it, with the command', async () => {
+		const s = oldBox();
+		s.served = dumpOf(oldDottedRules(SHIPPED_FE));
+		s.servedAfterRefresh = s.served;
+		const out = await s.run();
+		expect(out.forwarding).toBe('stale');
+		const w = s.warn.join(' ');
+		expect(w).toMatch(/account name ending like a file \(such as bob\.old\) with its own 404 page/);
+		expect(w).toContain('up -d --no-deps --build --force-recreate frontend');
 	});
 });
 

@@ -899,7 +899,7 @@
 			"no_account_for_key": "Der Schlüssel dieser Sitzung kontrolliert kein Konto auf der Blockchain. Es wurde nichts gesendet. Melde dich ab und mit dem richtigen Schlüssel wieder an.",
 			"lookup_failed": "{brand} konnte seinen Indexer nicht erreichen, um zu prüfen, welches Konto dieser Schlüssel kontrolliert, und hat deshalb nichts gesendet. Prüfe deine Verbindung und versuche es erneut.",
 			"unreachable": "{brand} war nicht erreichbar — oder {brand} konnte das Blurt-Netzwerk nicht erreichen. Die Instanz ist evtl. offline, synchronisiert noch oder ihre Verbindung zur Chain ist blockiert (manche Netze/Länder filtern sie). Stelle sicher, dass deine Instanz online ist und das Netzwerk erreichen kann, und versuche es erneut. (Details: {detail})",
-			"low_blurt": "Das Senden kostet eine kleine BLURT-Gebühr, und größere Änderungen (zum Beispiel ein Avatar) kosten mehr, weil die Gebühr mit der Größe wächst. Das liquide BLURT deines Kontos reicht dafür nicht. Lade etwas liquides BLURT auf dein Konto und versuche es erneut. (Chain: {reason})",
+			"low_blurt": "Übertragung wegen unzureichenden Guthabens abgelehnt. Kaufe BLURT, um weitere Daten in der Blockchain zu speichern.",
 			"too_large": "Das ist zu groß für die Blockchain. Mach es kleiner (bei einem Bild ein kleineres oder einfacheres — ein kompaktes SVG oder ein kleineres Foto) und versuche es erneut. (Chain: {reason})",
 			"auth": "Dein Posting-Schlüssel ist nicht berechtigt, für dieses Konto zu posten. Melde dich ab und mit dem richtigen Schlüssel wieder an, und versuche es erneut. (Chain: {reason})",
 			"generic_detail": "Senden fehlgeschlagen: {detail}. Bitte versuche es erneut — wenn es weiterhin auftritt, ist genau diese Meldung die Ursache zum Melden.",

@@ -193,7 +193,13 @@ async function postSignedTransaction(
 			const body = (await res.json()) as { message?: string };
 			if (typeof body.message === 'string' && body.message) message = body.message;
 		} catch {
-			/* keep default */
+			// Not the indexer's JSON: a web page from the firewall in front of it,
+			// which had replaced the reason (BunkerWeb's default before v1.21.12 —
+			// a bio save on an account short of the fee read only "the chain
+			// rejected the transaction"). Say so, rather than a reason-less line.
+			if (/text\/html/i.test(res.headers?.get?.('content-type') ?? ''))
+				message =
+					"the reason was replaced by a page from your Morphit server's web firewall (status 400). Tell the server's operator: the Morphit upgrade lets the reason through";
 		}
 		throw new ChainRejectedError(message);
 	}

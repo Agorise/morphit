@@ -42,6 +42,7 @@
 		broadcastSignedTransaction
 	} from '$blurt/sign';
 	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
+	import { classifyChainReason } from '$blurt/broadcastErrorClass';
 	import { formatBlurtAmount } from '$blurt/balanceMath';
 	import { fetchAccountBalance } from '$blurt/accountBalance';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
@@ -300,7 +301,11 @@
 				// voting power). So the reason here is whatever the chain
 				// reports (e.g. balance/fee, authority) — we show it verbatim.
 				console.warn('[send] broadcast rejected:', err);
-				if (err instanceof ChainRejectedError) {
+				if (err instanceof ChainRejectedError && classifyChainReason(err.message) === 'low_blurt') {
+					// Out of BLURT for the amount or the fee: the maintainer's wording,
+					// the same on every screen that writes to the chain.
+					phase = { kind: 'error', messageKey: 'common.broadcast_err.low_blurt' };
+				} else if (err instanceof ChainRejectedError) {
 					phase = {
 						kind: 'error',
 						messageKey: 'profile.wallet.error_chain_rejected',

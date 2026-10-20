@@ -7321,6 +7321,13 @@ export async function healBunkerWebWaf(
 		changed = true;
 	};
 
+	/** A value without the quotes an env file may put round it. */
+	const unq = (v: string | null): string =>
+		(v ?? '')
+			.trim()
+			.replace(/^["']|["']$/g, '')
+			.trim();
+
 	// ── Fix A: MAX_CLIENT_SIZE — avatar/order broadcasts must not 413. ──
 	try {
 		const cur = getVal('MAX_CLIENT_SIZE');
@@ -7333,19 +7340,44 @@ export async function healBunkerWebWaf(
 		/* keep going */
 	}
 
-	// ── Fix B: bad-behavior must NOT ban on routine API 400s. ──
+	// ── Fix B: bad-behavior must NOT ban real visitors for routine answers. ──
+	//    Morphit counts only 401 405 444 (bunkerweb.env.j2 / .example, README):
+	//    400 is a rejected broadcast, 403 is BunkerWeb's answer to a banned
+	//    visitor (counting it never ends a ban), 404 is "no chat key / no profile
+	//    yet" and PWA probing, 429 is a normal burst. Where BunkerWeb's default is
+	//    in force (no line, or its own list), or the list this heal wrote before
+	//    v1.21.12 (the default less 400), it becomes Morphit's; an operator's own
+	//    list only loses 400. BunkerWeb's default counting window bans for a day
+	//    after 10 counted answers a minute; Morphit's is 50 a minute, an hour.
 	try {
 		const cur = getVal('BAD_BEHAVIOR_STATUS_CODES');
-		const codes = (cur ?? '400 401 403 404 405 429 444')
-			.trim()
-			.split(/\s+/)
-			.filter((c) => c !== '400');
-		const joined = codes.join(' ');
-		if (cur === null || cur.trim() !== joined) {
+		const norm = (v: string): string => unq(v).trim().split(/\s+/).join(' ');
+		const joined =
+			cur === null ||
+			norm(cur) === BW_DEFAULT_BAD_BEHAVIOR_CODES ||
+			norm(cur) === BW_DEFAULT_BAD_BEHAVIOR_CODES.replace(/^400 /, '')
+				? MORPHIT_BAD_BEHAVIOR_CODES
+				: norm(cur)
+						.split(' ')
+						.filter((c) => c !== '400')
+						.join(' ');
+		if (cur === null || norm(cur) !== joined) {
 			setVal('BAD_BEHAVIOR_STATUS_CODES', joined);
 			info(
-				'WAF: removed 400 from bad-behavior triggers (a JSON API returns 400 routinely; it must not ban traders).'
+				`WAF: bad-behavior bans now count only ${joined} (a "not found", a refused broadcast, a ban page or a short burst is ordinary use and must not ban a visitor).`
 			);
+		}
+		for (const [k, v] of [
+			['BAD_BEHAVIOR_THRESHOLD', '50'],
+			['BAD_BEHAVIOR_COUNT_TIME', '60'],
+			['BAD_BEHAVIOR_BAN_TIME', '3600']
+		] as const) {
+			if (getVal(k) === null) {
+				setVal(k, v);
+				info(
+					`WAF: ${k}=${v} (BunkerWeb's default banned a visitor for a day after 10 counted answers in a minute).`
+				);
+			}
 		}
 	} catch {
 		/* keep going */
@@ -7377,11 +7409,6 @@ export async function healBunkerWebWaf(
 	//    REAL_IP_FROM), which include the Docker bridge IPv6 visitors arrive from.
 	//    A deliberate CDN setup (REAL_IP_FROM listing that CDN's ranges) is left
 	//    alone. ──
-	const unq = (v: string | null): string =>
-		(v ?? '')
-			.trim()
-			.replace(/^["']|["']$/g, '')
-			.trim();
 	try {
 		if (unq(getVal('USE_REAL_IP')).toLowerCase() === 'yes') {
 			const from = unq(getVal('REAL_IP_FROM'));
@@ -7423,6 +7450,28 @@ export async function healBunkerWebWaf(
 			setVal('LIMIT_CONN_MAX_HTTP2', BW_LIMIT_CONN_MAX_HTTP2);
 			info(
 				`WAF: a visitor may now download ${BW_LIMIT_CONN_MAX_HTTP2} files at once over HTTP/2 (BunkerWeb's default of 100 turned away part of a first visit on a slow line).`
+			);
+		}
+	} catch {
+		/* keep going */
+	}
+
+	// ── Fix F: the indexer's and the relay's own answers reach the browser.
+	//    BunkerWeb's default (REVERSE_PROXY_INTERCEPT_ERRORS=yes) replaces every
+	//    4xx/5xx answer from the site with its own HTML error page, so the app
+	//    lost the reason for every refusal: a 404 "no chat key yet" became
+	//    "Malformed response from indexer (status 404)", a chain rejection's 400
+	//    became "the chain rejected the transaction" (v1.21.12). BunkerWeb's
+	//    own answers (WAF blocks, limits) keep its pages. ──
+	//    Every copy of the line counts (Compose reads the last one), so all are
+	//    made "no" and only one is kept.
+	try {
+		const lines = [...env.matchAll(/^REVERSE_PROXY_INTERCEPT_ERRORS=(.*)$/gm)];
+		if (lines.length !== 1 || unq(lines[0]![1] ?? '').toLowerCase() !== 'no') {
+			env = env.replace(/^REVERSE_PROXY_INTERCEPT_ERRORS=.*\n?/gm, '');
+			setVal('REVERSE_PROXY_INTERCEPT_ERRORS', 'no');
+			info(
+				'WAF: BunkerWeb set to pass the site\'s own error answers through with their reason (it replaced them with its own page, so the app showed "Malformed response" or "the chain rejected the transaction" without saying why).'
 			);
 		}
 	} catch {
@@ -7810,6 +7859,126 @@ export async function healBunkerWebWaf(
 		}
 	} catch {
 		/* best-effort — never fail the upgrade over a probe */
+	}
+
+	// (5) ERROR ANSWERS (Fix F) — prove the RUNNING BunkerWeb passes the
+	//     indexer's own error answer through: a chat key that does not exist
+	//     must come back as the indexer's JSON 404, not BunkerWeb's page. Still
+	//     replaced → recreate its own services once and look again; then ask the
+	//     operator.
+	try {
+		if (site && unq(getVal('REVERSE_PROXY_INTERCEPT_ERRORS')).toLowerCase() === 'no') {
+			// BunkerWeb's Compose service setting it itself (`environment:`) wins
+			// over the file, and no recreate changes that: say where it is.
+			const composeSetsIt = (): boolean => {
+				if (ref === null) return false;
+				const r = spawnSync(
+					'docker',
+					composeArgs(ref, ['config', '--format', 'json', '--no-env-resolution']),
+					{
+						encoding: 'utf8',
+						timeout: 30000,
+						maxBuffer: 64 * 1024 * 1024
+					}
+				);
+				const svc =
+					r.status === 0 && (r.stdout ?? '') !== ''
+						? parseComposeModel(r.stdout)?.get(ref.service)
+						: undefined;
+				return svc?.environment.has('REVERSE_PROXY_INTERCEPT_ERRORS') ?? false;
+			};
+			const probe = async (): Promise<'passes' | 'replaced' | null> => {
+				const stop = startDotsSpinner("Checking the site's own error answers reach the browser…");
+				let out = '';
+				try {
+					out = (
+						await runAsync(
+							'curl',
+							[
+								'-sk',
+								'--max-time',
+								'15',
+								'--noproxy',
+								'*',
+								'--resolve',
+								`${site}:443:127.0.0.1`,
+								'-w',
+								'\n%{http_code}',
+								`https://${site}/v1/chat-identity/${ERROR_PROBE_ACCOUNT}`
+							],
+							{ timeoutMs: 25000 }
+						)
+					).stdout;
+				} finally {
+					stop();
+				}
+				const i = out.lastIndexOf('\n');
+				return classifyErrorPassThrough(out.slice(i + 1).trim(), out.slice(0, Math.max(i, 0)));
+			};
+			let live = await probe();
+			// Not while BunkerWeb is still loading the settings just written
+			// (cycle 'pending'): a second recreate would restart that load.
+			const overridden = live === 'replaced' && composeSetsIt();
+			if (
+				live === 'replaced' &&
+				!overridden &&
+				cycle?.kind !== 'refused' &&
+				cycle?.kind !== 'pending' &&
+				ref !== null
+			) {
+				const c = applyAndWait('recreating BunkerWeb so it passes the error answers through', true);
+				if (c !== null) live = await probe();
+			}
+			if (live === 'passes')
+				info(
+					"WAF: error answers verified live — a missing chat key came back as the indexer's own answer, with its reason."
+				);
+			else if (live === null)
+				info(
+					`WAF: the error-answer check got no usable answer from this server, so it could not be checked; the setting was applied. To check again later, on this server: ${HEALS_COMMAND}`
+				);
+			else if (overridden)
+				warn(
+					`WAF: BunkerWeb still replaces the site's error answers with its own page: its Docker Compose service sets REVERSE_PROXY_INTERCEPT_ERRORS itself (an environment: entry), which wins over ${bwEnv}. Set it to "no" there, then run on this server: sudo ${composeCommand(ref!, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services])}`
+				);
+			else
+				warn(
+					ref !== null
+						? `WAF: BunkerWeb still replaces the site's error answers with its own page (chat and profile saves then show "Malformed response" or "the chain rejected the transaction" without the reason). When convenient, run on this server: sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services])}`
+						: `WAF: BunkerWeb still replaces the site's error answers with its own page. ${bw} was not started by Docker Compose; recreate it on this server the way it was started so it reads ${bwEnv} again.`
+				);
+		}
+	} catch {
+		/* best-effort — never fail the upgrade over a probe */
+	}
+}
+
+/** The account the error-answer check asks for. The indexer accepts the name
+ *  (ACCOUNT_NAME_RE) and answers 404 not_found; Blurt can never create it (each
+ *  part of a name must be at least 3 characters, and "zz" is 2), so no one can
+ *  publish a chat key under it and turn the check into a 200. */
+export const ERROR_PROBE_ACCOUNT = 'zz.morphit-probe';
+
+/** BunkerWeb 1.5's own BAD_BEHAVIOR_STATUS_CODES (badbehavior/plugin.json). */
+export const BW_DEFAULT_BAD_BEHAVIOR_CODES = '400 401 403 404 405 429 444';
+/** Morphit's (bunkerweb.env.j2, bunkerweb.env.example). */
+export const MORPHIT_BAD_BEHAVIOR_CODES = '401 405 444';
+
+/** What a request for a chat key that does not exist came back as through
+ *  BunkerWeb: 'passes' when it is the indexer's own JSON answer (404,
+ *  code not_found), 'replaced' when BunkerWeb answered with its own error
+ *  page instead, null when nothing can be said (no answer, another status).
+ *  PURE. */
+export function classifyErrorPassThrough(
+	status: string,
+	body: string
+): 'passes' | 'replaced' | null {
+	if (status !== '404') return null;
+	try {
+		const j = JSON.parse(body) as { code?: unknown };
+		return j && j.code === 'not_found' ? 'passes' : null;
+	} catch {
+		return /<html|<!doctype/i.test(body) ? 'replaced' : null;
 	}
 }
 

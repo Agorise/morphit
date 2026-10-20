@@ -150,6 +150,12 @@ async function main(): Promise<void> {
 	const site = join(work, 'site');
 	mkdirSync(join(site, '.well-known'), { recursive: true });
 	writeFileSync(join(site, 'index.html'), '<!doctype html><title>shell</title>SPA-SHELL');
+	// Leftovers that must never be served, and an SVG that must be (the
+	// dotted-account-name checks, v1.21.12).
+	writeFileSync(join(site, 'backup.sql'), 'LEFTOVER-SECRET');
+	mkdirSync(join(site, 'en'), { recursive: true });
+	writeFileSync(join(site, 'en', 'leak.bak'), 'LEFTOVER-SECRET');
+	writeFileSync(join(site, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
 	// 200 files of 40 KB: what a first visit asks for at once (web.conf check).
 	mkdirSync(join(site, '_slow'));
 	for (let n = 0; n < SLOW_FILES; n++)
@@ -387,6 +393,54 @@ async function runChecks(
 		check(
 			`${L}: the page CSP keeps 'wasm-unsafe-eval' for the WebAssembly crypto`,
 			csp.includes("'wasm-unsafe-eval'")
+		);
+	}
+
+	// Account names may end in .old, .git, .svg … (any part of 3+ characters).
+	// The leftover-file rule once beat /v1/ and /relay/: nginx's own 404 page
+	// came back for /v1/chat-identity/bob.old, so that member's chat key was
+	// never published; and /en/@bob.old answered 404 instead of the app.
+	if (c.page) {
+		for (const p of [
+			'/v1/chat-identity/bob.old',
+			'/v1/chat-identity/max.svg',
+			'/v1/profiles/ann.git',
+			'/relay/v1/account/availability/ann.git',
+			'/v1/chat/bob.old/stream'
+		]) {
+			const before = seen.length;
+			const g = await get(port, p, { tls });
+			const got = seen.slice(before);
+			check(
+				`${L}: ${p} reaches the relay/indexer (a dotted account name is not a leftover file)`,
+				got.some((x) => x.url.endsWith(p.replace(/^\/relay/, ''))) &&
+					g.body.includes('"status":"ok"'),
+				`${g.status} ${g.body.slice(0, 60)}`
+			);
+		}
+		for (const p of ['/en/@bob.old', '/en/chat/max.svg', '/zh-CN/@ann.git', '/en/leak.bak']) {
+			const g = await get(port, p, { tls });
+			check(
+				`${L}: ${p} is the app's page (never a file, never 404)`,
+				g.status === 200 && g.body.includes('SPA-SHELL') && !g.body.includes('LEFTOVER-SECRET'),
+				`${g.status} ${g.body.slice(0, 60)}`
+			);
+		}
+		for (const p of ['/backup.sql', '/nothing-here.bak']) {
+			const g = await get(port, p, { tls });
+			check(
+				`${L}: ${p} — a leftover file is never served, and missing or not answers the same 404`,
+				g.status === 404 && !g.body.includes('LEFTOVER-SECRET') && !g.body.includes('SPA-SHELL'),
+				`${g.status} ${g.body.slice(0, 60)}`
+			);
+		}
+		const svg = await get(port, '/logo.svg', { tls });
+		check(
+			`${L}: the site's own SVG is still served, under the "never runs anything" policy`,
+			svg.status === 200 &&
+				svg.body.includes('<svg') &&
+				/sandbox/.test(String(svg.headers['content-security-policy'] ?? '')),
+			`${svg.status} ${String(svg.headers['content-security-policy'] ?? '').slice(0, 60)}`
 		);
 	}
 

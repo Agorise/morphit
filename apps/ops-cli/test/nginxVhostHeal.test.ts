@@ -116,6 +116,40 @@ describe('the bare-metal nginx site heals like a fresh copy (planner)', () => {
 		expect(p).toContain(`script-src 'self' https://cdn.example.org"`);
 	});
 
+	it('web.conf as v1.21.11 shipped it: an account name ending like a file reaches the API and the app', () => {
+		const old = readFileSync(join(import.meta.dirname, 'fixtures', 'web.conf.v1.21.11'), 'utf8');
+		expect(vhostLoadedOk(old).why).toContain(
+			"an account name ending like a file (such as bob.old) still gets nginx's 404"
+		);
+		const p = planVhost(old);
+		expect(p.changes).toContain(
+			"an account name ending like a file (such as bob.old) reaches the indexer and the app, not nginx's 404"
+		);
+		expect(vhostLoadedOk(p.text).why).not.toContain(
+			"an account name ending like a file (such as bob.old) still gets nginx's 404"
+		);
+		const at = (re: RegExp): number => p.text.search(re);
+		const lang = at(/^ {4}location ~\* "\^\/\[a-z\]\{2\}/m);
+		const svg = at(/^ {4}location ~\* \^\/\(\?!_app\/\|v1\/\|relay\/\)\.\*\\\.svg\$ \{$/m);
+		const left = at(/^ {4}location ~\* \^\/\(\?!v1\/\|relay\/\)\.\*\\\.\(env/m);
+		// nginx takes the FIRST regex that matches: the language rule leads.
+		expect(lang).toBeGreaterThan(0);
+		expect(svg).toBeGreaterThan(lang);
+		expect(left).toBeGreaterThan(lang);
+		expect(p.text.match(/error_page 418 = @spa;/g)).toHaveLength(1);
+		// The same rules as today's shipped file, and nothing more to do.
+		for (const line of shipped('web.conf')
+			.split('\n')
+			.filter((l) => /^\s*location ~\*.*(env\|git|svg\$)/.test(l)))
+			expect(p.text).toContain(line);
+		expect(planVhost(p.text).text).toBe(p.text);
+	});
+
+	it('the old leftover rule in a vhost that serves no app page (indexer.conf shape) is left alone', () => {
+		const api = `server {\n    listen 443 ssl;\n    server_tokens off;\n    error_log stderr crit;\n    location ~* \\.(env|git|sql|bak|old|orig|swp|tmp)$ {\n        return 404;\n    }\n    location /v1/ {\n        proxy_pass http://127.0.0.1:8081;\n        proxy_set_header X-Morphit-Local-Health "";\n        proxy_set_header X-I2P-DestB64 "";\n        proxy_set_header X-I2P-DestB32 "";\n        proxy_set_header X-I2P-DestHash "";\n    }\n}\n`;
+		expect(planVhost(api).text).toBe(api);
+	});
+
 	it('the shipped configs need nothing; they are Morphit sites, an unrelated site is not', () => {
 		for (const f of ['web.conf', 'relay.conf', 'indexer.conf']) {
 			expect(isMorphitVhost(shipped(f))).toBe(true);

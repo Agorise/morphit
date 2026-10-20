@@ -899,7 +899,7 @@
 			"no_account_for_key": "The key in this session doesn't control any account on the blockchain. Nothing was broadcast. Sign out and sign back in with the right key.",
 			"lookup_failed": "{brand} couldn't reach its indexer to check which account this key controls, so it didn't broadcast anything. Check your connection and try again.",
 			"unreachable": "Couldn't reach {brand} — or {brand} couldn't reach the Blurt network. It may be offline, still syncing, or its connection to the chain may be blocked (some networks or countries filter it). Make sure your instance is online and can reach the network, then try again. (Details: {detail})",
-			"low_blurt": "Broadcasting costs a small BLURT fee, and larger updates (an avatar, for example) cost more because the fee scales with size. Your account's liquid BLURT is too low to cover it. Add a little liquid BLURT to your account, then try again. (Chain: {reason})",
+			"low_blurt": "Broadcast rejected due to insufficient funds. Buy BLURT to save more data to the chain.",
 			"too_large": "This is too large for the blockchain. Make it smaller (for an image, choose a smaller or simpler one — a compact SVG or a smaller photo), then try again. (Chain: {reason})",
 			"auth": "Your posting key isn't authorized to post for this account. Sign out and back in with the correct key, then try again. (Chain: {reason})",
 			"generic_detail": "Couldn't broadcast: {detail}. Please try again — if it keeps happening, that message is the exact cause to report.",

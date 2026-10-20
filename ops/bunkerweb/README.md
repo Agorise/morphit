@@ -288,6 +288,18 @@ testing in staging.
 - Both reach installed boxes on their next `morphit-ops upgrade`, which
   sets them where BunkerWeb's defaults are in force (an operator's own
   value is kept) and checks the running site afterwards.
+- `REVERSE_PROXY_INTERCEPT_ERRORS=no` — BunkerWeb's default (`yes`)
+  replaces every error answer from the site (400, 401, 403, 404, 405,
+  413, 429, 500–504) with its own HTML page.  The app reads the indexer's and the relay's error
+  answers for their reason: "this member has no chat key yet" is a 404,
+  a chain refusal ("not enough BLURT for the fee") is a 400.  Replaced,
+  the chat screen showed "Malformed response from indexer (status 404)",
+  a new member's chat key was never published, and a profile save showed
+  "the chain rejected the transaction" without the reason (morphit.io,
+  v1.21.10).  BunkerWeb's own answers (a firewall block, a limit) keep
+  its pages.  `morphit-ops upgrade` sets it on installed boxes, recreates
+  BunkerWeb, and checks a missing chat key comes back as the indexer's
+  own answer.
 - Bad-behavior bans (`BAD_BEHAVIOR_*`) — by default BunkerWeb counts
   `400 401 403 404 405 429 444` and bans an IP that accumulates too
   many.  Morphit narrows the counted set to `401 405 444`,
@@ -300,7 +312,13 @@ testing in staging.
   expired or malformed one: normal use, not malice; counting it banned
   real traders in v1.16.9).  Threshold 50, ban
   3600s.  If you re-add any of the excluded codes, expect ordinary
-  visitors to get banned during normal browsing.
+  visitors to get banned during normal browsing.  `morphit-ops upgrade`
+  sets this list where BunkerWeb's default is in force (no line, or
+  BunkerWeb's own list) or where it holds the list earlier upgrades wrote
+  (BunkerWeb's less 400); an operator's own list only loses `400`.  It
+  sets the threshold, window and ban time where they are missing
+  (BunkerWeb's defaults ban a visitor for a day after 10 counted answers
+  in a minute) (v1.21.12).
 
 ## What the Ansible playbook does
 

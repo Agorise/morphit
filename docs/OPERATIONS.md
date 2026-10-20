@@ -6978,6 +6978,10 @@ USE_REVERSE_PROXY=yes
 REVERSE_PROXY_URL=/
 REVERSE_PROXY_HOST=http://127.0.0.1:3000  # the apps/web dev server, OR
                                           # the static-build path if served by nginx
+# Pass the site's own error answers (JSON with a reason) through instead
+# of BunkerWeb's error page — the app reads them (a 404 "no chat key yet",
+# a 400 chain refusal). Required.
+REVERSE_PROXY_INTERCEPT_ERRORS=no
 # TLS: the host's certbot gets the certificate (§35); BunkerWeb's own
 # Let's Encrypt client stays off.
 AUTO_LETS_ENCRYPT=no
@@ -7053,6 +7057,7 @@ services:
       SERVER_NAME: "morphit.example.com"
       USE_REVERSE_PROXY: "yes"
       REVERSE_PROXY_HOST: "http://web:3000"
+      REVERSE_PROXY_INTERCEPT_ERRORS: "no"   # the app reads the site's own error answers
       AUTO_LETS_ENCRYPT: "no"           # the host's certbot gets the certificate (§35)
       USE_CUSTOM_SSL: "yes"
       CUSTOM_SSL_CERT: "/etc/letsencrypt/live/morphit.example.com/fullchain.pem"

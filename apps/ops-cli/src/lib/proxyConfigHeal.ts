@@ -880,6 +880,69 @@ export function frontendFileMissesAre404(dump: string): boolean {
 	return walk(parseNgx(dump));
 }
 
+/** Addresses that carry an account name ending in what looks like a file
+ *  extension (any part of a Blurt name is 3+ characters: bob.old, ann.git,
+ *  max.svg). */
+const DOTTED_NAME_API = [
+	'/v1/chat-identity/bob.old',
+	'/v1/profiles/max.svg',
+	'/relay/v1/account/availability/ann.git'
+] as const;
+const DOTTED_NAME_PAGES = ['/en/@bob.old', '/en/chat/max.svg'] as const;
+
+/**
+ * Does the frontend send an account name that ends like a file to the app?
+ * The leftover-file rule (`\.(env|git|…|old|…)$`) and the SVG rule are regex
+ * locations, so they beat the plain `/v1/` and `/relay/` prefixes: nginx's
+ * own 404 page came back for /v1/chat-identity/bob.old (that member's chat
+ * key was never published), and /en/@bob.old answered 404 instead of the app
+ * (v1.21.12). Read from what nginx serves: in every server with a `/v1/`
+ * location, the FIRST regex location matching each address (nginx's own
+ * order) must proxy it (API) or hand it to the app (@spa). PURE.
+ */
+export function frontendDottedNamesServed(dump: string): boolean {
+	const servers: NgxDirective[][] = [];
+	const findServers = (list: readonly NgxDirective[]): void => {
+		for (const d of list) {
+			if (d.name === 'server' && d.block) servers.push([...d.block]);
+			else if (d.block && d.name !== 'location') findServers(d.block);
+		}
+	};
+	findServers(parseNgx(dump));
+	const has = (b: readonly NgxDirective[] | null, f: (x: NgxDirective) => boolean): boolean =>
+		(b ?? []).some((x) => f(x) || (x.name !== 'location' && has(x.block, f)));
+	const toSpa = (b: readonly NgxDirective[] | null): boolean =>
+		has(b, (x) => x.name === 'error_page' && x.args.includes('=') && x.args.at(-1) === '@spa') ||
+		has(b, (x) => x.name === 'try_files' && x.args.at(-1) === '@spa');
+	let checked = 0;
+	for (const server of servers) {
+		if (!server.some((d) => d.name === 'location' && d.args[0] === '/v1/')) continue;
+		checked++;
+		const regexes: Array<{ re: RegExp; block: readonly NgxDirective[] | null }> = [];
+		for (const d of server) {
+			if (d.name !== 'location' || (d.args[0] !== '~' && d.args[0] !== '~*')) continue;
+			try {
+				regexes.push({
+					re: new RegExp(d.args[1] ?? '', d.args[0] === '~*' ? 'i' : ''),
+					block: d.block
+				});
+			} catch {
+				return false; // a regex this cannot read: assume the old rule
+			}
+		}
+		const first = (path: string) => regexes.find((r) => r.re.test(path)) ?? null;
+		for (const path of DOTTED_NAME_API) {
+			const m = first(path);
+			if (m !== null && !has(m.block, (x) => x.name === 'proxy_pass')) return false;
+		}
+		for (const path of DOTTED_NAME_PAGES) {
+			const m = first(path);
+			if (m !== null && !toSpa(m.block)) return false;
+		}
+	}
+	return checked > 0;
+}
+
 /** Does this CSP's script-src allow neither inline script nor eval? A policy
  *  without script-src falls back to default-src. PURE. */
 export function cspScriptSrcStrict(csp: string): boolean {
@@ -1271,6 +1334,8 @@ async function verifyFrontendForwarding(
 		missing: string[];
 		edgePort: number | null;
 		filesAre404: boolean;
+		/** An account name ending like a file (bob.old) reaches the app. */
+		dottedNames: boolean;
 		/** Its page CSP allows no inline script and no eval. */
 		cspStrict: boolean;
 		/** No nginx version in its headers or error pages. */
@@ -1339,6 +1404,7 @@ async function verifyFrontendForwarding(
 					...frontendHidesInternals(dump),
 					edgePort: frontendEdgePort(dump),
 					filesAre404: frontendFileMissesAre404(dump),
+					dottedNames: frontendDottedNamesServed(dump),
 					cspStrict: frontendCspStrict(dump),
 					baseCurrent: baseOf() !== false
 				};
@@ -1349,6 +1415,7 @@ async function verifyFrontendForwarding(
 		r.missing.length === 0 &&
 		r.edgePort !== null &&
 		r.filesAre404 &&
+		r.dottedNames &&
 		r.cspStrict &&
 		r.tokensOff &&
 		r.uncleared.length === 0 &&
@@ -1398,6 +1465,9 @@ async function verifyFrontendForwarding(
 			!r.filesAre404
 				? 'answers a missing file (such as /.well-known/…) with the app page instead of 404'
 				: '',
+			!r.dottedNames
+				? 'answers an account name ending like a file (such as bob.old) with its own 404 page, so that member gets no chat key and no profile page'
+				: '',
 			!r.cspStrict ? 'still allows inline script and eval in its Content-Security-Policy' : '',
 			!r.tokensOff ? 'still shows its nginx version in headers and error pages' : '',
 			r.uncleared.length > 0
@@ -1445,6 +1515,10 @@ async function verifyFrontendForwarding(
 			);
 		if (!before.filesAre404)
 			opts.info('✓ The frontend now answers a missing file with 404 instead of the app page.');
+		if (!before.dottedNames)
+			opts.info(
+				'✓ The frontend now sends an account name ending like a file (such as bob.old) to the indexer and the app, not to its own 404 page.'
+			);
 		if (!before.cspStrict)
 			opts.info(
 				'✓ The frontend now sends a Content-Security-Policy with no inline script and no eval (seen in its running config).'

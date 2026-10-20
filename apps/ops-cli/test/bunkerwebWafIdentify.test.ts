@@ -26,7 +26,9 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+	classifyErrorPassThrough,
 	classifyRepeatProbe,
+	ERROR_PROBE_ACCOUNT,
 	healBunkerWebWaf,
 	restartFrontendContainer,
 	selfHealSteps
@@ -136,6 +138,7 @@ if (cmd === 'compose') {
 		const svcs = sub.slice(1).filter((a) => !a.startsWith('-'));
 		// Only a recreate of the edge re-reads its env file.
 		if ((svcs.length === 0 || svcs.includes(st.edgeService)) && /^USE_REAL_IP=no$/m.test(fs.readFileSync(st.envPath, 'utf8'))) st.edgeLive = st.cleanLive;
+		if ((svcs.length === 0 || svcs.includes(st.edgeService)) && !st.edgeKeepsOldErrors) st.errorsPass = /^REVERSE_PROXY_INTERCEPT_ERRORS=no$/m.test(fs.readFileSync(st.envPath, 'utf8'));
 		if ((svcs.length === 0 || svcs.includes(st.edgeService)) && !st.edgeKeepsOldLimit) st.limitLoaded = /^LIMIT_REQ_URL=\^\/\(\?:ipfs\|ipns\|rss\)\/\|\^\/mcp$/m.test(fs.readFileSync(st.envPath, 'utf8'));
 		done(0);
 	}
@@ -150,8 +153,10 @@ const CLEAN = 'http {\n  server {\n    listen 8443 ssl;\n  }\n}\n';
 // The frontend behind BunkerWeb legitimately trusts BunkerWeb's forwarding.
 const FRONTEND_LIVE = 'http {\n  server {\n    set_real_ip_from 172.16.0.0/12;\n  }\n}\n';
 const STEADY_ABC =
-	'MAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 403 404 405 429 444\nCUSTOM_CONF_MODSEC_morphit_json_api_off=x\n' +
-	'LIMIT_REQ_URL=^/(?:ipfs|ipns|rss)/|^/mcp\nLIMIT_REQ_RATE=2r/s\nLIMIT_CONN_MAX_HTTP2=256\n';
+	'MAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 405 444\nBAD_BEHAVIOR_THRESHOLD=50\nBAD_BEHAVIOR_COUNT_TIME=60\nBAD_BEHAVIOR_BAN_TIME=3600\n' +
+	'CUSTOM_CONF_MODSEC_morphit_json_api_off=x\n' +
+	'LIMIT_REQ_URL=^/(?:ipfs|ipns|rss)/|^/mcp\nLIMIT_REQ_RATE=2r/s\nLIMIT_CONN_MAX_HTTP2=256\n' +
+	'REVERSE_PROXY_INTERCEPT_ERRORS=no\n';
 
 interface Ctr {
 	service: string;
@@ -195,6 +200,10 @@ function morphitIo(
 		edgeKeepsOldLimit?: boolean;
 		/** What curl writes for the three-fetch probe instead (e.g. no answer). */
 		repeatAnswer?: string;
+		/** BunkerWeb keeps replacing error answers even when recreated. */
+		edgeKeepsOldErrors?: boolean;
+		/** What curl writes for the error-answer probe instead (e.g. no answer). */
+		errorAnswer?: string;
 		/** How long the three-fetch probe takes, in ms. */
 		repeatDelayMs?: number;
 	} = {}
@@ -231,6 +240,7 @@ const a = process.argv.slice(2);
 const st = JSON.parse(fs.readFileSync(process.env.FAKE_DOCKER_STATE, 'utf8'));
 const urls = a.filter((x, i) => /^https?:/.test(x) && a[i - 1] === '/dev/null');
 if (urls.length === 3) { st.repeatProbes = (st.repeatProbes || 0) + 1; const t = process.env.FAKE_DOCKER_STATE + '.' + process.pid; fs.writeFileSync(t, JSON.stringify(st)); fs.renameSync(t, process.env.FAKE_DOCKER_STATE); if (st.repeatDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, st.repeatDelayMs); process.stdout.write(st.repeatAnswer ?? (st.limitLoaded ? '200 200 200 ' : '200 200 429 ')); process.exit(st.repeatAnswer === undefined ? 0 : 7); }
+if (a.some((x) => x.includes('/v1/chat-identity/zz.morphit-probe'))) { st.errorProbes = (st.errorProbes || 0) + 1; st.errorProbeArgs = a; const t = process.env.FAKE_DOCKER_STATE + '.' + process.pid; fs.writeFileSync(t, JSON.stringify(st)); fs.renameSync(t, process.env.FAKE_DOCKER_STATE); process.stdout.write(st.errorAnswer ?? (st.errorsPass ? '{"status":"error","code":"not_found","message":"no chat identity for @zz.morphit-probe"}\n404' : '<!doctype html> <html lang="en"> <head></head></html>\n404')); process.exit(st.errorAnswer === undefined ? 0 : 28); }
 process.stdout.write(a.join(' ').includes('v1/health') ? (process.env.FAKE_CURL_API || '200') : (process.env.FAKE_CURL_HOME || '200'));
 `
 	);
@@ -300,6 +310,12 @@ process.stdout.write(a.join(' ').includes('v1/health') ? (process.env.FAKE_CURL_
 		cleanLive: opts.edgeKeepsOldConfig ? WIDE : CLEAN,
 		edgeKeepsOldLimit: opts.edgeKeepsOldLimit ?? false,
 		repeatAnswer: opts.repeatAnswer,
+		edgeKeepsOldErrors: opts.edgeKeepsOldErrors ?? false,
+		errorAnswer: opts.errorAnswer,
+		// Passed through at start when the env already turns the replacing off.
+		errorsPass: false as boolean,
+		errorProbes: 0,
+		errorProbeArgs: [] as string[],
 		repeatDelayMs: opts.repeatDelayMs ?? 0,
 		// Loaded at start when the env already carries Morphit's rule.
 		limitLoaded: false as boolean,
@@ -318,6 +334,7 @@ process.stdout.write(a.join(' ').includes('v1/health') ? (process.env.FAKE_CURL_
 		removedIds: [] as number[],
 		restoredCount: 0
 	};
+	state.errorsPass = /^REVERSE_PROXY_INTERCEPT_ERRORS=no$/m.test(readFileSync(envPath, 'utf8'));
 	state.limitLoaded = /^LIMIT_REQ_URL=\^\/\(\?:ipfs\|ipns\|rss\)\/\|\^\/mcp$/m.test(
 		readFileSync(envPath, 'utf8')
 	);
@@ -331,6 +348,8 @@ process.stdout.write(a.join(' ').includes('v1/health') ? (process.env.FAKE_CURL_
 		files,
 		envPath,
 		projEnv,
+		state: () => JSON.parse(readFileSync(statePath, 'utf8')) as typeof state,
+		setState: (st: typeof state) => writeFileSync(statePath, JSON.stringify(st)),
 		async run(fn: () => unknown) {
 			const out: string[] = [];
 			vi.spyOn(process.stdout, 'write').mockImplementation((s: string | Uint8Array) => {
@@ -752,7 +771,7 @@ describe('install summary (wave 6): BunkerWeb + front-end rows are checked by im
 describe('healBunkerWebWaf: the site’s own files are not request-limited', () => {
 	// The edge already runs without the real-IP trust (CLEAN): only the request
 	// limit is under test here.
-	const LIMITLESS = `SERVER_NAME=vigilante.trading\nMAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 405 444\nCUSTOM_CONF_MODSEC_morphit_json_api_off=x\nUSE_REAL_IP=no\nUSE_LIMIT_REQ=yes\nLIMIT_REQ_URL_1=/v1/\nLIMIT_REQ_RATE_1=1800r/m\nLIMIT_REQ_URL_2=/relay/\nLIMIT_REQ_RATE_2=120r/m\n`;
+	const LIMITLESS = `SERVER_NAME=vigilante.trading\nMAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 405 444\nBAD_BEHAVIOR_THRESHOLD=50\nBAD_BEHAVIOR_COUNT_TIME=60\nBAD_BEHAVIOR_BAN_TIME=3600\nCUSTOM_CONF_MODSEC_morphit_json_api_off=x\nREVERSE_PROXY_INTERCEPT_ERRORS=no\nUSE_REAL_IP=no\nUSE_LIMIT_REQ=yes\nLIMIT_REQ_URL_1=/v1/\nLIMIT_REQ_RATE_1=1800r/m\nLIMIT_REQ_URL_2=/relay/\nLIMIT_REQ_RATE_2=120r/m\n`;
 	const line = (env: string, k: string): string | null =>
 		new RegExp(`^${k}=(.*)$`, 'm').exec(env)?.[1] ?? null;
 
@@ -864,4 +883,235 @@ describe('healBunkerWebWaf: the site’s own files are not request-limited', () 
 			process.stdout.isTTY = tty;
 		}
 	}, 30_000);
+});
+
+// morphit.io, v1.21.10: BunkerWeb's default (REVERSE_PROXY_INTERCEPT_ERRORS=yes)
+// replaced every 4xx/5xx answer from the indexer with its own HTML page. The
+// app read "no chat key yet" (404) as "Malformed response from indexer", never
+// published a new member's chat key, and showed a chain refusal (400) without
+// its reason.
+describe('healBunkerWebWaf: the site’s own error answers reach the browser', () => {
+	// Everything else already as Morphit wants it, real-IP trust off (CLEAN):
+	// only the error answers are under test here.
+	const STEADY = `SERVER_NAME=morphit.io\n${STEADY_ABC}USE_REAL_IP=no\n`;
+	const DEFAULT = STEADY.replace('REVERSE_PROXY_INTERCEPT_ERRORS=no\n', '');
+	const recreates = (st: Parameters<typeof ups>[0]) =>
+		ups(st).filter((u) => u.sub.includes('--force-recreate')).length;
+
+	it('a box on BunkerWeb’s default: turned off, BunkerWeb recreated, the indexer’s own 404 proven through it', async () => {
+		const box = morphitIo({ env: DEFAULT, edgeLive: CLEAN });
+		expect(box.state().errorsPass).toBe(false);
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.env).toMatch(/^REVERSE_PROXY_INTERCEPT_ERRORS=no$/m);
+		expect(recreates(r.st)).toBe(1);
+		expect(r.st.errorsPass).toBe(true);
+		expect(r.st.errorProbes).toBe(1);
+		expect(r.out).toMatch(/error answers verified live/);
+		expect(r.out).not.toMatch(/ERR/);
+	});
+
+	it('an operator’s explicit "yes" is turned off too (the app cannot work with it)', async () => {
+		const box = morphitIo({
+			env: DEFAULT + 'REVERSE_PROXY_INTERCEPT_ERRORS="yes"\n',
+			edgeLive: CLEAN
+		});
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.env.match(/^REVERSE_PROXY_INTERCEPT_ERRORS=.*$/gm)).toEqual([
+			'REVERSE_PROXY_INTERCEPT_ERRORS=no'
+		]);
+		expect(r.st.errorsPass).toBe(true);
+	});
+
+	it('already off and passing: nothing written, nothing restarted, checked once', async () => {
+		const box = morphitIo({ env: STEADY, edgeLive: CLEAN });
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.env).toBe(STEADY);
+		expect(ups(r.st)).toEqual([]);
+		expect(r.st.errorProbes).toBe(1);
+		expect(r.out).toMatch(/error answers verified live/);
+	});
+
+	it('off in the file but the running BunkerWeb still replaces them: recreated once, checked again', async () => {
+		const box = morphitIo({ env: STEADY, edgeLive: CLEAN });
+		// The running BunkerWeb started before the line was there.
+		const st0 = box.state();
+		st0.errorsPass = false;
+		box.setState(st0);
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(recreates(r.st)).toBe(1);
+		expect(r.st.errorProbes).toBe(2);
+		expect(r.st.errorsPass).toBe(true);
+		expect(r.out).toMatch(/error answers verified live/);
+	});
+
+	it('still replaced after the recreate: the operator is given the exact command, as a warning', async () => {
+		const { warningCount } = await import('../src/render/term.ts');
+		const box = morphitIo({ env: DEFAULT, edgeLive: CLEAN, edgeKeepsOldErrors: true });
+		const before = warningCount();
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.st.errorsPass).toBe(false);
+		expect(r.st.errorProbes).toBe(2);
+		expect(recreates(r.st)).toBe(2);
+		expect(r.out).toMatch(
+			/ERR \[WARN\] WAF: BunkerWeb still replaces the site's error answers .*sudo docker compose -p bunkerweb .* up -d --no-deps --force-recreate bunkerweb bw-scheduler/
+		);
+		expect(r.out).not.toMatch(/error answers verified live/);
+		expect(warningCount() - before).toBeGreaterThanOrEqual(1);
+	});
+
+	it('no usable answer: said plainly, nothing recreated for it', async () => {
+		const box = morphitIo({ env: STEADY, edgeLive: CLEAN, errorAnswer: '\n000' });
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(ups(r.st)).toEqual([]);
+		expect(r.st.errorProbes).toBe(1);
+		expect(r.out).toMatch(/error-answer check got no usable answer/);
+		expect(r.out).not.toMatch(/error answers verified live/);
+	});
+
+	it('the check goes to THIS server under the site’s name, past any proxy, for a name Blurt cannot create', async () => {
+		const box = morphitIo({ env: STEADY, edgeLive: CLEAN });
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		const a = r.st.errorProbeArgs;
+		expect(a[a.indexOf('--resolve') + 1]).toBe('morphit.io:443:127.0.0.1');
+		expect(a[a.indexOf('--noproxy') + 1]).toBe('*');
+		expect(a[a.indexOf('-w') + 1]).toBe('\n%{http_code}');
+		expect(a).toContain('https://morphit.io/v1/chat-identity/zz.morphit-probe');
+		// "zz" is below Blurt's 3-character minimum per part, so nobody can
+		// publish a key under it; the indexer's own name check accepts it.
+		expect(ERROR_PROBE_ACCOUNT.split('.').some((part) => part.length < 3)).toBe(true);
+		expect(/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/.test(ERROR_PROBE_ACCOUNT)).toBe(true);
+	});
+
+	it('every copy of the line counts: a later "yes" is removed, one "no" kept', async () => {
+		const box = morphitIo({
+			env: STEADY + 'REVERSE_PROXY_INTERCEPT_ERRORS=yes\n',
+			edgeLive: CLEAN
+		});
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.env.match(/^REVERSE_PROXY_INTERCEPT_ERRORS=.*$/gm)).toEqual([
+			'REVERSE_PROXY_INTERCEPT_ERRORS=no'
+		]);
+		expect(r.st.errorsPass).toBe(true);
+	});
+
+	it('no site name in the file: the line is still written, nothing is probed', async () => {
+		const box = morphitIo({
+			env: DEFAULT.replace('SERVER_NAME=morphit.io\n', ''),
+			edgeLive: CLEAN
+		});
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.env).toMatch(/^REVERSE_PROXY_INTERCEPT_ERRORS=no$/m);
+		expect(r.st.errorProbes).toBe(0);
+	});
+
+	it('BunkerWeb’s Compose service sets it itself: named, and no recreate is wasted on it', async () => {
+		const { warningCount } = await import('../src/render/term.ts');
+		const box = morphitIo({ env: STEADY, edgeLive: CLEAN });
+		const st0 = box.state();
+		st0.errorsPass = false;
+		st0.edgeKeepsOldErrors = true;
+		(st0.model.services.bunkerweb as Record<string, unknown>).environment = {
+			REVERSE_PROXY_INTERCEPT_ERRORS: 'yes'
+		};
+		box.setState(st0);
+		const before = warningCount();
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(recreates(r.st)).toBe(0);
+		expect(r.st.errorProbes).toBe(1);
+		expect(r.out).toMatch(
+			/Compose service sets REVERSE_PROXY_INTERCEPT_ERRORS itself \(an environment: entry\)/
+		);
+		expect(warningCount() - before).toBeGreaterThanOrEqual(1);
+	});
+
+	it('BunkerWeb still loading the settings just written: not recreated a second time', async () => {
+		const box = morphitIo({
+			env: DEFAULT,
+			edgeLive: CLEAN,
+			edgeKeepsOldErrors: true,
+			schedLog: ''
+		});
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build, { reloadBudgetMs: 50 }));
+		expect(r.threw).toBeNull();
+		expect(recreates(r.st)).toBe(1);
+		expect(r.st.errorProbes).toBe(1);
+		expect(r.out).toMatch(/had not finished rebuilding its settings/);
+	});
+
+	it('classifyErrorPassThrough: only the indexer’s own not_found passes; only a page is "replaced"', () => {
+		const own =
+			'{"status":"error","code":"not_found","message":"no chat identity for @zz.morphit-probe"}';
+		expect(classifyErrorPassThrough('404', own)).toBe('passes');
+		expect(classifyErrorPassThrough('404', '<!doctype html> <html lang="en">')).toBe('replaced');
+		expect(classifyErrorPassThrough('404', '<HTML><body>404</body></HTML>')).toBe('replaced');
+		expect(classifyErrorPassThrough('200', own)).toBeNull();
+		expect(classifyErrorPassThrough('000', '')).toBeNull();
+		expect(classifyErrorPassThrough('404', '')).toBeNull();
+		expect(classifyErrorPassThrough('404', '{"code":"bad_request"}')).toBeNull();
+		expect(classifyErrorPassThrough('404', 'null')).toBeNull();
+		expect(classifyErrorPassThrough('404', 'Not Found')).toBeNull();
+	});
+});
+
+// Bad-behavior bans: Morphit counts only 401 405 444 (bunkerweb.env.j2 /
+// .example). BunkerWeb's default also counts 404 ("no chat key / no profile
+// yet") and bans for a day after 10 a minute; the heal before v1.21.12 only
+// took 400 out, so boxes without the template's line kept counting 403 404 429.
+describe('healBunkerWebWaf: bad-behavior bans count only what is not ordinary use', () => {
+	const BASE = `SERVER_NAME=morphit.io\n${STEADY_ABC}USE_REAL_IP=no\n`;
+	const withCodes = (codes: string | null, extra = '') =>
+		BASE.replace(
+			/^BAD_BEHAVIOR_STATUS_CODES=.*\n/m,
+			codes === null ? '' : `BAD_BEHAVIOR_STATUS_CODES=${codes}\n`
+		) + extra;
+	const line = (env: string, k: string) => new RegExp(`^${k}=(.*)$`, 'm').exec(env)?.[1] ?? null;
+	const heal = async (env: string) => {
+		const box = morphitIo({ env, edgeLive: CLEAN });
+		return box.run(() => healBunkerWebWaf(box.envPath, box.build));
+	};
+
+	it('no line (BunkerWeb’s default in force) → Morphit’s list', async () => {
+		const r = await heal(withCodes(null));
+		expect(line(r.env, 'BAD_BEHAVIOR_STATUS_CODES')).toBe('401 405 444');
+	});
+	it('BunkerWeb’s own list written out → Morphit’s list', async () => {
+		const r = await heal(withCodes('400 401 403 404 405 429 444'));
+		expect(line(r.env, 'BAD_BEHAVIOR_STATUS_CODES')).toBe('401 405 444');
+	});
+	it('the list this heal wrote before v1.21.12 → Morphit’s list', async () => {
+		const r = await heal(withCodes('"401 403 404 405 429 444"'));
+		expect(line(r.env, 'BAD_BEHAVIOR_STATUS_CODES')).toBe('401 405 444');
+	});
+	it('an operator’s own list only loses 400', async () => {
+		const r = await heal(withCodes('400 401 403 405 444'));
+		expect(line(r.env, 'BAD_BEHAVIOR_STATUS_CODES')).toBe('401 403 405 444');
+		const own = await heal(withCodes('401 403 444'));
+		expect(line(own.env, 'BAD_BEHAVIOR_STATUS_CODES')).toBe('401 403 444');
+	});
+	it('Morphit’s list, quoted: left alone, nothing restarted', async () => {
+		const env = withCodes('"401 405 444"');
+		const r = await heal(env);
+		expect(r.env).toBe(env);
+		expect(ups(r.st)).toEqual([]);
+	});
+	it('threshold, window and ban time: Morphit’s where BunkerWeb’s defaults are in force; an operator’s kept', async () => {
+		const bare = BASE.replace(/^BAD_BEHAVIOR_(THRESHOLD|COUNT_TIME|BAN_TIME)=.*\n/gm, '');
+		const r = await heal(bare);
+		expect(line(r.env, 'BAD_BEHAVIOR_THRESHOLD')).toBe('50');
+		expect(line(r.env, 'BAD_BEHAVIOR_COUNT_TIME')).toBe('60');
+		expect(line(r.env, 'BAD_BEHAVIOR_BAN_TIME')).toBe('3600');
+		const own = await heal(bare + 'BAD_BEHAVIOR_THRESHOLD=20\nBAD_BEHAVIOR_BAN_TIME=600\n');
+		expect(line(own.env, 'BAD_BEHAVIOR_THRESHOLD')).toBe('20');
+		expect(line(own.env, 'BAD_BEHAVIOR_BAN_TIME')).toBe('600');
+		expect(line(own.env, 'BAD_BEHAVIOR_COUNT_TIME')).toBe('60');
+	});
 });

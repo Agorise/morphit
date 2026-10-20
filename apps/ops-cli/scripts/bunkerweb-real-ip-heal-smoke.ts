@@ -31,14 +31,18 @@ const check = (d: string, ok: boolean): void => {
 	}
 };
 
-/** Lines Fixes A–C and E already want, so a case only exercises Fix D. */
+/** Lines Fixes A–C, E and F already want, so a case only exercises Fix D. */
 const STEADY_ABC = [
 	'MAX_CLIENT_SIZE=1m',
-	'BAD_BEHAVIOR_STATUS_CODES=401 403 404 405 429 444',
+	'BAD_BEHAVIOR_STATUS_CODES=401 405 444',
+	'BAD_BEHAVIOR_THRESHOLD=50',
+	'BAD_BEHAVIOR_COUNT_TIME=60',
+	'BAD_BEHAVIOR_BAN_TIME=3600',
 	'CUSTOM_CONF_MODSEC_morphit_json_api_off=x',
 	'LIMIT_REQ_URL=^/(?:ipfs|ipns|rss)/|^/mcp',
 	'LIMIT_REQ_RATE=2r/s',
-	'LIMIT_CONN_MAX_HTTP2=256'
+	'LIMIT_CONN_MAX_HTTP2=256',
+	'REVERSE_PROXY_INTERCEPT_ERRORS=no'
 ].join('\n');
 
 const LIVE_WIDE =

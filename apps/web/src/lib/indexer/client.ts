@@ -159,7 +159,7 @@ async function request<T>(
 		return {
 			ok: false,
 			code: 'network_error',
-			message: `Malformed response from indexer (status ${response.status})`
+			message: nonJsonAnswerMessage(response.status, response.headers?.get?.('content-type') ?? '')
 		};
 	}
 	clearTimeout(timeoutId);
@@ -176,6 +176,29 @@ async function request<T>(
 		message:
 			typeof err.message === 'string' ? err.message : `Indexer returned status ${response.status}`
 	};
+}
+
+/**
+ * What to tell the user when the indexer's address answered with something that
+ * is not the indexer's JSON — almost always a web page from the web server or
+ * firewall in front of it. Before v1.21.12 every such answer read "Malformed
+ * response from indexer", which named neither the layer nor the fix: on
+ * BunkerWeb's default settings a plain "no chat key yet" (404) arrived as its
+ * error page, and that line was all a member saw. PURE.
+ */
+export function nonJsonAnswerMessage(status: number, contentType: string): string {
+	const page = /text\/html/i.test(contentType);
+	if (status === 429)
+		return 'Your Morphit server is limiting requests right now (status 429). Wait a moment and try again.';
+	if (status === 403)
+		return "Your Morphit server's web firewall blocked this request (status 403). If it keeps happening, tell the server's operator.";
+	if (status >= 500)
+		return `Your Morphit server could not reach its indexer (status ${status}). Try again shortly; if it lasts, tell the server's operator.`;
+	// Only an error status: a 200 page (an anti-bot check, a captive portal) is
+	// not a replaced error answer.
+	if (page && status >= 400)
+		return `Your Morphit server's web firewall answered with its own page instead of the indexer's reply (status ${status}), so the reason was lost. Tell the server's operator: the Morphit upgrade lets the reason through.`;
+	return `Malformed response from indexer (status ${status})`;
 }
 
 /** Compose multiple AbortSignals into one — aborts when any input

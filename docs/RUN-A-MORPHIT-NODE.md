@@ -160,7 +160,7 @@ tmux new -s morphit
 
 ```sh
 # on the server
-V=1.21.11
+V=1.21.12
 mkdir -p ~/morphit && cd ~/morphit
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz"
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz.sha256"

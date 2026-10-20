@@ -68,6 +68,7 @@
 		broadcastSignedTransaction
 	} from '$blurt/sign';
 	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
+	import { classifyChainReason } from '$blurt/broadcastErrorClass';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { formatBlurtAmount } from '$lib/orders/fee';
 
@@ -130,6 +131,9 @@
 	 *  instance is unreachable). Blurt meters ops with a tiny BLURT fee (not
 	 *  RC/mana), so balance is rarely the real cause. */
 	function classifyBroadcastError(e: unknown): { messageKey: string; detail?: string } {
+		if (e instanceof ChainRejectedError && classifyChainReason(e.message) === 'low_blurt') {
+			return { messageKey: 'common.broadcast_err.low_blurt' };
+		}
 		if (e instanceof ChainRejectedError) {
 			return { messageKey: 'chat.pay_blurt.error.chain_rejected', detail: e.message };
 		}

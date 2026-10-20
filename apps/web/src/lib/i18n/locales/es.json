@@ -899,7 +899,7 @@
 			"no_account_for_key": "La clave de esta sesión no controla ninguna cuenta en la cadena de bloques. No se emitió nada. Cierra sesión y vuelve a entrar con la clave correcta.",
 			"lookup_failed": "{brand} no pudo contactar con su indexador para comprobar qué cuenta controla esta clave, así que no emitió nada. Revisa tu conexión e inténtalo de nuevo.",
 			"unreachable": "No se pudo contactar con {brand} — o {brand} no pudo alcanzar la red Blurt. Puede estar sin conexión, aún sincronizando, o su conexión a la cadena puede estar bloqueada (algunas redes o países la filtran). Asegúrate de que tu instancia esté en línea y pueda alcanzar la red, y vuelve a intentarlo. (Detalles: {detail})",
-			"low_blurt": "Difundir cuesta una pequeña comisión en BLURT, y las actualizaciones grandes (un avatar, por ejemplo) cuestan más porque la comisión crece con el tamaño. El BLURT líquido de tu cuenta no alcanza para cubrirla. Añade un poco de BLURT líquido a tu cuenta e inténtalo de nuevo. (Cadena: {reason})",
+			"low_blurt": "Publicación rechazada por fondos insuficientes. Compra BLURT para guardar más datos en la cadena.",
 			"too_large": "Esto es demasiado grande para la cadena. Hazlo más pequeño (si es una imagen, elige una más pequeña o sencilla — un SVG compacto o una foto más pequeña) e inténtalo de nuevo. (Cadena: {reason})",
 			"auth": "Tu clave de publicación no está autorizada para publicar en esta cuenta. Cierra sesión y vuelve a entrar con la clave correcta, y reinténtalo. (Cadena: {reason})",
 			"generic_detail": "No se pudo publicar: {detail}. Inténtalo de nuevo — si persiste, ese mensaje es la causa exacta a reportar.",
