@@ -102,6 +102,22 @@ for (const rel of [
 	);
 }
 
+// ── chat (v1.21.13): a failed send is classified by the controller and the
+//    bubble shows the shared wording — it showed the chain's raw text before ──
+{
+	const svc = readFileSync(join(REPO, 'apps/web/src/lib/chat/chatService.ts'), 'utf8');
+	const bubble = readFileSync(join(REPO, 'apps/web/src/lib/components/ChatMessage.svelte'), 'utf8');
+	check(
+		'chat: a failed send is classified (classifyBroadcastError → broadcast_err:<key>)',
+		/classifyBroadcastError\(err, deps\.me\)/.test(svc) && /m\.error = `\$\{BROADCAST_ERR_PREFIX\}\$\{copy\.key\}`/.test(svc)
+	);
+	check(
+		'chat: the bubble renders it as common.broadcast_err.<key>',
+		/message\.error\.startsWith\(BROADCAST_ERR_PREFIX\)/.test(bubble) &&
+			bubble.includes('`common.broadcast_err.${message.error.slice(BROADCAST_ERR_PREFIX.length)}`')
+	);
+}
+
 // ── settings routes through the classifier (no opaque generic-only path) ──
 const settings = readFileSync(join(REPO, 'apps/web/src/routes/[lang]/settings/+page.svelte'), 'utf8');
 check('settings uses the shared broadcastErrorMessage resolver', /broadcastErrorMessage\(/.test(settings));

@@ -23,8 +23,8 @@ Account creation, the welcome payouts, and Web Push — seven HTTP endpoints:
   `account_create` op body from the client, validates rigorously,
   signs with the relay's active key, pays the chain's live
   `account_creation_fee` (~100 BLURT) from the relay's liquid
-  balance, broadcasts, then sends the new account 2 BLURT so it can
-  pay its first operation fees — ~102 BLURT per signup. (Blurt
+  balance, broadcasts, then sends the new account 4 BLURT so it can
+  pay its first operation fees — ~104 BLURT per signup. (Blurt
   disabled account-creation tokens at HF2; there is no fee-free path.)
 - `POST /v1/account/invite` — the signed invite token (and, past a
   per-network threshold, an ALTCHA proof-of-work) that a create

@@ -67,6 +67,22 @@ import { unsealSettled } from './unsealGate';
 
 const KEY = 'morphit.chat.pub_pins';
 const PENDING_KEY = 'morphit.chat.pub_pin_pending';
+/** v1.21.13 — the same pins for a peer's POSTING key, which the posting-key
+ *  envelope (crypto.ts v3) encrypts to and authenticates with. Stored like the
+ *  chat-key pins (same validation, same lock seal, same sign-out wipe) with a
+ *  fixed reference: a posting key has no op of its own, its account does. */
+const POSTING_KEY = 'morphit.chat.posting_pins';
+const POSTING_PENDING_KEY = 'morphit.chat.posting_pin_pending';
+const POSTING_REF = { blockNum: 0, trxId: '0'.repeat(40) } as const;
+/** A posting pin is the SET of the peer's posting keys that can sign alone
+ *  (base64 strings joined by this; base64 never contains it). */
+const SET_SEP = ',';
+/** v1.21.13 — the chat key THIS account was last seen to have published, per
+ *  account (the indexer's word, or our own publish). Once seen, a later "you
+ *  have published nothing" from the indexer cannot move this account's
+ *  conversations off their chat keys: an op on chain is never withdrawn.
+ *  Stored, sealed and wiped exactly like the pins (it names the account). */
+const OWN_KEY = 'morphit.chat.own_published';
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 const TRX_ID_RE = /^[a-f0-9]{40}$/;
 
@@ -229,9 +245,15 @@ function clearPending(peer: string): void {
 	}
 }
 
-/** The user confirmed "safety number changed" for `peer`: the pending key
- *  becomes the pin. Returns false when nothing was pending. */
-export function acceptKeyChange(peer: string): boolean {
+/** Which of a peer's keys a change is about: their published chat key, or
+ *  their posting keys (the posting-key envelope). Accepting one never accepts
+ *  the other — the user saw, and compared, only the one that was shown. */
+export type KeyKind = 'chat' | 'posting';
+
+/** The user confirmed "safety number changed" for `peer`: the pending key of
+ *  that `kind` becomes the pin. Returns false when nothing was pending. */
+export function acceptKeyChange(peer: string, kind: KeyKind): boolean {
+	if (kind === 'posting') return acceptPostingKeyChange(peer);
 	const next = pendingKeyChange(peer);
 	if (next === null) return false;
 	const old = getPin(peer);
@@ -286,12 +308,18 @@ export function clearPin(peer: string): void {
 export function clearAllPins(): void {
 	safeLocal.remove(KEY);
 	safeLocal.remove(PENDING_KEY);
+	safeLocal.remove(POSTING_KEY);
+	safeLocal.remove(POSTING_PENDING_KEY);
+	safeLocal.remove(OWN_KEY);
 }
 
 /** Remove the readable pins and pending changes (a sealed copy stays). */
 export function dropReadablePins(): void {
 	safeLocal.remove(KEY);
 	safeLocal.remove(PENDING_KEY);
+	safeLocal.remove(POSTING_KEY);
+	safeLocal.remove(POSTING_PENDING_KEY);
+	safeLocal.remove(OWN_KEY);
 }
 
 /** The pins of a locked session, encrypted (see the file header): one slot
@@ -323,9 +351,21 @@ function sealSlot(postingPriv: Uint8Array): string {
 export function sealPinsForLock(postingPriv: Uint8Array): Promise<void> {
 	const pins = readRaw();
 	const pending = readRaw(PENDING_KEY);
+	const postingPins = readRaw(POSTING_KEY);
+	const postingPending = readRaw(POSTING_PENDING_KEY);
+	const ownPublished = readRaw(OWN_KEY);
 	safeLocal.remove(KEY);
 	safeLocal.remove(PENDING_KEY);
-	if (Object.keys(pins).length === 0 && Object.keys(pending).length === 0) {
+	safeLocal.remove(POSTING_KEY);
+	safeLocal.remove(POSTING_PENDING_KEY);
+	safeLocal.remove(OWN_KEY);
+	if (
+		Object.keys(pins).length === 0 &&
+		Object.keys(pending).length === 0 &&
+		Object.keys(postingPins).length === 0 &&
+		Object.keys(postingPending).length === 0 &&
+		Object.keys(ownPublished).length === 0
+	) {
 		return Promise.resolve();
 	}
 	const priv = Uint8Array.from(postingPriv);
@@ -340,7 +380,10 @@ export function sealPinsForLock(postingPriv: Uint8Array): Promise<void> {
 			const plain = new TextEncoder().encode(
 				JSON.stringify({
 					pins: { ...(prior?.pins ?? {}), ...pins },
-					pending: { ...(prior?.pending ?? {}), ...pending }
+					pending: { ...(prior?.pending ?? {}), ...pending },
+					postingPins: { ...(prior?.postingPins ?? {}), ...postingPins },
+					postingPending: { ...(prior?.postingPending ?? {}), ...postingPending },
+					ownPublished: { ...(prior?.ownPublished ?? {}), ...ownPublished }
 				})
 			);
 			const ct = sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
@@ -367,7 +410,16 @@ export function sealPinsForLock(postingPriv: Uint8Array): Promise<void> {
 /** The seal being written, if any (see unsealPins). */
 let sealing: Promise<void> = Promise.resolve();
 
-function openSealed(slot: string, key: Uint8Array): { pins: PinMap; pending: PinMap } | null {
+function openSealed(
+	slot: string,
+	key: Uint8Array
+): {
+	pins: PinMap;
+	pending: PinMap;
+	postingPins: PinMap;
+	postingPending: PinMap;
+	ownPublished: PinMap;
+} | null {
 	const raw = safeLocal.get(slot);
 	if (raw === null) return null;
 	try {
@@ -383,11 +435,17 @@ function openSealed(slot: string, key: Uint8Array): { pins: PinMap; pending: Pin
 		const parsed = JSON.parse(new TextDecoder().decode(plain)) as {
 			pins?: unknown;
 			pending?: unknown;
+			postingPins?: unknown;
+			postingPending?: unknown;
+			ownPublished?: unknown;
 		};
 		// Validated exactly like the readable copy.
 		return {
 			pins: parsePinMap(JSON.stringify(parsed.pins ?? {})),
-			pending: parsePinMap(JSON.stringify(parsed.pending ?? {}))
+			pending: parsePinMap(JSON.stringify(parsed.pending ?? {})),
+			postingPins: parsePinMap(JSON.stringify(parsed.postingPins ?? {})),
+			postingPending: parsePinMap(JSON.stringify(parsed.postingPending ?? {})),
+			ownPublished: parsePinMap(JSON.stringify(parsed.ownPublished ?? {}))
 		};
 	} catch {
 		return null; // damaged: nothing to restore
@@ -417,11 +475,154 @@ export async function unsealPins(
 		if (sealed === null) return false;
 		writeRaw({ ...readRaw(), ...sealed.pins });
 		writeRaw({ ...sealed.pending, ...readRaw(PENDING_KEY) }, PENDING_KEY);
+		writeRaw({ ...readRaw(POSTING_KEY), ...sealed.postingPins }, POSTING_KEY);
+		writeRaw({ ...sealed.postingPending, ...readRaw(POSTING_PENDING_KEY) }, POSTING_PENDING_KEY);
+		writeRaw({ ...sealed.ownPublished, ...readRaw(OWN_KEY) }, OWN_KEY);
 		safeLocal.remove(slot);
 		return true;
 	} finally {
 		sodium.memzero(key);
 	}
+}
+
+// ─── Posting-key pins (v1.21.13) ─────────────────────────────────
+
+const splitSet = (v: string | undefined): string[] =>
+	v === undefined ? [] : v.split(SET_SEP).filter((k) => k.length > 0);
+const joinSet = (keys: readonly string[]): string => [...keys].join(SET_SEP);
+
+/** The posting keys pinned for `peer` (base64, 33 bytes each); empty when
+ *  none are pinned. A v3 message from `peer` is authenticated only by one of
+ *  these, and ours to them is encrypted only to these. */
+export function pinnedPostingFor(peer: string): string[] {
+	if (!ACCOUNT_NAME_RE.test(peer)) return [];
+	return splitSet(readRaw(POSTING_KEY)[peer]?.pubB64);
+}
+
+/** A changed set of posting keys for `peer` waiting for the user's
+ *  confirmation, or null. */
+export function pendingPostingKeyChange(peer: string): string[] | null {
+	if (!ACCOUNT_NAME_RE.test(peer)) return null;
+	const v = readRaw(POSTING_PENDING_KEY)[peer]?.pubB64;
+	return v === undefined ? null : splitSet(v);
+}
+
+function writePostingPin(peer: string, keys: readonly string[]): void {
+	const pins = readRaw(POSTING_KEY);
+	pins[peer] = { ...POSTING_REF, pubB64: joinSet(keys) };
+	writeRaw(pins, POSTING_KEY);
+}
+
+function acceptPostingKeyChange(peer: string): boolean {
+	const next = pendingPostingKeyChange(peer);
+	if (next === null || next.length === 0) return false;
+	writePostingPin(peer, next);
+	const pending = readRaw(POSTING_PENDING_KEY);
+	delete pending[peer];
+	writeRaw(pending, POSTING_PENDING_KEY);
+	return true;
+}
+
+/** The Verify-peer panel: the user compared the number made from exactly
+ *  these keys and it matched — they become the pin (any pending change is
+ *  dropped: what was accepted is what was shown). */
+export function acceptPostingKeysShown(peer: string, keysB64: readonly string[]): boolean {
+	if (!ACCOUNT_NAME_RE.test(peer) || keysB64.length === 0) return false;
+	writePostingPin(peer, keysB64);
+	const pending = readRaw(POSTING_PENDING_KEY);
+	if (peer in pending) {
+		delete pending[peer];
+		writeRaw(pending, POSTING_PENDING_KEY);
+	}
+	return true;
+}
+
+/** What the chain's posting keys mean against the pin, WITHOUT changing
+ *  anything (the Verify-peer panel shows it before the user decides). */
+export type PostingPinView =
+	| { kind: 'first_use'; keys: string[] }
+	| { kind: 'pinned'; keys: string[] }
+	| { kind: 'changed'; pinned: string[]; chain: string[] };
+
+export function peekPostingKeyPin(peer: string, chainKeysB64: readonly string[]): PostingPinView {
+	const chain = [...chainKeysB64];
+	const pinned = pinnedPostingFor(peer);
+	if (pinned.length === 0) return { kind: 'first_use', keys: chain };
+	// Every key on the account now is one the user already trusts: use those.
+	// (A key REMOVED from the account narrows the pin — fewer keys can speak
+	// for the peer, none is added. An ADDED key is a change.)
+	if (chain.length > 0 && chain.every((k) => pinned.includes(k))) {
+		return { kind: 'pinned', keys: chain };
+	}
+	return { kind: 'changed', pinned, chain };
+}
+
+/**
+ * The posting keys to encrypt to (and to authenticate `peer` by), given the
+ * keys that can sign alone on their account now (`chainKeysB64`, as the
+ * indexer read them from the chain).
+ *
+ *  - Not pinned: pin them (trust on first use — the chain's answer, read like
+ *    every other key check through this instance's indexer) — unless
+ *    `needsConsent` (the peer's CHAT key is pinned here: the user already
+ *    trusts a key of theirs, and a first posting set must not slip in beside
+ *    it on an indexer's word). Then it is held as a pending change and
+ *    refused with `pub_pin_posting_key_changed`, like a changed set.
+ *  - Every key on the account is pinned already: use them; the pin narrows
+ *    to them when some were removed.
+ *  - The account has a key that is not pinned: a change — the peer reset or
+ *    added a key, or someone is substituting one. Held back as a pending
+ *    change (acceptKeyChange(peer, 'posting') after comparing the new safety
+ *    number) and refused with `pub_pin_posting_key_changed`. Never silently.
+ */
+export async function resolvePostingKeyPin(
+	peer: string,
+	chainKeysB64: readonly string[],
+	opts: { needsConsent?: boolean } = {}
+): Promise<string[]> {
+	if (!ACCOUNT_NAME_RE.test(peer) || chainKeysB64.length === 0) {
+		throw new PubPinError(
+			PUB_PIN_ERROR.malformed_indexer_response,
+			peer,
+			`no usable posting key for @${peer}`
+		);
+	}
+	// The pins a Lock sealed are compared against too.
+	await unsealSettled();
+	const view = peekPostingKeyPin(peer, chainKeysB64);
+	if (view.kind === 'changed' || (view.kind === 'first_use' && opts.needsConsent === true)) {
+		const pending = readRaw(POSTING_PENDING_KEY);
+		pending[peer] = {
+			...POSTING_REF,
+			pubB64: joinSet(view.kind === 'changed' ? view.chain : view.keys)
+		};
+		writeRaw(pending, POSTING_PENDING_KEY);
+		throw new PubPinError(
+			PUB_PIN_ERROR.posting_key_changed,
+			peer,
+			`@${peer}'s posting keys changed; not used until the new safety number is accepted`
+		);
+	}
+	if (view.kind === 'first_use' || view.keys.length !== pinnedPostingFor(peer).length) {
+		writePostingPin(peer, view.keys);
+	}
+	return view.keys;
+}
+
+// ─── This account's own published chat key (v1.21.13) ─────────────
+
+/** The chat key `account` was last seen to have published (base64), or null. */
+export function ownPublishedRecord(account: string): string | null {
+	if (!ACCOUNT_NAME_RE.test(account)) return null;
+	return readRaw(OWN_KEY)[account]?.pubB64 ?? null;
+}
+
+/** Remember that `account`'s chat key on chain is `pubB64`. */
+export function recordOwnPublished(account: string, pubB64: string): void {
+	if (!ACCOUNT_NAME_RE.test(account) || pubB64.length === 0) return;
+	const m = readRaw(OWN_KEY);
+	m[account] = { ...POSTING_REF, pubB64 };
+	writeRaw(m, OWN_KEY);
 }
 
 /** For tests / debugging only: list all currently-pinned peers. */
@@ -443,7 +644,14 @@ export const PUB_PIN_ERROR = {
 	malformed_indexer_response: 'pub_pin_malformed_indexer_response',
 	/** The peer's key changed. Not an error the user can do nothing about:
 	 *  they compare the new safety number and accept it (acceptKeyChange). */
-	key_changed: 'pub_pin_key_changed'
+	key_changed: 'pub_pin_key_changed',
+	/** The peer's POSTING keys changed (the posting-key envelope); accepted
+	 *  separately from a chat key (acceptKeyChange(peer, 'posting')). */
+	posting_key_changed: 'pub_pin_posting_key_changed',
+	/** The indexer says a peer whose chat key is pinned here has none. An op
+	 *  on chain is never withdrawn, so this is a wrong or hostile answer: the
+	 *  send stops instead of moving to keys nobody here has checked. */
+	withdrawn: 'pub_pin_withdrawn'
 } as const;
 export type PubPinErrorCode = (typeof PUB_PIN_ERROR)[keyof typeof PUB_PIN_ERROR];
 

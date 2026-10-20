@@ -124,9 +124,15 @@ import {
 	pinnedPubsFor,
 	replacedPubsFor,
 	pendingKeyChange,
+	resolvePostingKeyPin,
+	pinnedPostingFor,
+	ownPublishedRecord,
+	recordOwnPublished,
+	PUB_PIN_ERROR,
 	type ChatPubPin
 } from '$lib/chat/pubPin';
 import { ChainRelayError } from '$net/chainRelay';
+import { unsealSettled } from '$lib/chat/unsealGate';
 
 /** LocalMessage.error sentinel for "the chain relay could not be reached".
  *  Mapped to `chat.security.chain_unreachable` by ChatMessage.svelte, exactly
@@ -145,8 +151,80 @@ import {
 	decryptSelfCopy,
 	decodeChatPub,
 	DecryptError,
-	type ChatEnvelopeWire
+	encryptToPostingKey,
+	decryptPostingEnvelope,
+	decryptPostingSelfCopy,
+	decodePostingPubBLT,
+	encodeChatPub,
+	postingReader,
+	wipePostingReader,
+	NotForThisKeyError,
+	MAX_RECIPIENT_KEYS,
+	type ChatEnvelopeWire,
+	type PostingEnvelopeWire,
+	type PostingReader
 } from '$lib/chat/crypto';
+import { classifyBroadcastError } from '$blurt/broadcastErrorClass';
+import { fetchAccountKeys } from '$blurt/accountKeys';
+
+/** A long history is opened a few messages at a time, letting the page paint
+ *  and take input between batches: opening a posting-key message is ~3–6 ms
+ *  of crypto on a server CPU and several times that on a phone. */
+export const DECRYPT_YIELD_EVERY = 8;
+/** Give the main thread a turn: a macrotask through MessageChannel (not a
+ *  timer, so it is not clamped or throttled). The runtime's
+ *  ChatControllerDeps.yieldToMain. */
+export function yieldToMainThread(): Promise<void> {
+	if (typeof MessageChannel === 'undefined') return Promise.resolve();
+	return new Promise((resolve) => {
+		const ch = new MessageChannel();
+		ch.port1.onmessage = () => {
+			ch.port1.close();
+			resolve();
+		};
+		ch.port2.postMessage(0);
+	});
+}
+
+const isStringArray = (x: unknown): x is string[] =>
+	Array.isArray(x) && x.every((e) => typeof e === 'string');
+
+/** LocalMessage.error for a recipient account the chain does not have (a
+ *  mistyped direct message). Mapped by ChatMessage.svelte. */
+export const PEER_NOT_FOUND_SENTINEL = 'peer_not_found';
+/** LocalMessage.error for an account with no posting key that can sign on
+ *  its own (its posting authority is other accounts, or a multi-signature
+ *  set): nothing can be encrypted to it, and no Morphit session can hold it. */
+export const PEER_NO_POSTING_KEY_SENTINEL = 'peer_no_posting_key';
+/** A failed lookup of a key (ours or the peer's) is asked again only after
+ *  this long, so a history full of messages costs one lookup, not one each.
+ *  Retry asks at once. */
+export const KEY_LOOKUP_RETRY_MS = 30_000;
+/** What this account's published chat key is, against the one it derives:
+ *  the same ('current'), another one ('stale' — the posting key changed and
+ *  the new one is not published yet), or none at all. */
+export type OwnChatKeyStatus = 'current' | 'stale' | 'none';
+/** LocalMessage.error prefix for a broadcast the network or the instance
+ *  refused: the rest is a `common.broadcast_err.*` key (the wording every
+ *  chain-write screen uses — "Broadcast rejected due to insufficient
+ *  funds…"), its values in LocalMessage.errorValues. */
+export const BROADCAST_ERR_PREFIX = 'broadcast_err:';
+
+/** What one send attempt is encrypted into: v2 (both chat keys published) or
+ *  v3 (the posting-key envelope, crypto.ts). */
+export interface SealedEnvelope {
+	v?: 2 | 3;
+	ciphertext: string;
+	ephemeralPub: string;
+	nonce: string;
+	selfCiphertext?: string;
+	selfNonce?: string;
+	/** v3: the sender's posting key, the recipient's posting keys and the
+	 *  content key wrapped for each of them (crypto.ts PostingEnvelopeWire). */
+	senderKey?: string;
+	recipientKeys?: readonly string[];
+	wraps?: readonly string[];
+}
 
 /** A message as the UI sees it. Synthesis of local optimistic
  *  state + (potentially) a confirmed server record. */
@@ -189,6 +267,11 @@ export interface LocalMessage {
 	/** Non-null only in the 'failed' state. Populated by the
 	 *  broadcast catch block. Used by the "Tap to retry" UI. */
 	error: string | null;
+	/** Values for a `broadcast_err:` error's message (its `{reason}`, …). */
+	errorValues?: Record<string, string>;
+	/** Set while this own message failed before reaching the network: its key
+	 *  in the kept-past-this-view list of unsent messages (v1.21.13). */
+	unsentId?: string;
 	/** Tags this message has previously been sent under, oldest first — a retry
 	 *  mints a new one, and the copy sent under an older one can still arrive.
 	 *  Kept so that late original reconciles instead of appearing twice. */
@@ -223,6 +306,10 @@ export interface LocalMessage {
 	 *  UI renders with muted styling and an explanatory tooltip
 	 *  rather than silently showing the raw ciphertext. */
 	decryptFailed: boolean;
+	/** v1.21.13: why it failed, when that is worth telling — 'other_key': a
+	 *  posting-key message made for ANOTHER posting key of this account (one
+	 *  this session does not hold; an account can list several). */
+	decryptFailedReason?: 'other_key';
 	/** True for a message from the PEER that arrived in the older v1 envelope:
 	 *  it decrypted, but anyone who knows our public chat key could have
 	 *  written it, so its sender is not proved. The UI says so, and a payment
@@ -423,14 +510,67 @@ export interface ChatControllerDeps {
 		recipientAccount: string,
 		sender: { priv: Uint8Array; pub: Uint8Array },
 		includeSelfCopy: boolean
-	): Promise<{
-		v?: 2;
-		ciphertext: string;
-		ephemeralPub: string;
-		nonce: string;
-		selfCiphertext?: string;
-		selfNonce?: string;
-	}>;
+	): Promise<SealedEnvelope>;
+	/**
+	 * v1.21.13 — the posting-key envelope (v3, crypto.ts), for a pair where
+	 * either side has no published chat key: a message then still goes on chain
+	 * for an offline recipient who never opened chat (or cannot pay to publish a
+	 * key), and their replies open on our side. All optional: absent, the old
+	 * behaviour (`peer_not_ready`) applies — tests that predate it.
+	 *
+	 * `fetchPostingPubs`: the account's posting keys that can sign on their
+	 * own (at most MAX_RECIPIENT_KEYS), as the chain lists them; [] when it has
+	 * none; null when the chain has no such account. Throws when the chain
+	 * could not be asked.
+	 */
+	fetchPostingPubs?(account: string): Promise<Uint8Array[] | null>;
+	/** The posting keys of `peer` to encrypt to and to authenticate them with,
+	 *  pinned like a chat key (pubPin.resolvePostingKeyPin): the set first
+	 *  seen; an added key is refused (PubPinError
+	 *  'pub_pin_posting_key_changed') until the user accepts the new safety
+	 *  number. Optional: absent, the chain's keys are used (tests). */
+	pinPostingKey?(
+		peer: string,
+		chainKeys: readonly Uint8Array[],
+		opts?: { needsConsent?: boolean }
+	): Promise<Uint8Array[]>;
+	/** The posting keys pinned for `peer`, without asking anyone: what a v3
+	 *  message from them is authenticated by. */
+	pinnedPostingKeys?(peer: string): readonly Uint8Array[];
+	/** Let the page paint between batches of DECRYPT_YIELD_EVERY messages
+	 *  while a history is opened. Absent: no pause (tests). */
+	yieldToMain?(): Promise<void>;
+	/** Our own chat key on chain against the one we derive (OwnChatKeyStatus).
+	 *  Throws when it could not be determined — then nothing is sent (retry):
+	 *  guessing could move a conversation off keys the user checked. A v2
+	 *  message is opened by the peer with our PUBLISHED key, so only 'current'
+	 *  sends v2. */
+	myChatKeyStatus?(): Promise<OwnChatKeyStatus>;
+	encryptPosting?(
+		plaintext: string,
+		recipientPostingPubs: readonly Uint8Array[],
+		live: LiveIdentity,
+		senderAccount: string,
+		recipientAccount: string,
+		includeSelfCopy: boolean
+	): Promise<SealedEnvelope>;
+	/** Open a v3 message to us; `authenticated` when its sender key is one of
+	 *  `senderPostingPubs` (their pinned keys). Null when it does not open;
+	 *  'other_key' when it was made for other posting keys of our account. */
+	decryptPosting?(
+		envelope: SealedEnvelope,
+		live: LiveIdentity,
+		senderAccount: string,
+		recipientAccount: string,
+		senderPostingPubs: readonly Uint8Array[]
+	): Promise<{ text: string; authenticated: boolean } | null | 'other_key'>;
+	/** Open our own self-copy of a v3 message we sent. Null when it does not. */
+	decryptPostingSelfCopy?(
+		envelope: SealedEnvelope,
+		live: LiveIdentity,
+		senderAccount: string,
+		recipientAccount: string
+	): Promise<string | null>;
 	/** Decrypt an envelope. `senderPubs` are the sender's pinned chat keys
 	 *  (current first), which a v2 envelope must open with. Returns the
 	 *  plaintext and whether the sender is proved (a bare string counts as
@@ -712,6 +852,8 @@ function rememberOwnSent(me: string, clientTag: string, plaintext: string): void
 export function clearOwnSentPlaintextCache(): void {
 	ownSentPlaintext.clear();
 	unconfirmedOwnSends.clear();
+	unsentOwnSends.clear();
+	forgetPostingReader();
 	// This is the lock hook — identity.ts calls it from
 	// lockSession() and reset(). Clearing the maps was not enough: a controller
 	// still mounted kept the decrypted transcript on screen and its derived chat
@@ -755,6 +897,28 @@ interface UnconfirmedOwnSend {
 }
 const UNCONFIRMED_OWN_MAX = 200;
 const unconfirmedOwnSends = new Map<string, UnconfirmedOwnSend>();
+
+/**
+ * Our own sends that FAILED before the network took them, kept past the view
+ * that sent them (v1.21.13). A failed message lived only in its conversation
+ * controller, so leaving the chat and coming back showed nothing where it had
+ * been — the sender's words gone, and no Retry. Restored on return, failed,
+ * with the reason and Retry. Same rules as the lists above: keep-history mode
+ * only, in memory only, cleared on lock and sign-out, bounded.
+ */
+interface UnsentOwnSend {
+	readonly text: string;
+	readonly error: string | null;
+	readonly errorValues: Record<string, string> | null;
+	readonly priorTags: readonly string[];
+	readonly atMs: number;
+}
+const UNSENT_OWN_MAX = 200;
+let unsentSeq = 0;
+const unsentOwnSends = new Map<string, UnsentOwnSend>();
+function unsentKey(me: string, peer: string, order: string | null, id: string): string {
+	return `${me}\t${peer}\t${order ?? ''}\t${id}`;
+}
 function unconfirmedKey(me: string, peer: string, order: string | null, tag: string): string {
 	return `${me}\t${peer}\t${order ?? ''}\t${tag}`;
 }
@@ -829,10 +993,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	let myChatIdentity: { priv: Uint8Array; pub: Uint8Array } | null = null;
 
 	/** Cached fetch of the peer's published chat pubkey. Null means
-	 *  "not yet looked up"; a fetched-and-absent peer is cached as
-	 *  `{ pub: null }` via the peerPubUnknown flag to avoid spam
-	 *  polling their identity endpoint while they haven't set up
-	 *  chat yet. */
+	 *  "not yet looked up"; a fetched-and-absent peer is remembered via
+	 *  peerPubUnknown for the rest of the conversation (Retry asks again), so
+	 *  each send to someone without a chat key costs no lookup. */
 	let peerChatPub: Uint8Array | null = null;
 	let peerPubUnknown = false;
 
@@ -844,18 +1007,297 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		return myChatIdentity;
 	}
 
+	const nowMs = (): number => deps.now().getTime();
+
+	/** One lookup at a time: the warm-up at start and a send that comes before
+	 *  it finished share the same request. */
+	let peerPubInFlight: Promise<Uint8Array | null> | null = null;
+	/** A failed lookup, asked again only after KEY_LOOKUP_RETRY_MS (Retry: at
+	 *  once), so each send does not wait out the timeout again. */
+	let peerPubFailed: { at: number; err: unknown } | null = null;
 	async function ensurePeerChatPub(): Promise<Uint8Array | null> {
 		if (peerChatPub) {
 			return peerChatPub;
 		}
 		if (peerPubUnknown) return null;
-		const fetched = await deps.fetchPeerChatPub(deps.peer);
-		if (fetched === null) {
-			peerPubUnknown = true;
-			return null;
+		if (peerPubInFlight !== null) return peerPubInFlight;
+		if (peerPubFailed !== null && nowMs() - peerPubFailed.at < KEY_LOOKUP_RETRY_MS) {
+			throw peerPubFailed.err;
 		}
-		peerChatPub = fetched;
-		return fetched;
+		peerPubInFlight = (async () => {
+			const fetched = await deps.fetchPeerChatPub(deps.peer);
+			// The pins a Lock sealed are read only once the unlock's unseal landed.
+			await unsealSettled();
+			if (fetched === null) {
+				// A chat key pinned here was published on chain, and an op on
+				// chain is never withdrawn: "none" is a wrong (or hostile) answer.
+				// Moving on to their posting keys would route around the pin.
+				if ((deps.pinnedPeerPubs?.(deps.peer) ?? []).length > 0) {
+					throw new PubPinError(
+						PUB_PIN_ERROR.withdrawn,
+						deps.peer,
+						`the indexer says @${deps.peer} has no chat key, but one is pinned`
+					);
+				}
+				peerPubUnknown = true;
+				return null;
+			}
+			peerChatPub = fetched;
+			return fetched;
+		})().then(
+			(v) => {
+				peerPubFailed = null;
+				return v;
+			},
+			(err: unknown) => {
+				peerPubFailed = { at: nowMs(), err };
+				throw err;
+			}
+		);
+		try {
+			return await peerPubInFlight;
+		} finally {
+			peerPubInFlight = null;
+		}
+	}
+
+	/** The format of the latest message from the peer whose sender was PROVED:
+	 *  2, 3, or null when none yet. A peer who writes v3 although we hold their
+	 *  chat key does so because, from their side, ours cannot be used (their
+	 *  own key is stale or unpublished, or they see none for us) — so we answer
+	 *  in v3 too, to the posting keys that proved them. Otherwise a member whose
+	 *  published chat key went stale would never read our v2 replies to it
+	 *  (v1.21.13 review 2, M-3). */
+	let peerLastProvedV: 2 | 3 | null = null;
+
+	/** Posting keys per account (v3). Only an answer with keys is kept for the
+	 *  conversation; "no such account" / "no usable key" is asked again on the
+	 *  next send, and a failed read after KEY_LOOKUP_RETRY_MS (or on Retry). */
+	const postingPubsCache = new Map<string, Uint8Array[]>();
+	const postingPubsInFlight = new Map<string, Promise<Uint8Array[] | null>>();
+	const postingPubsFailed = new Map<string, { at: number; err: unknown }>();
+	async function postingPubsOf(account: string): Promise<Uint8Array[] | null> {
+		const hit = postingPubsCache.get(account);
+		if (hit !== undefined) return hit;
+		if (deps.fetchPostingPubs === undefined) return null;
+		const pending = postingPubsInFlight.get(account);
+		if (pending !== undefined) return pending;
+		const failed = postingPubsFailed.get(account);
+		if (failed !== undefined && nowMs() - failed.at < KEY_LOOKUP_RETRY_MS) throw failed.err;
+		const p = deps.fetchPostingPubs(account).then(
+			(pubs) => {
+				postingPubsFailed.delete(account);
+				if (pubs !== null && pubs.length > 0) postingPubsCache.set(account, pubs);
+				return pubs;
+			},
+			(err: unknown) => {
+				postingPubsFailed.set(account, { at: nowMs(), err });
+				throw err;
+			}
+		);
+		postingPubsInFlight.set(account, p);
+		try {
+			return await p;
+		} finally {
+			postingPubsInFlight.delete(account);
+		}
+	}
+
+	/** Our own chat key's status, decided once per conversation. A failure is
+	 *  not kept as an answer: the send fails (retry), and the next one asks
+	 *  again after KEY_LOOKUP_RETRY_MS (Retry: at once). */
+	let myStatus: OwnChatKeyStatus | null = null;
+	let myStatusInFlight: Promise<OwnChatKeyStatus> | null = null;
+	let myStatusFailed: { at: number; err: unknown } | null = null;
+	async function ensureMyStatus(): Promise<OwnChatKeyStatus> {
+		if (myStatus !== null) return myStatus;
+		if (deps.myChatKeyStatus === undefined) return 'current';
+		if (myStatusInFlight !== null) return myStatusInFlight;
+		if (myStatusFailed !== null && nowMs() - myStatusFailed.at < KEY_LOOKUP_RETRY_MS) {
+			throw myStatusFailed.err;
+		}
+		const p = deps.myChatKeyStatus().then(
+			(v) => {
+				myStatusFailed = null;
+				myStatus = v;
+				return v;
+			},
+			(err: unknown) => {
+				myStatusFailed = { at: nowMs(), err };
+				throw err;
+			}
+		);
+		myStatusInFlight = p;
+		try {
+			return await p;
+		} finally {
+			myStatusInFlight = null;
+		}
+	}
+
+	/** Retry: every negative or failed key answer is asked again, and the
+	 *  peer's posting keys are read afresh. */
+	function forgetKeyMisses(): void {
+		peerPubUnknown = false;
+		peerPubFailed = null;
+		myStatusFailed = null;
+		postingPubsFailed.clear();
+		// The peer's posting keys are read again too: a send refused over them
+		// (a changed set) is retried against what the chain says now — the keys
+		// the user just compared in Verify peer, not the answer cached at open.
+		postingPubsCache.delete(deps.peer);
+	}
+
+	/**
+	 * Look up, as the conversation opens, everything the first send may need:
+	 * our own status, the peer's chat key and the peer's posting keys — all at
+	 * once, not one after the other. On a Tor/I2P instance each is a hidden
+	 * round trip of a second or more; done side by side while the user types,
+	 * the first message leaves as fast as any other (the 6-second delivery
+	 * budget). One of them may go unused (seal decides); none is asked twice.
+	 * Best-effort: a send asks again for whatever this could not get.
+	 */
+	function warmUpKeys(): void {
+		// The peer's keys need no session; our own status does (it derives our
+		// key). A session handed over from another tab a moment after the view
+		// opened still finds the peer's lookups done.
+		if (deps.getLiveIdentity() !== null) void ensureMyStatus().catch(() => undefined);
+		void ensurePeerChatPub().catch(() => undefined);
+		void postingPubsOf(deps.peer).catch(() => undefined);
+	}
+
+	/** A key lookup that failed, as LocalMessage.error: a pin verdict keeps its
+	 *  own code; anything else is the chain not answering (retry). */
+	function lookupSentinel(err: unknown): string {
+		return err instanceof PubPinError ? err.code : CHAIN_UNREACHABLE_SENTINEL;
+	}
+
+	/**
+	 * Encrypt one send attempt. ONE place for the first send, every retry and
+	 * nothing else, so the two can never pick differently.
+	 *
+	 * v2 (chat keys) when our published chat key is current and the peer has
+	 * one — every pair that chats today, unchanged. Otherwise v3 (posting keys,
+	 * crypto.ts): it needs nothing from the recipient but their account, so a
+	 * message to someone offline who never opened chat goes on chain and waits
+	 * for them (v1.21.13 — it used to fail with "this recipient hasn't opened
+	 * Morphit chat yet" and was never stored).
+	 *
+	 * Never a silent move off checked keys: a chat-key fetch that FAILS (a pin
+	 * mismatch, the chain unreachable), our own status unknown, or a pinned
+	 * chat key the indexer now calls absent (`pub_pin_withdrawn`) each stop the
+	 * send.
+	 */
+	async function seal(
+		text: string,
+		live: LiveIdentity,
+		includeSelfCopy: boolean
+	): Promise<{ ok: true; envelope: SealedEnvelope } | { ok: false; error: string }> {
+		const postingCapable = deps.fetchPostingPubs !== undefined && deps.encryptPosting !== undefined;
+		let status: OwnChatKeyStatus = 'current';
+		if (postingCapable) {
+			try {
+				status = await ensureMyStatus();
+			} catch (err) {
+				return { ok: false, error: lookupSentinel(err) };
+			}
+		}
+		if (status === 'current' && !(postingCapable && peerLastProvedV === 3)) {
+			let peerPub: Uint8Array | null;
+			try {
+				peerPub = await ensurePeerChatPub();
+			} catch (err) {
+				return { ok: false, error: errorToSentinel(err) };
+			}
+			if (peerPub !== null) {
+				let myId: { priv: Uint8Array; pub: Uint8Array };
+				try {
+					myId = await ensureMyChatIdentity(live);
+				} catch (err) {
+					return { ok: false, error: err instanceof Error ? err.message : String(err) };
+				}
+				try {
+					return {
+						ok: true,
+						envelope: await deps.encrypt(text, peerPub, deps.me, deps.peer, myId, includeSelfCopy)
+					};
+				} catch (err) {
+					return { ok: false, error: err instanceof Error ? err.message : String(err) };
+				}
+			}
+			if (!postingCapable) {
+				// Peer hasn't published their chat identity, and this build cannot
+				// send without it (tests that predate v3). Ask again next time.
+				peerPubUnknown = false;
+				return { ok: false, error: 'peer_not_ready' };
+			}
+		}
+		let pubs: Uint8Array[] | null;
+		try {
+			pubs = await postingPubsOf(deps.peer);
+		} catch (err) {
+			return { ok: false, error: lookupSentinel(err) };
+		}
+		if (pubs === null) return { ok: false, error: PEER_NOT_FOUND_SENTINEL };
+		if (pubs.length === 0) return { ok: false, error: PEER_NO_POSTING_KEY_SENTINEL };
+		// The pinned keys, never silently a changed set (see pinPostingKey).
+		let targets: Uint8Array[];
+		try {
+			// A peer whose chat key is pinned here gets no posting keys on first
+			// use: the user compares them in Verify peer first (review 2, M-1).
+			targets =
+				deps.pinPostingKey !== undefined
+					? await deps.pinPostingKey(deps.peer, pubs, { needsConsent: await peerChatPinned() })
+					: pubs;
+		} catch (err) {
+			return { ok: false, error: lookupSentinel(err) };
+		}
+		try {
+			return {
+				ok: true,
+				envelope: await deps.encryptPosting!(
+					text,
+					targets,
+					live,
+					deps.me,
+					deps.peer,
+					includeSelfCopy
+				)
+			};
+		} catch (err) {
+			return { ok: false, error: err instanceof Error ? err.message : String(err) };
+		}
+	}
+
+	/** The posting keys a v3 message from `sender` is authenticated by: the
+	 *  pinned set, without a lookup. Only when none is pinned, and only for the
+	 *  peer, is the chain asked and its answer pinned (trust on first use) —
+	 *  and not even then for a peer whose chat key is pinned while ours is
+	 *  current: such a peer writes v2, so a v3 "from" them is not taken on the
+	 *  indexer's word. */
+	async function senderPostingCandidates(sender: string): Promise<readonly Uint8Array[]> {
+		await unsealSettled();
+		if (deps.pinnedPostingKeys !== undefined) {
+			const pinned = deps.pinnedPostingKeys(sender);
+			if (pinned.length > 0) return pinned;
+		}
+		if (sender !== deps.peer) return [];
+		const chainKeys = await postingPubsOf(sender).catch(() => null);
+		if (chainKeys === null || chainKeys.length === 0) return [];
+		if (deps.pinPostingKey === undefined) return chainKeys;
+		// Trust on first use only for a peer with no chat key pinned here. For
+		// one who has, the keys are held as a pending change (Verify peer shows
+		// them to compare) and the message stays unproved until the user
+		// accepts them (review 2, M-1).
+		return deps
+			.pinPostingKey(sender, chainKeys, { needsConsent: await peerChatPinned() })
+			.catch(() => []);
+	}
+
+	/** Is a chat key pinned here for the peer (after the unlock's unseal)? */
+	async function peerChatPinned(): Promise<boolean> {
+		await unsealSettled();
+		return (deps.pinnedPeerPubs?.(deps.peer) ?? []).length > 0;
 	}
 
 	function emit(): void {
@@ -921,6 +1363,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				if (m.state === 'failed' && !isDurable) m.sentAtMs = Date.now();
 				m.state = 'confirmed';
 				m.error = null;
+				delete m.errorValues;
+				// It reached the network after all: nothing left to restore.
+				forgetUnsent(m);
 				m.createdAt = new Date(rec.created_at);
 			}
 			// Adopt the durable id the first time it lands; a provisional
@@ -1015,9 +1460,12 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 * we want the conversation to keep rendering, with the one
 	 * bad message shown muted.
 	 */
-	async function decryptOrPlaceholder(
-		rec: ChatMessageRecord
-	): Promise<{ text: string; decryptFailed: boolean; senderUnverified: boolean }> {
+	async function decryptOrPlaceholder(rec: ChatMessageRecord): Promise<{
+		text: string;
+		decryptFailed: boolean;
+		senderUnverified: boolean;
+		otherKey?: true;
+	}> {
 		// If the session is locked, we can't derive our chat
 		// identity. Show placeholder; once the user unlocks and
 		// re-enters the conversation, a fresh controller will
@@ -1044,6 +1492,58 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: false, senderUnverified: false };
 		}
 		const v = typeof h.v === 'number' ? h.v : undefined;
+
+		if (v === 3) {
+			// The posting-key envelope (crypto.ts): opened with our posting key;
+			// its sender is proved when the key it was made with is one of the
+			// sender's posting keys on chain.
+			const sk = h.sk;
+			const rk = h.rk;
+			const wk = h.wk;
+			if (
+				deps.decryptPosting === undefined ||
+				typeof sk !== 'string' ||
+				!isStringArray(rk) ||
+				!isStringArray(wk)
+			) {
+				return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
+			}
+			try {
+				// Proved only by a PINNED key (a changed set waits for the user,
+				// as with chat keys): readable either way.
+				const senderPubs = await senderPostingCandidates(rec.sender).catch(() => []);
+				const opened = await deps.decryptPosting(
+					{
+						v: 3,
+						ciphertext: rec.ciphertext,
+						ephemeralPub,
+						nonce,
+						senderKey: sk,
+						recipientKeys: rk,
+						wraps: wk
+					},
+					live,
+					rec.sender,
+					rec.recipient,
+					senderPubs
+				);
+				if (opened === null) {
+					return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
+				}
+				if (opened === 'other_key') {
+					return {
+						text: ENCRYPTED_PLACEHOLDER,
+						decryptFailed: true,
+						senderUnverified: false,
+						otherKey: true
+					};
+				}
+				if (opened.authenticated && rec.sender === deps.peer) peerLastProvedV = 3;
+				return { text: opened.text, decryptFailed: false, senderUnverified: !opened.authenticated };
+			} catch {
+				return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
+			}
+		}
 
 		try {
 			const id = await ensureMyChatIdentity(live);
@@ -1082,6 +1582,8 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			}
 			const text = typeof opened === 'string' ? opened : opened.text;
 			const authenticated = typeof opened === 'string' ? false : opened.authenticated;
+			if (authenticated && !viaPendingKey && v === 2 && rec.sender === deps.peer)
+				peerLastProvedV = 2;
 			return { text, decryptFailed: false, senderUnverified: !authenticated || viaPendingKey };
 		} catch {
 			// Any unexpected error during decrypt (including
@@ -1111,7 +1613,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 *  rec.sender === deps.me. */
 	async function decryptOwnFromChain(rec: ChatMessageRecord): Promise<string | null> {
 		const live = deps.getLiveIdentity();
-		if (!live || deps.decryptSelfCopy === undefined) return null;
+		if (!live) return null;
 		const header = rec.header;
 		if (typeof header !== 'object' || header === null) return null;
 		const h = header as Record<string, unknown>;
@@ -1128,6 +1630,40 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return null;
 		}
 		const v = typeof h.v === 'number' ? h.v : undefined;
+		if (v === 3) {
+			const sk = h.sk;
+			const rk = h.rk;
+			const wk = h.wk;
+			if (
+				deps.decryptPostingSelfCopy === undefined ||
+				typeof sk !== 'string' ||
+				!isStringArray(rk) ||
+				!isStringArray(wk)
+			) {
+				return null;
+			}
+			try {
+				return await deps.decryptPostingSelfCopy(
+					{
+						v: 3,
+						ciphertext: rec.ciphertext,
+						ephemeralPub,
+						nonce,
+						selfCiphertext,
+						selfNonce,
+						senderKey: sk,
+						recipientKeys: rk,
+						wraps: wk
+					},
+					live,
+					rec.sender,
+					rec.recipient
+				);
+			} catch {
+				return null;
+			}
+		}
+		if (deps.decryptSelfCopy === undefined) return null;
 		try {
 			const id = await ensureMyChatIdentity(live);
 			return await deps.decryptSelfCopy(
@@ -1293,6 +1829,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		const oldestFirst = [...items].reverse();
 		let added = false;
 		const before = messages.length;
+		let opened = 0;
 
 		for (const rec of oldestFirst) {
 			// A durable copy of our own send, in ANY thread
@@ -1341,6 +1878,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// Everything is gated on getLiveIdentity() so a LOCKED session
 				// shows the placeholder, exactly like incoming messages.
 				const ownTag = clientTagFromHeader(rec.header);
+				if (++opened % DECRYPT_YIELD_EVERY === 0 && deps.yieldToMain !== undefined) {
+					await deps.yieldToMain();
+				}
 				const ownFromChain = await decryptOwnFromChain(rec);
 				if (lockedSince()) return 0;
 				const ownCached =
@@ -1421,6 +1961,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					if (mode === 'live') runDueEffects(byId.get(rec.id));
 					continue;
 				}
+				if (++opened % DECRYPT_YIELD_EVERY === 0 && deps.yieldToMain !== undefined) {
+					await deps.yieldToMain();
+					if (lockedSince()) return 0;
+				}
 				const d = await decryptOrPlaceholder(rec);
 				if (lockedSince()) return 0;
 				const declared = priorTagsFromHeader(rec.header, incomingTag);
@@ -1456,6 +2000,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					trxId: isDurable ? rec.source_trx_id || null : null,
 					error: null,
 					decryptFailed: d.decryptFailed,
+					...(d.otherKey === true ? { decryptFailedReason: 'other_key' as const } : {}),
 					...(d.senderUnverified ? { senderUnverified: true } : {}),
 					localSeq: ++localSeqCounter,
 					wire: wireOf(rec),
@@ -1730,66 +2275,20 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		messages.push(local);
 		emit();
 
-		// Real crypto path (ADR-0015).
-		// Step 1: fetch peer's chat pubkey (cached).
-		let peerPub: Uint8Array | null;
-		try {
-			peerPub = await ensurePeerChatPub();
-		} catch (err) {
-			local.state = 'failed';
-			local.error = errorToSentinel(err);
-			emit();
-			return;
-		}
-		if (peerPub === null) {
-			// Peer hasn't published their chat identity yet. The UI
-			// layer maps this exact error string to a localized
-			// "peer not ready" message and suggests retrying after
-			// the peer opens chat once.
-			local.state = 'failed';
-			local.error = 'peer_not_ready';
-			// Reset peerPubUnknown so the next send retries — if the
-			// peer publishes in the meantime, the retry will succeed.
-			peerPubUnknown = false;
-			emit();
-			return;
-		}
-
-		// Step 2: derive my identity (cached). Used for the sender self-copy
-		// (keep-history mode, below) and to keep receive-path decryption fast.
-		let myId: { priv: Uint8Array; pub: Uint8Array };
-		try {
-			myId = await ensureMyChatIdentity(live);
-		} catch (err) {
-			local.state = 'failed';
-			local.error = err instanceof Error ? err.message : String(err);
-			emit();
-			return;
-		}
-
-		// Step 3: encrypt. deps.encrypt wraps crypto.encryptToRecipient (the v2,
-		// sender-authenticated envelope: our own chat identity takes part in
-		// the key). In keep-history mode (the default) the envelope also carries
-		// a sender self-copy — a second ciphertext only the two of us can have
-		// written, which we can reopen — letting us reread our own sent messages
-		// from chain. The opt-in "destroy on leave" mode omits it.
+		// Real crypto path (ADR-0015): v2 to the peer's chat key, or v3 to their
+		// posting key when either side has no chat key (seal). keep-history mode
+		// (the default) adds a self-copy so we can reread our own message from
+		// chain; the opt-in "destroy on leave" mode omits it.
 		const includeSelfCopy = keepHistory;
-		let envelope: {
-			v?: 2;
-			ciphertext: string;
-			ephemeralPub: string;
-			nonce: string;
-			selfCiphertext?: string;
-			selfNonce?: string;
-		};
-		try {
-			envelope = await deps.encrypt(trimmed, peerPub, deps.me, deps.peer, myId, includeSelfCopy);
-		} catch (err) {
+		const sealed = await seal(trimmed, live, includeSelfCopy);
+		if (!sealed.ok) {
 			local.state = 'failed';
-			local.error = err instanceof Error ? err.message : String(err);
+			local.error = sealed.error;
+			rememberUnsent(local);
 			emit();
 			return;
 		}
+		const envelope = sealed.envelope;
 
 		// Step 4: build the on-wire payload and hand it to the node.
 		const payload = wirePayload(clientTag, envelope, []);
@@ -1825,25 +2324,26 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 */
 	function wirePayload(
 		clientTag: string,
-		envelope: {
-			v?: 2;
-			ciphertext: string;
-			ephemeralPub: string;
-			nonce: string;
-			selfCiphertext?: string;
-			selfNonce?: string;
-		},
+		envelope: SealedEnvelope,
 		priorTags: readonly string[]
 	): Record<string, unknown> {
 		const payload: Record<string, unknown> = {
 			recipient: deps.peer,
 			ciphertext: envelope.ciphertext,
 			header: {
-				// The envelope version: 2 = sender-authenticated (crypto.ts).
-				...(envelope.v === 2 ? { v: 2 } : {}),
+				// The envelope version: 2 = sender-authenticated (chat keys),
+				// 3 = posting keys (crypto.ts).
+				...(envelope.v === 2 || envelope.v === 3 ? { v: envelope.v } : {}),
 				client_tag: clientTag,
 				ephemeral_pub: envelope.ephemeralPub,
 				nonce: envelope.nonce,
+				// v3: the posting keys it was made with (public keys) and the
+				// content key wrapped for each recipient key.
+				...(envelope.senderKey !== undefined &&
+				envelope.recipientKeys !== undefined &&
+				envelope.wraps !== undefined
+					? { sk: envelope.senderKey, rk: [...envelope.recipientKeys], wk: [...envelope.wraps] }
+					: {}),
 				// sender self-copy (keep-history mode). Bounded + validated
 				// by the indexer exactly like the main ciphertext.
 				...(envelope.selfCiphertext !== undefined && envelope.selfNonce !== undefined
@@ -1865,6 +2365,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 * message to its own listeners before it answers the request.
 	 */
 	function markAccepted(m: LocalMessage, trxId?: string): void {
+		forgetUnsent(m);
 		if (m.state === 'pending') m.state = 'broadcast';
 		if (m.id === null) {
 			m.sentAtMs = Date.now();
@@ -1905,6 +2406,83 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	function forgetUnconfirmed(tag: string | null): void {
 		if (tag === null) return;
 		unconfirmedOwnSends.delete(unconfirmedKey(deps.me, deps.peer, deps.orderPermlink ?? null, tag));
+	}
+
+	/** A send that never reached the network, kept past this view (v1.21.13):
+	 *  coming back to the chat showed nothing where the failed message had
+	 *  been. Keyed by the message's own sequence in this thread. */
+	function rememberUnsent(m: LocalMessage): void {
+		if (deps.getLiveIdentity() === null) return;
+		if (!shouldAttachSelfCopy(deps.chatSecurityMode?.())) return;
+		if (m.id !== null || m.state !== 'failed') return;
+		const key = unsentKey(
+			deps.me,
+			deps.peer,
+			deps.orderPermlink ?? null,
+			m.unsentId ?? newUnsentId(m)
+		);
+		unsentOwnSends.set(key, {
+			text: m.text,
+			error: m.error,
+			errorValues: m.errorValues ? { ...m.errorValues } : null,
+			// The tags it was sent under, so a copy that reached the network after
+			// all still reconciles into it instead of beside it.
+			priorTags: [
+				...new Set([...(m.priorTags ?? []), ...(m.clientTag !== null ? [m.clientTag] : [])])
+			].slice(-MAX_PRIOR_TAGS),
+			atMs: Date.now()
+		});
+		while (unsentOwnSends.size > UNSENT_OWN_MAX) {
+			const oldest = unsentOwnSends.keys().next().value;
+			if (oldest === undefined) break;
+			unsentOwnSends.delete(oldest);
+		}
+	}
+	function newUnsentId(m: LocalMessage): string {
+		// Its own counter, never a client tag: tags are what goes on chain.
+		m.unsentId = `u${++unsentSeq}`;
+		return m.unsentId;
+	}
+	function forgetUnsent(m: LocalMessage): void {
+		if (m.unsentId === undefined) return;
+		unsentOwnSends.delete(unsentKey(deps.me, deps.peer, deps.orderPermlink ?? null, m.unsentId));
+		delete m.unsentId;
+	}
+	/** Put this thread's never-sent messages back, failed, with Retry. */
+	function restoreUnsent(): void {
+		if (deps.getLiveIdentity() === null) return;
+		const prefix = unconfirmedThreadPrefix(deps.me, deps.peer, deps.orderPermlink ?? null);
+		// "Destroy after you leave this chat" chosen since the send failed: the
+		// words are not shown again, and not kept.
+		const keep = shouldAttachSelfCopy(deps.chatSecurityMode?.());
+		let restored = false;
+		for (const [key, u] of Array.from(unsentOwnSends)) {
+			if (!key.startsWith(prefix)) continue;
+			if (!keep) {
+				unsentOwnSends.delete(key);
+				continue;
+			}
+			const id = key.slice(prefix.length);
+			if (messages.some((m) => m.unsentId === id)) continue;
+			messages.push({
+				id: null,
+				orderPermlink: deps.orderPermlink ?? null,
+				clientTag: null,
+				text: u.text,
+				sender: deps.me,
+				state: 'failed',
+				createdAt: null,
+				trxId: null,
+				error: u.error,
+				...(u.errorValues !== null ? { errorValues: { ...u.errorValues } } : {}),
+				decryptFailed: false,
+				localSeq: ++localSeqCounter,
+				unsentId: id,
+				...(u.priorTags.length > 0 ? { priorTags: [...u.priorTags] } : {})
+			});
+			restored = true;
+		}
+		if (restored) emit();
 	}
 
 	/** Put this thread's unconfirmed own sends back, with their original clocks.
@@ -1962,7 +2540,14 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	function markSendFailed(m: LocalMessage, err: unknown): void {
 		if (m.state === 'pending') {
 			m.state = 'failed';
-			m.error = err instanceof Error ? err.message : String(err);
+			// In the words every chain-write screen uses (out of BLURT: "Broadcast
+			// rejected due to insufficient funds…"), not the chain's raw
+			// assertion text, which the bubble used to show verbatim.
+			const copy = classifyBroadcastError(err, deps.me);
+			m.error = `${BROADCAST_ERR_PREFIX}${copy.key}`;
+			if (copy.values !== undefined) m.errorValues = { ...copy.values };
+			else delete m.errorValues;
+			rememberUnsent(m);
 		} else if (m.id === null && m.sentAtMs === undefined) {
 			m.sentAtMs = Date.now();
 		}
@@ -2025,57 +2610,21 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
-		// Re-run the full crypto path. We don't trust any cached
-		// peerPub for a retry (the peer might have just published
-		// between the failed send and the retry), so reset
-		// peerPubUnknown if it was set.
-		let peerPub: Uint8Array | null;
-		try {
-			peerPub = await ensurePeerChatPub();
-		} catch (err) {
-			target.state = 'failed';
-			target.error = errorToSentinel(err);
-			emit();
-			return;
-		}
-		if (peerPub === null) {
-			target.state = 'failed';
-			target.error = 'peer_not_ready';
-			peerPubUnknown = false; // allow next retry to refetch
-			emit();
-			return;
-		}
-
-		let myId: { priv: Uint8Array; pub: Uint8Array };
-		try {
-			myId = await ensureMyChatIdentity(live);
-		} catch (err) {
-			target.state = 'failed';
-			target.error = err instanceof Error ? err.message : String(err);
-			emit();
-			return;
-		}
-
-		// attach a sender self-copy in keep-history mode (the default),
-		// so a retried message is also readable by us from chain; DESTROY mode
-		// omits it, exactly like the send path (shared helper, no drift).
+		// Re-run the full crypto path (the same choice of envelope as a first
+		// send). A peer that was not found or had no chat key is asked again:
+		// they may have published one since.
 		const includeSelfCopy = shouldAttachSelfCopy(deps.chatSecurityMode?.());
-		let envelope: {
-			v?: 2;
-			ciphertext: string;
-			ephemeralPub: string;
-			nonce: string;
-			selfCiphertext?: string;
-			selfNonce?: string;
-		};
-		try {
-			envelope = await deps.encrypt(text, peerPub, deps.me, deps.peer, myId, includeSelfCopy);
-		} catch (err) {
+		forgetKeyMisses();
+		const sealed = await seal(text, live, includeSelfCopy);
+		if (!sealed.ok) {
 			target.state = 'failed';
-			target.error = err instanceof Error ? err.message : String(err);
+			target.error = sealed.error;
+			delete target.errorValues;
+			rememberUnsent(target);
 			emit();
 			return;
 		}
+		const envelope = sealed.envelope;
 
 		const payload = wirePayload(newTag, envelope, target.priorTags ?? []);
 		try {
@@ -2342,6 +2891,8 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			started = true;
 			controllerLockHooks.add(onSessionLocked);
 			restoreUnconfirmed();
+			restoreUnsent();
+			warmUpKeys();
 
 			// Phase E.5 — wire up SSE if the dep is provided. The
 			// stream delivers a snapshot followed by appended
@@ -2478,6 +3029,203 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
  *  payloads (Q11) — pass the order context from ConversationView's
  *  `orderPermlink` prop, or null when no order context exists.
  */
+const bytesToB64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
+const b64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+/** The runtime's posting-key pin (ChatControllerDeps.pinPostingKey), over the
+ *  pin store in pubPin.ts. */
+export async function pinPostingKeyInStore(
+	peerAccount: string,
+	chainKeys: readonly Uint8Array[],
+	opts: { needsConsent?: boolean } = {}
+): Promise<Uint8Array[]> {
+	return (await resolvePostingKeyPin(peerAccount, chainKeys.map(bytesToB64), opts)).map(b64ToBytes);
+}
+
+/** The posting keys pinned for `peer` (ChatControllerDeps.pinnedPostingKeys). */
+export function pinnedPostingKeysInStore(peer: string): Uint8Array[] {
+	const out: Uint8Array[] = [];
+	for (const b64 of pinnedPostingFor(peer)) {
+		try {
+			out.push(b64ToBytes(b64));
+		} catch {
+			/* a malformed stored key proves nothing */
+		}
+	}
+	return out;
+}
+
+/**
+ * An account's posting keys as the posting-key envelope wants them: the keys
+ * that can sign on their own (weight at least the threshold) — a Morphit
+ * session holds one of them — at most MAX_RECIPIENT_KEYS, unreadable entries
+ * dropped. [] when there is none (the authority is other accounts, or only a
+ * multi-signature set); null when the chain has no such account. PURE.
+ */
+export function orderPostingPubs(
+	keys: { posting?: { weight_threshold?: number; key_auths?: Array<[string, number]> } } | null
+): Uint8Array[] | null {
+	if (keys === null) return null;
+	const auths = keys.posting?.key_auths ?? [];
+	const threshold = keys.posting?.weight_threshold ?? 1;
+	const out: Uint8Array[] = [];
+	for (const [blt, w] of auths) {
+		if (!(w >= threshold)) continue;
+		const k = decodePostingPubBLT(blt);
+		if (k === null || out.some((o) => bytesToB64(o) === bytesToB64(k))) continue;
+		out.push(k);
+		if (out.length === MAX_RECIPIENT_KEYS) break;
+	}
+	return out;
+}
+
+/** Our posting key's reader (its public half, and the per-sender secrets a
+ *  history reuses — crypto.ts PostingReader), for the session's key. Wiped on
+ *  lock and sign-out (clearOwnSentPlaintextCache) and when the key changes. */
+let cachedReader: PostingReader | null = null;
+function readerFor(postingPriv: Uint8Array): PostingReader {
+	if (
+		cachedReader !== null &&
+		cachedReader.priv === postingPriv &&
+		postingPriv.some((b) => b !== 0)
+	) {
+		return cachedReader;
+	}
+	forgetPostingReader();
+	cachedReader = postingReader(postingPriv);
+	return cachedReader;
+}
+/** For tests: the cached reader, or null. */
+export function __cachedPostingReader(): PostingReader | null {
+	return cachedReader;
+}
+function forgetPostingReader(): void {
+	if (cachedReader !== null) wipePostingReader(cachedReader);
+	cachedReader = null;
+}
+
+/** A v3 SealedEnvelope as crypto.ts takes it, or null when a field is missing. */
+function postingWire(envelope: SealedEnvelope): PostingEnvelopeWire | null {
+	if (
+		envelope.senderKey === undefined ||
+		envelope.recipientKeys === undefined ||
+		envelope.wraps === undefined
+	) {
+		return null;
+	}
+	return {
+		v: 3,
+		ciphertext: envelope.ciphertext,
+		ephemeralPub: envelope.ephemeralPub,
+		nonce: envelope.nonce,
+		senderKey: envelope.senderKey,
+		recipientKeys: envelope.recipientKeys,
+		wraps: envelope.wraps,
+		...(envelope.selfCiphertext !== undefined && envelope.selfNonce !== undefined
+			? { selfCiphertext: envelope.selfCiphertext, selfNonce: envelope.selfNonce }
+			: {})
+	};
+}
+
+/** The posting-key envelope's three operations, as the controller takes them
+ *  (pure crypto, no network): used by runtimeDeps and by the tests that run
+ *  two real parties against each other. */
+export const postingEnvelopeCrypto: Pick<
+	Required<ChatControllerDeps>,
+	'encryptPosting' | 'decryptPosting' | 'decryptPostingSelfCopy'
+> = {
+	encryptPosting: async (
+		plaintext,
+		recipientPostingPubs,
+		live,
+		senderAccount,
+		recipientAccount,
+		includeSelfCopy
+	) => {
+		const env = await encryptToPostingKey(
+			plaintext,
+			recipientPostingPubs,
+			live.posting.privateKey,
+			senderAccount,
+			recipientAccount,
+			includeSelfCopy
+		);
+		return {
+			v: 3 as const,
+			ciphertext: env.ciphertext,
+			ephemeralPub: env.ephemeralPub,
+			nonce: env.nonce,
+			senderKey: env.senderKey,
+			recipientKeys: [...env.recipientKeys],
+			wraps: [...env.wraps],
+			...(env.selfCiphertext !== undefined && env.selfNonce !== undefined
+				? { selfCiphertext: env.selfCiphertext, selfNonce: env.selfNonce }
+				: {})
+		};
+	},
+	decryptPosting: async (envelope, live, senderAccount, recipientAccount, senderPostingPubs) => {
+		const wire = postingWire(envelope);
+		if (wire === null) return null;
+		try {
+			return await decryptPostingEnvelope(
+				wire,
+				readerFor(live.posting.privateKey),
+				senderAccount,
+				recipientAccount,
+				senderPostingPubs
+			);
+		} catch (err) {
+			if (err instanceof NotForThisKeyError) return 'other_key';
+			if (err instanceof DecryptError) return null;
+			throw err;
+		}
+	},
+	decryptPostingSelfCopy: async (envelope, live, senderAccount, recipientAccount) => {
+		const wire = postingWire(envelope);
+		if (wire === null) return null;
+		try {
+			return await decryptPostingSelfCopy(
+				wire,
+				readerFor(live.posting.privateKey),
+				senderAccount,
+				recipientAccount
+			);
+		} catch (err) {
+			if (err instanceof DecryptError) return null;
+			throw err;
+		}
+	}
+};
+
+/**
+ * This account's chat key on chain against the one it derives
+ * (ChatControllerDeps.myChatKeyStatus; the Verify-peer panel asks the same).
+ * Once the key has been seen current here (pubPin recordOwnPublished), it
+ * stays current without asking: an op on chain is never withdrawn, so a later
+ * "none" from an indexer cannot move this account's conversations off chat
+ * keys. Throws when the indexer could not say.
+ */
+export async function ownChatKeyStatus(me: string, live: LiveIdentity): Promise<OwnChatKeyStatus> {
+	const mine = await deriveChatIdentity(live.posting.privateKey, me);
+	let derived: string;
+	try {
+		derived = encodeChatPub(mine.pub);
+	} finally {
+		mine.priv.fill(0);
+	}
+	// The record a Lock sealed is readable only once the unlock's unseal landed.
+	await unsealSettled();
+	if (ownPublishedRecord(me) === derived) return 'current';
+	const r = await getChatIdentity(me);
+	if (!r.ok) {
+		if (r.code === 'not_found') return 'none';
+		throw new Error(r.message);
+	}
+	if (r.data.chat_pub !== derived) return 'stale';
+	recordOwnPublished(me, derived);
+	return 'current';
+}
+
 export function runtimeDeps(
 	me: string,
 	peer: string,
@@ -2645,6 +3393,19 @@ export function runtimeDeps(
 				throw err;
 			}
 		},
+		fetchPostingPubs: async (account: string) =>
+			// The account's posting authority, read through this instance's
+			// indexer (the same chain read every other key check here uses).
+			orderPostingPubs(await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account)),
+		myChatKeyStatus: async () => {
+			const live = getLiveIdentity();
+			if (live === null) throw new Error('session locked');
+			return ownChatKeyStatus(me, live);
+		},
+		pinPostingKey: pinPostingKeyInStore,
+		pinnedPostingKeys: pinnedPostingKeysInStore,
+		yieldToMain: yieldToMainThread,
+		...postingEnvelopeCrypto,
 		pinnedPeerPubs: (p: string) => {
 			const out: Uint8Array[] = [];
 			for (const b64 of pinnedPubsFor(p)) {

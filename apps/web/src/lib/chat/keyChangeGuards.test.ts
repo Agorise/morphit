@@ -294,7 +294,7 @@ describe('a replaced chat key reads history, never authenticates', () => {
 				relay
 			)
 			.catch(() => {});
-		expect(pp.acceptKeyChange('alice')).toBe(true);
+		expect(pp.acceptKeyChange('alice', 'chat')).toBe(true);
 
 		const FUNDS = JSON.stringify({
 			v: 1,
@@ -370,5 +370,66 @@ describe('a replaced chat key reads history, never authenticates', () => {
 		expect(m.decryptFailed).toBe(false); // history stays readable
 		expect(m.senderUnverified).toBe(true);
 		expect(recordFundsSent).not.toHaveBeenCalled();
+	});
+});
+
+describe('Lock through the identity store (v1.21.13)', () => {
+	it('seals the posting pins and the own-key record, and forgets a failed send', async () => {
+		const pp = await import('$lib/chat/pubPin');
+		const cs = await import('$lib/chat/chatService');
+		await unlockAs(7);
+		await pp.resolvePostingKeyPin('bob', ['QktFWQ==']);
+		pp.recordOwnPublished('anna', 'TUlORQ==');
+		const live = liveFor(7);
+		const mk = () =>
+			cs.createConversationController({
+				me: 'anna',
+				peer: 'bob',
+				orderPermlink: null,
+				getLiveIdentity: () => live as never,
+				now: () => new Date(),
+				visibilityState: () => 'visible',
+				onVisibilityChange: () => () => undefined,
+				generateClientTag: () => 'f'.repeat(32),
+				fetchHistory: async () => ({ ok: true, items: [], nextCursor: null }),
+				broadcast: async () => {
+					throw new Error('boom');
+				},
+				fetchPeerChatPub: async () => new Uint8Array(32).fill(4),
+				deriveMyChatIdentity: async () => ({ priv: new Uint8Array(32), pub: new Uint8Array(32) }),
+				encrypt: async () => ({ v: 2, ciphertext: 'Yw==', ephemeralPub: 'ZQ==', nonce: 'bg==' }),
+				decrypt: async () => null,
+				onChange: () => undefined
+			});
+		const a = mk();
+		a.start();
+		await a.sendMessage('words that failed');
+		a.destroy();
+		const b = mk();
+		b.start();
+		expect(b.snapshot().map((m) => m.text)).toEqual(['words that failed']);
+		b.destroy();
+
+		const { runExplicitLockExtras } = await import('$lib/chat/explicitLock');
+		const { lockSession } = await import('$stores/identity');
+		runExplicitLockExtras();
+		lockSession();
+		await vi.waitFor(() => expect(sealCount()).toBeGreaterThan(0));
+		// identity.ts clears the in-memory sends through a dynamic import.
+		await vi.waitFor(() => {
+			const c = mk();
+			c.start();
+			const n = c.snapshot().length;
+			c.destroy();
+			expect(n).toBe(0);
+		});
+		expect(everythingStored()).not.toContain('QktFWQ');
+		expect(everythingStored()).not.toContain('TUlORQ');
+		expect(pp.pinnedPostingFor('bob')).toEqual([]);
+		expect(pp.ownPublishedRecord('anna')).toBeNull();
+
+		await unlockAs(7);
+		await vi.waitFor(() => expect(pp.pinnedPostingFor('bob')).toEqual(['QktFWQ==']));
+		expect(pp.ownPublishedRecord('anna')).toBe('TUlORQ==');
 	});
 });

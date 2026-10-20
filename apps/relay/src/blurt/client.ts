@@ -631,7 +631,7 @@ export class BlurtClient {
 	/** Build, sign, and broadcast a `transfer` op sending BLURT from
 	 *  the relay to `to`. Used by the welcome-bonus queue drainer
 	 *  (ADR-0011 §8) to deliver 10 BLURT liquid to a new trader, and
-	 *  by the signup path to send 2 BLURT dust.
+	 *  by the signup path to send the starter BLURT (SIGNUP_DUST_BLURT).
 	 *
 	 *  Signed ONCE (v1.20.0, D2). `onSigned` (the drainer's bookkeeping) runs
 	 *  after signing and BEFORE any node is sent the bytes; if it throws,

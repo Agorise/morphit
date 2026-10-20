@@ -96,8 +96,8 @@ Blurt `transfer` op is involved.
 **Account creation** uses **none** of the user's keys.  The
 relay's active key signs a direct `account_create` op that
 pays the chain's live `account_creation_fee` (~100 BLURT)
-from the relay's own liquid balance, plus a 2 BLURT dust
-transfer — ~102 BLURT per signup (Blurt disabled
+from the relay's own liquid balance, plus a 4 BLURT starter
+transfer — ~104 BLURT per signup (Blurt disabled
 `claim_account` / `create_claimed_account` at hard fork 2, so
 there are no pre-minted ACTs; see "Account-creation key
 handling" below). The user supplies only the **public keys**

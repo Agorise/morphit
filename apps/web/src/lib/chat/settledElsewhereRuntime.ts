@@ -30,6 +30,11 @@ export function runtimeSettledElsewhereDeps(
 		deriveMyChatIdentity: base.deriveMyChatIdentity,
 		encrypt: base.encrypt,
 		broadcast: base.broadcast,
-		generateClientTag: base.generateClientTag
+		generateClientTag: base.generateClientTag,
+		fetchPostingPubs: base.fetchPostingPubs,
+		myChatKeyStatus: base.myChatKeyStatus,
+		pinPostingKey: base.pinPostingKey,
+		pinnedPeerPubs: base.pinnedPeerPubs,
+		encryptPosting: base.encryptPosting
 	};
 }

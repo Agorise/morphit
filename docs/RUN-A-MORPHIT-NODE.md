@@ -109,7 +109,7 @@ If your address is a domain of its own (like `example.com`, not a subdomain like
 
 Your instance uses the Blurt blockchain, and it's best to make **two** free Blurt accounts:
 
-- a **relay account** — it signs new-user signups and pays the chain's account-creation fee for each: about **102 BLURT per signup** (Blurt's ~100 BLURT `account_creation_fee` plus 2 BLURT sent to the new account so it can pay its first operation fees), and it keeps 3 BLURT spare. So **fund it with about 2,100 BLURT for your first 20 signups**, and have its *active key* ready (it lives on the server); and
+- a **relay account** — it signs new-user signups and pays the chain's account-creation fee for each: about **104 BLURT per signup** (Blurt's ~100 BLURT `account_creation_fee` plus 4 BLURT sent to the new account so it can pay its first operation fees), and it keeps 5 BLURT spare. So **fund it with about 2,100 BLURT for your first 20 signups**, and have its *active key* ready (it lives on the server); and
 - a **fees account** — where your listing-fee earnings land. Keep its keys **off the server** (don't enter them anywhere), so your earnings stay safe even if the machine is ever compromised.
 
 Name them after **your own** instance or domain so they're easy to recognise — use your branding, not the word "morphit" (that's our reserved namespace). For example, if your instance is **Acme Barter** at `acme-barter.com`, you might use **@acmebarter-relay** and **@acmebarter-fees**, or **@acme-relay** and **@acme-fees**. Any Blurt signup works (for example your own onboarding page, or another Blurt wallet); keep all the keys in your password manager.
@@ -160,7 +160,7 @@ tmux new -s morphit
 
 ```sh
 # on the server
-V=1.21.12
+V=1.21.13
 mkdir -p ~/morphit && cd ~/morphit
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz"
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz.sha256"

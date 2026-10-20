@@ -55,6 +55,7 @@ import { _, locale } from 'svelte-i18n';
 import { liveIdentity } from '$stores/identity';
 import { notify } from '$lib/notifications';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
+import type { LiveIdentity } from '$crypto/keygen';
 
 interface PerPeerStream {
 	readonly peer: string;
@@ -105,7 +106,20 @@ async function tryDecrypt(rec: ChatMessageRecord): Promise<string | null> {
 	if (rec.sender === me) return null; // we don't toast our own outgoing
 	const live = get(liveIdentity);
 	if (!live) return null;
+	return openTradeMessage(rec, me, live);
+}
 
+/**
+ * Open a message TO `me` for the trade listener: the plaintext only when its
+ * sender is PROVED by the key pinned for them (v2: chat key; v3: posting key,
+ * v1.21.13), else null — an unproved message must never move a trade.
+ * Exported for tests.
+ */
+export async function openTradeMessage(
+	rec: ChatMessageRecord,
+	me: string,
+	live: LiveIdentity
+): Promise<string | null> {
 	// byte budget: load chat message-crypto lazily so libsodium
 	// (~1 MB) never sits in the every-page layout closure — it loads
 	// only when a chat-bearing trade event actually arrives. Best-effort:
@@ -122,6 +136,55 @@ async function tryDecrypt(rec: ChatMessageRecord): Promise<string | null> {
 			typeof header.nonce !== 'string'
 		) {
 			return null;
+		}
+		if (header.v === 3) {
+			// The posting-key envelope (v1.21.13): opened with our posting key; it
+			// moves a trade only when made with the sender's PINNED posting key
+			// (as a v2 message needs the pinned chat key). Not pinned yet → nothing
+			// is proved here; the chat view pins on first contact.
+			const rk = header.rk;
+			const wk = header.wk;
+			if (
+				typeof header.sk !== 'string' ||
+				!Array.isArray(rk) ||
+				!rk.every((k) => typeof k === 'string') ||
+				!Array.isArray(wk) ||
+				!wk.every((w) => typeof w === 'string')
+			) {
+				return null;
+			}
+			const { pinnedPostingFor } = await import('$lib/chat/pubPin');
+			const senderPosting: Uint8Array[] = [];
+			for (const b64 of pinnedPostingFor(rec.sender)) {
+				try {
+					senderPosting.push(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+				} catch {
+					/* a malformed stored key proves nothing */
+				}
+			}
+			// Nothing pinned: nothing can be proved, so nothing is opened.
+			if (senderPosting.length === 0) return null;
+			const reader = chatCrypto.postingReader(live.posting.privateKey);
+			try {
+				const opened = await chatCrypto.decryptPostingEnvelope(
+					{
+						v: 3,
+						ephemeralPub: header.ephemeral_pub,
+						nonce: header.nonce,
+						ciphertext: rec.ciphertext,
+						senderKey: header.sk,
+						recipientKeys: rk as string[],
+						wraps: wk as string[]
+					},
+					reader,
+					rec.sender,
+					rec.recipient,
+					senderPosting
+				);
+				return opened.authenticated ? opened.text : null;
+			} finally {
+				chatCrypto.wipePostingReader(reader);
+			}
 		}
 		const envelope = {
 			...(header.v === 2 ? { v: 2 as const } : {}),

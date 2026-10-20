@@ -89,7 +89,9 @@ check('every inbound record is filtered to this thread', /if \(\(rec\.order_perm
 check('…at the single seam every record passes through', /for \(const rec of oldestFirst\) \{[\s\S]{0,400}continue;/.test(service));
 // A third site since the final v1.18.0 review (W2): an own send restored after
 // the user left and came back is rebuilt here, and must land in the same thread.
-check('all three outgoing sites (pending, failed, restored unconfirmed) inherit the thread\u2019s order', (service.match(/orderPermlink: deps\.orderPermlink \?\? null/g) ?? []).length === 3);
+// A fourth since v1.21.13: an own send that FAILED before the network took it,
+// restored the same way (restoreUnsent).
+check('all four outgoing sites (pending, failed, restored unconfirmed, restored unsent) inherit the thread\u2019s order', (service.match(/orderPermlink: deps\.orderPermlink \?\? null/g) ?? []).length === 4);
 check('wire messages keep the order they arrived with', (service.match(/orderPermlink: rec\.order_permlink \?\? null/g) ?? []).length === 2);
 check('LocalMessage carries the order', /orderPermlink: string \| null;/.test(service));
 

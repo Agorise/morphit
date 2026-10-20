@@ -182,6 +182,35 @@ Graphene) separately binds the envelope to an account.
 re-submitting the same op fails with `duplicate_message`.
 Clients don't need to carry extra replay state.
 
+## Amendment (v1.21.13): the posting-key envelope
+
+The publication step above turned out to break the marketplace case. A buyer
+pressed "Message" on a new member's order and got "This recipient hasn't
+opened Morphit chat yet"; nothing was stored for the recipient, who could not
+have paid the fee to publish a chat key anyway. The "first-use publish" was
+also a broadcast the user never asked for, paid from their own BLURT.
+
+Decision: a third envelope (`v: 3`, docs/CHAT-CRYPTO.md) for any pair where
+the chat-key envelope cannot be used. One content key encrypts the message;
+it is wrapped for each of the recipient's **posting keys** that can sign on
+their own (at most three), each wrap keyed by the same two-DH BLAKE2b
+derivation as v2 on secp256k1, and once more for the sender's self-copy. A
+sender uses v2 only when its own published chat key is current and the
+recipient has one (and did not last write in v3); otherwise v3. Each wrap is
+bound to the message (a hash of nonce, ciphertext and header in its AAD), so
+a holder of one listed key cannot forge for the others. A recipient whose
+chat key is pinned and whom the indexer suddenly calls keyless is refused,
+never moved to posting keys, and such a peer's first posting keys wait for
+the user's comparison. Posting keys are pinned as a set, with their own
+key-change code and their own Accept. The first-use publish is removed; a published key is still
+re-published after a posting-key rotation, so peers using v2 keep reaching
+the right key. The sender pays every fee.
+
+This replaces requirement 4's "no new key" reasoning above for new accounts:
+nothing at all has to be published before someone can be written to. Clients
+older than v1.21.13 can neither open v3 nor send to an account without a
+published chat key.
+
 ## Alternatives considered
 
 - **Option 2 (ADR-0014-Q1): publish separate chat identity.**
@@ -235,6 +264,12 @@ Clients don't need to carry extra replay state.
   every signer's posting pubkey from chain replay, so the
   UI can even encrypt to someone who has never opened
   Morphit's chat UI.
+  *(Corrected v1.21.13: this was never true. The chat key is
+  derived from the posting PRIVATE key, so nobody else can
+  derive it — which is why it had to be published, and why
+  someone who never opened chat could not be written to. The
+  posting-key envelope in the amendment above is what now
+  makes it true.)*
 - Small bundle: X25519 + ChaCha20-Poly1305 are available in
   every modern crypto library including `@noble/curves` and
   libsodium (already a dep for Blurt operations). Zero new

@@ -33,6 +33,9 @@
 	import {
 		CHAT_CONSTANTS,
 		NOT_CONFIRMED_SENTINEL,
+		BROADCAST_ERR_PREFIX,
+		PEER_NOT_FOUND_SENTINEL,
+		PEER_NO_POSTING_KEY_SENTINEL,
 		ON_CHAIN_NOT_ACCEPTED_SENTINEL,
 		SESSION_LOCKED_SENTINEL
 	} from '$lib/chat/chatService';
@@ -222,7 +225,9 @@
 	);
 	const placeholderI18nKey = $derived(
 		placeholderKind === 'failed'
-			? 'chat.message.placeholder_encrypted_failed'
+			? message.decryptFailedReason === 'other_key'
+				? 'chat.message.placeholder_other_key'
+				: 'chat.message.placeholder_encrypted_failed'
 			: placeholderKind === 'paired'
 				? 'chat.message.placeholder_encrypted_paired'
 				: 'chat.message.placeholder_encrypted'
@@ -1659,7 +1664,18 @@
 		     they're useful technical details. -->
 		{#if isFailed && message.error}
 			<p class="break-words text-xs text-red-700 dark:text-red-300">
-				{#if message.error === 'peer_not_ready'}
+				{#if message.error.startsWith(BROADCAST_ERR_PREFIX)}
+					<!-- The network or the instance refused the send: the wording
+					     every chain-write screen uses (out of BLURT: "Broadcast
+					     rejected due to insufficient funds…"), v1.21.13. -->
+					{$_(`common.broadcast_err.${message.error.slice(BROADCAST_ERR_PREFIX.length)}`, {
+						values: message.errorValues ?? {}
+					})}
+				{:else if message.error === PEER_NOT_FOUND_SENTINEL}
+					{$_('chat.message.peer_not_found')}
+				{:else if message.error === PEER_NO_POSTING_KEY_SENTINEL}
+					{$_('chat.message.peer_no_posting_key')}
+				{:else if message.error === 'peer_not_ready'}
 					{$_('chat.message.peer_not_ready')}
 				{:else if message.error === 'pub_pin_tampered_same_ref'}
 					{$_('chat.security.pub_pin_tampered_same_ref')}
@@ -1673,6 +1689,10 @@
 					{$_('chat.security.pub_pin_malformed_indexer_response')}
 				{:else if message.error === 'pub_pin_key_changed'}
 					{$_('chat.security.pub_pin_key_changed')}
+				{:else if message.error === 'pub_pin_posting_key_changed'}
+					{$_('chat.security.pub_pin_posting_key_changed')}
+				{:else if message.error === 'pub_pin_withdrawn'}
+					{$_('chat.security.pub_pin_withdrawn')}
 				{:else if message.error === NOT_CONFIRMED_SENTINEL}
 					{$_('chat.message.not_confirmed_on_chain')}
 				{:else if message.error === ON_CHAIN_NOT_ACCEPTED_SENTINEL}
@@ -1693,14 +1713,16 @@
 			     The four security codes share one FAQ entry
 			     (chat_key_changed) so a single link works for all of
 			     them. -->
-			{#if message.error === 'pub_pin_key_changed' && peer !== undefined && onRetry !== undefined}
+			{#if (message.error === 'pub_pin_key_changed' || message.error === 'pub_pin_posting_key_changed') && peer !== undefined && onRetry !== undefined}
 				<!-- The changed key is used only after this explicit choice
-				     (pubPin.acceptKeyChange); never silently. -->
+				     (pubPin.acceptKeyChange), and only the KIND of key this
+				     message named; never silently. -->
 				<button
 					type="button"
 					class="mr-2 text-xs font-semibold text-red-700 underline hover:no-underline dark:text-red-300"
 					onclick={() => {
-						if (peer !== undefined && acceptKeyChange(peer)) onRetry?.(message.localSeq);
+						const kind = message.error === 'pub_pin_posting_key_changed' ? 'posting' : 'chat';
+						if (peer !== undefined && acceptKeyChange(peer, kind)) onRetry?.(message.localSeq);
 					}}
 				>
 					{$_('chat.security.accept_new_key')}

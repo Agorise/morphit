@@ -83,6 +83,9 @@
  */
 
 import sodium from 'libsodium-wrappers-sumo';
+import * as secp from '@noble/secp256k1';
+import { ripemd160 } from '@noble/hashes/ripemd160';
+import { base58Decode } from '$crypto/base58';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -114,10 +117,11 @@ export const CHAT_ENVELOPE_VERSION = 2;
  *  on-chain op stores JSON and the ciphertext column expects
  *  base64. */
 export interface ChatEnvelopeWire {
-	/** 2 for the sender-authenticated envelope; absent for v1. */
+	/** 2 for the sender-authenticated envelope; absent for v1. (The
+	 *  posting-key envelope, v3, is PostingEnvelopeWire.) */
 	readonly v?: 2;
 	readonly ciphertext: string; // base64 — ChaCha20-Poly1305 output (ciphertext || 16-byte tag)
-	readonly ephemeralPub: string; // base64 — 32 bytes
+	readonly ephemeralPub: string; // base64 — 32-byte X25519 key
 	readonly nonce: string; // base64 — 12 bytes
 	/** OPTIONAL sender-decryptable copy. Present only when the sender is in
 	 *  "keep my history" mode (the default). It is the SAME plaintext,
@@ -697,4 +701,456 @@ export function decodeChatPub(b64: string): Uint8Array {
 		throw new Error(`chat crypto: decoded pub length ${pub.length}, expected 32`);
 	}
 	return pub;
+}
+
+// ─── v3: the posting-key envelope (v1.21.13) ─────────────────────────────
+//
+// WHY. v1 and v2 encrypt to the recipient's CHAT key, an X25519 key that
+// exists on chain only once its owner has opened chat and paid the fee for the
+// `morphit_chat_identity_v1` op. Until then nobody could write to them, and
+// their replies could not be proved in the other direction either. Every Blurt
+// account has posting keys on chain from the moment it exists.
+//
+// CONSTRUCTION. A fresh random 32-byte content key K encrypts the message
+// once (ChaCha20-Poly1305-IETF, random 12-byte nonce, AAD = the two account
+// names). K is then wrapped for each of the recipient's posting keys R_i that
+// can sign alone (at most MAX_RECIPIENT_KEYS) — a Morphit session holds one of
+// them, and the sender cannot know which:
+//
+//     dh1_i = ECDH(ephemeral, R_i).x                 — fresh per message
+//     dh2_i = ECDH(sender_posting, R_i).x            — static-static
+//     KEK_i = BLAKE2b-256(key = dh1_i ‖ dh2_i,
+//                         msg = "morphit-chat-wrap-v3/" sender 0 recipient 0
+//                               ‖ S ‖ R_i ‖ E)
+//     C      = BLAKE2b-256("morphit-chat-commit-v3" 0 ‖ nonce ‖ ct ‖ E ‖ S ‖ R_1…R_n)
+//     wrap_i = ChaCha20-Poly1305(KEK_i, nonce = 0, K, aad = "…wrap-aad-v3…" ‖ C)
+//
+// C binds every wrap to THIS message: K opens nothing else as authenticated
+// (a listed key holder who recovers K cannot write new text that the other
+// keys, or the sender's copy, accept).
+//
+// (a zero nonce is safe: each KEK encrypts exactly one thing, and E is fresh
+// per message.) The sender's self-copy is one more wrap of K, under
+// ECDH(ephemeral, S) ‖ ECDH(S, R_0) with a "self" domain, so the sender can
+// reread the message and the recipient cannot open the copy.
+//
+// AUTHENTICATION is v2's: only a holder of S's or R_i's private key can make
+// a wrap that opens, so the message proves the sender once `sk` is a posting
+// key the reader has PINNED for them (pubPin, the caller's job).
+//
+// Header: v 3, ephemeral_pub (33 B compressed), nonce, sk, rk[] and wk[]
+// (recipient keys and their wraps, in the same order), and the self wrap in
+// self_ciphertext/self_nonce (the fields the indexer already bounds).
+//
+// Same security properties as v2 (no forward secrecy, deniable sender
+// authentication); the posting key itself takes part instead of a key derived
+// from it — ADR-0015 already accepted that a posting-key compromise opens
+// every message. Which version a sender uses is chatService's choice.
+
+/** The posting-key envelope's version. */
+export const POSTING_ENVELOPE_VERSION = 3;
+/** At most this many recipient posting keys get a wrap. */
+export const MAX_RECIPIENT_KEYS = 3;
+
+/** The posting-key envelope on the wire (crypto side). */
+export interface PostingEnvelopeWire {
+	readonly v: 3;
+	readonly ciphertext: string; // base64 — the message under K (with tag)
+	readonly ephemeralPub: string; // base64 — 33 bytes
+	readonly nonce: string; // base64 — 12 bytes
+	readonly senderKey: string; // base64 — the sender's posting key, 33 bytes
+	readonly recipientKeys: readonly string[]; // base64 — 33 bytes each
+	readonly wraps: readonly string[]; // base64 — K under each KEK (48 bytes)
+	readonly selfCiphertext?: string; // base64 — K under the self KEK (48 bytes)
+	readonly selfNonce?: string; // base64 — 12 bytes (zeros; kept for the indexer's pair rule)
+}
+
+/** A secp256k1 public key, 33 bytes compressed, checked to be ON the curve. */
+function validPostingPub(pub: Uint8Array): boolean {
+	if (pub.length !== 33) return false;
+	try {
+		secp.ProjectivePoint.fromHex(pub).assertValidity();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** The x coordinate of priv·pub (32 bytes). getSharedSecret decodes `pub`
+ *  with ProjectivePoint.fromHex, which refuses a point that is not on the
+ *  curve (prefix, x range, square root, then assertValidity — noble 2.3; pinned
+ *  by crypto.posting.test.ts), so it is not decoded a second time here: on a
+ *  phone that decompression is most of a message's crypto time. */
+function ecdhX(priv: Uint8Array, pub: Uint8Array, onFail: () => Error): Uint8Array {
+	if (pub.length !== 33) throw onFail();
+	let shared: Uint8Array;
+	try {
+		shared = secp.getSharedSecret(priv, pub, true);
+	} catch {
+		throw onFail();
+	}
+	const x = shared.slice(1);
+	shared.fill(0);
+	return x;
+}
+
+/** The 33-byte compressed posting public key of a 32-byte private key. */
+export function postingPubOf(postingPriv: Uint8Array): Uint8Array {
+	return secp.getPublicKey(postingPriv, true);
+}
+
+function kekV3(
+	dh1: Uint8Array,
+	dh2: Uint8Array,
+	senderAccount: string,
+	recipientAccount: string,
+	senderKey: Uint8Array,
+	recipientKey: Uint8Array,
+	ephKey: Uint8Array,
+	self: boolean
+): Uint8Array {
+	if (dh1.length !== 32 || dh2.length !== 32) {
+		throw new Error('chat crypto: shared secrets must be 32 bytes');
+	}
+	const ikm = concatBytes(dh1, dh2);
+	try {
+		const info = concatBytes(
+			enc.encode(
+				`${self ? 'morphit-chat-self-wrap-v3' : 'morphit-chat-wrap-v3'}/${senderAccount}\u0000${recipientAccount}\u0000`
+			),
+			senderKey,
+			recipientKey,
+			ephKey
+		);
+		return sodium.crypto_generichash(32, info, ikm);
+	} finally {
+		sodium.memzero(ikm);
+	}
+}
+
+const aadV3 = (senderAccount: string, recipientAccount: string): Uint8Array =>
+	enc.encode(`morphit-chat-aad-v3/${senderAccount}\u0000${recipientAccount}`);
+const aadWrapV3 = (senderAccount: string, recipientAccount: string, self: boolean): Uint8Array =>
+	enc.encode(
+		`${self ? 'morphit-chat-self-wrap-aad-v3' : 'morphit-chat-wrap-aad-v3'}/${senderAccount}\u0000${recipientAccount}`
+	);
+const ZERO_NONCE = new Uint8Array(12);
+
+/** What every wrap of a message is bound to: the message itself (nonce and
+ *  ciphertext) and its public header (ephemeral key, sender key, recipient
+ *  keys, in order). Without it a wrap would open K for ANY ciphertext, and
+ *  whoever holds one listed recipient key could recover K from their own wrap
+ *  and write new text under it that every OTHER recipient key — and the
+ *  sender's own copy — would show as authenticated (v1.21.13 review 2, H-1). */
+function commitV3(
+	nonce: Uint8Array,
+	ct: Uint8Array,
+	eph: Uint8Array,
+	sk: Uint8Array,
+	rks: readonly Uint8Array[]
+): Uint8Array {
+	return sodium.crypto_generichash(
+		32,
+		concatBytes(enc.encode('morphit-chat-commit-v3\u0000'), nonce, ct, eph, sk, ...rks)
+	);
+}
+const wrapAad = (
+	senderAccount: string,
+	recipientAccount: string,
+	self: boolean,
+	commit: Uint8Array
+): Uint8Array => concatBytes(aadWrapV3(senderAccount, recipientAccount, self), commit);
+
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+	a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * Encrypt to a recipient's POSTING keys (v3). `recipientPostingPubs`: the keys
+ * of their account that can sign alone (the first MAX_RECIPIENT_KEYS are
+ * used). `senderPostingPriv`: our own posting private key.
+ */
+export async function encryptToPostingKey(
+	plaintext: string,
+	recipientPostingPubs: readonly Uint8Array[],
+	senderPostingPriv: Uint8Array,
+	senderAccount: string,
+	recipientAccount: string,
+	includeSelfCopy = true
+): Promise<PostingEnvelopeWire> {
+	await ensureSodium();
+	const recipients = recipientPostingPubs.slice(0, MAX_RECIPIENT_KEYS);
+	if (recipients.length === 0 || !recipients.every(validPostingPub)) {
+		throw new Error('chat crypto: recipient posting key is not a usable secp256k1 key');
+	}
+	if (senderPostingPriv.length !== 32) {
+		throw new Error('chat crypto: sender posting priv must be 32 bytes');
+	}
+	if (senderAccount.length === 0 || recipientAccount.length === 0) {
+		throw new Error('chat crypto: accounts must be non-empty');
+	}
+	const senderKey = postingPubOf(senderPostingPriv);
+	const ephPriv = secp.utils.randomPrivateKey();
+	const ephKey = secp.getPublicKey(ephPriv, true);
+	const contentKey = sodium.randombytes_buf(32);
+	const wipe: Uint8Array[] = [ephPriv, contentKey];
+	try {
+		const bad = () => new Error('chat crypto: recipient posting key is not a usable secp256k1 key');
+		const nonce = sodium.randombytes_buf(12);
+		const ct = sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+			enc.encode(plaintext),
+			aadV3(senderAccount, recipientAccount),
+			null,
+			nonce,
+			contentKey
+		);
+		const commit = commitV3(nonce, ct, ephKey, senderKey, recipients);
+		const wraps: string[] = [];
+		let dh2First: Uint8Array | null = null;
+		for (const r of recipients) {
+			const dh1 = ecdhX(ephPriv, r, bad);
+			const dh2 = ecdhX(senderPostingPriv, r, bad);
+			wipe.push(dh1, dh2);
+			if (dh2First === null) dh2First = dh2;
+			const kek = kekV3(dh1, dh2, senderAccount, recipientAccount, senderKey, r, ephKey, false);
+			wipe.push(kek);
+			wraps.push(
+				toBase64(
+					sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+						contentKey,
+						wrapAad(senderAccount, recipientAccount, false, commit),
+						null,
+						ZERO_NONCE,
+						kek
+					)
+				)
+			);
+		}
+		let selfCiphertext: string | undefined;
+		if (includeSelfCopy) {
+			const dh1Self = ecdhX(ephPriv, senderKey, () => new Error('chat crypto: bad sender key'));
+			wipe.push(dh1Self);
+			const kekSelf = kekV3(
+				dh1Self,
+				dh2First!,
+				senderAccount,
+				recipientAccount,
+				senderKey,
+				recipients[0]!,
+				ephKey,
+				true
+			);
+			wipe.push(kekSelf);
+			selfCiphertext = toBase64(
+				sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+					contentKey,
+					wrapAad(senderAccount, recipientAccount, true, commit),
+					null,
+					ZERO_NONCE,
+					kekSelf
+				)
+			);
+		}
+		return {
+			v: 3,
+			ciphertext: toBase64(ct),
+			ephemeralPub: toBase64(ephKey),
+			nonce: toBase64(nonce),
+			senderKey: toBase64(senderKey),
+			recipientKeys: recipients.map(toBase64),
+			wraps,
+			...(selfCiphertext !== undefined ? { selfCiphertext, selfNonce: toBase64(ZERO_NONCE) } : {})
+		};
+	} finally {
+		for (const b of wipe) b.fill(0);
+	}
+}
+
+interface ParsedV3 {
+	eph: Uint8Array;
+	ct: Uint8Array;
+	nonce: Uint8Array;
+	sk: Uint8Array;
+	rks: Uint8Array[];
+	wks: Uint8Array[];
+}
+
+function parseV3(envelope: PostingEnvelopeWire): ParsedV3 {
+	if (
+		envelope.v !== 3 ||
+		typeof envelope.senderKey !== 'string' ||
+		!Array.isArray(envelope.recipientKeys) ||
+		!Array.isArray(envelope.wraps) ||
+		envelope.recipientKeys.length === 0 ||
+		envelope.recipientKeys.length > MAX_RECIPIENT_KEYS ||
+		envelope.recipientKeys.length !== envelope.wraps.length
+	) {
+		throw new DecryptError();
+	}
+	try {
+		const p: ParsedV3 = {
+			eph: fromBase64(envelope.ephemeralPub),
+			ct: fromBase64(envelope.ciphertext),
+			nonce: fromBase64(envelope.nonce),
+			sk: fromBase64(envelope.senderKey),
+			rks: envelope.recipientKeys.map((k) => fromBase64(k)),
+			wks: envelope.wraps.map((w) => fromBase64(w))
+		};
+		// Lengths only: each key that takes part in an ECDH is decoded (and
+		// refused off the curve) there; the others are compared with ours.
+		if (
+			p.eph.length !== 33 ||
+			p.sk.length !== 33 ||
+			p.nonce.length !== 12 ||
+			p.ct.length < 16 ||
+			p.rks.some((k) => k.length !== 33) ||
+			p.wks.some((w) => w.length !== 48)
+		) {
+			throw new DecryptError();
+		}
+		return p;
+	} catch {
+		throw new DecryptError();
+	}
+}
+
+/** What a reader can reuse across messages: its own posting key's public half
+ *  and the static-static secret per sender key (one ECDH per sender instead of
+ *  one per message). Owned by the caller; wipe with wipePostingReader. */
+export interface PostingReader {
+	readonly priv: Uint8Array;
+	readonly pub: Uint8Array;
+	readonly dh2: Map<string, Uint8Array>;
+}
+export function postingReader(postingPriv: Uint8Array): PostingReader {
+	return { priv: postingPriv, pub: postingPubOf(postingPriv), dh2: new Map() };
+}
+export function wipePostingReader(r: PostingReader): void {
+	for (const v of r.dh2.values()) v.fill(0);
+	r.dh2.clear();
+}
+function staticSecret(reader: PostingReader, other: Uint8Array): Uint8Array {
+	const k = toBase64(other);
+	const hit = reader.dh2.get(k);
+	if (hit !== undefined) return hit;
+	const dh2 = ecdhX(reader.priv, other, () => new DecryptError());
+	reader.dh2.set(k, dh2);
+	return dh2;
+}
+
+/** Why a v3 message did not open for us, when that is worth saying: it was
+ *  made for posting keys of our account other than the one this session
+ *  holds. */
+export class NotForThisKeyError extends DecryptError {
+	constructor() {
+		super();
+		this.name = 'NotForThisKeyError';
+	}
+}
+
+/**
+ * Open a v3 message sent TO us. `reader`: our posting key (postingReader).
+ * `senderPostingPubs`: the sender's PINNED posting keys — the message is
+ * `authenticated` only when it was made with one of them; it opens either way.
+ * Throws NotForThisKeyError when no wrap is for our key, DecryptError on any
+ * other failure (without detail).
+ */
+export async function decryptPostingEnvelope(
+	envelope: PostingEnvelopeWire,
+	reader: PostingReader,
+	senderAccount: string,
+	recipientAccount: string,
+	senderPostingPubs: readonly Uint8Array[] = []
+): Promise<OpenedMessage> {
+	await ensureSodium();
+	const p = parseV3(envelope);
+	const i = p.rks.findIndex((k) => sameBytes(k, reader.pub));
+	if (i < 0) throw new NotForThisKeyError();
+	const wipe: Uint8Array[] = [];
+	try {
+		const dh1 = ecdhX(reader.priv, p.eph, () => new DecryptError());
+		wipe.push(dh1);
+		const dh2 = staticSecret(reader, p.sk);
+		const kek = kekV3(dh1, dh2, senderAccount, recipientAccount, p.sk, p.rks[i]!, p.eph, false);
+		wipe.push(kek);
+		const k = aeadOpen(
+			p.wks[i]!,
+			wrapAad(senderAccount, recipientAccount, false, commitV3(p.nonce, p.ct, p.eph, p.sk, p.rks)),
+			ZERO_NONCE,
+			kek
+		);
+		if (k === null || k.length !== 32) throw new DecryptError();
+		wipe.push(k);
+		const pt = aeadOpen(p.ct, aadV3(senderAccount, recipientAccount), p.nonce, k);
+		if (pt === null) throw new DecryptError();
+		return {
+			text: new TextDecoder().decode(pt),
+			authenticated: senderPostingPubs.some((x) => sameBytes(x, p.sk))
+		};
+	} finally {
+		for (const b of wipe) b.fill(0);
+	}
+}
+
+/**
+ * Open OUR OWN self-copy of a v3 message we sent (keep-history mode). Throws
+ * DecryptError when there is none, it was not made with our key, or it does
+ * not open.
+ */
+export async function decryptPostingSelfCopy(
+	envelope: PostingEnvelopeWire,
+	reader: PostingReader,
+	senderAccount: string,
+	recipientAccount: string
+): Promise<string> {
+	await ensureSodium();
+	if (envelope.selfCiphertext === undefined) throw new DecryptError();
+	const p = parseV3(envelope);
+	let wrap: Uint8Array;
+	try {
+		wrap = fromBase64(envelope.selfCiphertext);
+	} catch {
+		throw new DecryptError();
+	}
+	if (wrap.length !== 48 || !sameBytes(p.sk, reader.pub)) throw new DecryptError();
+	const wipe: Uint8Array[] = [];
+	try {
+		const dh1 = ecdhX(reader.priv, p.eph, () => new DecryptError());
+		wipe.push(dh1);
+		const dh2 = staticSecret(reader, p.rks[0]!);
+		const kek = kekV3(dh1, dh2, senderAccount, recipientAccount, p.sk, p.rks[0]!, p.eph, true);
+		wipe.push(kek);
+		const k = aeadOpen(
+			wrap,
+			wrapAad(senderAccount, recipientAccount, true, commitV3(p.nonce, p.ct, p.eph, p.sk, p.rks)),
+			ZERO_NONCE,
+			kek
+		);
+		if (k === null || k.length !== 32) throw new DecryptError();
+		wipe.push(k);
+		const pt = aeadOpen(p.ct, aadV3(senderAccount, recipientAccount), p.nonce, k);
+		if (pt === null) throw new DecryptError();
+		return new TextDecoder().decode(pt);
+	} finally {
+		for (const b of wipe) b.fill(0);
+	}
+}
+
+/**
+ * A Blurt public key string ("BLT" + base58(33-byte key ‖ RIPEMD-160
+ * checksum[0..4])) as its 33 bytes; null when it is not one (wrong prefix,
+ * length, checksum, or not on the curve).
+ */
+export function decodePostingPubBLT(s: string): Uint8Array | null {
+	if (typeof s !== 'string' || !s.startsWith('BLT')) return null;
+	let raw: Uint8Array;
+	try {
+		raw = base58Decode(s.slice(3));
+	} catch {
+		return null;
+	}
+	if (raw.length !== 37) return null;
+	const key = raw.slice(0, 33);
+	const sum = ripemd160(key).slice(0, 4);
+	if (!sameBytes(sum, raw.slice(33))) return null;
+	return validPostingPub(key) ? key : null;
 }

@@ -560,17 +560,29 @@ export function getChatHistory(
 /**
  * GET /v1/chat-identity/:account — the account's published X25519
  * chat public key. ADR-0015. Returns `not_found` if the account
- * has never published (they must open chat once to auto-publish).
- * Callers should treat `not_found` as "peer not ready yet" rather
- * than as an error.
+ * has never published one; since v1.21.13 nothing is published on
+ * first use, and messages to such an account go to its posting keys
+ * (chatService). `not_found` is an answer, not an error.
+ *
+ * Calls without a signal that overlap share one request: opening a
+ * conversation asks for our own key twice at once (the re-publish check
+ * and the send path's own-status check), and on Tor/I2P every request is
+ * a slow round trip competing for few connections.
  */
+const chatIdentityInFlight = new Map<string, Promise<Result<ChatIdentityResponse>>>();
 export function getChatIdentity(
 	account: string,
 	signal?: AbortSignal
 ): Promise<Result<ChatIdentityResponse>> {
-	return request<ChatIdentityResponse>(`/v1/chat-identity/${encodeURIComponent(account)}`, {
-		signal
+	const path = `/v1/chat-identity/${encodeURIComponent(account)}`;
+	if (signal !== undefined) return request<ChatIdentityResponse>(path, { signal });
+	const pending = chatIdentityInFlight.get(account);
+	if (pending !== undefined) return pending;
+	const p = request<ChatIdentityResponse>(path, {}).finally(() => {
+		chatIdentityInFlight.delete(account);
 	});
+	chatIdentityInFlight.set(account, p);
+	return p;
 }
 
 /**

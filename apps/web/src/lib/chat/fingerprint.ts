@@ -54,15 +54,57 @@ export const SAFETY_NUMBER_VERSION = 2;
 const DOMAIN_TAG = 'morphit-safety-number-v2';
 const ITERATIONS = 5200;
 const PUB_BYTES = 32;
+/** A compressed secp256k1 posting key (pairs that talk with posting keys). */
+const POSTING_PUB_BYTES = 33;
+/** At most this many posting keys per party (crypto.ts MAX_RECIPIENT_KEYS). */
+const MAX_POSTING_KEYS = 3;
 /** Digits per party, shown in groups of 5. */
 const PARTY_DIGITS = 30;
 const GROUP = 5;
 
-export interface SafetyNumberParty {
-	/** The Blurt account name the key belongs to. */
-	readonly account: string;
-	/** The party's raw 32-byte X25519 chat public key. */
-	readonly pub: Uint8Array;
+/** One side of the conversation: its account and EITHER its raw 32-byte
+ *  X25519 chat public key (`pub`) OR — for a pair that talks with posting keys
+ *  (v1.21.13: the v3 envelope) — the posting keys it is written to and proved
+ *  by (`postingKeys`, 33-byte compressed secp256k1, 1 to 3, any order). Both
+ *  parties must be the same kind. */
+export type SafetyNumberParty =
+	| { readonly account: string; readonly pub: Uint8Array; readonly postingKeys?: undefined }
+	| {
+			readonly account: string;
+			readonly postingKeys: readonly Uint8Array[];
+			readonly pub?: undefined;
+	  };
+
+const hex = (b: Uint8Array): string =>
+	Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+
+/** The bytes a party's digits are made from, and whether they are posting
+ *  keys: a posting-key set in one canonical order, so both sides agree
+ *  whatever order the chain or the pin listed it in. */
+function partyKey(party: SafetyNumberParty): { key: Uint8Array; posting: boolean } {
+	if (party.postingKeys !== undefined) {
+		const keys = party.postingKeys;
+		if (
+			!Array.isArray(keys) ||
+			keys.length === 0 ||
+			keys.length > MAX_POSTING_KEYS ||
+			!keys.every((k) => k instanceof Uint8Array && k.length === POSTING_PUB_BYTES)
+		) {
+			throw new Error(
+				`safety number: posting keys must be 1 to ${MAX_POSTING_KEYS} ${POSTING_PUB_BYTES}-byte keys`
+			);
+		}
+		const sorted = [...new Map(keys.map((k) => [hex(k), k])).entries()]
+			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+			.map(([, k]) => k);
+		return { key: concat(...sorted), posting: true };
+	}
+	if (!(party.pub instanceof Uint8Array) || party.pub.length !== PUB_BYTES) {
+		throw new Error(
+			`safety number: a chat key must be a ${PUB_BYTES}-byte Uint8Array, got ${party.pub?.length}`
+		);
+	}
+	return { key: party.pub, posting: false };
 }
 
 function concat(...parts: Uint8Array[]): Uint8Array {
@@ -77,11 +119,7 @@ function concat(...parts: Uint8Array[]): Uint8Array {
 
 /** The 30 digits of one party. */
 async function partyDigits(party: SafetyNumberParty): Promise<string> {
-	if (!(party.pub instanceof Uint8Array) || party.pub.length !== PUB_BYTES) {
-		throw new Error(
-			`safety number: a chat key must be a ${PUB_BYTES}-byte Uint8Array, got ${party.pub?.length}`
-		);
-	}
+	const { key, posting } = partyKey(party);
 	if (typeof party.account !== 'string' || party.account.length === 0) {
 		throw new Error('safety number: account name must not be empty');
 	}
@@ -89,9 +127,15 @@ async function partyDigits(party: SafetyNumberParty): Promise<string> {
 	const enc = new TextEncoder();
 	const { crypto_hash_sha512 } = sodiumSumo();
 	let h = crypto_hash_sha512(
-		concat(enc.encode(DOMAIN_TAG), new Uint8Array([0]), party.pub, enc.encode(party.account))
+		concat(
+			// A posting key gets its own domain; a chat key's number is unchanged.
+			enc.encode(posting ? `${DOMAIN_TAG}/posting` : DOMAIN_TAG),
+			new Uint8Array([0]),
+			key,
+			enc.encode(party.account)
+		)
 	);
-	for (let i = 0; i < ITERATIONS; i++) h = crypto_hash_sha512(concat(h, party.pub));
+	for (let i = 0; i < ITERATIONS; i++) h = crypto_hash_sha512(concat(h, key));
 	let digits = '';
 	for (let c = 0; c < PARTY_DIGITS / GROUP; c++) {
 		let v = 0;
@@ -110,6 +154,9 @@ export async function computeSafetyNumber(
 	a: SafetyNumberParty,
 	b: SafetyNumberParty
 ): Promise<readonly string[]> {
+	if ((a.postingKeys === undefined) !== (b.postingKeys === undefined)) {
+		throw new Error('safety number: both parties must use the same kind of key');
+	}
 	const [da, db] = await Promise.all([partyDigits(a), partyDigits(b)]);
 	const all = da <= db ? da + db : db + da;
 	const groups: string[] = [];

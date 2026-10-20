@@ -291,12 +291,12 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 	explain(
 		'Morphit uses the Blurt blockchain.  Your RELAY account is the\n' +
 			'account that PAYS the chain fee when a NEW user signs up to\n' +
-			'your instance — currently about 100 BLURT per signup — and it\n' +
+			'your instance — currently about 104 BLURT per signup — and it\n' +
 			'signs those signups, so its active key lives on this server.\n' +
 			'\n' +
 			'FUND IT before you open for signups.  Put in enough BLURT for\n' +
 			'AT LEAST 20 signups to start (ideally more) — that is about\n' +
-			'2,000 BLURT at the current fee.  Each Morphit instance pays\n' +
+			'2,100 BLURT at the current fee.  Each Morphit instance pays\n' +
 			'for its OWN signups from its OWN relay; the main morphit.io\n' +
 			'account never covers yours.\n' +
 			'\n' +
@@ -351,14 +351,16 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 			console.log(
 				`  ✓ @${name} exists on Blurt.  Current balance: ${sanitizeForTerm(account.balance)}`
 			);
-			// Estimate runway at ~100 BLURT/signup.
-			const runway = Math.floor(account.balanceBlurt / 100);
+			// Estimate runway at ~104 BLURT/signup: the chain's ~100 BLURT
+			// account fee plus the 4 BLURT the relay sends each new account
+			// (apps/relay/src/blurt/signupDust.ts).
+			const runway = Math.floor(account.balanceBlurt / 104);
 			if (runway < 20) {
 				console.log(
 					`  ⚠ That funds only ~${runway} signup${runway === 1 ? '' : 's'} — below the recommended 20-signup minimum.`
 				);
 				console.log(
-					'  Top up your relay before you open for signups (about 2,000 BLURT covers 20).'
+					'  Top up your relay before you open for signups (about 2,100 BLURT covers 20).'
 				);
 			} else if (runway < 50) {
 				console.log(

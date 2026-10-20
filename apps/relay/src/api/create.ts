@@ -7,8 +7,8 @@
  * signed with the relay's own active key, and broadcasts a direct
  * `account_create` op that pays the live `account_creation_fee`
  * (100 BLURT, unchanged for years) INLINE from the relay account's
- * liquid balance, followed by a 2 BLURT signup-dust transfer — so
- * each successful signup spends ~102 liquid BLURT from the relay.
+ * liquid balance, followed by a SIGNUP_DUST_BLURT (4 BLURT) starter transfer —
+ * so each successful signup spends ~104 liquid BLURT from the relay.
  * (Blurt DISABLED the Account-Creation-Token model — claim_account /
  * create_claimed_account — at HF2, so there are no pre-minted ACTs
  * and creation is NOT fee-free. See ADR-0010 and docs/OPERATIONS.md;
@@ -76,6 +76,7 @@ import { SequentialDetector } from '../policy/sequentialDetector.ts';
 import { isValidPublicKey } from '../blurt/pubkey.ts';
 import { clientIp, canonicalBucketKey } from '../middleware/ip.ts';
 import { logger } from '$log';
+import { SIGNUP_DUST_BLURT } from '../blurt/signupDust.ts';
 
 const log = logger('relay-create');
 
@@ -731,7 +732,7 @@ export class CreateEndpoint {
 		// broadcast. tryClaim() is synchronous, so between it and the
 		// `await` below no other request runs: a concurrent request
 		// presenting the SAME still-valid invite is rejected here rather
-		// than also creating an account (each account is a ~102 BLURT spend
+		// than also creating an account (each account is a ~104 BLURT spend
 		// from the relay wallet). Consumed when the relay spent, released on
 		// every other path (the finally below) — never left to a timer (D6).
 		if (!this.inviteTokens.tryClaim(invitePayload)) {
@@ -792,24 +793,24 @@ export class CreateEndpoint {
 				log.info('create_recovered_after_lost_reply', { account: name });
 			}
 
-			// ── ADR-0010 §2 step 4: 2 BLURT signup dust ──────────────
-			// Send a small dust balance so the fresh account can pay
-			// chain bandwidth for its first few ops AND set up its
-			// profile (display name, avatar, blurt.media / Nostr links)
-			// before the first trade. Sent ONCE: the transfer is signed once
+			// ── ADR-0010 §2 step 4: starter BLURT (signup dust) ──────
+			// Send a small balance so the fresh account can pay the chain's
+			// fee for its first ops AND set up its whole profile (display
+			// name, short bio, avatar, links, languages, settings) before
+			// the first trade — see signupDust.ts for the arithmetic. Sent ONCE: the transfer is signed once
 			// and never re-signed (D2); a failure or an unknown outcome is
 			// logged and not retried here — the account already exists, and
 			// the low-balance auto-refill (ADR-0010 §3) tops it up later.
 			// Only when a node ACCEPTED this request's own transaction: a `recovered` account may have been created by an EARLIER
 			// attempt that already sent its dust (a retry whose availability
-			// read hit a lagging node lands here), and a second 2 BLURT would
+			// read hit a lagging node lands here), and a second starter transfer would
 			// be a double payment. The auto-refill tops up a missed dust.
 			if (confirmation.recovered !== true) try {
 				await this.blurt.broadcastTransfer({
 					from: this.cfg.relayAccount,
 					fromActiveWif: this.cfg.relayActiveKeyWif,
 					to: name,
-					amountBlurt: 2,
+					amountBlurt: SIGNUP_DUST_BLURT,
 					memo: 'morphit:signup_dust'
 				});
 			} catch (dustErr) {

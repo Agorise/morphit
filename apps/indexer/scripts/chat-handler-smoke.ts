@@ -657,6 +657,49 @@ await scenario('#5: no order_permlink path persists NULL', async () => {
 	}
 });
 
+// v1.21.13 — the posting-key envelope (v3): 33-byte secp256k1 keys, the
+// sender's posting key (`sk`), the recipient's posting keys (`rk`, up to 3) and
+// the content key wrapped for each (`wk`). The indexer stores the header
+// opaquely; this proves it accepts the largest such header (three keys, a
+// self-copy wrap and a full set of retry tags) and keeps every field, so the
+// recipient's browser gets what it needs to decrypt.
+await scenario('v3 posting-key envelope: accepted, header stored verbatim', async () => {
+	const k33 = (c: string) => Buffer.alloc(33, c).toString('base64'); // 44 chars
+	const wrap = (n: number) => Buffer.alloc(48, n).toString('base64'); // 64 chars
+	const header = {
+		v: 3,
+		client_tag: 'f'.repeat(32),
+		ephemeral_pub: k33('e'),
+		nonce: Buffer.alloc(12, 1).toString('base64'),
+		sk: k33('s'),
+		rk: [k33('r'), k33('t'), k33('u')],
+		wk: [wrap(5), wrap(6), wrap(7)],
+		self_ciphertext: wrap(2),
+		self_nonce: Buffer.alloc(12, 0).toString('base64'),
+		prior_tags: Array.from({ length: 8 }, (_, i) => String(i).repeat(32))
+	};
+	const mock = makeMockClient([
+		{ match: 'FROM blocks', rows: [{ exists: false }] },
+		{ match: 'admitted', rows: [{ admitted: true }] },
+		{ match: 'unique_fan_in', rows: [{ unique_fan_in: '1', per_pair_count: null }] },
+		{ match: 'INSERT INTO chat_messages' },
+		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		{ match: 'AS quiet', rows: [{ quiet: false }] },
+		{ match: 'INSERT INTO push_pending' }
+	]);
+	const r = await handler(
+		makeCtx({
+			signer: 'alice',
+			payload: { recipient: 'bob', ciphertext: Buffer.alloc(30, 4).toString('base64'), header }
+		}),
+		mock.client
+	);
+	assertEqual(r, { ok: true }, 'result');
+	const insert = mock.queries.find((q) => q.text.includes('INSERT INTO chat_messages'));
+	if (!insert) throw new Error('no chat_messages insert');
+	assertEqual(JSON.parse(String(insert.params[3])), header, 'stored header');
+});
+
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {
 	console.log(`✓ all ${scenarios} scenarios passed`);

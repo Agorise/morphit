@@ -395,7 +395,7 @@ ALTER TABLE orders
 --   'welcome_bonus_liquid'       10 BLURT welcome
 --   'welcome_bonus_vesting'      10 BP welcome
 --   'dust_refill'                1 BLURT low-balance refill
---   'signup_dust'                1 BLURT at account creation
+--   'signup_dust'                the starter BLURT at account creation (4 since v1.21.13)
 --   'loyalty_milestone_vesting'  BP reward at milestone
 -- The relay doesn't interpret reason — it's purely for audit.
 CREATE TABLE IF NOT EXISTS relay_pending_transfers (

@@ -198,3 +198,22 @@ describe('unproved senders cannot pay, verify or badge', () => {
 		expect(target.textContent).toContain('chat.funds_sent.verify_received_unasked');
 	});
 });
+
+describe('a message this session cannot open (v1.21.13)', () => {
+	it('made for another posting key of the account: says so, not "may be damaged"', async () => {
+		const { target } = await mount({
+			me: 'alice',
+			peer: 'bob',
+			message: msg({ text: '(encrypted)', decryptFailed: true, decryptFailedReason: 'other_key' })
+		});
+		expect(target.textContent).toContain('chat.message.placeholder_other_key');
+		expect(target.textContent).not.toContain('chat.message.placeholder_encrypted_failed');
+		document.body.innerHTML = '';
+		const other = await mount({
+			me: 'alice',
+			peer: 'bob',
+			message: msg({ text: '(encrypted)', decryptFailed: true })
+		});
+		expect(other.target.textContent).toContain('chat.message.placeholder_encrypted_failed');
+	});
+});

@@ -34,6 +34,7 @@ import type { Config } from '../config/index.ts';
 import { FEE_REFUSE_MULTIPLIER, type BlurtClient } from '../blurt/client.ts';
 import type { GlobalDailyCeiling } from '../policy/globalDailyCeiling.ts';
 import { logger } from '$log';
+import { SIGNUP_DUST_BLURT } from '../blurt/signupDust.ts';
 
 const log = logger('relay-acts');
 
@@ -44,16 +45,16 @@ const log = logger('relay-acts');
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-export const VERSION = '1.21.12';
+export const VERSION = '1.21.13';
 const POLL_INTERVAL_MS = 30_000;
 /** Liquid-BLURT headroom (above the account_creation_fee) the relay
  *  must hold to accept a signup. Blurt disabled the ACT model at HF2,
  *  so the relay pays the fee inline per `account_create`; signup
  *  readiness is gated on liquid balance, not a pre-minted-token buffer.
- *  Covers the 2 BLURT signup dust plus a small buffer so a TOCTOU race
- *  between health refresh and broadcast can't start a signup we can't
- *  fund. */
-const SIGNUP_LIQUID_MARGIN_BLURT = 3;
+ *  Covers the starter BLURT sent to each new account (SIGNUP_DUST_BLURT)
+ *  plus a small buffer so a TOCTOU race between health refresh and
+ *  broadcast can't start a signup we can't fund. */
+const SIGNUP_LIQUID_MARGIN_BLURT = SIGNUP_DUST_BLURT + 1;
 /** A balance older than this (three missed polls) is no longer trusted:
  *  canAcceptCreation refuses and /v1/health says `stale: true` (v1.20.0, D10).
  *  It used to keep the last good balance forever once polls started failing. */

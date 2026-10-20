@@ -7,7 +7,7 @@
  * consumed the invite ONLY after a successful broadcast (so an RPC failure
  * wouldn't burn a user's invite). Two concurrent requests presenting the
  * SAME still-valid invite could therefore both pass verify() before either
- * consumed it, yielding two accounts — and two ~102 BLURT spends from the
+ * consumed it, yielding two accounts — and two ~104 BLURT spends from the
  * relay wallet — from one invite.
  *
  * F3 adds a synchronous tryClaim() taken immediately before the broadcast:

@@ -1,5 +1,17 @@
 /**
- * Auto-publish chat identity helper.
+ * Chat identity upkeep (since v1.21.13: re-publish only).
+ *
+ * v1.21.13: a FIRST publication no longer happens. It was a broadcast the
+ * user never asked for, paid from their own BLURT the first time they opened
+ * chat, and until it landed nobody could write to them; a new member short of
+ * BLURT could never be reached at all. Messages to an account without a
+ * published chat key now go to its posting key (the v3 envelope, crypto.ts),
+ * which is on chain from the moment the account exists, so nothing needs
+ * publishing. What stays is the RE-publication: an account that published a
+ * chat key and later changed its posting key would otherwise keep a stale key
+ * on chain, and peers sending the older format to it could not be read.
+ *
+ * Before v1.21.13:
  *
  * Per ADR-0015, every account has an X25519 chat identity that
  * must be PUBLISHED on-chain before peers can send encrypted
@@ -23,12 +35,12 @@ import { getUserBlurtAccount } from '$blurt/ops/profile';
 import { deriveChatIdentity, encodeChatPub, wipeChatIdentity } from '$lib/chat/crypto';
 import { broadcastChatIdentity } from '$blurt/ops/chatIdentity';
 import { getChatIdentity } from '$lib/indexer/client';
+import { recordOwnPublished } from '$lib/chat/pubPin';
 
 export type PublishResult =
 	| { kind: 'already_published' }
-	| { kind: 'published'; trx_id: string; block_num: number }
 	| { kind: 're_published'; trx_id: string; block_num: number }
-	| { kind: 'skipped'; reason: 'locked' | 'no_account' }
+	| { kind: 'skipped'; reason: 'locked' | 'no_account' | 'not_published' }
 	| { kind: 'failed'; reason: string };
 
 /**
@@ -61,7 +73,8 @@ const publishedThisSession: Set<string> = new Set();
  *   - Existing record present but pubkey differs → 're_published'.
  *     This happens after a posting-key rotation (the derivation
  *     changed).
- *   - No existing record → 'published'. First-time publish.
+ *   - No existing record → 'skipped' ('not_published'): nothing is broadcast
+ *     (v1.21.13 — messages to us go to our posting key).
  *   - Any network / broadcast error → 'failed' with reason.
  *
  * This function never throws — errors are wrapped in the return
@@ -103,12 +116,17 @@ export async function ensureChatIdentityPublished(): Promise<PublishResult> {
 		if (existing.ok) {
 			if (existing.data.chat_pub === expectedPubBase64) {
 				publishedThisSession.add(account);
+				// Seen current: a later "none" from an indexer cannot move this
+				// account's conversations off chat keys (chatService.ownChatKeyStatus).
+				recordOwnPublished(account, expectedPubBase64);
 				return { kind: 'already_published' };
 			}
 			// Existing record doesn't match — user must have
 			// rotated their posting key. Re-publish.
 			const r = await broadcastChatIdentity(live, expectedPubBase64);
 			publishedThisSession.add(account);
+			// Not recorded as current yet: accepted is not on chain. The next
+			// check that SEES it there records it.
 			return {
 				kind: 're_published',
 				trx_id: r.trx_id,
@@ -116,18 +134,15 @@ export async function ensureChatIdentityPublished(): Promise<PublishResult> {
 			};
 		}
 
-		// Not-found is the common first-time case; treat as
-		// "publish now." Any other error is a real failure.
+		// Not published: nothing to keep current, and nothing is published
+		// (v1.21.13). Any other error is a real failure.
 		if (existing.code !== 'not_found') {
 			return {
 				kind: 'failed',
 				reason: `indexer lookup failed: ${existing.message}`
 			};
 		}
-
-		const r = await broadcastChatIdentity(live, expectedPubBase64);
-		publishedThisSession.add(account);
-		return { kind: 'published', trx_id: r.trx_id, block_num: r.block_num };
+		return { kind: 'skipped', reason: 'not_published' };
 	} catch (err) {
 		// Audit 2026-05 finding 2-4: don't echo the underlying
 		// error text into the `reason` field — it surfaces in

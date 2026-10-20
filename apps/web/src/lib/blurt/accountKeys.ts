@@ -26,14 +26,42 @@
 
 import type { AccountAuthorities } from '$crypto/postingVerify';
 import type { AccountKeysResponse } from '@morphit/indexer-client';
+import { chainCallTimeoutMs } from '$net/transportBudget';
+
+/** Clearnet budget for the lookup. The indexer answers it with a chain read,
+ *  so a hidden-transport instance gets the chain floor (chainCallTimeoutMs). */
+export const ACCOUNT_KEYS_TIMEOUT_MS = 15_000;
 
 /** Fetch `GET /v1/account/:name/keys` from the indexer.
  *  @returns the public authorities, or `null` if the account doesn't exist.
- *  @throws on network error or non-404 failure. */
+ *  @throws on network error, non-404 failure, or no complete answer within
+ *  the budget (a stalled server must not hold a chat send or a login open). */
+/** Overlapping lookups of the same account share one request (opening a
+ *  conversation reads the peer's keys for its header and for sending at
+ *  once; on Tor/I2P each is a slow round trip). Per fetch implementation. */
+const inFlight = new WeakMap<typeof fetch, Map<string, Promise<AccountAuthorities | null>>>();
+
 export async function fetchAccountKeys(
 	indexerOrigin: string,
 	account: string,
 	fetchImpl: typeof fetch = fetch
+): Promise<AccountAuthorities | null> {
+	const url = new URL(`/v1/account/${encodeURIComponent(account)}/keys`, indexerOrigin).href;
+	const m = inFlight.get(fetchImpl) ?? new Map<string, Promise<AccountAuthorities | null>>();
+	inFlight.set(fetchImpl, m);
+	const pending = m.get(url);
+	if (pending !== undefined) return pending;
+	const p = fetchAccountKeysOnce(indexerOrigin, account, fetchImpl).finally(() => {
+		m.delete(url);
+	});
+	m.set(url, p);
+	return p;
+}
+
+async function fetchAccountKeysOnce(
+	indexerOrigin: string,
+	account: string,
+	fetchImpl: typeof fetch
 ): Promise<AccountAuthorities | null> {
 	// Compose with `new URL` (NOT string concatenation) per $net/config:
 	// a root-absolute path replaces any path/trailing slash on the base, so
@@ -42,14 +70,32 @@ export async function fetchAccountKeys(
 	// `//v1/…` when indexerOrigin carried a trailing slash, which a
 	// merge_slashes-off proxy 404s, making a valid account read "invalid".)
 	const url = new URL(`/v1/account/${encodeURIComponent(account)}/keys`, indexerOrigin);
-	const res = await fetchImpl(url, {
-		method: 'GET',
-		headers: { accept: 'application/json' }
-	});
-	if (res.status === 404) return null;
-	if (!res.ok) throw new Error(`indexer /v1/account/:name/keys returned ${res.status}`);
-
-	const body = (await res.json()) as Partial<AccountKeysResponse>;
+	const ac = new AbortController();
+	const timer = setTimeout(
+		() => ac.abort(new Error('indexer /v1/account/:name/keys timed out')),
+		chainCallTimeoutMs(ACCOUNT_KEYS_TIMEOUT_MS, url.href)
+	);
+	let body: Partial<AccountKeysResponse>;
+	try {
+		// The fetch AND the body read race the timer: a server that sends its
+		// headers and then stalls is as stuck as one that never answers.
+		const aborted = new Promise<never>((_, reject) => {
+			ac.signal.addEventListener('abort', () => reject(ac.signal.reason), { once: true });
+		});
+		const res = await Promise.race([
+			fetchImpl(url, {
+				method: 'GET',
+				headers: { accept: 'application/json' },
+				signal: ac.signal
+			}),
+			aborted
+		]);
+		if (res.status === 404) return null;
+		if (!res.ok) throw new Error(`indexer /v1/account/:name/keys returned ${res.status}`);
+		body = (await Promise.race([res.json(), aborted])) as Partial<AccountKeysResponse>;
+	} finally {
+		clearTimeout(timer);
+	}
 	const a = body.account;
 	if (
 		!a ||

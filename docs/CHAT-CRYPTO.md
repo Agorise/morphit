@@ -46,6 +46,79 @@ Code: `apps/web/src/lib/chat/crypto.ts`. The on-wire envelope
 (`ChatEnvelopeWire`) carries the version, the ephemeral public, the
 nonce, and the AEAD output (with its 16-byte Poly1305 tag).
 
+**v3 envelopes — the posting-key envelope (v1.21.13).** v2 needs a
+published chat key on BOTH sides, and until v1.21.13 a key was published
+only when its owner opened chat, from their own BLURT. A message to anyone
+who had not (a new member answering nobody yet; one with no BLURT left)
+could not be sent at all, and their replies could not be opened. v3 uses the
+accounts' **posting keys** (secp256k1), which every account has on chain from
+the moment it exists.
+
+A fresh random 32-byte content key `K` encrypts the message once
+(ChaCha20-Poly1305-IETF, random 12-byte nonce, AAD
+`"morphit-chat-aad-v3/" sender 0 recipient`). `K` is then wrapped for each
+of the recipient's posting keys that can sign on their own (weight at least
+the threshold), at most three — a session holds one of them, and the sender
+cannot know which:
+
+```
+dh1_i  = ECDH(ephemeral, R_i).x                 — fresh per message
+dh2_i  = ECDH(sender_posting, R_i).x            — static-static
+KEK_i  = BLAKE2b-256(key = dh1_i ‖ dh2_i,
+                     msg = "morphit-chat-wrap-v3/" sender 0 recipient 0
+                           ‖ S ‖ R_i ‖ E)
+C      = BLAKE2b-256("morphit-chat-commit-v3" 0 ‖ nonce ‖ ct ‖ E ‖ S ‖ R_1…R_n)
+wrap_i = ChaCha20-Poly1305(KEK_i, nonce = 0, K, aad = names ‖ C)  — each KEK seals one thing
+```
+
+`C` ties every wrap to this exact message and header. Without it, whoever
+holds any listed recipient key could recover `K` from their own wrap and
+write new text under it that every other key — and the sender's own copy —
+would show as authenticated.
+
+The sender's self-copy is one more wrap of `K`, under
+`ECDH(ephemeral, S) ‖ ECDH(S, R_0)` with a "self" domain, so only the sender
+can open it. The header carries `v: 3`, the ephemeral key (33 bytes,
+compressed), the nonce, `sk` (the sender's posting key), `rk` (the recipient
+keys) and `wk` (their wraps, same order), and the self wrap in
+`self_ciphertext`/`self_nonce`. Every key that takes part in an ECDH is
+decoded by `getSharedSecret`, which refuses a point off the curve; keys read
+from chain (`BLT…`) are checksum- and curve-checked when decoded.
+
+The sender is proved when `sk` is one of the posting keys **pinned** for
+them. A posting pin is the SET of the peer's keys that can sign alone:
+first contact pins the set read from chain; a key removed from the account
+narrows the pin; a key added is refused as a changed key
+(`pub_pin_posting_key_changed`) until the user compares the new safety number
+and accepts it — accepting one kind of key never accepts the other. A peer
+whose CHAT key is pinned gets no posting set on first use at all: it is held
+as a pending change for the same comparison, and their v3 messages stay
+unproved until then. Verify peer pins a first set only when the user says
+the numbers matched. A message from a pinned sender opens and is proved
+without any lookup.
+
+**Which envelope a send uses.** Our own status is decided first:
+`current` (our published chat key is the one we derive — remembered once seen,
+so an indexer's later "none" cannot change it), `stale`, `none`, or unknown.
+Unknown fails the send (retry); nothing is guessed. Only `current` with a
+peer chat key sends v2 — every pair that chatted before, unchanged — unless
+the peer's latest PROVED message was v3: they wrote v3 because, from their
+side, our chat key cannot be used (theirs is stale, for one), so we answer
+in v3 to the posting keys that proved them. A peer
+whose chat key is pinned here and whom the indexer now calls keyless is
+refused (`pub_pin_withdrawn`): an op on chain is never withdrawn. Everything
+else sends v3. Nothing is published on first use any more; a published chat
+key is still re-published after its owner changes their posting key.
+
+Same claims as v2 (confidentiality, deniable sender authentication, no
+forward secrecy): the posting key itself takes part instead of a key derived
+from it, and ADR-0015 already accepted that the posting key opens every
+message. Cost on a server CPU: about 11 ms to encrypt, 6 ms to open the first
+message from a sender, 3 ms for later ones (they reuse its static secret). Clients older
+than v1.21.13 cannot open v3 (they show "couldn't be decrypted") and cannot
+send to an account without a published chat key, so every instance has to
+upgrade.
+
 **v1 envelopes** (older clients, no `v`) were anonymous ECIES: the
 key depended only on the ephemeral and the recipient key. They still
 decrypt, so old messages stay readable, but the app marks them

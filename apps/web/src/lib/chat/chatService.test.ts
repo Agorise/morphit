@@ -194,7 +194,9 @@ describe('chatService — controller', () => {
 
 		const snap = ctrl.snapshot();
 		expect(snap[0]!.state).toBe('failed');
-		expect(snap[0]!.error).toBe('chain error');
+		// In the shared broadcast-error wording (v1.21.13), the raw reason kept.
+		expect(snap[0]!.error).toBe('broadcast_err:generic_detail');
+		expect(snap[0]!.errorValues).toEqual({ detail: 'chain error' });
 	});
 
 	it('send with locked identity records a failed message', async () => {

@@ -4,7 +4,7 @@
 	 * can receive, when, and how, in plain words (v1.21.3).
 	 *
 	 * Each line states what the code does (apps/relay/src/api/create.ts for the
-	 * account and its 2 BLURT; apps/indexer/src/indexer/handlers/order.ts for the
+	 * account and its 4 BLURT; apps/indexer/src/indexer/handlers/order.ts for the
 	 * free first buy; loyalty.ts for the 1 BP stake and the milestones;
 	 * handlers/feedback.ts for the 10 + 10 first-trade bonus;
 	 * lowBalanceScanner.ts for the top-ups). Rewards are paid by the relay of the

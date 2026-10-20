@@ -40,8 +40,9 @@
 	 * 4. Display the 12 groups of 5 digits in a stable layout.
 	 *
 	 * Failure modes surfaced to the UI:
-	 *   - peer hasn't published their chat key yet → "peer
-	 *     not ready" message + "try again later".
+	 *   - either side has no published chat key → the number is made
+	 *     from both posting keys (v1.21.13), as their messages are;
+	 *     no such account on chain → "no such account".
 	 *   - locked / no live identity → "unlock first" prompt.
 	 *   - chain-verified fetcher detects tampering → strong
 	 *     red "DO NOT continue chatting" banner with stable
@@ -61,8 +62,19 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { computeSafetyNumber } from '$lib/chat/fingerprint';
 	import { deriveChatIdentity, decodeChatPub } from '$lib/chat/crypto';
+	import { orderPostingPubs, ownChatKeyStatus } from '$lib/chat/chatService';
+	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import { fetchPeerChatPubChainVerified } from '$lib/chat/peerPubFetch';
-	import { PUB_PIN_ERROR, acceptKeyChange, pendingKeyChange } from '$lib/chat/pubPin';
+	import {
+		PUB_PIN_ERROR,
+		acceptKeyChange,
+		acceptPostingKeysShown,
+		pendingKeyChange,
+		pendingPostingKeyChange,
+		peekPostingKeyPin,
+		pinnedPubsFor
+	} from '$lib/chat/pubPin';
 	import { identity, isUnlocked } from '$stores/identity';
 	import { get } from 'svelte/store';
 	import { safeLocal } from '$lib/utils/safeStorage';
@@ -87,13 +99,29 @@
 	type State =
 		| { kind: 'computing' }
 		| { kind: 'locked' }
-		| { kind: 'peer_not_ready' }
+		/** The chain has no account by this name. */
+		| { kind: 'no_account' }
+		/** The account has no posting key of its own (other accounts manage
+		 *  it): nothing is encrypted to it, so there is nothing to compare. */
+		| { kind: 'no_posting_key' }
 		| { kind: 'tamper_detected'; code: string }
 		/** The peer's key changed: the NEW safety number, to compare before
-		 *  accepting (nothing is sent to the new key until then). */
-		| { kind: 'key_changed'; words: readonly string[] }
+		 *  accepting (nothing is sent to the new key until then). `posting`:
+		 *  the posting keys shown, which Accept pins exactly; absent for a
+		 *  chat key (its pending change is accepted). */
+		| { kind: 'key_changed'; words: readonly string[]; posting?: readonly string[] }
 		| { kind: 'error'; message: string }
-		| { kind: 'ready'; words: readonly string[] };
+		/** `ownStale`: our key on chain is an old one (our posting key
+		 *  changed and the new one is not on chain yet) — the peer may see
+		 *  another number until it is. `firstUse`: posting keys not pinned yet —
+		 *  the number is made from these, and "use these keys" pins exactly
+		 *  them (so what the user compared is what messages go to). */
+		| {
+				kind: 'ready';
+				words: readonly string[];
+				ownStale?: boolean;
+				firstUse?: readonly string[];
+		  };
 
 	let panelState = $state<State>({ kind: 'computing' });
 	let showWhy = $state(false);
@@ -136,6 +164,104 @@
 			return;
 		}
 
+		const unreachable = (): void => {
+			// NOT a security event: the chain could not be asked at all, which
+			// on a Tor/I2P instance is ordinary and transient. The red tamper
+			// banner would teach the user to dismiss it, and it has to mean
+			// something.
+			panelState = {
+				kind: 'error',
+				message: $_('chat.verify_peer.error_chain_unreachable') as string
+			};
+		};
+
+		// The same rule as sending (chatService.seal), so both sides compare
+		// numbers made from the keys messages actually use: chat keys when our
+		// own published chat key is current and the peer has one; otherwise
+		// posting keys. Asked fresh here, never a cached answer.
+		let status: 'current' | 'stale' | 'none';
+		try {
+			status = await ownChatKeyStatus(me, id.live);
+		} catch {
+			if (!aborted) unreachable();
+			return;
+		}
+		if (aborted) return;
+
+		const b64 = (k: Uint8Array): string => btoa(String.fromCharCode(...k));
+		const bytes = (s: string): Uint8Array => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+		// Posting keys: ours as the chain lists them (what the peer pins for
+		// us), theirs as PINNED here — read, never changed: opening this panel
+		// pins nothing.
+		const byPostingKeys = async (): Promise<void> => {
+			let mineKeys: Uint8Array[] | null;
+			let theirKeys: Uint8Array[] | null;
+			try {
+				const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
+				[mineKeys, theirKeys] = await Promise.all([
+					fetchAccountKeys(origin, me).then(orderPostingPubs),
+					fetchAccountKeys(origin, peer).then(orderPostingPubs)
+				]);
+			} catch {
+				if (!aborted) unreachable();
+				return;
+			}
+			if (aborted) return;
+			if (theirKeys === null) {
+				panelState = { kind: 'no_account' };
+				return;
+			}
+			if (theirKeys.length === 0) {
+				panelState = { kind: 'no_posting_key' };
+				return;
+			}
+			if (mineKeys === null || mineKeys.length === 0) {
+				panelState = {
+					kind: 'error',
+					message: $_('chat.verify_peer.error_unknown') as string
+				};
+				return;
+			}
+			const view = peekPostingKeyPin(peer, theirKeys.map(b64));
+			const shown = view.kind === 'changed' ? view.chain : view.keys;
+			const words = await computeSafetyNumber(
+				{ account: me, postingKeys: mineKeys },
+				{ account: peer, postingKeys: shown.map(bytes) }
+			);
+			if (aborted) return;
+			// A peer whose chat key is pinned here gets no posting keys on first
+			// use without this comparison (chatService: they are held as a
+			// pending change), so a first set is shown as a change to accept.
+			const chatPinned = pinnedPubsFor(peer).length > 0;
+			panelState =
+				view.kind === 'changed' || (view.kind === 'first_use' && chatPinned)
+					? { kind: 'key_changed', words, posting: shown }
+					: {
+							kind: 'ready',
+							words,
+							ownStale: status === 'stale',
+							...(view.kind === 'first_use' ? { firstUse: shown } : {})
+						};
+		};
+
+		// Posting keys of this peer waiting for the user (the conversation
+		// stopped a send or left a message unproved over them): compare those,
+		// whatever format the two of you use otherwise.
+		if (status !== 'current' || pendingPostingKeyChange(peer) !== null) {
+			try {
+				await byPostingKeys();
+			} catch {
+				if (!aborted) {
+					panelState = {
+						kind: 'error',
+						message: $_('chat.verify_peer.error_unknown') as string
+					};
+				}
+			}
+			return;
+		}
+
 		let myPriv: Uint8Array | null = null;
 		try {
 			// Derive my chat identity.  This is the same derivation
@@ -156,7 +282,13 @@
 			if (aborted) return;
 			switch (peerResult.kind) {
 				case 'not_published':
-					panelState = { kind: 'peer_not_ready' };
+					// A key pinned here was on chain; an op on chain is never
+					// withdrawn (chatService: pub_pin_withdrawn — nothing is sent).
+					if (pinnedPubsFor(peer).length > 0) {
+						panelState = { kind: 'tamper_detected', code: PUB_PIN_ERROR.withdrawn };
+						return;
+					}
+					await byPostingKeys();
 					return;
 				case 'tamper_detected': {
 					const pending =
@@ -185,14 +317,7 @@
 					};
 					return;
 				case 'chain_unreachable':
-					// NOT a security event. We could not reach the chain to check
-					// at all, which on a Tor/I2P instance is an ordinary, transient
-					// thing. Rendering the red tamper banner here would teach the
-					// user to dismiss it, and that banner has to mean something.
-					panelState = {
-						kind: 'error',
-						message: $_('chat.verify_peer.error_chain_unreachable') as string
-					};
+					unreachable();
 					return;
 				case 'indexer_error':
 					panelState = {
@@ -227,9 +352,22 @@
 		}
 	}
 
-	/** The user compared the new number with the peer and it matched. */
+	/** The user compared the new number with the peer and it matched: the
+	 *  keys that number was made from become the pin — exactly those, and
+	 *  only that kind. */
+	/** First use: the numbers matched — pin exactly the keys they were made from. */
+	function useTheseKeys(): void {
+		if (panelState.kind !== 'ready' || panelState.firstUse === undefined) return;
+		if (acceptPostingKeysShown(peer, panelState.firstUse)) void compute();
+	}
+
 	function acceptNewKey(): void {
-		if (acceptKeyChange(peer)) void compute();
+		if (panelState.kind !== 'key_changed') return;
+		const ok =
+			panelState.posting !== undefined
+				? acceptPostingKeysShown(peer, panelState.posting)
+				: acceptKeyChange(peer, 'chat');
+		if (ok) void compute();
 	}
 
 	function handleBackdropClick(e: MouseEvent): void {
@@ -275,11 +413,13 @@
 			>
 				{$_('chat.verify_peer.locked')}
 			</div>
-		{:else if panelState.kind === 'peer_not_ready'}
+		{:else if panelState.kind === 'no_account' || panelState.kind === 'no_posting_key'}
 			<div
 				class="mt-5 rounded-lg border border-ink-300 bg-ink-50 p-4 text-sm text-ink-700 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200"
 			>
-				{$_('chat.verify_peer.peer_not_ready')}
+				{panelState.kind === 'no_account'
+					? $_('chat.verify_peer.no_account')
+					: $_('chat.verify_peer.no_posting_key')}
 			</div>
 		{:else if panelState.kind === 'tamper_detected'}
 			<!-- This is a real security event.  Pub-pin or chain
@@ -347,6 +487,13 @@
 				</button>
 			</div>
 		{:else if panelState.kind === 'ready'}
+			{#if panelState.ownStale}
+				<div
+					class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+				>
+					{$_('chat.verify_peer.own_key_stale', { values: { peer } })}
+				</div>
+			{/if}
 			{#if showReverify}
 				<div
 					class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
@@ -385,6 +532,23 @@
 					{/each}
 				</div>
 			</div>
+
+			{#if panelState.firstUse !== undefined}
+				<!-- Posting keys not pinned yet: comparing pins nothing until the
+				     user says the numbers matched. -->
+				<div class="mt-3">
+					<p class="text-sm text-ink-600 dark:text-ink-300">
+						{$_('chat.verify_peer.first_use_note', { values: { peer } })}
+					</p>
+					<button
+						type="button"
+						class="mt-2 rounded-lg border-2 border-ink-300 bg-white px-3 py-1.5 text-sm font-semibold hover:bg-ink-100 dark:border-ink-600 dark:bg-ink-900 dark:hover:bg-ink-800"
+						onclick={useTheseKeys}
+					>
+						{$_('chat.verify_peer.first_use_accept')}
+					</button>
+				</div>
+			{/if}
 
 			<!-- Instruction copy.  Emphasizes OOB channel. -->
 			<div

@@ -98,7 +98,7 @@
 
 	<!-- v1.21.3: the money, both ways, so an operator knows what to fund.
 	     Figures: the 90/10 split (indexer fee.ts, featureBid.ts, strangerFee.ts);
-	     the relay's costs (relay api/create.ts: chain fee + 2 BLURT; indexer
+	     the relay's costs (relay api/create.ts: chain fee + 4 BLURT; indexer
 	     feedback.ts: 10 + 10; loyalty.ts: 1 BP + milestones; config:
 	     1 BLURT top-ups, 50 BLURT/hour featured floor). -->
 	<section class="mt-14" aria-labelledby="earn-box-heading">

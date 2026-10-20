@@ -643,8 +643,8 @@ fee transfer fails, the order doesn't promote to
 
 The `@morphit-relay` figure dominates because of the
 ~100 BLURT chain account-creation fee the relay pays
-inline per signup, plus the 2 BLURT it sends each new account.
-Plan ~102 BLURT per expected signup plus a safety margin.
+inline per signup, plus the 4 BLURT it sends each new account.
+Plan ~104 BLURT per expected signup plus a safety margin.
 
 ### Long-term funding — see §1
 
@@ -1033,7 +1033,7 @@ recurrent_transfer as a cancellation.
 >
 > **What this means for you as an operator:** keep `@morphit-relay`
 > funded with enough liquid BLURT to cover signups — roughly one week of
-> (≈100 BLURT creation fee + 2 BLURT dust + the welcome bonus per
+> (≈100 BLURT creation fee + 4 BLURT starter balance + the welcome bonus per
 > completed-trade signup). See **§0a** for the funding math and **§16**
 > for the low-balance Matrix alert (`relay_low_balance_for_signups`). The
 > relay refuses signups (`relay_out_of_funds`) when its liquid balance
@@ -4444,8 +4444,8 @@ token). That's a larger design change not yet built.
 The relay's `/v1/account/create` endpoint pays the ~100 BLURT
 account-creation fee inline (from `@morphit-relay`'s liquid BLURT)
 to create each new Blurt account (see ADR-0010 §4, as amended), then
-sends the new account 2 BLURT, so each successful signup spends
-~102 BLURT of your relay's balance.
+sends the new account 4 BLURT, so each successful signup spends
+~104 BLURT of your relay's balance.
 Without defenses, a third-party operator who forges the
 `Origin` header (server-side scripts can) could attribute THEIR
 users' registrations to YOUR relay, draining your relay's BLURT and
@@ -4504,10 +4504,10 @@ mirror" message.
 
 Hard cap on successful signups per UTC day.  Bounds worst-case
 spend to `ceiling` signups per day; in BLURT terms that's
-`ceiling × (account_creation_fee + 2)` BLURT at risk (where the fee
+`ceiling × (account_creation_fee + 4)` BLURT at risk (where the fee
 is whatever the chain's `account_creation_fee`
 witness-parameter is at claim time, typically ~100 BLURT, and the
-2 BLURT is the transfer to each new account).  Reset
+4 BLURT is the transfer to each new account).  Reset
 at UTC midnight. The count is persisted in
 `/var/lib/morphit-relay/signup-ceiling.json`
 (`MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH` overrides it), so a

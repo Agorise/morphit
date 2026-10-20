@@ -412,10 +412,16 @@ after first config.
 
 ### 1. Account creation — paid TO the Blurt chain when a user signs up
 
-- **Cost: ~102 BLURT per new user** — the chain's
+- **Cost: ~104 BLURT per new user** — the chain's
   `account_creation_fee` (~100 BLURT, set by Blurt witness
-  consensus, subject to change without notice) plus a 2 BLURT
-  starter transfer so the new account can pay its first ops.
+  consensus, subject to change without notice) plus a 4 BLURT
+  starter transfer (since v1.21.13; 2 before) so the new account
+  can pay the chain's fee for its first ops: every profile field
+  saved once (avatar at the 6 KB cap), two settings saves, the
+  first order and about seven short chat messages. The fee is
+  0.050 BLURT per operation plus 0.200 BLURT per 1,024 bytes of
+  the signed transaction; the arithmetic is in
+  `apps/relay/src/blurt/signupDust.ts`.
 - Source: `apps/relay/src/config/index.ts`
   (operator-tunable mirror of chain `account_creation_fee`)
 - Source: `apps/relay/src/blurt/client.ts`
@@ -535,15 +541,15 @@ fact.  That feedback IS visible.  But the money flow is not.
 The displayed BLURT listing fee tracks a ~12.5¢ target — about
 62 BLURT at BLURT ≈ $0.002 — and the operator keeps 90% of it,
 about 56 BLURT. A new-user signup costs the operator's relay about
-102 BLURT. So an operator breaks even at roughly **two BLURT-paid
+104 BLURT. So an operator breaks even at roughly **two BLURT-paid
 listings per new user**, before welcome bonuses; BTC/XMR-paid
 listings earn the operator nothing (100% to the treasury).
 
 - Income per BLURT-paid listing: ~56 BLURT (90% of ~62)
-- Cost per signup: ~102 BLURT
+- Cost per signup: ~104 BLURT
 - 5 listings × 56 = 280 BLURT income
-- 1 signup × 102 = 102 BLURT cost
-- Net: about +178 BLURT per (5-listing × 1-signup) cycle, before the
+- 1 signup × 104 = 104 BLURT cost
+- Net: about +176 BLURT per (5-listing × 1-signup) cycle, before the
   20-BLURT welcome bonus for users who trade
 
 These figures move with the BLURT price and the chain fee; treat them

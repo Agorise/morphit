@@ -139,7 +139,7 @@ No single host, domain, operator, or network is load-bearing.
 - Input: inbound HTTP — account creation (invite + public keys),
   Web Push subscribe/unsubscribe, health.
 - Process: creates accounts with its own **active** key (paying the
-  chain's account-creation fee plus 2 BLURT starter balance from its
+  chain's account-creation fee plus 4 BLURT starter balance from its
   liquid balance), and pays from a Postgres-backed
   `relay_pending_transfers` queue: welcome bonuses, low-balance dust
   refills and loyalty BP delegations; the drainer broadcasts queued

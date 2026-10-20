@@ -63,3 +63,52 @@ describe('verify-peer safety number', () => {
 		await expect(shown(alice, { account: 'bob', pub: new Uint8Array(31) })).rejects.toThrow();
 	});
 });
+
+describe('safety number from posting keys (v1.21.13)', () => {
+	it('a pair that talks with posting keys gets the same number on both sides, unlike its chat-key number', async () => {
+		const { computeSafetyNumber } = await import('./fingerprint');
+		const secp = await import('@noble/secp256k1');
+		const a = secp.getPublicKey(secp.utils.randomPrivateKey(), true);
+		const b = secp.getPublicKey(secp.utils.randomPrivateKey(), true);
+		const ab = await computeSafetyNumber(
+			{ account: 'anna', postingKeys: [a] },
+			{ account: 'bo', postingKeys: [b] }
+		);
+		const ba = await computeSafetyNumber(
+			{ account: 'bo', postingKeys: [b] },
+			{ account: 'anna', postingKeys: [a] }
+		);
+		expect(ab).toEqual(ba);
+		expect(ab).toHaveLength(12);
+		// The same 32 bytes as a chat key give a different number (own domain).
+		const chat = await computeSafetyNumber(
+			{ account: 'anna', pub: a.slice(1) },
+			{ account: 'bo', pub: b.slice(1) }
+		);
+		expect(chat).not.toEqual(ab);
+		// Never one of each.
+		await expect(
+			computeSafetyNumber({ account: 'anna', postingKeys: [a] }, { account: 'bo', pub: b.slice(1) })
+		).rejects.toThrow(/same kind of key/);
+	});
+
+	it('made from every key of the set, in any order: an added key changes it, the order does not', async () => {
+		const { computeSafetyNumber } = await import('./fingerprint');
+		const secp = await import('@noble/secp256k1');
+		const k = () => secp.getPublicKey(secp.utils.randomPrivateKey(), true);
+		const [a, b1, b2, extra] = [k(), k(), k(), k()];
+		const n = (bs: Uint8Array[]) =>
+			computeSafetyNumber(
+				{ account: 'anna', postingKeys: [a!] },
+				{ account: 'bo', postingKeys: bs }
+			);
+		const base = await n([b1!, b2!]);
+		expect(await n([b2!, b1!])).toEqual(base);
+		expect(await n([b1!, b2!, b1!])).toEqual(base); // a repeated key is the same set
+		expect(await n([b1!, b2!, extra!])).not.toEqual(base);
+		expect(await n([b1!])).not.toEqual(base);
+		await expect(n([])).rejects.toThrow();
+		await expect(n([b1!, b2!, extra!, k()])).rejects.toThrow();
+		await expect(n([new Uint8Array(32)])).rejects.toThrow();
+	});
+});

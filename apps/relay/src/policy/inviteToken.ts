@@ -201,7 +201,7 @@ export class InviteTokenService {
 		// F3 — reject a nonce that is CLAIMED (verified by a concurrent
 		// request that is mid-broadcast). Without this, two requests
 		// presenting the same still-valid invite both pass verify() before
-		// either consumes, yielding two accounts — and two ~102 BLURT spends
+		// either consumes, yielding two accounts — and two ~104 BLURT spends
 		// — from one invite. The authoritative gate is tryClaim() just before
 		// broadcast; this early check simply rejects the loser sooner.
 		if (this.claimedNonces.has(payload.nonce)) {

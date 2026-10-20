@@ -27,16 +27,21 @@
  */
 import type { LiveIdentity } from '$crypto/keygen';
 import { encodeOrderSettledElsewherePayload } from '$lib/chat/payload';
+import { unsealSettled } from '$lib/chat/unsealGate';
 
 /** The encrypted envelope shape returned by `encrypt`. */
 interface ChatEnvelope {
-	/** 2 for the sender-authenticated envelope. */
-	readonly v?: 2;
+	/** 2 for the sender-authenticated envelope (chat keys), 3 for the
+	 *  posting-key envelope. */
+	readonly v?: 2 | 3;
 	readonly ciphertext: string;
 	readonly ephemeralPub: string;
 	readonly nonce: string;
 	readonly selfCiphertext?: string;
 	readonly selfNonce?: string;
+	readonly senderKey?: string;
+	readonly recipientKeys?: readonly string[];
+	readonly wraps?: readonly string[];
 }
 
 /** Injected so the announcer is unit-testable without the browser / chain. */
@@ -75,13 +80,41 @@ export interface SettledElsewhereDeps {
 	): Promise<{ block_num: number | null; trx_id: string }>;
 	/** 32-char hex client tag. */
 	generateClientTag(): string;
+	/** v1.21.13 — the posting-key envelope (v3), as the conversation uses it
+	 *  (chatService.seal): an inquirer with no chat key, or an owner with none,
+	 *  still gets the auto-reply. Optional: absent, such inquirers are skipped
+	 *  as before. */
+	fetchPostingPubs?(account: string): Promise<Uint8Array[] | null>;
+	/** Our own chat key's status (chatService.ownChatKeyStatus): only
+	 *  'current' sends v2. Throws when unknown — then nothing is sent. */
+	myChatKeyStatus?(): Promise<'current' | 'stale' | 'none'>;
+	/** The posting keys to use for `peer`, through the same pins as the
+	 *  conversation (a changed set throws, and that inquirer is not written
+	 *  to). Absent: the chain's keys (tests). */
+	pinPostingKey?(
+		peer: string,
+		chainKeys: readonly Uint8Array[],
+		opts?: { needsConsent?: boolean }
+	): Promise<Uint8Array[]>;
+	/** The chat keys pinned for `peer`: a pinned peer whose key the indexer
+	 *  now calls absent is not written to (no silent move to posting keys). */
+	pinnedPeerPubs?(peer: string): readonly Uint8Array[];
+	encryptPosting?(
+		plaintext: string,
+		recipientPostingPubs: readonly Uint8Array[],
+		live: LiveIdentity,
+		senderAccount: string,
+		recipientAccount: string,
+		includeSelfCopy: boolean
+	): Promise<ChatEnvelope>;
 }
 
 export interface SettledElsewhereResult {
 	/** Inquirers we successfully sent the auto-reply to. */
 	readonly sent: number;
-	/** Inquirers skipped because they never published a chat identity (we
-	 *  can't encrypt to them; harmless — they simply get no auto-reply). */
+	/** Inquirers skipped because they could not be encrypted to: no chat key
+	 *  and (without the posting-key envelope) nothing else, or no such account
+	 *  on chain. Harmless — they simply get no auto-reply. */
 	readonly skipped: number;
 	/** Inquirers whose send threw (best-effort — did not block the rest). */
 	readonly failed: number;
@@ -137,26 +170,64 @@ export async function announceSettledElsewhere(
 	let sent = 0;
 	let skipped = 0;
 	let failed = 0;
+	// The pins a Lock sealed are read only once the unlock's unseal landed.
+	await unsealSettled();
+	const postingCapable = deps.fetchPostingPubs !== undefined && deps.encryptPosting !== undefined;
+	// The same choice as a conversation's send (chatService.seal): our own
+	// status first; v2 only when ours is current and the inquirer has a chat
+	// key; otherwise v3 to their PINNED posting keys, every one of them.
+	let mine: 'current' | 'stale' | 'none' | null = 'current';
+	if (postingCapable && deps.myChatKeyStatus !== undefined) {
+		mine = await deps.myChatKeyStatus().catch(() => null);
+	}
 	for (const peer of inquirers) {
 		try {
-			const peerPub = await deps.fetchPeerChatPub(peer);
-			if (peerPub === null) {
-				// The inquirer never published a chat identity — can't encrypt to
-				// them. Harmless: they simply receive no auto-reply.
+			if (mine === null) throw new Error('own chat key status unknown');
+			const peerPub = mine === 'current' ? await deps.fetchPeerChatPub(peer) : null;
+			if (
+				mine === 'current' &&
+				peerPub === null &&
+				(deps.pinnedPeerPubs?.(peer) ?? []).length > 0
+			) {
+				throw new Error('a pinned chat key the indexer calls absent');
+			}
+			let envelope: ChatEnvelope;
+			// Keep a sender self-copy so the owner can reread the auto-reply in
+			// their own thread with this inquirer (matches keep-history default).
+			if (peerPub !== null) {
+				envelope = await deps.encrypt(wire, peerPub, me, peer, myId, true);
+			} else if (postingCapable) {
+				const pubs = await deps.fetchPostingPubs!(peer);
+				if (pubs === null || pubs.length === 0) {
+					skipped++;
+					continue;
+				}
+				const targets =
+					deps.pinPostingKey !== undefined
+						? await deps.pinPostingKey(peer, pubs, {
+								// A peer whose chat key is pinned: no posting keys on first use.
+								needsConsent: (deps.pinnedPeerPubs?.(peer) ?? []).length > 0
+							})
+						: pubs;
+				envelope = await deps.encryptPosting!(wire, targets, live, me, peer, true);
+			} else {
+				// No chat key and no other way to encrypt to them.
 				skipped++;
 				continue;
 			}
-			// Keep a sender self-copy so the owner can reread the auto-reply in
-			// their own thread with this inquirer (matches keep-history default).
-			const envelope = await deps.encrypt(wire, peerPub, me, peer, myId, true);
 			const payload: Record<string, unknown> = {
 				recipient: peer,
 				ciphertext: envelope.ciphertext,
 				header: {
-					...(envelope.v === 2 ? { v: 2 } : {}),
+					...(envelope.v === 2 || envelope.v === 3 ? { v: envelope.v } : {}),
 					client_tag: deps.generateClientTag(),
 					ephemeral_pub: envelope.ephemeralPub,
 					nonce: envelope.nonce,
+					...(envelope.senderKey !== undefined &&
+					envelope.recipientKeys !== undefined &&
+					envelope.wraps !== undefined
+						? { sk: envelope.senderKey, rk: [...envelope.recipientKeys], wk: [...envelope.wraps] }
+						: {}),
 					...(envelope.selfCiphertext !== undefined && envelope.selfNonce !== undefined
 						? { self_ciphertext: envelope.selfCiphertext, self_nonce: envelope.selfNonce }
 						: {})

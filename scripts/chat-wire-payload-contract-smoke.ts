@@ -68,10 +68,10 @@ function writtenKeys(): Set<string> {
 			for (const line of m[1]!.split('\n')) {
 				const k = /^\s*(?:\.\.\.\([^)]*\?\s*\{\s*)?([a-z][a-z0-9_]*)\s*:/.exec(line);
 				if (k !== null) keys.add(k[1]!);
-				// the conditional spread puts two keys on one line
-				for (const extra of line.matchAll(/\{\s*([a-z][a-z0-9_]*):[^,}]*,\s*([a-z][a-z0-9_]*):/g)) {
-					keys.add(extra[1]!);
-					keys.add(extra[2]!);
+				// a conditional spread puts several keys on one line:
+				// `? { sk: …, rk: [...], wk: [...] }` — every key in the braces
+				for (const obj of line.matchAll(/\{([^{}]*)\}/g)) {
+					for (const k2 of obj[1]!.matchAll(/(?:^|,)\s*([a-z][a-z0-9_]*)\s*:/g)) keys.add(k2[1]!);
 				}
 			}
 		}
@@ -142,7 +142,9 @@ const READER_BROWSER = read('apps/web/src/lib/chat/chatService.ts');
 
 /** HALF B. The E2EE fields must reach the reader that needs them. */
 {
-	const e2ee = ['ephemeral_pub', 'nonce'];
+	// sk / rk / wk: the posting-key envelope's sender key, recipient keys and the
+	// content key wrapped for each of them (v1.21.13, v3).
+	const e2ee = ['ephemeral_pub', 'nonce', 'sk', 'rk', 'wk'];
 	const broken = e2ee.filter((k) => !written.has(k) || !READER_BROWSER.includes(`h.${k}`));
 	if (broken.length === 0)
 		ok('the E2EE header fields are written by the sender and read by the recipient');
@@ -184,7 +186,9 @@ const READER_BROWSER = read('apps/web/src/lib/chat/chatService.ts');
  * reads like something every field ought to be.
  */
 {
-	const introspected = ['ephemeral_pub', 'nonce'].filter((k) => readByServer.has(k));
+	const introspected = ['ephemeral_pub', 'nonce', 'sk', 'rk', 'wk'].filter((k) =>
+		readByServer.has(k)
+	);
 	if (introspected.length === 0)
 		ok('the indexer does NOT read the E2EE fields — it stores the header opaquely');
 	else

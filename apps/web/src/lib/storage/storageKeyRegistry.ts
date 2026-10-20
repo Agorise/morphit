@@ -231,6 +231,15 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	// Changed counterparty keys waiting for the user to confirm the new safety number — names peers,
 	// so it must never survive sign-out.
 	{ key: 'morphit.chat.pub_pin_pending', tier: 'account', protection: 'sweep-only' },
+	// v1.21.13 — the peers' posting keys pinned for the posting-key envelope, and changed sets waiting
+	// for the user's confirmation. Name peers, so they never survive sign-out; sealed on Lock with the
+	// chat-key pins (morphit.chat.pub_pin_sealed).
+	{ key: 'morphit.chat.posting_pins', tier: 'account', protection: 'sweep-only' },
+	{ key: 'morphit.chat.posting_pin_pending', tier: 'account', protection: 'sweep-only' },
+	// v1.21.13 — the chat key this account was last seen to have published, so a later "none" from an
+	// indexer cannot move its conversations off chat keys. Names the account: wiped on sign-out,
+	// sealed on Lock.
+	{ key: 'morphit.chat.own_published', tier: 'account', protection: 'sweep-only' },
 	// The chat-key pins of a session locked with Lock, one slot per account (`.<id>`, derived one-way
 	// from its posting key), encrypted under a posting-key-derived key so they name nobody while
 	// locked; restored and removed at that account's next unlock. Kept on sign-out: another account

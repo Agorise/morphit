@@ -7,7 +7,7 @@
  *
  *   D2  a node that accepts a broadcast but loses the answer must not make the
  *       relay SIGN A SECOND, DIFFERENT transaction on the next node (a second
- *       2 BLURT dust / 10 BLURT bonus / account_create). The same signed bytes go
+ *       starter transfer / 10 BLURT bonus / account_create). The same signed bytes go
  *       to every node, and a create whose account landed with OUR keys is a
  *       SUCCESS: counted against the ceiling, invite consumed, dust sent once.
  *   D4  a live account_creation_fee more than 1.5x the configured one is refused

@@ -107,8 +107,9 @@ and we'll either fix the claim or fix the code.
   BTC/XMR/ETH/USDT/LTC/BCH per Koinly review; desktop-only).
 - **OpenMonero:** LocalMonero-clone web app (`openmonero.co`).
   Inherits LocalMonero's 2FA settings page (TOTP). Custodial. Web
-  UI, no dark mode. Multiple `.onion` and `.i2p` mirrors. Two
-  custodial-wallet exploits in 12 months — see brag entry #199.
+  UI, no dark mode. Multiple `.onion` and `.i2p` mirrors. Three
+  custodial-wallet drains since June 2025 (399 XMR by its operator's
+  count; refunds still pending) — see brag entry #217.
 - **BasicSwap:** `basicswapdex.com`, `github.com/basicswap/basicswap`
   (Particl team; Docker-deployed; user runs full node per coin or
   uses Electrum light-wallet mode for BTC/LTC; atomic swaps via

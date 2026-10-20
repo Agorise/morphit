@@ -178,8 +178,8 @@ curl -s -H 'X-Morphit-Local-Health: 1' http://localhost:8080/v1/health \
 ```
 
 Each signup costs the live `account_creation_fee` (~100 BLURT)
-plus a 2 BLURT dust transfer, so ~102 BLURT; the relay refuses a
-signup unless it holds the fee plus a 3 BLURT margin.  `stale: true`
+plus a 4 BLURT starter transfer, so ~104 BLURT; the relay refuses a
+signup unless it holds the fee plus a 5 BLURT margin.  `stale: true`
 means the last balance poll is over 90 s old — signups are refused
 until a poll succeeds again.
 
