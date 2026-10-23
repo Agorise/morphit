@@ -26,7 +26,10 @@
  * blip.  On each reconnect the server sends a fresh snapshot,
  * which we treat as authoritative — drop any pending buffered
  * appends, replace local state with the snapshot.  Subsequent
- * appends rebuild on top of that authoritative state.
+ * appends rebuild on top of that authoritative state.  A reconnect
+ * answered with an HTTP error closes an EventSource for good (HTML
+ * spec), so that case is reopened here, after a growing pause
+ * (v1.21.14 full chat audit, W-L2).
  *
  * Differences from orderbook stream:
  *   - No filter object (URL is fixed at construction).
@@ -40,6 +43,7 @@
 import { browser } from '$app/environment';
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
+import { withStreamTicket } from './streamTicket';
 
 function headerTag(header: unknown): string | null {
 	if (header && typeof header === 'object' && 'client_tag' in header) {
@@ -86,16 +90,28 @@ interface BufferedEvent {
  *  any honest workload; sustained overflow indicates abuse. */
 const MAX_BUFFER_SIZE = 500;
 
-function buildStreamUrl(me: string, peer: string): string {
+function buildStreamUrl(me: string, peer: string): string | null {
 	// Root-absolute path + new URL() resolves to `<origin>/v1/...`,
 	// discarding any path on the configured origin (correct for both
 	// colocated and split topologies). String-concat would re-introduce
 	// a stale prefix on single-host deploys.
-	return new URL(
+	const href = new URL(
 		`/v1/chat/${encodeURIComponent(me)}/${encodeURIComponent(peer)}/stream`,
 		resolveOrigin(MORPHIT_INDEXER_ORIGIN)
 	).href;
+	// v1.21.14, S-M8: the stream needs `me`'s ticket (403 without one). Null:
+	// this page has none (locked, nothing paired) — open nothing yet.
+	return withStreamTicket(href, me);
 }
+
+/** How often a conversation without a ticket looks again (a local check). */
+export const NO_TICKET_RETRY_MS = 2_000;
+
+/** v1.21.14 full chat audit, W-L2: a stream CLOSED by an HTTP error is
+ *  opened again after this pause, doubling up to the max, reset by the next
+ *  snapshot. */
+export const STREAM_RESTART_MIN_MS = 2_000;
+export const STREAM_RESTART_MAX_MS = 60_000;
 
 export function createChatStream(args: {
 	me: string;
@@ -108,6 +124,7 @@ export function createChatStream(args: {
 	let rafHandle: number | null = null;
 	const buffer: BufferedEvent[] = [];
 	let started = false;
+	let restartDelay = STREAM_RESTART_MIN_MS;
 
 	function setStreaming(s: boolean): void {
 		handlers.onStreamingChange?.(s);
@@ -147,10 +164,21 @@ export function createChatStream(args: {
 			// are simply unavailable on this rare browser.
 			return;
 		}
-		const url = buildStreamUrl(me, peer);
-		eventSource = new EventSource(url);
+		open();
+	}
 
-		eventSource.addEventListener('snapshot', (ev: MessageEvent) => {
+	function open(): void {
+		const url = buildStreamUrl(me, peer);
+		if (url === null) {
+			setTimeout(() => {
+				if (started && eventSource === null) open();
+			}, NO_TICKET_RETRY_MS);
+			return;
+		}
+		const source = new EventSource(url);
+		eventSource = source;
+
+		source.addEventListener('snapshot', (ev: MessageEvent) => {
 			try {
 				const snap = JSON.parse(ev.data) as ChatSnapshot;
 				// Drop any pending buffered diffs — snapshot is
@@ -165,6 +193,7 @@ export function createChatStream(args: {
 					rafHandle = null;
 				}
 				handlers.onSnapshot(snap);
+				restartDelay = STREAM_RESTART_MIN_MS;
 				setStreaming(true);
 			} catch {
 				// Bad JSON — server bug; the next snapshot will
@@ -172,7 +201,7 @@ export function createChatStream(args: {
 			}
 		});
 
-		eventSource.addEventListener('message_appended', (ev: MessageEvent) => {
+		source.addEventListener('message_appended', (ev: MessageEvent) => {
 			try {
 				const rec = JSON.parse(ev.data) as ChatMessageRecord;
 				if (buffer.length >= MAX_BUFFER_SIZE) {
@@ -190,11 +219,22 @@ export function createChatStream(args: {
 			}
 		});
 
-		eventSource.addEventListener('error', () => {
+		source.addEventListener('error', () => {
 			// EventSource auto-reconnects.  Mark streaming false
 			// transiently so the UI can dim the "Live" pip; flips
 			// back true when the next snapshot arrives.
 			setStreaming(false);
+			// W-L2: …except after an HTTP error answer, which CLOSES it for
+			// good (HTML spec): open it again, after a pause that grows.
+			if (!started || eventSource !== source || source.readyState !== 2 /* CLOSED */) return;
+			source.close();
+			eventSource = null;
+			const wait = restartDelay;
+			restartDelay = Math.min(restartDelay * 2, STREAM_RESTART_MAX_MS);
+			// Only if still wanted and not reopened meanwhile (stop, start).
+			setTimeout(() => {
+				if (started && eventSource === null) open();
+			}, wait);
 		});
 	}
 

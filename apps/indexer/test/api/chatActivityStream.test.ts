@@ -11,6 +11,9 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 
 import { chatActivityStreamRoute } from '$api/chatActivityStream';
 import { chatEventBus } from '$indexer/chatEventBus';
+import { streamTickets } from '../testutils/streamTickets';
+
+const T = await streamTickets();
 
 /** Read decoded chunks from an SSE body until `substr` appears (or time out). */
 async function readUntil(
@@ -57,14 +60,14 @@ afterEach(() => {
 
 describe('chatActivityStreamRoute', () => {
 	it('rejects an invalid account name with 400', async () => {
-		const app = chatActivityStreamRoute();
+		const app = chatActivityStreamRoute(T.routeOpts);
 		const res = await app.request('/Invalid_Name/stream');
 		expect(res.status).toBe(400);
 	});
 
 	it('opens an event-stream and sends a ready event', async () => {
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/alice/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/alice/stream', 'alice'), T.as('alice'));
 		expect(res.status).toBe(200);
 		expect(res.headers.get('content-type')).toContain('text/event-stream');
 		expect(res.headers.get('cache-control')).toContain('no-store');
@@ -75,8 +78,8 @@ describe('chatActivityStreamRoute', () => {
 	});
 
 	it('pings ONLY for conversations the account is in, carries the peer, and leaks no content', async () => {
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/alice/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/alice/stream', 'alice'), T.as('alice'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 		// Subscriptions are active once `ready` has been pushed.
@@ -97,9 +100,24 @@ describe('chatActivityStreamRoute', () => {
 		expect(frame).not.toMatch(/ciphertext|header|messageId|"id"/);
 	});
 
+	it('a durable ping says which way the message went (S-L5)', async () => {
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/alice/stream', 'alice'), T.as('alice'));
+		const reader = res.body!.getReader();
+		openReader = reader;
+		await readUntil(reader, 'event: ready');
+		chatEventBus.emit({ lo: 'alice', hi: 'dave', messageId: 2, sender: 'dave' });
+		const inbound = await readUntil(reader, '"inbound"');
+		expect(inbound).toContain('"peer":"dave"');
+		expect(inbound).toContain('"inbound":true');
+		chatEventBus.emit({ lo: 'alice', hi: 'erin', messageId: 3, sender: 'alice' });
+		const outbound = await readUntil(reader, '"peer":"erin"');
+		expect(outbound.slice(outbound.indexOf('"peer":"erin"'))).toContain('"inbound":false');
+	});
+
 	it('handles the head-block fast path too (sub-second, pre-DB) with peer + no content', async () => {
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/alice/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/alice/stream', 'alice'), T.as('alice'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 		await readUntil(reader, 'event: ready');
@@ -146,8 +164,8 @@ describe('chatActivityStreamRoute', () => {
 		// delivered into an open chatroom — a conversation you are looking at is
 		// not a notification — and the durable path still judges it on its own
 		// terms.
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/alice/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/alice/stream', 'alice'), T.as('alice'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 		await readUntil(reader, 'event: ready');
@@ -193,8 +211,8 @@ describe('chatActivityStreamRoute', () => {
 		// out before the recipient has ever replied, which is most first
 		// messages. The client ignores anything not marked inbound, so this frame
 		// is a reconcile hint rather than a badge.
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/alice/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/alice/stream', 'alice'), T.as('alice'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 		await readUntil(reader, 'event: ready');
@@ -250,8 +268,8 @@ describe('chatActivityStreamRoute', () => {
 
 		// NOW he opens a tab and signs in. No live event will ever fire for that
 		// message again.
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/alice/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/alice/stream', 'alice'), T.as('alice'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 
@@ -280,8 +298,8 @@ describe('chatActivityStreamRoute', () => {
 			orderPermlink: null,
 			replayable: true
 		});
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/alice/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/alice/stream', 'alice'), T.as('alice'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 
@@ -310,8 +328,8 @@ describe('chatActivityStreamRoute', () => {
 			orderPermlink: null,
 			replayable: true
 		});
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/zara/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/zara/stream', 'zara'), T.as('zara'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 
@@ -335,8 +353,8 @@ describe('chatActivityStreamRoute', () => {
 			orderPermlink: null,
 			replayable: true
 		});
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/yuri/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/yuri/stream', 'yuri'), T.as('yuri'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 
@@ -363,8 +381,8 @@ describe('chatActivityStreamRoute', () => {
 			orderPermlink: null,
 			replayable: false
 		});
-		const app = chatActivityStreamRoute();
-		const res = await app.request('/wanda/stream');
+		const app = chatActivityStreamRoute(T.routeOpts);
+		const res = await app.request(T.path('/wanda/stream', 'wanda'), T.as('wanda'));
 		const reader = res.body!.getReader();
 		openReader = reader;
 

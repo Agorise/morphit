@@ -33,10 +33,14 @@ describe('chat stream with MORPHIT_CHAT_DEBUG=1', () => {
 				}
 			};
 			const poller = { getStatus: () => ({ indexedBlock: 1 }) };
-			const res = await chatStreamRoute(db as never, poller as never).request(
-				'/alice/bob/stream',
-				{},
-				{ incoming: { socket: { remoteAddress: '127.0.0.1' } } }
+			const { streamTickets } = await import('../testutils/streamTickets');
+			const T = await streamTickets();
+			const res = await chatStreamRoute(db as never, poller as never, T.routeOpts).request(
+				T.path('/alice/bob/stream', 'alice'),
+				T.as('alice'),
+				{
+					incoming: { socket: { remoteAddress: '127.0.0.1' } }
+				}
 			);
 			const reader = res.body!.getReader();
 			let text = '';

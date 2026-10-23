@@ -59,14 +59,28 @@ export interface PushQueueDb {
 	query(text: string, params?: unknown[]): Promise<{ rowCount: number | null }>;
 }
 
+/**
+ * How long a CHAT push (category chat/order) stays as a tombstone: the
+ * indexer's one-push-per-day-until-reply cap (chatPushEnqueue.ts,
+ * NO_REPLY_PUSH_WINDOW_MS) reads earlier pushes from this table. Pruned after
+ * an hour, the cap lasted an hour for any message that never reached the chain
+ * (v1.21.14 full chat audit, S-M3): a stranger could earn a push every hour.
+ */
+export const CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS = 24 * 3600;
+
 /** Delete retired rows older than the tombstone retention — which is never
- *  shorter than `maxAgeSeconds`. Returns how many. */
+ *  shorter than `maxAgeSeconds`, and a day for chat pushes. Returns how many. */
 export async function prunePushTombstones(db: PushQueueDb, maxAgeSeconds: number): Promise<number> {
 	const res = await db.query(
 		`DELETE FROM push_pending
 		  WHERE sent_at IS NOT NULL
-		    AND sent_at < NOW() - ($1::int * INTERVAL '1 second')`,
-		[pushTombstoneRetentionSeconds(maxAgeSeconds)]
+		    AND sent_at < NOW() - ($1::int * INTERVAL '1 second')
+		    AND (category NOT IN ('chat', 'order')
+		         OR sent_at < NOW() - ($2::int * INTERVAL '1 second'))`,
+		[
+			pushTombstoneRetentionSeconds(maxAgeSeconds),
+			Math.max(CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS, pushTombstoneRetentionSeconds(maxAgeSeconds))
+		]
 	);
 	return res.rowCount ?? 0;
 }

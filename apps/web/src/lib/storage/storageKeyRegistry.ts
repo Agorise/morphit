@@ -114,13 +114,14 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	// Idle-lock timing is a property of the machine you are sitting at, not of you. Syncing a laptop
 	// value onto a phone would be wrong.
 	{ key: 'morphit.autoLock.timeoutMinutes', tier: 'device' },
-	// Which nodes THIS browser can reach; network-dependent.
+	// A Blurt RPC node list older builds let a user edit. Nothing writes or reads it any more (the
+	// browser contacts no node); kept so a value an older build left is still classified.
 	{ key: 'morphit.rpcEndpoints', tier: 'device' },
 	// Which build version this browser was told about.
 	{ key: 'morphit.updateDismissed', tier: 'device' },
 	// The outcome of the last release check (a signature-verified @morphit release record, public
-	// chain data, or the kind of failure) and when it was made, so this browser asks the Blurt nodes
-	// at most once a day. Names no person.
+	// chain data, or the kind of failure) and when it was made, so this browser asks this site's
+	// indexer again only when the check is due, not on every page load. Names no person.
 	{ key: 'morphit.releaseCheck.v2', tier: 'device' },
 	// This browser dismissed the "install the app" banner. A flag; names no person. (Its colon puts
 	// it outside the sign-out sweep's `morphit.` prefix, which is right for a device key.)

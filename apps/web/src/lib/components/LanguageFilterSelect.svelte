@@ -8,6 +8,7 @@
 -->
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
+	import { typedByUser } from '$lib/ui/typedByUser';
 	import { SUPPORTED_LOCALES } from '$i18n/locales';
 
 	/** Selected language codes (e.g. ["en","de"]). */
@@ -163,6 +164,12 @@
 			aria-expanded={open}
 			aria-controls="language-filter-listbox"
 			oninput={() => {
+				// Only the person's own typing opens the menu: a password manager
+				// filling this field must not blur the page (typedByUser).
+				if (!typedByUser(inputEl)) {
+					query = '';
+					return;
+				}
 				open = true;
 				activeIndex = 0;
 			}}

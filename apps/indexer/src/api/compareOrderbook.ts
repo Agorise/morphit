@@ -8,8 +8,9 @@
  * THE PROBLEM. The /compare page diffs this instance's orderbook against a
  * peer's, to catch an instance hiding orders. It fetched the peer's
  * `/v1/orderbook` from the visitor's browser, and every instance's
- * Content-Security-Policy `connect-src` allows only 'self' and the Blurt RPC
- * nodes — so the browser refused the request before it left ("Failed to
+ * Content-Security-Policy `connect-src` allowed only 'self' and the Blurt RPC
+ * nodes (since v1.21.14, 'self' alone) — so the browser refused the request
+ * before it left ("Failed to
  * fetch": morphit.io → timeapp, 2026-10-01). Since v1.20.0 put that policy on
  * the BunkerWeb boxes too, compare worked nowhere. Widening `connect-src` to
  * "every instance" is not a list a static header can hold, would put the

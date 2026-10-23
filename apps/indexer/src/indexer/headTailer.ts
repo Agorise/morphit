@@ -17,15 +17,24 @@
  *
  * HARD INVARIANTS (the safety contract — read before changing anything):
  *
- *  1. NEVER writes to the database. Not one row. The durable poller
+ *  1. NEVER writes message state to the database. The durable poller
  *     remains the SOLE source of truth for chat history (and for orders,
- *     fees, transfers, everything). This tailer only reads (the block
- *     feed + a block-list lookup) and emits in-process events.
+ *     fees, transfers, everything): no `chat_messages` row, no order, fee
+ *     or key row is written here. Its only writes are notification queue
+ *     rows, through the shared enqueues: `push_pending` (enqueueChatPush,
+ *     enqueueFeedbackPush) and `offline_notify_pending` (via
+ *     enqueueChatPush), deduplicated with the durable path's on the
+ *     transaction id (v1.21.14 audit: this used to say "not one row").
+ *     It reads the block feed, the block list, whether a transaction is
+ *     already stored, the signer's posting key (or asks two RPC operators
+ *     for it), and the notify gate's tables, and emits in-process events.
  *
- *  2. CHAT ONLY. It extracts exactly one op id — `morphit_chat_v1`.
- *     Orders, fees, feedback, transfers, and every other op are ignored
- *     here; they stay irreversible-only, always. A head-block op is not
- *     yet irreversible and must never drive money or state.
+ *  2. CHAT ONLY (as first written). It now also reads, for display and
+ *     notification only, order cancel/complete ops (ADR-0051), reviews (a
+ *     notification), and block and stranger-fee ops (held in memory:
+ *     headBlocks.ts, headStrangerFees.ts). Orders, fees, transfers and
+ *     every other op still stay irreversible-only for STATE. A head-block
+ *     op is not yet irreversible and must never drive money or state.
  *
  *  3. REORG IS ACCEPTABLE. A head block can be orphaned by a fork. If a
  *     message shown via the fast path is orphaned, it simply never
@@ -35,14 +44,16 @@
  *
  *  4. BLOCK LIST IS ENFORCED. Before emitting, we run the SAME block
  *     check the durable handler runs (recipient has blocked sender →
- *     drop). Skipping it would let a blocked sender's message flash up
- *     live even though the recipient blocked them — a real block bypass.
- *     This is the one gate we MUST replicate. (The anti-spam gates —
- *     stranger-fee + rate limits — are deliberately NOT replicated here:
- *     the durable pass still enforces them for persistent history, and a
- *     spammer's message being briefly visible before it fails to persist
- *     is a bounded, acceptable degradation. The block check is the only
- *     one whose bypass would be a genuine safety hole.)
+ *     drop), plus a block seen at the head and not durable yet
+ *     (headBlocks.ts, v1.21.14). Skipping it would let a blocked sender's
+ *     message flash up live even though the recipient blocked them — a
+ *     real block bypass. The anti-spam gates (stranger fee, rate limits)
+ *     decide DELIVERY only on the durable pass: a message the fast path
+ *     shows live in an open chatroom may still fail to persist. What they
+ *     DO decide here is ANNOUNCEMENT — the inbox ping, the push and the
+ *     replay — through the shared notify gate (fastNotifyGate.ts), a strict
+ *     subset of durable admission: a first-contact stranger is shown in a
+ *     chatroom already open on them, never announced.
  *
  *  5. CLIENT-TAG GATED. We only emit messages whose header carries a
  *     non-empty `client_tag`. That tag is how the client dedupes this
@@ -77,9 +88,17 @@ import { hasVerifiedChat } from '$indexer/chatGates';
 import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
 import { enqueueChatPush } from '$indexer/chatPushEnqueue';
 import {
+	looksLikeStrangerFeeOp,
+	noteHeadStrangerFee,
+	type ActiveSignerCheck
+} from '$indexer/headStrangerFees';
+import { parkFirstContact } from '$indexer/parkedFirstContacts';
+import { headBlocked, headBlockPending, noteHeadBlockOp } from '$indexer/headBlocks';
+import {
 	reconciledColumnLookup,
-	trxSignedByPostingKey,
-	type TrxSignerCheck
+	trxPostingSignatureState,
+	type TrxSignerCheck,
+	type TrxSignerState
 } from '$indexer/chainTrxSignature';
 import { logger } from '$log';
 import { transactionIdOf } from '$blurt/snapshotOpTrust';
@@ -137,6 +156,26 @@ export const MAX_CATCHUP_BLOCKS = 120;
  * Anything refused here still arrives by the durable path if it is real.
  */
 export const HEAD_BLOCK_MAX_SKEW_MS = 10 * 60_000;
+
+/** While no new block appears, the head number is read on one tick in this
+ *  many (a shortened chain, a node that skipped ahead); otherwise a tick asks
+ *  only for the next block (S-H4). */
+export const HEAD_READ_EVERY_TICKS = 10;
+
+/** When a head-block chat op whose signature could not be checked yet (its
+ *  sender's key needs a chain read) is looked at again, after the first try
+ *  (v1.21.14 audit, S-M4). A quorum key read is two RPC round trips. */
+export const RECHECK_DELAYS_MS: readonly number[] = [750, 2_000, 4_000];
+/** Ops waiting for a recheck at once. Past this, the durable path delivers. */
+export const RECHECK_MAX = 200;
+
+interface PendingRecheck {
+	readonly trx: unknown;
+	readonly located: LocatedChatOp;
+	readonly trxId: string;
+	readonly createdAt: Date;
+	readonly attempt: number;
+}
 export const TRX_MAX_EXPIRATION_S = 3600;
 
 /** Is this transaction's expiration plausible for a block at `blockTime`? */
@@ -431,13 +470,25 @@ export interface HeadTailerStatus {
 	/** Head-block ops refused because their signature could not be verified
 	 *  against the signer's posting key (v1.20.0, E1). */
 	readonly unverified: number;
+	/** Chat ops emitted after a recheck: their sender's key needed the chain. */
+	readonly rechecked?: number;
 	readonly lastError: string | null;
 	readonly lastErrorAt: Date | null;
 }
 
+/** Head stranger-fee checks one tailer queues at most (review A, F8). */
+export const FEE_CHECKS_QUEUED = 64;
+
 export class HeadTailer {
 	private readonly abort = new AbortController();
 	private scannedHead = 0;
+	/** The first block of the current unbroken run of scanned blocks (0 until
+	 *  the first watermark): head stranger fees need it (review A, F5). */
+	private coveredFrom = 0;
+	/** Head stranger-fee checks waiting or running (review A, F8): one at a
+	 *  time, at most FEE_CHECKS_QUEUED queued — each costs database reads. */
+	private feeChain: Promise<unknown> = Promise.resolve();
+	private feeQueued = 0;
 	private emitted = 0;
 	private running = false;
 	private lastError: string | null = null;
@@ -451,16 +502,43 @@ export class HeadTailer {
 	 * without one, only a chain-CONFIRMED key on file is trusted.
 	 */
 	private readonly signedBySigner: TrxSignerCheck;
+	/** A block op's signature, three-way (headBlocks.ts). */
+	private readonly blockSignature: (trx: unknown, account: string) => Promise<boolean | 'unknown'>;
 	/** Head-block ops shown/notified WITHOUT a verifiable signature: refused. */
 	private unverified = 0;
+
+	/** Checks a head-block stranger fee's ACTIVE signature (quorum keys). Absent
+	 *  → fees are not recognised at the head (the durable path still is). */
+	private readonly signedByActive: ActiveSignerCheck | undefined;
 
 	constructor(
 		private readonly config: Config,
 		private readonly db: Database,
 		private readonly blurt: BlurtClient,
-		opts: { readonly signedBySigner?: TrxSignerCheck } = {}
+		opts: {
+			readonly signedBySigner?: TrxSignerCheck;
+			/** The three-answer form (block ops need it); derived from
+			 *  signedBySigner when only that is given ('unknown' for any no). */
+			readonly signerState?: TrxSignerState;
+			readonly signedByActive?: ActiveSignerCheck;
+		} = {}
 	) {
-		this.signedBySigner = opts.signedBySigner ?? trxSignedByPostingKey(reconciledColumnLookup(db));
+		const state =
+			opts.signerState ??
+			(opts.signedBySigner !== undefined
+				? undefined
+				: trxPostingSignatureState(reconciledColumnLookup(db)));
+		this.signedBySigner =
+			opts.signedBySigner ?? (async (t, a) => (await (state as TrxSignerState)(t, a)) === 'valid');
+		const check = this.signedBySigner;
+		this.blockSignature =
+			state !== undefined
+				? async (t, a) => {
+						const st = await state(t as never, a);
+						return st === 'valid' ? true : st === 'invalid' ? false : 'unknown';
+					}
+				: async (t, a) => ((await check(t as never, a)) ? true : 'unknown');
+		this.signedByActive = opts.signedByActive;
 	}
 
 	/** Has the durable path stored this chat transaction already? A failed
@@ -495,6 +573,7 @@ export class HeadTailer {
 			scannedHead: this.scannedHead,
 			emitted: this.emitted,
 			unverified: this.unverified,
+			rechecked: this.rechecked,
 			lastError: this.lastError,
 			lastErrorAt: this.lastErrorAt
 		};
@@ -504,8 +583,9 @@ export class HeadTailer {
 	 *  stop().
 	 *
 	 *  v1.7.0 (ADR-0051) — there is no longer an enabled check here. The fast
-	 *  path is unconditional: it never writes to the DB, so the worst it can
-	 *  do is fail to make things fast, and nobody prefers slow. */
+	 *  path is unconditional: it writes no message state (only notification
+	 *  queue rows, see invariant 1), so the worst it can do is fail to make
+	 *  things fast, and nobody prefers slow. */
 	async run(): Promise<void> {
 		log.info('fastpath_start', { interval_ms: this.config.fastPathIntervalMs });
 		this.running = true;
@@ -518,6 +598,7 @@ export class HeadTailer {
 		try {
 			const dgp = await this.blurt.getDynamicGlobalProperties();
 			this.scannedHead = dgp.head_block_number;
+			this.coveredFrom = dgp.head_block_number + 1;
 		} catch (err) {
 			// Couldn't read the head at startup — start from 0 and let
 			// the first successful tick establish the watermark (it will
@@ -525,9 +606,15 @@ export class HeadTailer {
 			this.recordError(err);
 		}
 
+		// FIXED RATE (v1.21.14 audit, S-H4): the next tick is due one interval
+		// after this one STARTED, not after it ended. Sleeping a full interval
+		// after a tick that itself took a few RPC round trips added the tick's
+		// length to every message's worst case.
+		let nextDue = Date.now() + this.config.fastPathIntervalMs;
 		while (!this.abort.signal.aborted) {
-			await sleep(this.config.fastPathIntervalMs, this.abort.signal);
+			await sleep(Math.max(0, nextDue - Date.now()), this.abort.signal);
 			if (this.abort.signal.aborted) break;
+			nextDue = Date.now() + this.config.fastPathIntervalMs;
 			try {
 				await this.tick();
 				this.lastError = null;
@@ -543,7 +630,31 @@ export class HeadTailer {
 	}
 
 	/** One scan of the head delta. */
+	/** Ticks since the head was last read (see `tick`). */
+	private ticksSinceHeadRead = 0;
+
 	private async tick(): Promise<void> {
+		// THE NEXT BLOCK FIRST (v1.21.14 full chat audit, S-H4). Asking for the
+		// head number and then for the block cost two RPC round trips before a
+		// message could be shown, and on a node that reads its chain over a
+		// hidden service a round trip is most of a second. The block after the
+		// watermark is asked for directly: when it exists, its messages are
+		// emitted one round trip sooner; when it does not, the tick is over
+		// without reading the head at all. The head is still read after a block
+		// is found (catch-up, skip-ahead) and every HEAD_READ_EVERY_TICKS idle
+		// ticks (a chain that shortened under us).
+		if (this.scannedHead > 0) {
+			const next = this.scannedHead + 1;
+			const block = await this.blurt.getBlock(next);
+			if (block) {
+				await this.scanBlock(block, next);
+				this.scannedHead = next;
+			} else if (++this.ticksSinceHeadRead < HEAD_READ_EVERY_TICKS) {
+				return;
+			}
+		}
+		this.ticksSinceHeadRead = 0;
+
 		const dgp = await this.blurt.getDynamicGlobalProperties();
 		const head = dgp.head_block_number;
 
@@ -551,6 +662,7 @@ export class HeadTailer {
 		// the watermark without scanning back to genesis.
 		if (this.scannedHead === 0) {
 			this.scannedHead = head;
+			this.coveredFrom = head + 1;
 			return;
 		}
 
@@ -573,6 +685,7 @@ export class HeadTailer {
 			const skipTo = head - MAX_CATCHUP_BLOCKS + 1;
 			log.warn('fastpath_skip_ahead', { from, skip_to: skipTo, head });
 			from = skipTo;
+			this.coveredFrom = skipTo;
 		}
 
 		for (let n = from; n <= head && !this.abort.signal.aborted; n++) {
@@ -586,13 +699,13 @@ export class HeadTailer {
 				this.scannedHead = n - 1;
 				return;
 			}
-			await this.scanBlock(block);
+			await this.scanBlock(block, n);
 			this.scannedHead = n;
 		}
 	}
 
 	/** Extract, validate, block-check, and emit chat ops from one block. */
-	private async scanBlock(block: BlockHeader): Promise<void> {
+	private async scanBlock(block: BlockHeader, blockNum = 0): Promise<void> {
 		// Head-block timestamps are UTC; normalise like the dispatcher.
 		const createdAt = blockTimeOf(block.timestamp);
 		// Not a head block (see HEAD_BLOCK_MAX_SKEW_MS): nothing in it is live.
@@ -601,6 +714,34 @@ export class HeadTailer {
 			Math.abs(Date.now() - createdAt.getTime()) > HEAD_BLOCK_MAX_SKEW_MS
 		) {
 			return;
+		}
+
+		// The block's BLOCK ops first, before any of its chat ops (v1.21.14
+		// review A, F7): the durable path applies them first too
+		// (sortOpsForAdmission), so a message placed earlier in the same block
+		// than its recipient's block of the sender is refused there — and was
+		// announced here. A transaction's signature is checked once per account,
+		// not once per op (review A, F6: 400 block ops in one transaction cost
+		// 400 recoveries, ~1.4 s of the tailer on every instance).
+		for (const trx of block.transactions) {
+			if (!trx || !trxFreshAt(trx, createdAt)) continue;
+			const memo = new Map<string, Promise<boolean | 'unknown'>>();
+			const once = (t: unknown, a: string): Promise<boolean | 'unknown'> => {
+				let r = memo.get(a);
+				if (r === undefined) {
+					r = this.blockSignature(t, a);
+					memo.set(a, r);
+				}
+				return r;
+			};
+			for (const op of trx.operations) {
+				if (!op || op[0] !== 'custom_json') continue;
+				const b = await noteHeadBlockOp(trx, op as readonly [string, unknown], once);
+				// The blocker's key needs the chain, or may have just been rotated:
+				// looked at again (finding 7).
+				if (b === 'pending' || b === 'unverified')
+					this.scheduleBlockRecheck(trx, op as readonly [string, unknown], 0);
+			}
 		}
 
 		for (let ti = 0; ti < block.transactions.length; ti++) {
@@ -619,6 +760,43 @@ export class HeadTailer {
 			if (trxId === null) continue;
 			for (const op of trx.operations) {
 				if (!op) continue;
+
+				// (Block ops seen at the head — S-L2 — were recorded above, before
+				// any op of this block.)
+
+				// A stranger fee seen at the head (S-H3): recognised in the
+				// background — the tailer never waits on the chain — so the paid
+				// first message that follows reaches the inbox fast.
+				const signedByActive = this.signedByActive;
+				if (
+					signedByActive !== undefined &&
+					looksLikeStrangerFeeOp(op) &&
+					this.feeQueued < FEE_CHECKS_QUEUED
+				) {
+					this.feeQueued++;
+					const ctx = {
+						blockNum,
+						blockTime: createdAt,
+						feeRecipient: this.config.feeRecipient,
+						feeTolerance: this.config.feeTolerance,
+						trxId,
+						coveredFrom: this.coveredFrom
+					};
+					this.feeChain = this.feeChain
+						.then(() =>
+							noteHeadStrangerFee(
+								this.db,
+								trx,
+								op as readonly [string, unknown],
+								ctx,
+								signedByActive
+							)
+						)
+						.catch(() => undefined)
+						.finally(() => {
+							this.feeQueued--;
+						});
+				}
 
 				// v1.5.5 fastfeedback — a 4-star review produced no notification
 				// at all, let alone within 6 seconds. Only chat had a head-block path, so a
@@ -666,6 +844,11 @@ export class HeadTailer {
 					continue;
 				}
 				if (blocked) {
+					// Held back only while a head block's signature is checked: looked
+					// at again once that is settled (an unverifiable block must not
+					// cost the message its fast delivery).
+					if (headBlockPending(located.recipient, located.signer))
+						this.scheduleRecheck({ trx, located, trxId, createdAt, attempt: 0 });
 					continue;
 				}
 
@@ -695,26 +878,32 @@ export class HeadTailer {
 					continue;
 				}
 
-				const fastAllowed = await this.fastNotifyAllowed(located, createdAt);
-
-				// ASKED AGAIN, on purpose. The gate above is one or two database
-				// reads, and this loop yields at them — which is long enough for a
-				// peer's push of this very transaction to arrive, verify, emit and
-				// record itself in the window between the first check and here.
-				// Re-reading immediately before the emit closes that window; the
-				// earlier check stays because it saves the gate queries entirely in
-				// the common case, which is that the fast path got there first.
-				if (wasFastEmitted(trxId)) {
+				// E1 (v1.20.0): the op NAMES its signer; only the signature proves
+				// it. Checked after the cheap skips, so a message the fast path
+				// already delivered costs no key recovery, and BEFORE the notify
+				// gate, which counts what it lets through (fastNotifyGate.ts): an
+				// op nobody has proved must not count against its pair (independent
+				// review 2, finding 1). Unverifiable here (unknown or unconfirmed
+				// key, a rotation not yet recorded) means not shown LIVE from this
+				// block YET: the lookup has started a background chain read of the
+				// key, and the message is looked at again once it has had time to
+				// answer (v1.21.14 audit, S-M4 — it used to be dropped for good, so
+				// a new account's first message waited out the durable poller).
+				if (!(await this.verified(trx, located.signer))) {
+					this.scheduleRecheck({ trx, located, trxId, createdAt, attempt: 0 });
 					continue;
 				}
 
-				// E1 (v1.20.0): the op NAMES its signer; only the signature proves
-				// it. Checked last, after the cheap skips, so a message the fast
-				// path already delivered costs no key recovery. Unverifiable here
-				// (unknown or unconfirmed key, a rotation not yet recorded) means
-				// not shown LIVE from this block — a peer's verified push or the
-				// durable poller still brings it.
-				if (!(await this.verified(trx, located.signer))) {
+				const fastAllowed = await this.fastNotifyAllowed(located, createdAt);
+
+				// ASKED AGAIN, on purpose. The checks above read the database and
+				// recover a key, and this loop yields at them — which is long enough
+				// for a peer's push of this very transaction to arrive, verify, emit
+				// and record itself in the window between the first check and here.
+				// Re-reading immediately before the emit closes that window; the
+				// earlier check stays because it saves the work entirely in the
+				// common case, which is that the fast path got there first.
+				if (wasFastEmitted(trxId)) {
 					continue;
 				}
 
@@ -740,8 +929,110 @@ export class HeadTailer {
 				// stranger is never fast-notified.
 				if (fastAllowed) {
 					await this.maybeFastNotify(located, trxId, createdAt);
+				} else {
+					this.park(located, trxId, createdAt);
 				}
 			}
+		}
+	}
+
+	/** A message the gate refused waits briefly for its stranger fee, which
+	 *  may be recognised a moment later (S-H3, parkedFirstContacts.ts). */
+	private park(located: LocatedChatOp, trxId: string, createdAt: Date): void {
+		parkFirstContact({
+			located,
+			trxId,
+			createdAt,
+			gateAt: createdAt,
+			blocked: (l) => this.recipientBlockedSender(l.recipient, l.signer),
+			gate: (l, at) => this.fastNotifyAllowed(l, at),
+			notify: (l, id, at) => this.maybeFastNotify(l, id, at)
+		});
+	}
+
+	/** Chat ops whose signature could not be checked yet, waiting for the key. */
+	private readonly rechecks = new Set<NodeJS.Timeout>();
+	private rechecked = 0;
+
+	/** Look at a head-block chat op again after its sender's key read has had
+	 *  time to answer (S-M4). Bounded: RECHECK_DELAYS_MS attempts per op,
+	 *  RECHECK_MAX ops waiting at once. */
+	private scheduleRecheck(item: PendingRecheck): void {
+		const delay = RECHECK_DELAYS_MS[item.attempt];
+		if (delay === undefined || this.rechecks.size >= RECHECK_MAX) return;
+		const timer = setTimeout(() => {
+			this.rechecks.delete(timer);
+			void this.recheck(item);
+		}, delay);
+		timer.unref?.();
+		this.rechecks.add(timer);
+	}
+
+	/** A head block whose blocker's key needed the chain, looked at again on the
+	 *  same schedule (independent review of the audit fixes, finding 7). */
+	private scheduleBlockRecheck(
+		trx: unknown,
+		op: readonly [string, unknown],
+		attempt: number
+	): void {
+		const delay = RECHECK_DELAYS_MS[attempt];
+		if (delay === undefined || this.rechecks.size >= RECHECK_MAX) return;
+		const timer = setTimeout(() => {
+			this.rechecks.delete(timer);
+			if (this.abort.signal.aborted) return;
+			const final = attempt + 1 >= RECHECK_DELAYS_MS.length;
+			void noteHeadBlockOp(trx as never, op, (t, a) => this.blockSignature(t, a), Date.now(), {
+				final
+			}).then((r) => {
+				if (r === 'pending' || r === 'unverified') this.scheduleBlockRecheck(trx, op, attempt + 1);
+			});
+		}, delay);
+		timer.unref?.();
+		this.rechecks.add(timer);
+	}
+
+	private async recheck(item: PendingRecheck): Promise<void> {
+		if (this.abort.signal.aborted) return;
+		const { trx, located, trxId, createdAt } = item;
+		try {
+			if (wasFastEmitted(trxId) || (await this.storedChat(trxId))) return;
+			if (await this.recipientBlockedSender(located.recipient, located.signer)) {
+				// Still pending: keep looking (the hold itself ends within
+				// HEAD_BLOCK_PENDING_MS, so this stops).
+				if (headBlockPending(located.recipient, located.signer))
+					this.scheduleRecheck({
+						...item,
+						attempt: Math.min(item.attempt + 1, RECHECK_DELAYS_MS.length - 1)
+					});
+				return;
+			}
+			if (!(await this.verified(trx, located.signer))) {
+				this.scheduleRecheck({ ...item, attempt: item.attempt + 1 });
+				return;
+			}
+			const fastAllowed = await this.fastNotifyAllowed(located, createdAt);
+			if (wasFastEmitted(trxId)) return;
+			const lo = located.signer < located.recipient ? located.signer : located.recipient;
+			const hi = located.signer < located.recipient ? located.recipient : located.signer;
+			chatEventBus.emitFast({
+				lo,
+				hi,
+				sender: located.signer,
+				recipient: located.recipient,
+				ciphertext: located.ciphertext,
+				header: located.header,
+				createdAt,
+				clientTag: located.clientTag,
+				orderPermlink: located.orderPermlink,
+				replayable: fastAllowed
+			});
+			this.emitted++;
+			this.rechecked++;
+			if (fastAllowed) await this.maybeFastNotify(located, trxId, createdAt);
+			else this.park(located, trxId, createdAt);
+		} catch (err) {
+			// Never let a recheck escape; the durable path still delivers.
+			log.warn('fastpath_recheck_failed', {}, err);
 		}
 	}
 
@@ -768,10 +1059,9 @@ export class HeadTailer {
 			// clock here, exactly as the durable handler uses it.
 			return await fastChatNotifyAllowed(this.db, located, createdAt);
 		} catch (err) {
-			log.warn('fast_gate_failed', {
-				recipient: located.recipient,
-				err: String((err as Error)?.message ?? err)
-			});
+			// No account names in the log (v1.21.14 full chat audit, S-L6): who
+			// messaged whom is exactly what the chat design keeps off disk.
+			log.warn('fast_gate_failed', { err: String((err as Error)?.message ?? err) });
 			return false;
 		}
 	}
@@ -795,10 +1085,7 @@ export class HeadTailer {
 				eventAt: createdAt
 			});
 		} catch (err) {
-			log.warn('fast_notify_failed', {
-				recipient: located.recipient,
-				err: String((err as Error)?.message ?? err)
-			});
+			log.warn('fast_notify_failed', { err: String((err as Error)?.message ?? err) });
 		}
 	}
 
@@ -897,6 +1184,8 @@ export class HeadTailer {
 	/** SAME block-list check the durable chat handler runs. Returns true
 	 *  when `recipient` has an active block against `sender`. */
 	private async recipientBlockedSender(recipient: string, sender: string): Promise<boolean> {
+		// A block the durable list does not have yet (S-L2, headBlocks.ts).
+		if (headBlocked(recipient, sender)) return true;
 		const res = await this.db.query<{ exists: boolean }>(
 			`SELECT EXISTS (
 			   SELECT 1 FROM blocks
@@ -916,6 +1205,8 @@ export class HeadTailer {
 	/** Ask the loop to stop at the next safe boundary. */
 	stop(): void {
 		this.abort.abort();
+		for (const t of this.rechecks) clearTimeout(t);
+		this.rechecks.clear();
 	}
 }
 

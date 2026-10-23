@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { currentLocale } from '$i18n';
@@ -682,17 +683,20 @@
 				     different passwords for the same keys. -->
 				{#if keystoreMode === 'password'}
 					<div class="mt-5 space-y-3">
-						<label class="block text-sm font-medium">
-							{$_('onboarding.backup.password_label')}
-							<input
-								type="password"
-								bind:value={password}
-								autocomplete="new-password"
-								minlength="8"
-								maxlength="64"
-								class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-							/>
-						</label>
+						<!-- Its own form (PasswordScope); no account name is known yet. -->
+						<PasswordScope account={null} class="block">
+							<label class="block text-sm font-medium">
+								{$_('onboarding.backup.password_label')}
+								<input
+									type="password"
+									bind:value={password}
+									autocomplete="new-password"
+									minlength="8"
+									maxlength="64"
+									class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								/>
+							</label>
+						</PasswordScope>
 						<p class="text-xs text-ink-500">{$_('onboarding.backup.password_hint')}</p>
 						{#if password.length >= 10}
 							{@const strength = scorePassword(password)}

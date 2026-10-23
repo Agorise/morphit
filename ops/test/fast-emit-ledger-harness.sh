@@ -155,20 +155,20 @@ fi
 # so "the tailer stops consulting the ledger" means removing both.
 snapshot "$TAILER"
 cat > "$WORK/.needle" <<'NEEDLE'
-				if (trxId !== undefined && wasFastEmitted(trxId)) {
-					tailerDbg('tailer.SKIP_ALREADY_FAST', { trxId });
+				if (wasFastEmitted(trxId)) {
 					continue;
 				}
+				// Already stored by the durable path: an old message, not news.
 NEEDLE
-printf '%s' '' > "$WORK/.repl"
+printf '%s\n' '				// Already stored by the durable path: an old message, not news.' > "$WORK/.repl"
 if mutate "$TAILER" "$WORK/.needle" "$WORK/.repl"; then
 	cat > "$WORK/.needle" <<'NEEDLE'
-				if (trxId !== undefined && wasFastEmitted(trxId)) {
-					tailerDbg('tailer.SKIP_ALREADY_FAST_LATE', { trxId });
+				// common case, which is that the fast path got there first.
+				if (wasFastEmitted(trxId)) {
 					continue;
 				}
 NEEDLE
-	printf '%s' '' > "$WORK/.repl"
+	printf '%s\n' '				// common case, which is that the fast path got there first.' > "$WORK/.repl"
 	if mutate "$TAILER" "$WORK/.needle" "$WORK/.repl"; then
 		expect_caught 'R2 every message is delivered twice' "$TAILER" 're-emitted'
 	else
@@ -260,10 +260,11 @@ fi
 # never going to be accepted.
 snapshot "$BCAST"
 cat > "$WORK/.needle" <<'NEEDLE'
-			const located = structuralCheckChatOp(trx);
-			if (located.ok) noteOutboundChat(located.located.signer, located.located.recipient);
+			if (located.ok && verifiedHere) {
+				noteOutboundChat(located.located.signer, located.located.recipient);
+			}
 NEEDLE
-printf '%s' '			const located = structuralCheckChatOp(trx);' > "$WORK/.repl"
+printf '%s' '' > "$WORK/.repl"
 if mutate "$BCAST" "$WORK/.needle" "$WORK/.repl"; then
 	cat > "$WORK/.needle" <<'NEEDLE'
 		const chatOnly = isChatMessageOnly(trx);
@@ -302,15 +303,13 @@ if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	cat > "$WORK/.needle" <<'NEEDLE'
 	if (fastAllowed) {
 		await gates.enqueuePush(located, trxId, createdAt).catch(() => undefined);
-	}
-	return 'emitted';
+	} else {
 NEEDLE
 	cat > "$WORK/.repl" <<'REPL'
 	if (!trxId.startsWith('tag:')) markFastEmitted(trxId);
 	if (fastAllowed) {
 		await gates.enqueuePush(located, trxId, createdAt).catch(() => undefined);
-	}
-	return 'emitted';
+	} else {
 REPL
 	if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 		expect_caught 'R9 the ledger is claimed after the await, so a concurrent twin emits' "$FED" 'concurrent deliveries emitted'

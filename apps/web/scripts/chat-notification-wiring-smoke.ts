@@ -78,10 +78,16 @@ check('the review form container still carries scroll-mt-24 (\u22481in below the
 // timestamp sanitiser introduced a `seen` local — changes that STRENGTHEN what
 // these checks protect. (A federated indexer can serve `last_message_at: 2099`;
 // unsanitised, that becomes the read cursor and the user goes silently deaf.)
+// v1.21.14 full chat audit, W-M3 / W-L4 — the requirement changed: the ack
+// is the newest message SEEN (a chain time) and nothing else. max(seen, now)
+// — what this used to pin — acked, on a device whose clock runs fast, the
+// messages that arrived after the user left; nothing seen is no ack at all.
 check(
-	'readAckTimestamp prefers the CHAIN timestamp over a lagging clock',
+	'readAckTimestamp is the CHAIN timestamp seen, never raised to the device clock',
 	/export function readAckTimestamp/.test(readState) &&
-		/\.getTime\(\) > now\.getTime\(\) \?[\s\S]{0,40}?: now;/.test(code(readState))
+		/if \(latestSeenAt === null\) return null;/.test(code(readState)) &&
+		/return seen;\s*\}/.test(code(readState)) &&
+		!/\.getTime\(\) > now\.getTime\(\) \?[\s\S]{0,40}?: now;/.test(code(readState))
 );
 check(
 	'an unparseable timestamp falls back to the local clock',

@@ -77,26 +77,29 @@ const readState = strip(read('apps/web/src/lib/chat/readState.ts'));
 // and broke when the sanitiser introduced a `seen` local: a correct change
 // failing a check it never violated. Third time today; the family is relentless.
 check(
-	'4 readAckTimestamp clamps to max(latestSeen, now)',
-	/export function readAckTimestamp\([\s\S]{0,600}?\.getTime\(\) > now\.getTime\(\) \?[\s\S]{0,40}?: now;/.test(
-		readState
-	),
-	'this is the watermark that keeps a cursor from landing behind the message it acks'
+	'4 readAckTimestamp is the newest message SEEN, never raised to the device clock',
+	/export function readAckTimestamp\([\s\S]{0,1200}?return seen;\s*\}/.test(readState) &&
+		!/\.getTime\(\) > now\.getTime\(\) \?[\s\S]{0,40}?: now;/.test(readState),
+	'v1.21.14 full chat audit, W-M3: max(seen, now) acked, on a fast clock, what arrived after the reader left'
 );
 const inbox = strip(read('apps/web/src/routes/[lang]/chat/+page.svelte'));
 check(
-	'5 the inbox acks through the clamp, not a bare new Date()',
-	/markConversationRead\(\s*peer,\s*orderPermlink,\s*readAckTimestamp\(/.test(inbox),
-	'bare new Date() here = the thread you just opened stays green on a slow clock'
+	'5 the inbox acks with the row time (ackThreadRead), not a bare new Date()',
+	/ackThreadRead\(peer, orderPermlink, lastMessageAt\)/.test(inbox) &&
+		/export function ackThreadRead\([\s\S]{0,200}?readAckTimestamp\(new Date\(lastMessageAt\)\)/.test(
+			strip(read('apps/web/src/lib/notifications/chatUnread.ts'))
+		),
+	'bare new Date() here = the thread you just opened stays green on a slow clock (or, fast, swallows what comes next)'
 );
 check(
 	'6 …and hands it the row block time it already has',
-	/handleOpen\(convo\.peer, convo\.order\?\.permlink \?\? '', convo\.last_message_at\)/.test(inbox)
+	/handleOpen\(convo\.peer, convo\.order\?\.permlink \?\? '', 'fastOnly' in convo \? undefined : convo\.last_message_at\)/.test(inbox)
 );
 const convView = strip(read('apps/web/src/lib/components/ConversationView.svelte'));
 check(
-	'7 ConversationView acks through the clamp against the newest message',
-	/markConversationRead\(peer, orderPermlink \?\? '', readAckTimestamp\(latestConfirmedAt\(\)\)\)/.test(convView)
+	'7 ConversationView acks with the newest message shown, and nothing when none is',
+	/const at = readAckTimestamp\(latestConfirmedAt\(\)\);\s*if \(at === null\) return;/.test(convView) &&
+		/markConversationRead\(peer, orderPermlink \?\? '', at(?:, \{ newestIsFast: newestIsFastCopy\(\) \})?\)/.test(convView)
 );
 
 // ── FOLDERS: compared against last_message_at (block time) ──────────
@@ -123,13 +126,13 @@ check(
 // thread would. Nothing here may special-case a missing permlink into "no thread".
 check(
 	'10 the no-order thread ("") goes through the same clamp as an order thread',
-	/handleOpen\(convo\.peer, convo\.order\?\.permlink \?\? '', convo\.last_message_at\)/.test(inbox),
+	/handleOpen\(convo\.peer, convo\.order\?\.permlink \?\? '', 'fastOnly' in convo \? undefined : convo\.last_message_at\)/.test(inbox),
 	'`?? \'\'` is the girlfriends thread — it carries a block time like any other and must be clamped'
 );
 check(
 	'11 …and the fallback-peer list still opens a no-order thread',
 	/handleOpen\(peer, ''\)/.test(inbox),
-	'no messages loaded there, so the clamp degrades to now — correct, not special-cased away'
+	'no messages loaded there, so nothing is acked (W-M3: the device clock is never a cursor) — correct, not special-cased away'
 );
 check(
 	'12 archiving passes the block time for BOTH thread shapes',
@@ -300,8 +303,9 @@ check(
 );
 check(
 	'30 …and a PAST lie still cannot silence a real message',
-	/latestSeenAt/.test(readState) && /\.getTime\(\) > now\.getTime\(\) \?/.test(readState),
-	'both consumers floor at now, so a past lie can only fail to advance the cursor'
+	/const seen = sanitizeBlockTime\(latestSeenAt, now\.getTime\(\)\);/.test(readState) &&
+		/return seen;\s*\}/.test(readState),
+	'the ack is at most the (sanitised) time of a message seen, so a past lie can only move the cursor back — more unread, never less'
 );
 
 // ── the inbox slide must not fire on arrival (Bob walkthrough) ────

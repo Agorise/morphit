@@ -12,8 +12,12 @@
 	 * on the outgoing text regardless of whether the warning was
 	 * acknowledged — defense in depth.
 	 *
-	 * Draft persistence: keyed by peer account so parallel conversations
-	 * don't collide. Saved with 500ms debounce; wiped on successful send.
+	 * Draft persistence: keyed by THREAD — peer account plus the order the
+	 * thread is about (v1.21.14 full chat audit, W-L7: it was the peer
+	 * alone, so a draft typed in one order's thread reappeared, and could be
+	 * sent, in another thread with the same person). Saved with 500ms
+	 * debounce; wiped when a message is sent (the words then live in its
+	 * bubble, with Retry if the send fails).
 	 * Per docs/CHAT-UI-DESIGN.md, draft persistence survives auto-lock
 	 * (idle timeout) because the user's intent to send is still there;
 	 * it's only wiped on explicit Lock-now. That wiping is handled by
@@ -39,6 +43,9 @@
 		/** Peer account name — used for the draft key and the
 		 *  placeholder text. */
 		peer: string;
+		/** The order this thread is about (absent: the thread that cites no
+		 *  order). Part of the draft key. */
+		orderPermlink?: string;
 		/** Called when the user confirms a send. The composer has
 		 *  already redacted private-key material from the argument
 		 *  string. Parent handles the actual broadcast + state
@@ -57,7 +64,7 @@
 		onkeydown?: (event: KeyboardEvent) => void;
 	}
 
-	let { peer, onSend, isLocked = false, onkeydown }: Props = $props();
+	let { peer, orderPermlink, onSend, isLocked = false, onkeydown }: Props = $props();
 
 	/** Maximum plaintext codepoints per message. Matches the
 	 *  design-doc budget; the indexer enforces a ciphertext-level
@@ -73,9 +80,13 @@
 	 *  so it never truncates a valid 256-codepoint message. */
 	const MAX_CODEPOINTS = 256;
 
-	/** Draft key in the shared drafts module. The full localStorage
-	 *  key becomes `morphit.draft.chat.<peer>`. */
-	const draftKey = $derived(`chat.${peer}`);
+	/** Draft key in the shared drafts module. The full localStorage key is
+	 *  `morphit.draft.chat.<peer>` for the thread that cites no order (the
+	 *  key every draft had before), `morphit.draft.chat.<peer>#<order>` for
+	 *  an order's thread. `#` occurs in neither an account name nor a
+	 *  permlink, so no two threads share a key; an explicit Lock still clears
+	 *  them all by the `chat` prefix. */
+	const draftKey = $derived(orderPermlink ? `chat.${peer}#${orderPermlink}` : `chat.${peer}`);
 
 	let text = $state('');
 	let sending = $state(false);
@@ -146,10 +157,9 @@
 		};
 	});
 
-	// Re-load the draft when the peer changes — e.g. user navigates
+	// Re-load the draft when the thread changes — e.g. user navigates
 	// from /chat/alice to /chat/bob without unmounting the component.
 	$effect(() => {
-		void peer;
 		const saved = loadDraft<{ text: string }>(draftKey);
 		text = saved && typeof saved.text === 'string' ? saved.text : '';
 	});
@@ -191,25 +201,31 @@
 			return;
 		}
 		sending = true;
+		// Final redaction pass — even if the modal was dismissed,
+		// nothing sensitive leaves the client.
+		const outgoing = redactPrivateKeys(trimmed);
+		// Clear text + draft BEFORE anything is awaited — a user hitting Enter
+		// twice quickly must not resubmit the same content.
+		text = '';
+		clearDraft(draftKey);
+		userAckedKeyWarning = false;
+		// v1.21.14 full chat audit, W-M6: NOT awaited. The send continues in
+		// the background — its bubble shows "sending…", then delivered, or
+		// failed with Retry (the words are kept there) — while the box is free
+		// for the next message at once. Awaiting it held the box disabled, the
+		// text still in it, for the chain-head read and the broadcast: seconds
+		// per message on Tor/I2P.
 		try {
-			// Final redaction pass — even if the modal was dismissed,
-			// nothing sensitive leaves the client.
-			const outgoing = redactPrivateKeys(trimmed);
-			await onSend(outgoing);
-			// Success: clear text + draft. Intentionally blank the
-			// text BEFORE yielding — a user hitting Enter twice
-			// quickly shouldn't resubmit the same content.
-			text = '';
-			clearDraft(draftKey);
-			userAckedKeyWarning = false;
-		} finally {
-			sending = false;
-			// v1.5.0 — keep the cursor in the composer after a send (success OR
-			// failure) unless the user clicks elsewhere. tick() first so the
-			// textarea is re-enabled (disabled while `sending`) before focus.
-			await tick();
-			inputRef?.focus();
+			void Promise.resolve(onSend(outgoing)).catch(() => undefined);
+		} catch {
+			// A send that throws at once has its own bubble or nothing to say.
 		}
+		sending = false;
+		// v1.5.0 — keep the cursor in the composer after a send unless the
+		// user clicks elsewhere. tick() first so the textarea is re-enabled
+		// (disabled while `sending`) before focus.
+		await tick();
+		inputRef?.focus();
 	}
 
 	function onKeydown(event: KeyboardEvent): void {

@@ -1185,6 +1185,39 @@ export const SHIPMENT_LIMITS = {
 	noteMax: 500
 } as const;
 
+/**
+ * The longest ciphertext (base64 characters) the indexer accepts for a chat
+ * message — and, separately, for its self-copy. Mirrors MAX_CIPHERTEXT_CHARS
+ * in apps/indexer/src/indexer/handlers/chat.ts (payloadBudget.test.ts reads
+ * that file and fails if the two differ).
+ */
+export const MAX_CHAT_CIPHERTEXT_CHARS = 1536;
+/** ChaCha20-Poly1305 tag bytes, appended to the encrypted text in BOTH
+ *  envelope formats (v2 chat keys, v3 posting keys; crypto.ts). */
+const AEAD_TAG_BYTES = 16;
+
+/**
+ * The exact length of the ciphertext `plaintext` encrypts to, in either
+ * envelope format: base64 of its UTF-8 bytes plus the 16-byte tag. Neither
+ * format pads. (The v2 self-copy is the same length; the v3 one is a 48-byte
+ * key wrap.)
+ */
+export function chatCiphertextChars(plaintext: string): number {
+	const bytes = new TextEncoder().encode(plaintext).length + AEAD_TAG_BYTES;
+	return 4 * Math.ceil(bytes / 3);
+}
+
+/**
+ * Will this plaintext be accepted as ONE chat message? v1.21.14 full chat
+ * audit, W-M5: a mailing address every field of which the modal accepted could
+ * encrypt to more than the indexer takes. It was broadcast, the fee charged,
+ * and never delivered ("on chain, not accepted"). The forms check this before
+ * sending; chatService checks the sealed envelope itself as the last line.
+ */
+export function fitsChatMessage(plaintext: string): boolean {
+	return chatCiphertextChars(plaintext) <= MAX_CHAT_CIPHERTEXT_CHARS;
+}
+
 /** ISO 3166-1 alpha-2 country code shape: two uppercase letters. */
 export const ISO_COUNTRY_RE = /^[A-Z]{2}$/;
 
@@ -1211,6 +1244,8 @@ export function isValidCustomTrackingUrl(s: unknown): s is string {
 	if (typeof s !== 'string') return false;
 	if (s.length > SHIPMENT_LIMITS.customTrackingUrlMax) return false;
 	if (!s.startsWith('https://')) return false;
+	// W-L9: shown to the reader as text too — no direction overrides.
+	if (noteHasForbiddenChars(s)) return false;
 	try {
 		const u = new URL(s);
 		return u.protocol === 'https:';
@@ -1895,7 +1930,9 @@ export type MailingAddressProblem =
 	| 'recipient_name_too_long'
 	| 'note_too_long'
 	| 'note_forbidden_chars'
-	| 'order_permlink_invalid';
+	| 'field_forbidden_chars'
+	| 'order_permlink_invalid'
+	| 'too_long_to_send';
 
 /** Why a shipment payload can't be sent. */
 export type ShipmentProblem =
@@ -1905,7 +1942,9 @@ export type ShipmentProblem =
 	| 'custom_tracking_url_invalid'
 	| 'note_too_long'
 	| 'note_forbidden_chars'
-	| 'order_permlink_invalid';
+	| 'field_forbidden_chars'
+	| 'order_permlink_invalid'
+	| 'too_long_to_send';
 
 /** Thrown by the mailing-address and shipment encoders; `problem` is the
  *  same code the matching validator returns. */
@@ -1924,6 +1963,17 @@ function noteProblem(
 	if (note.length > max) return 'note_too_long';
 	if (noteHasForbiddenChars(note)) return 'note_forbidden_chars';
 	return null;
+}
+
+/**
+ * v1.21.14 full chat audit, W-L9: the free-text fields a reader sees as text
+ * (street, city, name, carrier, …) refuse control and direction-override
+ * characters, as the notes always did. A hostile peer could otherwise make a
+ * mailing address or a carrier name read differently from what it says —
+ * U+202E reverses what follows it. Same rule on encode and decode.
+ */
+function fieldsHaveForbiddenChars(...fields: (string | undefined)[]): boolean {
+	return fields.some((f) => typeof f === 'string' && noteHasForbiddenChars(f));
 }
 
 function permlinkProblem(permlink: string | undefined): 'order_permlink_invalid' | null {
@@ -1958,7 +2008,13 @@ export function mailingAddressProblem(p: MailingAddressPayload): MailingAddressP
 		p.recipientName.length > MAILING_ADDRESS_LIMITS.recipientNameMax
 	)
 		return 'recipient_name_too_long';
-	return noteProblem(p.note, MAILING_ADDRESS_LIMITS.noteMax) ?? permlinkProblem(p.orderPermlink);
+	if (fieldsHaveForbiddenChars(p.street, p.street2, p.city, p.state, p.postalCode, p.recipientName))
+		return 'field_forbidden_chars';
+	const other =
+		noteProblem(p.note, MAILING_ADDRESS_LIMITS.noteMax) ?? permlinkProblem(p.orderPermlink);
+	if (other !== null) return other;
+	// W-M5: everything valid, and still too long to travel as one message.
+	return fitsChatMessage(mailingAddressWire(p)) ? null : 'too_long_to_send';
 }
 
 /**
@@ -1978,8 +2034,12 @@ export function shipmentProblem(p: ShipmentPayload): ShipmentProblem | null {
 			return 'custom_carrier_name_too_long';
 		if (p.customTrackingUrl !== undefined && !isValidCustomTrackingUrl(p.customTrackingUrl))
 			return 'custom_tracking_url_invalid';
+		if (fieldsHaveForbiddenChars(p.customCarrierName)) return 'field_forbidden_chars';
 	}
-	return noteProblem(p.note, SHIPMENT_LIMITS.noteMax) ?? permlinkProblem(p.orderPermlink);
+	const other = noteProblem(p.note, SHIPMENT_LIMITS.noteMax) ?? permlinkProblem(p.orderPermlink);
+	if (other !== null) return other;
+	// W-M5: everything valid, and still too long to travel as one message.
+	return fitsChatMessage(shipmentWire(p)) ? null : 'too_long_to_send';
 }
 
 /**
@@ -1996,7 +2056,11 @@ export function encodeMailingAddressPayload(p: MailingAddressPayload): string {
 	if (p.kind !== 'morphit_mailing_address') throw new Error('payload: wrong kind');
 	const problem = mailingAddressProblem(p);
 	if (problem !== null) throw new PayloadValidationError(problem);
+	return mailingAddressWire(p);
+}
 
+/** The wire JSON of a mailing address, unchecked (the encoder checks). */
+function mailingAddressWire(p: MailingAddressPayload): string {
 	const wire: Record<string, unknown> = {
 		v: 1,
 		kind: 'morphit_mailing_address',
@@ -2024,7 +2088,11 @@ export function encodeShipmentPayload(p: ShipmentPayload): string {
 	if (p.kind !== 'morphit_shipment') throw new Error('payload: wrong kind');
 	const problem = shipmentProblem(p);
 	if (problem !== null) throw new PayloadValidationError(problem);
+	return shipmentWire(p);
+}
 
+/** The wire JSON of a shipment, unchecked (the encoder checks). */
+function shipmentWire(p: ShipmentPayload): string {
 	const wire: Record<string, unknown> = {
 		v: 1,
 		kind: 'morphit_shipment',
@@ -2196,6 +2264,18 @@ export function decodePayload(plaintext: string): DecodeResult {
 		};
 		const result = optionalFieldsMailingAddress(payload, o);
 		if (result === null) return { kind: 'plaintext' };
+		// W-L9: no control / direction-override characters in what is shown.
+		if (
+			fieldsHaveForbiddenChars(
+				result.street,
+				result.street2,
+				result.city,
+				result.state,
+				result.postalCode,
+				result.recipientName
+			)
+		)
+			return { kind: 'plaintext' };
 		return { kind: 'mailing_address', payload: result };
 	}
 
@@ -2212,6 +2292,8 @@ export function decodePayload(plaintext: string): DecodeResult {
 		};
 		const result = optionalFieldsShipment(payload, o);
 		if (result === null) return { kind: 'plaintext' };
+		// W-L9: the carrier name is shown as text.
+		if (fieldsHaveForbiddenChars(result.customCarrierName)) return { kind: 'plaintext' };
 		return { kind: 'shipment', payload: result };
 	}
 

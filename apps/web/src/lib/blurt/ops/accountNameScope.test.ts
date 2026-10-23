@@ -106,6 +106,32 @@ describe('where the account name goes', () => {
 		expect(names(window.sessionStorage)).toEqual([]);
 	});
 
+	it('another account signing in on a device that remembers one: never takes the remembered name', async () => {
+		// alice is remembered here (her name under HER key, and in the
+		// origin-wide "last account" slot beside it).
+		window.localStorage.setItem('morphit.keystore.mode', 'password');
+		window.localStorage.setItem('morphit.keystore.envelope', JSON.stringify(ENV));
+		window.localStorage.setItem('morphit.blurtAccount.0505050505050505', 'alice');
+		window.localStorage.setItem('morphit.blurtAccount', 'alice');
+		const { identity, profile } = await load();
+		// Someone else's key unlocks; its name is not known yet.
+		unlock(identity);
+		expect(profile.getUserBlurtAccount()).toBeNull();
+		expect(window.localStorage.getItem('morphit.blurtAccount.0303030303030303')).toBeNull();
+		profile.setUserBlurtAccount('bob');
+		expect(profile.getUserBlurtAccount()).toBe('bob');
+	});
+
+	it("a device from before names were scoped: the one name there is the unlocked key's", async () => {
+		window.localStorage.setItem('morphit.keystore.mode', 'password');
+		window.localStorage.setItem('morphit.keystore.envelope', JSON.stringify(ENV));
+		window.localStorage.setItem('morphit.blurtAccount', 'alice');
+		const { identity, profile } = await load();
+		unlock(identity);
+		expect(profile.getUserBlurtAccount()).toBe('alice');
+		expect(window.localStorage.getItem('morphit.blurtAccount.0303030303030303')).toBe('alice');
+	});
+
 	it('a tab handed the session by a sibling gets the name with it', async () => {
 		const { identity, profile } = await load();
 		unlock(identity, 'alice');

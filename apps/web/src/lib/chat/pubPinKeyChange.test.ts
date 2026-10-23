@@ -55,10 +55,10 @@ describe('a pinned key that changes waits for the user', () => {
 		).rejects.toBeTruthy();
 		const m = pin as unknown as {
 			pendingKeyChange?: (p: string) => unknown;
-			acceptKeyChange?: (p: string, kind: 'chat' | 'posting') => boolean;
+			acceptKeyChange?: (p: string, kind: 'chat' | 'posting', shown: string) => boolean;
 		};
 		expect(m.pendingKeyChange?.('alice')).toMatchObject({ pubB64: PUB_OPERATOR });
-		expect(m.acceptKeyChange?.('alice', 'chat')).toBe(true);
+		expect(m.acceptKeyChange?.('alice', 'chat', PUB_OPERATOR)).toBe(true);
 		expect(pin.getPin('alice')?.pubB64).toBe(PUB_OPERATOR);
 		const used = await pin.resolveChatPubFromIndexer(
 			'alice',

@@ -1,24 +1,31 @@
 /**
  * apps/indexer/src/indexer/chatPushEnqueue.ts
  *
- * shared chat Web Push enqueue, used by BOTH delivery paths:
- *   • the DURABLE handler (chat.ts), ~irreversible, and
- *   • the FAST head-block tailer (headTailer.ts), ~5s after send.
+ * shared chat Web Push enqueue, used by EVERY delivery route:
+ *   • the DURABLE handler (chat.ts), ~irreversible;
+ *   • the FAST head-block tailer (headTailer.ts: scanBlock, its rechecks and
+ *     a parked first contact released by its fee);
+ *   • a verified federation push and a local delivery
+ *     (chatFastFederation.deliverVerifiedPush through
+ *     federationChatFast.gatesFromDb, and a parked first contact released
+ *     there).
  *
- * Both set `source_trx_id` = the on-chain trx id; the partial UNIQUE
- * (account, source_trx_id) index (migration v43) makes the SECOND insert a
- * no-op, so the recipient gets EXACTLY ONE notification — fast when the
- * tailer wins the race, with the durable path as the reliable fallback for
- * any message the head tailer skipped (bounded scan / reorg).
+ * All set `source_trx_id` = the on-chain trx id; the partial UNIQUE
+ * (account, source_trx_id) index (migration v43) makes every later insert a
+ * no-op, so the recipient gets EXACTLY ONE notification — from whichever fast
+ * route got there first, with the durable path as the reliable fallback for
+ * any message no fast route delivered.
  *
  * SAFETY — BLOCK GATE. The CALLER must already have enforced the block list;
- * a blocked sender must NEVER reach here. Both call sites do:
+ * a blocked sender must NEVER reach here. Every call site does:
  *   • chat.ts drops "recipient blocked sender" (chat.DROP.blocked) before the
- *     enqueue, and
- *   • headTailer.scanBlock runs recipientBlockedSender BEFORE emitting.
+ *     enqueue;
+ *   • headTailer.scanBlock and its recheck run recipientBlockedSender BEFORE
+ *     emitting;
+ *   • deliverVerifiedPush runs gates.recipientBlockedSender first.
  * This function does NOT re-check — it trusts that gate. The smoke
- * `chat-fast-notification-smoke` pins BOTH call sites so the gate can't be
- * refactored out from under the enqueue.
+ * `chat-fast-notification-smoke` pins the durable and head-tailer call sites
+ * so the gate can't be refactored out from under the enqueue.
  *
  * PRIVACY. Content is metadata-only: the title/body name the sender, never
  * the plaintext (which the indexer cannot read — chat is E2EE on chain).
@@ -30,6 +37,7 @@ import type pg from 'pg';
 import { logger } from '$log';
 import { localize, normalizeLocale } from '$indexer/pushLocalize';
 import { enqueueOfflineNotice } from '$indexer/offlineNoticeEnqueue';
+import { hasRecentOutboundChat } from '$indexer/recentOutboundChat';
 
 const log = logger('chat-push-enqueue');
 
@@ -65,18 +73,44 @@ export interface ChatPushParams {
 }
 
 /**
- * Until the recipient has written to the sender, the sender's messages earn
- * ONE notification per NO_REPLY_PUSH_WINDOW_MS. The order-contact bypass
- * admits up to 20 new senders a day per recipient (no stranger fee) and up to
- * 50 unanswered messages each — 1,000 fee-free notifications a day from 20
- * sock accounts. The messages are still delivered; only the pushes are
- * capped, so 20 senders make at most 20 notifications a day. A prior message
- * (stored by the durable path) or a prior push (queued by either path) from
- * the same sender inside the window counts.
+ * Until the recipient has written to the sender (a stored message, or a reply
+ * this instance just relayed — recentOutboundChat), the sender's messages earn
+ * ONE notification per NO_REPLY_PUSH_WINDOW_MS. A prior message from the same
+ * sender inside the window (stored by the durable path) or a prior push for
+ * the sender's thread (queued by any route; the relay keeps chat tombstones
+ * for the whole window) counts. The messages are still delivered; only the
+ * pushes are capped.
+ *
+ * What this does NOT bound is the number of senders. The durable handler's
+ * fan-in cap admits at most 20 new unanswered senders a day per recipient
+ * (order-contact bypass included), up to 50 unanswered messages each — so its
+ * STORED messages earn at most 20 pushes a day. But a fast route pushes before
+ * the durable handler has run, and the fast gate does not apply the fan-in cap
+ * (fastNotifyBudget.ts: it meters per pair, not fan-in), so a 21st sender
+ * writing about the recipient's live order still gets a push for a message
+ * the durable path then refuses. Each such sender earns one push a day; the
+ * number of senders is bounded only by what accounts cost.
  */
-const NO_REPLY_PUSH_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const NO_REPLY_PUSH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Is this sender still in the one-push-per-day-until-reply window?
+ *
+ * v1.21.14 (full chat audit):
+ *   - S-M1: "has the recipient replied?" read only the DURABLE table, 45-63 s
+ *     behind. A seller who had just answered a buyer through this instance got
+ *     no notification for the buyer's next message. This instance's own relay
+ *     log of the recipient's reply (recentOutboundChat) now counts too — the
+ *     same first-hand record the fast gate trusts.
+ *   - S-M2: an earlier push was matched by `LIKE '%/chat/<sender>%'`, so a push
+ *     from "bobby" silenced the first message from "bob". The thread path is
+ *     now matched exactly (`…/chat/<sender>` or `…/chat/<sender>?…`).
+ *   - S-M3: chat tombstones are kept for the whole window (the relay prunes
+ *     them after NO_REPLY_PUSH_WINDOW_MS, see pushQueueJanitor), so the cap
+ *     lasts a day for messages that never reach the chain too, not an hour.
+ */
 async function quietUntilReply(db: ChatPushDb, p: ChatPushParams): Promise<boolean> {
+	if (hasRecentOutboundChat(p.recipient, p.sender)) return false;
 	const since = new Date(p.eventAt.getTime() - NO_REPLY_PUSH_WINDOW_MS);
 	const r = await db.query<{ quiet: boolean }>(
 		`SELECT NOT EXISTS (
@@ -91,7 +125,8 @@ async function quietUntilReply(db: ChatPushDb, p: ChatPushParams): Promise<boole
 		     OR EXISTS (
 		          SELECT 1 FROM push_pending
 		           WHERE account = $1 AND event_at > $3
-		             AND click_path LIKE '%/chat/' || $2 || '%'
+		             AND (click_path LIKE '%/chat/' || $2
+		                  OR click_path LIKE '%/chat/' || $2 || '?%')
 		             AND source_trx_id IS DISTINCT FROM $5
 		        )) AS quiet`,
 		[p.recipient, p.sender, since, p.eventAt, p.sourceTrxId]
@@ -185,9 +220,7 @@ export async function enqueueChatPush(db: ChatPushDb, params: ChatPushParams): P
 			]
 		);
 	} catch (err) {
-		log.warn('push_enqueue_failed', {
-			recipient: params.recipient,
-			err: String((err as Error)?.message ?? err)
-		});
+		// No account names in the log (v1.21.14 full chat audit, S-L6).
+		log.warn('push_enqueue_failed', { err: String((err as Error)?.message ?? err) });
 	}
 }

@@ -386,8 +386,10 @@
 			"unrecorded_label": "Not recorded on the blockchain",
 			"unrecorded_detail": "This message reached you directly from the sender's server, but the blockchain never recorded it, so there is no permanent proof it was sent. If the sender's app reported it as not sent, they may send it again.",
 			"unrecorded_detail_own": "This message was sent from another of your sessions, but the blockchain never recorded it, so there is no permanent proof it was sent. You can send it again.",
-			"sender_unverified": "Sender not verified: this message came in an older format (or after a key change you haven't accepted), so it can't be proved that this person wrote it. Don't pay to an address in it without confirming it with them another way.",
-			"peer_no_posting_key": "This account has no posting key of its own (other accounts manage it), so messages can't be encrypted to it."
+			"sender_unverified": "Sender not verified: this person's account keys have changed since you last chatted, and you haven't compared the new safety number yet (⋮ → Verify peer), so it can't be proved that they wrote this. Don't pay to an address in it without confirming it with them another way.",
+			"sender_unverified_older_format": "Sent from an older version of the app, so this message can't be confirmed as coming from this person — that's normal while everyone updates. Before paying to an address in it, confirm it with them another way.",
+			"peer_no_posting_key": "This account has no posting key of its own (other accounts manage it), so messages can't be encrypted to it.",
+			"too_long": "Not sent: too long for one chat message. Shorten it and send it again."
 		},
 		"composer": {
 			"aria_label": "Send a message",
@@ -502,8 +504,7 @@
 			},
 			"chain_unreachable": "We couldn't reach the blockchain to check this person's keys, so the message wasn't sent. This is common on Tor and I2P, where connections take a while to build. Nothing is wrong — try again in a moment.",
 			"pub_pin_key_changed": "Not sent: this person's key changed. That happens when they reset their keys — or when someone is trying to read your messages. Open ⋮ → Verify peer and compare the new safety number with them over another channel before you accept it.",
-			"accept_new_key": "I compared it — accept the new key",
-			"pub_pin_posting_key_changed": "Not sent: these are not keys you have checked for this person. Their account has a new key, or until now you only wrote to them in the older format. That happens when someone resets or adds keys — or when someone is trying to read your messages. Open ⋮ → Verify peer and compare the safety number with them over another channel before you accept it.",
+			"pub_pin_posting_key_changed": "Not sent: this person's account keys have changed since you last chatted. That happens when someone resets or adds keys — or when someone is trying to read your messages. Open ⋮ → Verify peer and compare the safety number with them over another channel before you accept it.",
 			"pub_pin_withdrawn": "We couldn't safely send: your server says this person no longer has the key it reported before, but a key recorded on the blockchain can't disappear. The server may be out of sync, or fabricating data. Try again later, or use another Morphit instance."
 		},
 		"live": "Live",
@@ -608,7 +609,8 @@
 			"address_invalid_xrp": "Not a valid XRP Ledger address.  Expected an address starting with r followed by 24-34 base58 characters (no destination tag in this field).",
 			"pill_method_xrp": "Ripple (XRP)",
 			"blurt_account_not_found": "No Blurt account with that name exists.",
-			"asset_label": "Coin"
+			"asset_label": "Coin",
+			"too_long_to_send": "This is too long to send in one chat message. Shorten the note or the PayJoin link and try again."
 		},
 		"funds_sent": {
 			"button": "Pay now",
@@ -722,10 +724,6 @@
 			"subtitle": "Compare this 60-digit safety number with @{peer} over a channel you already trust (voice call, in person, another platform). If both of you see the same number, nobody swapped your keys.",
 			"computing": "Computing the safety number…",
 			"locked": "Unlock your account first to compute the safety number.",
-			"tamper_heading": "Tamper detected — DO NOT continue chatting",
-			"tamper_body": "The chat key the indexer served for this peer doesn't match what the chain says. This is a strong signal of MITM or compromise. Stop trusting this conversation until you understand why.",
-			"error_indexer": "Couldn't fetch the peer's chat key from the indexer.",
-			"error_bad_key": "The peer's chat key is malformed.",
 			"error_unknown": "Couldn't compute the safety number. Try again.",
 			"retry": "Retry",
 			"fingerprint_aria": "Safety number, 12 groups of 5 digits",
@@ -744,9 +742,11 @@
 			"key_changed_accept": "The numbers match — accept the new key",
 			"no_account": "There is no Blurt account by this name, so there is no safety number to compare.",
 			"no_posting_key": "This account has no posting key of its own (other accounts manage it), so there is no safety number to compare.",
-			"own_key_stale": "Your key on the blockchain is an old one (you changed your keys since). It is replaced automatically the next time you open chat with enough BLURT for the network fee. Until then, @{peer} may see a different number.",
 			"first_use_note": "These are @{peer}'s keys as the blockchain lists them now, and nothing is pinned yet. If your numbers match, use these keys, so your messages go to exactly them.",
-			"first_use_accept": "The numbers match — use these keys"
+			"first_use_accept": "The numbers match — use these keys",
+			"own_key_missing": "This site does not list the posting key you signed in with among your account's keys, so there is no safety number to compare. If you have not just changed your keys, do not trust this site with your chats.",
+			"own_extra_heading": "Your account lists other posting keys",
+			"own_extra_body": "Besides the key you signed in with, this site lists the posting keys below for your account, and messages to you are encrypted to them too. If one of them is not yours, whoever holds it can read the messages sent to you: change your keys, and do not trust this site with your chats."
 		},
 		"boot_failed": "Couldn't load chat. Try refreshing the page.",
 		"mailing_address": {
@@ -1495,7 +1495,7 @@
 			},
 			"chat_identity_key": {
 				"q": "Do I need to set up a separate key to use chat?",
-				"a": "No. Chat uses your Blurt posting key — the key you already have. There's nothing extra to create, publish, back up or lose.\n\nHow it works:\n• Messages to you are encrypted to your posting public key, which has been on the Blurt chain since your account was created. Anyone can write to you, even if you have never opened chat, and you read it whenever you sign in. The sender pays the small network fee; you need no BLURT to receive a message.\n• Your private key never leaves your browser.\n• Conversations started before version 1.21.13 between two people who had both opened chat may use a key made from the posting key and published on chain back then. They keep working as before. If you published one then and later change your posting key, the new one is published for you the next time you open chat, for a small network fee.\n\nThe trade-off: anyone who gets your posting key — for example by stealing your 12-word phrase — can also read all your past chats, and your new ones until you change your posting key. They could already pose as you, so the thing to protect doesn't change: keep your 12-word phrase and your password safe."
+				"a": "No. Chat uses your Blurt posting key — the key you already have. There's nothing extra to create, publish, back up or lose.\n\nHow it works:\n• Messages to you are encrypted to your posting public key, which has been on the Blurt chain since your account was created. Anyone can write to you, even if you have never opened chat, and you read it whenever you sign in. The sender pays the small network fee; you need no BLURT to receive a message.\n• Your private key never leaves your browser.\n• Conversations from before version 1.21.14 may contain messages in an older format, which used a key made from the posting key and published on chain back then. They stay readable. Since 1.21.14 every new message uses your posting key, and nothing is published for you any more.\n\nThe trade-off: anyone who gets your posting key — for example by stealing your 12-word phrase — can also read all your past chats, and your new ones until you change your posting key. They could already pose as you, so the thing to protect doesn't change: keep your 12-word phrase and your password safe."
 			},
 			"syndicate_trade_announcement": {
 				"q": "What is the \"Syndicate my order\" checkbox?",
@@ -1775,7 +1775,7 @@
 			},
 			"ip_address_and_rpc_nodes": {
 				"q": "Does anything see or leak my IP address when I use {brand}?",
-				"a": "**What this site sees.** Like any website, the server gets your IP address with each request. The code keeps it only in memory, for rate limits — about a minute for ordinary requests, up to 24 hours for the signup limits — and never writes it to disk or a log, or sends it anywhere. The web server keeps addresses only in memory for its own limits and short bans, and keeps no access log with them. No cookies, analytics, trackers or telemetry. Orders, encrypted chat, balances and the block explorer data are all secured on-chain.\n\n**The one possible IP leak.** At most once a day (and once after each site update, or when you press **Try again** on a fee panel), your browser asks a public network node — a Blurt RPC node run by someone else — for the signed release record that says which Morphit version is current. That is two small requests to one node (each may come with a CORS preflight): the last 100 entries of @morphit's history, then the block holding the release. Only if that node fails, sends a record that can't be verified, or names a different release than this site runs, is another node asked the same. If the release is older than those 100 entries, one more history request is made (up to about 115 KB). The result is remembered for 24 hours and shared by all your tabs; if a node offers only a release older than this site's, your browser asks again within the hour. If your browser blocks this site's storage, it can't remember, so it asks each time you open {brand}. You can watch all of it in your browser's Network tab.\n\n**Which nodes.** On an https or plain-http clearnet address: the five public clearnet nodes. On a .onion address: only the seven .onion nodes. On an .i2p address: only the seven .b32.i2p nodes.\n\n**Why.** The record names the current release, Morphit's fee addresses and the fingerprints of the app's start-up files, and it must carry @morphit's signature. A bad node can make the check fail or delay an update notice, but can't fake a release. It catches an outdated or damaged build — not an operator who deliberately serves altered code, since that operator also serves the check.\n\n**What a node learns.** Your IP address, this site's address (on .onion or .i2p, that hidden address), your browser's User-Agent and language, and that someone asked for @morphit's release history. Not your username, orders, chat or balances.\n\n**Use Tor or a VPN** and this is closed: both hide your IP from the nodes and from your operator."
+				"a": "**What this site sees.** Like any website, the server gets your IP address with each request. The code keeps it only in memory, for rate limits — about a minute for ordinary requests, up to 24 hours for the signup limits — and never writes it to disk or a log, or sends it anywhere. The web server keeps addresses only in memory for its own limits and short bans, and keeps no access log with them. No cookies, analytics, trackers or telemetry. Orders, encrypted chat, balances and the block explorer data are all secured on-chain.\n\n**Nobody else.** Your browser talks to this site and to nothing else — no Blurt node, no price service, no tracker. The one exception is push notifications, if you turn them on (sites reachable only over Tor or I2P don't offer them): your browser then also uses its maker's push service (Google, Mozilla, Apple or Microsoft), which delivers each alert encrypted and sees when it arrives — see \"How do push notifications work with my privacy?\". This site's security policy (its Content-Security-Policy) lets your browser connect to this site only. Every read from the Blurt chain, every broadcast and the daily release check go through this site, which asks the network for you: the network's nodes see this site, never you.\n\n**The release check.** At most once a day (and once after each site update, or when you press **Try again** on a fee panel), your browser asks this site for the signed release record that says which Morphit version is current: two small requests — the last 100 entries of @morphit's history, then the block holding the release. If the release is older than those 100 entries, one more history request is made (up to about 115 KB). This site answers only with what two Blurt RPC operators agree on, and your browser checks @morphit's signature itself: nobody can fake a release, though this site could hold back news of a newer one. The result is remembered for 24 hours and shared by all your tabs; if the record names a release older than this site's, your browser asks again within the hour, and if this site could not get an answer, after 12 hours. If your browser blocks this site's storage, it can't remember, so it asks each time you open {brand}. You can watch all of it in your browser's Network tab.\n\n**Links you open.** A payment link for another coin opens a public block explorer in a new tab, and that explorer sees your IP like any site you visit.\n\n**Use Tor or a VPN** to hide your IP from this site and from any explorer you open."
 			}
 		},
 		"share_link": "Share",
@@ -2045,7 +2045,7 @@
 		},
 		"release_op": {
 			"title": "Release op",
-			"body": "An on-chain operation signed by the @morphit account that announces a new Morphit release: its version, the SHA-256 of its source tarball, and the hashes of the files that start the website. At most once a day your browser reads the newest one from a public Blurt node (a second node only if the first fails) and checks its signature; when the site runs that version, it compares the files it loaded with the signed hashes and warns you if they differ. That catches a file changed by accident or by a partly compromised server — not a hostile operator, who serves the checking code too."
+			"body": "An on-chain operation signed by the @morphit account that announces a new Morphit release: its version, the SHA-256 of its source tarball, and the hashes of the files that start the website. At most once a day your browser reads the newest one through this site, which answers only with what two Blurt RPC operators agree on, and checks its signature itself; when the site runs that version, it compares the files it loaded with the signed hashes and warns you if they differ. That catches a file changed by accident or by a partly compromised server — not a hostile operator, who serves the checking code too."
 		},
 		"seed_phrase": {
 			"title": "Seed phrase",
@@ -2395,7 +2395,9 @@
 			"recipient_name_too_long": "The recipient name is too long (at most 100 characters).",
 			"note_too_long": "The note is too long (at most 500 characters).",
 			"note_forbidden_chars": "The note contains a tab, line break or another invisible control character. Remove it and try again.",
-			"order_permlink_invalid": "This address can't be linked to the order. Close this window and open it again from the order."
+			"order_permlink_invalid": "This address can't be linked to the order. Close this window and open it again from the order.",
+			"too_long_to_send": "This address is too long to send in one chat message. Shorten the note (or another field) and try again.",
+			"field_forbidden_chars": "A field contains a tab, line break or another invisible control character. Remove it and try again."
 		},
 		"send_failed": "The address could not be sent. Check your connection and try again."
 	},
@@ -3956,7 +3958,7 @@
 		"chat_title": "Chat is end-to-end encrypted.",
 		"chat_body": "Every message is encrypted in your browser before it leaves (an elliptic-curve key exchange on your Blurt posting keys, and ChaCha20-Poly1305), with a fresh one-time key mixed with both of your keys, so only you and your partner can read it, and your partner knows it really came from you. No server holds a key that opens it. Your partner's key is pinned: if it ever changes, {brand} stops and asks you first, and a 60-digit safety number lets you check each other outside {brand}. What stays public is the envelope: messages live on the Blurt chain, so who wrote to whom, when, about which order and how long each message is are visible, and there is no forward secrecy. The full design is in {chat_crypto_doc}.",
 		"reproducible_title": "Signed, fingerprinted releases.",
-		"reproducible_body": "Every release is built from a GPG-signed git tag on main, and @morphit anchors it on the Blurt chain: the SHA-256 of the source tarball and of the offline bundle, and the hashes of the files that start the website (page shell, service worker, entry code). Your browser reads that signed record straight from a public Blurt node, not from this site, re-checks the files this site served against it, and names any that differ in a red warning; a node installs an upgrade only if it matches. That catches a file changed by accident or by a partly compromised server; it cannot protect you from a hostile operator, who serves the checking code too. There is no Subresource Integrity on the scripts, and builds are not yet byte-for-byte reproducible, so you verify a download by its hash and signature (docs/VERIFY-YOUR-DOWNLOAD.md), not by rebuilding it.",
+		"reproducible_body": "Every release is built from a GPG-signed git tag on main, and @morphit anchors it on the Blurt chain: the SHA-256 of the source tarball and of the offline bundle, and the hashes of the files that start the website (page shell, service worker, entry code). Your browser reads that signed record through this site, which answers only with what two Blurt RPC operators agree on, checks @morphit's signature itself, re-checks the files this site served against it, and names any that differ in a red warning; a node installs an upgrade only if it matches. That catches a file changed by accident or by a partly compromised server; it cannot protect you from a hostile operator, who serves the checking code too. There is no Subresource Integrity on the scripts, and builds are not yet byte-for-byte reproducible, so you verify a download by its hash and signature (docs/VERIFY-YOUR-DOWNLOAD.md), not by rebuilding it.",
 		"open_source_title": "Open-source, open threat model.",
 		"open_source_body": "The full threat model is in the repo's {security_doc}. We're explicit about what we protect against and what we don't — because pretending otherwise would be worse than honesty.",
 		"footer_body": "Found a security issue? Send it only as a private Matrix message to @agorise:matrix.org. Never post the details in public: not in a Forgejo issue (issues there are public), not in a chat room, and not on the chain (a message to {morphit_account} there stays public forever).",
@@ -4769,7 +4771,9 @@
 			"custom_tracking_url_invalid": "The tracking link must be a full https:// address (at most 500 characters).",
 			"note_too_long": "The note is too long (at most 500 characters).",
 			"note_forbidden_chars": "The note contains a tab, line break or another invisible control character. Remove it and try again.",
-			"order_permlink_invalid": "This shipment can't be linked to the order. Close this window and open it again from the order."
+			"order_permlink_invalid": "This shipment can't be linked to the order. Close this window and open it again from the order.",
+			"too_long_to_send": "This shipment is too long to send in one chat message. Shorten the note and try again.",
+			"field_forbidden_chars": "The carrier name contains a tab, line break or another invisible control character. Remove it and try again."
 		},
 		"send_failed": "The shipment could not be sent. Check your connection and try again."
 	},

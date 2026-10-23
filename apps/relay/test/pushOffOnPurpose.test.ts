@@ -26,6 +26,7 @@ import type { PushSubscriptionStore } from '../src/policy/pushSubscriptions.ts';
 import type { BlurtClient } from '../src/blurt/client.ts';
 import {
 	PushQueueJanitor,
+	CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS,
 	PUSH_TOMBSTONE_RETENTION_SECONDS
 } from '../src/policy/pushQueueJanitor.ts';
 
@@ -133,7 +134,12 @@ describe('the janitor that runs when the sender does not', () => {
 		expect(calls[0]!.text).toMatch(/UPDATE push_pending\s+SET sent_at = NOW\(\)/);
 		expect(calls[0]!.params).toEqual([1234]);
 		expect(calls[1]!.text).toMatch(/DELETE FROM push_pending/);
-		expect(calls[1]!.params).toEqual([PUSH_TOMBSTONE_RETENTION_SECONDS]);
+		// The general retention, and a day for chat and order pushes, whose
+		// tombstones the one-push-per-day-until-reply cap reads (v1.21.14, S-M3).
+		expect(calls[1]!.params).toEqual([
+			PUSH_TOMBSTONE_RETENTION_SECONDS,
+			Math.max(CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS, PUSH_TOMBSTONE_RETENTION_SECONDS)
+		]);
 	});
 
 	it('runs at once on start — a relay restarting into push-off may already hold a backlog', async () => {

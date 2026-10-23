@@ -18,10 +18,9 @@
  *   5. ops/bunkerweb/frontend/nginx.conf (the container every BunkerWeb and
  *      tor-only box serves from; Tor/I2P visitors reach it directly, so it
  *      must send the headers itself — v1.20.0, C2). Its page CSP comes from a
- *      `map $host $morphit_csp`: the default is the canonical CSP, and .onion
- *      / .i2p names get the same policy with connect-src narrowed to the hidden
- *      Blurt RPC nodes (DEFAULT_HIDDEN_RPC_ENDPOINTS in apps/web/src/lib/net/
- *      config.ts, what selectRpcPool uses on a hidden origin).
+ *      `map $host $morphit_csp` whose one value, for every name, is the
+ *      canonical CSP (v1.21.14 final review: the browser contacts nothing but
+ *      its own site, so .onion and .i2p names need no node list of their own).
  *
  * (RUN-A-MORPHIT-NODE.md is now grandma-only — the verbatim security
  * headers live in OPERATIONS.md §15, not in the friendly quick-start.)
@@ -32,8 +31,8 @@
  * forgotten — so an operator who pastes the OPERATIONS.md snippet, or deploys
  * via BunkerWeb, ends up with a DIFFERENT policy than the shipped nginx.  For
  * the CSP that breakage is not cosmetic: drop `'wasm-unsafe-eval'` and the
- * in-browser argon2 KDF dies; drop a Blurt RPC origin from connect-src and
- * sign-in/price fetches fail; drop `frame-ancestors 'none'` and the site is
+ * in-browser argon2 KDF dies; widen connect-src and the browser may reach a
+ * third party again; drop `frame-ancestors 'none'` and the site is
  * clickjackable.  For Permissions-Policy, lose `camera=(self)` and the
  * QR-login scanner (getUserMedia) stops working.
  *
@@ -54,15 +53,22 @@
  *      every HTML-serving block, so this catches "added CSP to a new block
  *      but forgot Permissions-Policy" without hardcoding a brittle block
  *      count.
- *   F. The frontend container: .onion names get connect-src = the hidden
- *      nodes' .onion addresses, .i2p names their .b32.i2p addresses; every
- *      location repeats the security headers.
+ *   C2. connect-src is exactly 'self': the browser talks to this site only.
+ *   F. The frontend container: every name (clearnet, .onion, .i2p) gets the
+ *      canonical CSP; every location repeats the security headers.
  *   H. script-src allows no inline script and no eval on any surface or
  *      origin ('wasm-unsafe-eval' stays: the keystore runs WebAssembly).
  *   I. Every nginx config hides its version (server_tokens off), and every
  *      location of the two web configs that proxies to Morphit clears the
  *      headers no upstream may receive from a visitor (X-Morphit-Local-Health,
  *      X-I2P-DestB64/B32/Hash).
+ *   J. X-DNS-Prefetch-Control: off goes wherever the CSP goes: every server
+ *      and location of web.conf and the frontend container that sends a CSP
+ *      (nginx inheritance: a block with add_header lines of its own inherits
+ *      none), the OPERATIONS.md reference copy, and both BunkerWeb env files
+ *      (a CUSTOM_HEADER_<n>: BunkerWeb 1.5 has no setting of its own for it).
+ *      A browser may look up the name of a link on a page before a click,
+ *      mostly on plain-http .onion/.i2p pages; the CSP does not cover that.
  *
  * Output contract: emits `✓ all N scenarios passed` on the last line.
  */
@@ -70,11 +76,6 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-	DEFAULT_HIDDEN_RPC_ENDPOINTS,
-	DEFAULT_I2P_RPC_ENDPOINTS,
-	DEFAULT_RPC_ENDPOINTS
-} from '../apps/web/src/lib/net/config';
 import { addHeaders, findBlocks, mapEntries, parseNginx } from './lib/nginx-conf';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -248,41 +249,20 @@ for (const [tok, why] of REQUIRED_CSP_TOKENS) {
 	if (canonicalCsp.includes(tok)) ok(`CSP retains \`${tok}\` (${why})`);
 	else bad(`CSP MISSING required directive \`${tok}\` (${why})`, 'a uniform-but-weakened CSP edit was detected');
 }
-// ── C2. connect-src RPC origins are EXACTLY the browser's RPC pool ────────
-// connect-src is what the BROWSER contacts: DEFAULT_RPC_ENDPOINTS in
-// apps/web/src/lib/net/config.ts (the canonical pool minus the server-only
-// node with no CORS, which rpc-endpoint-canon-smoke pins). Derived, so adding
-// or removing a browser endpoint there updates what this guard requires.
+// ── C2. connect-src is this site only ──────────────────────────────
+// Every chain read, broadcast and the release check go through the instance
+// (the release check by POST /v1/chain/agreed — v1.21.14 final review), so the
+// browser needs no other origin, on any surface or name. Any other source is a
+// third party the browser could reach with the visitor's address.
 {
-	const connectSrc = canonicalCsp.match(/connect-src([^;]*)/i)?.[1] ?? '';
-	const cspOrigins = new Set(
-		(connectSrc.match(/https:\/\/[^\s;'"]+/g) ?? []).map((o) => o.replace(/\/+$/, ''))
-	);
-	const canonOrigins = DEFAULT_RPC_ENDPOINTS.map((e) => e.replace(/\/+$/, ''));
-	for (const origin of canonOrigins) {
-		if (cspOrigins.has(origin)) ok(`CSP connect-src includes canonical RPC origin ${origin}`);
-		else
-			bad(
-				`CSP connect-src MISSING canonical RPC origin ${origin}`,
-				'a uniform CSP edit dropped a Blurt RPC node from every surface — sign-in/price via that node breaks silently and no surface-drift check would catch it'
-			);
-	}
-	// No EXTRA https origin beyond the canonical pool: catches a stale origin
-	// left behind after an endpoint removal, and a sneaked-in third-party origin.
-	const extra = [...cspOrigins].filter((o) => !canonOrigins.includes(o));
-	if (extra.length === 0) ok('CSP connect-src carries no https origin beyond the canonical RPC pool');
+	const connectSrc = (canonicalCsp.match(/connect-src([^;]*)/i)?.[1] ?? '').trim();
+	if (connectSrc === "'self'") ok("CSP connect-src is exactly 'self' — the browser talks to this site only");
 	else
 		bad(
-			`CSP connect-src has ${extra.length} https origin(s) the browser never calls: ${extra.join(', ')}`,
-			"connect-src must equal 'self' + the browser's Blurt RPC pool only (privacy + parity)"
+			`CSP connect-src is "${connectSrc}", not 'self'`,
+			'the browser contacts nothing but its own site; an extra source lets it reach a third party'
 		);
 }
-// connect-src must NOT silently re-admit an external price API (privacy —
-// A later change dropped CoinGecko; the client provider is unwired).  Catch a
-// re-introduction of the most likely candidate.
-if (!/connect-src[^;]*coingecko/i.test(canonicalCsp))
-	ok('CSP connect-src does not re-admit coingecko (privacy — cp233)');
-else bad('CSP connect-src re-admits coingecko', 'cp233 removed it; the client provider is unwired');
 
 // ── D. canonical Permissions-Policy keeps camera + FLoC opt-out ──────
 const canonicalPp = distinctPp[0] ?? '';
@@ -310,20 +290,16 @@ if (cspWebAll.length === ppWeb.length && cspWeb.length >= 1) {
 
 // ── F. the frontend container (Tor/I2P path + BunkerWeb upstream) ───
 {
-	// F1. hidden names get the canonical policy with connect-src = 'self' + the
-	// hidden RPC nodes the app uses on that kind of origin (selectRpcPool):
-	// .onion → their .onion addresses, .i2p → their .b32.i2p addresses (an I2P
-	// proxy cannot reach a .onion) — derived, not typed.
-	for (const [key, list] of [
-		['~*\\.onion$', DEFAULT_HIDDEN_RPC_ENDPOINTS],
-		['~*\\.i2p$', DEFAULT_I2P_RPC_ENDPOINTS]
-	] as const) {
-		const origins = list.map((u) => u.replace(/\/+$/, ''));
-		const expectHidden = canonicalCsp.replace(/connect-src[^;]*/, `connect-src 'self' ${origins.join(' ')}`);
-		const v = frontendCspMap?.get(key);
-		if (v === expectHidden) ok(`${FRONTEND}: ${key} gets the canonical CSP with connect-src = 'self' + the ${origins.length} hidden RPC node(s) of that network`);
-		else bad(`${FRONTEND}: ${key} hidden CSP wrong or missing`, `expected: ${expectHidden.slice(0, 120)}…\n      got:      ${String(v).slice(0, 120)}…`);
-	}
+	// F1. every name gets the one canonical policy: no per-name map entry
+	// (an .onion or .i2p entry was how a node list for hidden names got in).
+	const entries = [...(frontendCspMap?.entries() ?? [])];
+	if (entries.length === 1 && entries[0]![0] === 'default' && entries[0]![1] === canonicalCsp)
+		ok(`${FRONTEND}: every name (clearnet, .onion, .i2p) gets the canonical CSP`);
+	else
+		bad(
+			`${FRONTEND}: the CSP map has ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (${entries.map(([k]) => k).join(', ')})`,
+			'one value for every name — the canonical CSP'
+		);
 	// F2. server-level header set; no HSTS (plain-http hidden services).
 	const srv = addHeaders(frontendServer);
 	const want: Array<[string, string]> = [
@@ -421,6 +397,42 @@ for (const [rel, text] of [
 				else bad(`${rel}: location ${loc.args.join(' ')} passes ${missing.join(', ')} through`, 'add `proxy_set_header <name> "";`');
 			}
 		}
+	}
+}
+
+// ── J. X-DNS-Prefetch-Control: off wherever the CSP is ───────────────────
+{
+	type Dir = { name: string; args: string[]; block: Dir[] | null };
+	for (const rel of [WEB_CONF, FRONTEND]) {
+		const lacking: string[] = [];
+		let withCsp = 0;
+		const walk = (list: readonly Dir[], inherited: Map<string, string>): void => {
+			for (const d of list) {
+				if (!d.block) continue;
+				const own = addHeaders(d.block);
+				const eff = own.size > 0 ? own : inherited;
+				if ((d.name === 'server' || d.name === 'location') && eff.has('content-security-policy')) {
+					withCsp++;
+					if (eff.get('x-dns-prefetch-control') !== 'off') lacking.push(`${d.name} ${d.args.join(' ')}`.trim());
+				}
+				walk(d.block, eff);
+			}
+		};
+		walk(parseNginx(read(rel)) as Dir[], new Map());
+		if (withCsp > 0 && lacking.length === 0)
+			ok(`${rel}: all ${withCsp} blocks that send the CSP also send X-DNS-Prefetch-Control: off`);
+		else bad(`${rel}: a block sends the CSP without X-DNS-Prefetch-Control: off`, lacking.join(' | ') || 'no block sends a CSP');
+	}
+	if (nginxHeaderValues(operations, 'X-DNS-Prefetch-Control').includes('off'))
+		ok(`${OPERATIONS}: the reference headers include X-DNS-Prefetch-Control "off"`);
+	else bad(`${OPERATIONS}: the reference headers lack X-DNS-Prefetch-Control "off"`);
+	for (const [rel, text] of [
+		[BUNKERWEB, bunkerweb],
+		[BUNKERWEB_J2, bunkerwebJ2]
+	] as const) {
+		if (/^CUSTOM_HEADER(?:_\d+)?=X-DNS-Prefetch-Control: off$/m.test(text))
+			ok(`${rel}: CUSTOM_HEADER sends X-DNS-Prefetch-Control: off`);
+		else bad(`${rel}: no CUSTOM_HEADER sends X-DNS-Prefetch-Control: off`, 'BunkerWeb 1.5 has no setting of its own for it: CUSTOM_HEADER_<n>=X-DNS-Prefetch-Control: off');
 	}
 }
 

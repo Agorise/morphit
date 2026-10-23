@@ -14,12 +14,10 @@ import {
 	acceptPostingKeysShown,
 	clearAllPins,
 	dropReadablePins,
-	ownPublishedRecord,
 	peekPostingKeyPin,
 	pendingKeyChange,
 	pendingPostingKeyChange,
 	pinnedPostingFor,
-	recordOwnPublished,
 	resolvePostingKeyPin,
 	setPin
 } from './pubPin';
@@ -61,10 +59,10 @@ describe('resolvePostingKeyPin', () => {
 		// Asked again: still refused.
 		await expect(resolvePostingKeyPin('bob', [K1, K3])).rejects.toBeInstanceOf(PubPinError);
 		// Accepting a CHAT key change accepts nothing here (a different kind).
-		expect(acceptKeyChange('bob', 'chat')).toBe(false);
+		expect(acceptKeyChange('bob', 'chat', 'NEW')).toBe(false);
 		expect(pinnedPostingFor('bob')).toEqual([K1]);
 		// The user compares the new safety number and accepts it.
-		expect(acceptKeyChange('bob', 'posting')).toBe(true);
+		expect(acceptKeyChange('bob', 'posting', pendingPostingKeyChange('bob')!)).toBe(true);
 		expect(pinnedPostingFor('bob')).toEqual([K1, K3]);
 		expect(pendingPostingKeyChange('bob')).toBeNull();
 		expect(await resolvePostingKeyPin('bob', [K1, K3])).toEqual([K1, K3]);
@@ -78,22 +76,31 @@ describe('resolvePostingKeyPin', () => {
 		);
 		await resolvePostingKeyPin('bob', [K1]);
 		await resolvePostingKeyPin('bob', [K2]).catch(() => undefined);
-		expect(acceptKeyChange('bob', 'posting')).toBe(true);
+		expect(acceptKeyChange('bob', 'posting', pendingPostingKeyChange('bob')!)).toBe(true);
 		expect(pendingKeyChange('bob')?.pubB64).toBe('NEW');
-		expect(acceptKeyChange('bob', 'chat')).toBe(true);
+		expect(acceptKeyChange('bob', 'chat', 'NEW')).toBe(true);
 		expect(pendingKeyChange('bob')).toBeNull();
 	});
 
-	it('first use that needs consent (their chat key is pinned): held as pending, refused, nothing pinned', async () => {
-		const err = await resolvePostingKeyPin('bob', [K1, K2], { needsConsent: true }).catch(
-			(e: unknown) => e
+	it('first use is trusted whatever chat key of theirs is pinned (v1.21.14: no "consent" hold)', async () => {
+		setPin('bob', { blockNum: 5, trxId: 'a'.repeat(40), pubB64: 'CHAT' });
+		expect(await resolvePostingKeyPin('bob', [K1, K2])).toEqual([K1, K2]);
+		expect(pinnedPostingFor('bob')).toEqual([K1, K2]);
+		expect(pendingPostingKeyChange('bob')).toBeNull();
+	});
+
+	it('a pending entry the old hold left, with nothing pinned, is dropped at first use (it was never a change)', async () => {
+		localStorage.setItem(
+			'morphit.chat.posting_pin_pending',
+			JSON.stringify({ bob: { blockNum: 0, trxId: '0'.repeat(40), pubB64: K3 } })
 		);
-		expect((err as PubPinError).code).toBe(PUB_PIN_ERROR.posting_key_changed);
-		expect(pinnedPostingFor('bob')).toEqual([]);
-		expect(pendingPostingKeyChange('bob')).toEqual([K1, K2]);
-		expect(acceptKeyChange('bob', 'posting')).toBe(true);
-		// Once pinned, consent is not asked again for the same keys.
-		expect(await resolvePostingKeyPin('bob', [K1, K2], { needsConsent: true })).toEqual([K1, K2]);
+		expect(await resolvePostingKeyPin('bob', [K1])).toEqual([K1]);
+		expect(pendingPostingKeyChange('bob')).toBeNull();
+		// A real change keeps its pending entry.
+		await resolvePostingKeyPin('bob', [K2]).catch(() => undefined);
+		expect(pendingPostingKeyChange('bob')).toEqual([K2]);
+		expect(await resolvePostingKeyPin('bob', [K1])).toEqual([K1]);
+		expect(pendingPostingKeyChange('bob')).toEqual([K2]);
 	});
 
 	it('no keys, or a name that is not an account: refused', async () => {
@@ -127,17 +134,16 @@ describe('peekPostingKeyPin (the Verify-peer panel)', () => {
 	});
 });
 
-describe('own published record', () => {
-	it('kept per account, wiped with the pins', () => {
-		expect(ownPublishedRecord('anna')).toBeNull();
-		recordOwnPublished('anna', 'PUB');
-		expect(ownPublishedRecord('anna')).toBe('PUB');
-		expect(ownPublishedRecord('bob')).toBeNull();
+describe('own published record (not written since v1.21.14; one from before)', () => {
+	it('is wiped with the pins', () => {
+		const OWN = 'morphit.chat.own_published';
+		const rec = JSON.stringify({ anna: { blockNum: 0, trxId: '0'.repeat(40), pubB64: 'PUB' } });
+		localStorage.setItem(OWN, rec);
 		clearAllPins();
-		expect(ownPublishedRecord('anna')).toBeNull();
-		recordOwnPublished('anna', 'PUB');
+		expect(localStorage.getItem(OWN)).toBeNull();
+		localStorage.setItem(OWN, rec);
 		dropReadablePins();
-		expect(ownPublishedRecord('anna')).toBeNull();
+		expect(localStorage.getItem(OWN)).toBeNull();
 	});
 });
 
@@ -146,5 +152,31 @@ describe('lifecycle', () => {
 		await resolvePostingKeyPin('bob', [K1]);
 		clearAllPins();
 		expect(pinnedPostingFor('bob')).toEqual([]);
+	});
+});
+
+// v1.21.14 full chat audit, W-M2: Accept pins exactly what was shown.
+describe('acceptKeyChange pins only the key whose number was shown', () => {
+	it('a chat key: a different pending key is not pinned', async () => {
+		setPin('bob', { blockNum: 1, trxId: 'a'.repeat(40), pubB64: 'OLD' });
+		localStorage.setItem(
+			'morphit.chat.pub_pin_pending',
+			JSON.stringify({ bob: { blockNum: 3, trxId: 'c'.repeat(40), pubB64: 'K2' } })
+		);
+		expect(acceptKeyChange('bob', 'chat', 'K1')).toBe(false);
+		expect(pendingKeyChange('bob')?.pubB64).toBe('K2');
+		expect(acceptKeyChange('bob', 'chat', 'K2')).toBe(true);
+		expect(pendingKeyChange('bob')).toBeNull();
+	});
+
+	it('posting keys: the same set (in any order) or nothing', async () => {
+		await resolvePostingKeyPin('bob', [K1]);
+		await resolvePostingKeyPin('bob', [K1, K2]).catch(() => undefined);
+		expect(acceptKeyChange('bob', 'posting', [K1])).toBe(false);
+		expect(acceptKeyChange('bob', 'posting', [K1, K2, K3])).toBe(false);
+		expect(acceptKeyChange('bob', 'posting', 'K1')).toBe(false);
+		expect(pinnedPostingFor('bob')).toEqual([K1]);
+		expect(acceptKeyChange('bob', 'posting', [K2, K1])).toBe(true);
+		expect(pinnedPostingFor('bob')).toEqual([K1, K2]);
 	});
 });

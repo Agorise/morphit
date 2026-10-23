@@ -142,15 +142,19 @@ fi
 
 # ── Q1. Local delivery is removed ────────────────────────────────────
 snapshot "$BCAST"
+# Both roads to local delivery (v1.21.14): checked before the node took it,
+# or after, once the key read confirms the signature.
 cat > "$WORK/.needle" <<'NEEDLE'
-			if (located.ok && localChatDeliver !== undefined) {
-				localChatDeliver(located.located, trx_id);
-			}
+			if (located.ok && verifiedHere && localChatDeliver !== undefined) {
+				localChatDeliver(located.located, trx_id, sentAt);
 NEEDLE
 cat > "$WORK/.repl" <<'REPL'
-			void localChatDeliver;
+			if (located.ok && verifiedHere && localChatDeliver !== undefined) {
+				void sentAt;
 REPL
-if mutate "$BCAST" "$WORK/.needle" "$WORK/.repl"; then
+printf '%s\n' '					localChatDeliver?.(loc, id, sentAt);' > "$WORK/.needle2"
+printf '%s\n' '					void [loc, id, sentAt];' > "$WORK/.repl2"
+if mutate "$BCAST" "$WORK/.needle" "$WORK/.repl" && mutate "$BCAST" "$WORK/.needle2" "$WORK/.repl2"; then
 	expect_caught 'Q1 two people on one instance lose the fast path' "$BCAST" 'never arrived'
 else
 	no 'Q1 — mutation did not apply (the local delivery call changed; update this harness)'

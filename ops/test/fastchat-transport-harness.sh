@@ -49,14 +49,14 @@
 #  T13  The breaker may leave a peer with no candidate address.
 #  T14  A success no longer clears a network's down-mark.
 #         → a recovered network stays sidelined for the whole cooldown.
-#  T15  The hidden transport branch is bypassed entirely.
-#  T16  The warm-up warms every alternate regardless of cost.
+#  T15  The hidden transport branch is bypassed entirely. [RETIRED, see below]
+#  T16  The warm-up warms every alternate regardless of cost. [RETIRED, see below]
 #  T17  The warm-up warms only the preferred address.
 #         → a zero-clearnet peer's failover pays a cold tunnel build.
 #  T18  One failed route marks a whole network down.
 #         → one stale .loki name takes lokinet away from every other peer.
 #  T19  The warm-up's verdict never reaches the reachability tracker.
-#  T20  The warm-up classifies by marker class alone.
+#  T20  The warm-up classifies by marker class alone. [RETIRED, see below]
 #         → boot-time detection is blind on Lokinet, which raises no marker
 #           class because it has no proxy: its local fault is a DNS miss. It
 #           WAS also blind on I2P, until I2P got a CONNECT connector of ours
@@ -84,7 +84,7 @@
 #           which is the case this subsystem exists for, not a sick peer.
 #  T29  An unrecognised status ranks best.
 #         → a status added later silently outranks everything known to work.
-#  T30  The registration tiebreak is dropped.
+#  T30  The registration tiebreak is dropped. [RETIRED, see below]
 #  T31  The ranking is not a total order.
 #         → an unchanged directory reshuffles between refreshes.
 #  T32  The ranking mutates the caller's array.
@@ -465,18 +465,34 @@ try 'T8  alt-network values are no longer shape-checked' "$FED" \
 	'			const network = hiddenHostNetworkOf(bare);' \
 	"			const network = hiddenHostNetworkOf(bare) ?? 'tor';"
 
+# Two builders (login-pairing forward and chat fan-out) carry the same line; the
+# fan-out one is the queue key the sender uses.
 try 'T9  the queue key moves with the address' "$FED" \
-	'		key: normalisedOrigin(row.origin),' \
-	'		key: first.origin,'
+	'		key: normalisedOrigin(row.origin),
+		alternates: addresses.slice(1)
+	};
+}
+
+/**
+ * Peers to push to' \
+	'		key: first.origin,
+		alternates: addresses.slice(1)
+	};
+}
+
+/**
+ * Peers to push to'
 
 # ── the send path ────────────────────────────────────────────────────
+# Since the hedge (v1.21.14) an answer is recognised by its HTTP status; any
+# other failure starts the next address.
 try 'T10 the sender never fails over' "$FED" \
-	'		if (res.localFault !== true) {' \
-	'		if (true) {'
+	'				if (res.status !== undefined) {' \
+	'				if (true) {'
 
 try 'T11 a PEER failure triggers a failover too' "$FED" \
-	'		if (res.localFault !== true) {' \
-	'		if (false) {'
+	'				if (res.status !== undefined) {' \
+	'				if (false) {'
 
 try 'T12 a local fault is never detected' "$FED" \
 	'		const localFault = isProxyUnavailable(err);' \
@@ -487,20 +503,19 @@ try 'T13 the breaker can leave a peer with no address' "$FED" \
 	'	const order = usable;'
 
 try 'T14 a success no longer clears the mark' "$FED" \
-	'			reach.markUp(network);
-			supersede(null);
-			return null;' \
-	'			supersede(null);
-			return null;'
+	'					reach.markUp(FAN_OUT_NETWORK);
+					finish(null);' \
+	'					finish(null);'
 
-try 'T15 a hidden peer is dialled over the clearnet transport' "$FED" \
-	'		const res = addr.hidden' \
-	'		const res = false'
+# T15 RETIRED (v1.21.14 final review): chat fan-out has one transport — every
+# address, onion or clearnet, goes through Tor on its own circuit
+# (postJsonViaTorIsolated) — so there is no hidden/clearnet branch to collapse.
 
 # ── the warm-up ──────────────────────────────────────────────────────
-try 'T16 the warm-up warms every alternate regardless of cost' "$DISPATCH" \
-	'				if (hasCheapFallback) break;' \
-	''
+# T16 RETIRED (v1.21.14 final review): the warm-up visits fan-out peers, whose
+# addresses are an onion and an https origin (not hidden, never warmed) — so a
+# peer with a cheap fallback has exactly one address to warm, and dropping the
+# break changes nothing on any path that exists.
 
 try 'T17 the warm-up never warms an alternate' "$DISPATCH" \
 	'				if (hasCheapFallback) break;' \
@@ -516,9 +531,9 @@ try 'T19 the warm-up verdict never reaches the tracker' "$DISPATCH" \
 
 # The result now also carries a confidence (v1.18.0 review, S2), so the
 # classification is its own line.
-try 'T20 the warm-up is blind on I2P and Lokinet' "$POOL" \
-	'		const localFault = isLocalTransportFault(err, network, config);' \
-	'		const localFault = isProxyUnavailable(err);'
+# T20 RETIRED (v1.21.14 final review): the warm-up dials fan-out peers only,
+# and fan-out is Tor-only (fastPeerDirectory 'fanout'), where the Tor marker
+# that isProxyUnavailable reads is exactly what isLocalTransportFault reads.
 
 # ── the directory probe ──────────────────────────────────────────────
 try 'T21 the censorship fallback tries .onion only' "$PROBE" \
@@ -562,18 +577,12 @@ try 'T29 an unrecognised status ranks best' "$FED" \
 	'const PEER_RANK_UNKNOWN = 7;' \
 	'const PEER_RANK_UNKNOWN = -1;'
 
-try 'T30 the registration tiebreak is dropped' "$FED" \
-	'		const ga = timeValue(a.registered_at_time);
-		const gb = timeValue(b.registered_at_time);
-		if (ga !== gb) {
-			if (ga === null) return 1;
-			if (gb === null) return -1;
-			return ga - gb;
-		}' \
-	''
+# T30 RETIRED (v1.21.14 final review): the ranking has no registration
+# tiebreak any more — within a tier it orders by origin, a key a peer cannot
+# influence (rankDirectoryPeers). T31 guards that order.
 
 try 'T31 the ranking is not a total order' "$FED" \
-	'		return a.origin.localeCompare(b.origin);' \
+	'		return a.origin.toLowerCase().localeCompare(b.origin.toLowerCase());' \
 	'		return 0;'
 
 try 'T32 the ranking mutates the caller array' "$FED" \
@@ -720,8 +729,8 @@ try 'T59 a peer is tried at its first address only' "$PRICE" \
 	'		for (const base of t.bases.slice(0, 1)) {'
 
 try 'T60 the hidden budget is discarded again' "$PRICE" \
-	'		const body = await fetcher<PeerReceiptResponse>(url.toString(), timeoutMs);' \
-	'		const body = await fetcher<PeerReceiptResponse>(url.toString(), PEER_FETCH_TIMEOUT_MS);'
+	'		return parsePeerReceipt(await fetcher<unknown>(url.toString(), timeoutMs), asset, denominationFiat);' \
+	'		return parsePeerReceipt(await fetcher<unknown>(url.toString(), PEER_FETCH_TIMEOUT_MS), asset, denominationFiat);'
 
 # ── the relay is hidden-only too, and the claim asks it (F32) ────────
 try 'T61 the relay never recognises it is hidden-only' "$HT" \
@@ -836,9 +845,11 @@ try 'T87 the upgrade self-heal phase never runs it' "$OPSUPGRADE" \
 	"		['the relay RPC heal', () => healRelayClearnet()]," \
 	''
 
+# The re-exec'd child runs the shared heal list through
+# runPostUpgradeSelfHealChild (upgrade.ts) since v1.21.x.
 try 'T89 the self-heal phase stops calling the shared heal list' "$OPSMAIN" \
-	'			await runSelfHeals();' \
-	''
+	'			await mod.runPostUpgradeSelfHealChild();' \
+	'			void mod;'
 
 try 'T90 the heal announces the result without checking the relay' "$HEAL" \
 	'	if (last.reachable && last.hiddenOnly === true) {' \
@@ -867,6 +878,17 @@ try 'T92 the frontend drops idle peer connections before the next warm-up' "$WOR
 try 'T93 a node that never asked for Lokinet looks .loki names up anyway' "$HT" \
 	"	return (env.MORPHIT_INSTANCE_LOKINET_ADDRESS ?? '').trim().length > 0;" \
 	'	return true;'
+
+# ── moved from federation-chat-fast-harness (M43, M45) ───────────────
+# How the breaker weighs AMBIGUOUS evidence. Chat fan-out is Tor-only and its
+# evidence conclusive, so only NetworkReachability's own tests reach this rule.
+try 'T94 the corroboration bar is raised past what a batch can supply' "$FED" \
+	'const CORROBORATING_PEERS = 2;' \
+	'const CORROBORATING_PEERS = 3;'
+
+try 'T95 distinct peers collapse into one suspect' "$FED" \
+	'		seen.set(addressKey, now);' \
+	'		seen.set(network, now);'
 
 echo ''
 echo '────────────────────────────────────────────────────────'

@@ -44,13 +44,13 @@
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { loadRecentPeers } from '$lib/chat/recentPeers';
+	import { readState, mergeRemoteReadState } from '$lib/chat/readState';
 	import {
-		readState,
-		markConversationRead,
-		mergeRemoteReadState,
-		readAckTimestamp
-	} from '$lib/chat/readState';
-	import { threadIsUnread, fastPendingTick, listFastPending } from '$lib/notifications/chatUnread';
+		threadIsUnread,
+		fastPendingTick,
+		listFastPending,
+		ackThreadRead
+	} from '$lib/notifications/chatUnread';
 	import {
 		getConversations,
 		getChatReadState,
@@ -77,6 +77,8 @@
 	} from '$lib/chat/chatFolders';
 	import { isUnlocked, isPairedReadOnly, hasAnySession } from '$stores/identity';
 	import { tradeStates } from '$lib/trades/tradeStatus';
+	import { inboxTradeSettled } from '$lib/feedback/inboxFeedback';
+	import { inboxOrderPaid } from '$lib/chat/inboxPaid';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
 	import { showToast } from '$lib/stores/toast';
@@ -227,7 +229,16 @@
 		// changed — i.e. on the ~60s durable poll — which is the very lag the fast
 		// path exists to avoid.
 		void $fastPendingTick;
-		const withFlags = visible.map((c) => {
+		// `fastOnly` is set only on the placeholder cards pushed below (v1.21.14
+		// full chat audit, W-M3: their time is the device's, never a read cursor).
+		const withFlags: Array<
+			(typeof visible)[number] & {
+				unread: boolean;
+				folder: ReturnType<typeof folderOf>;
+				pending: boolean;
+				fastOnly?: true;
+			}
+		> = visible.map((c) => {
 			const order = c.order?.permlink ?? '';
 			const folder = folderOf(c.peer, order);
 			return {
@@ -286,6 +297,8 @@
 			// carries the true subject on first paint.
 			const resolved = p.orderPermlink ? pendingOrders.get(p.orderPermlink) : undefined;
 			withFlags.push({
+				// Dated by the push, not by the chain: never a read cursor (W-M3).
+				fastOnly: true as const,
 				peer: p.peer,
 				last_message_at: new Date(p.atMs).toISOString(),
 				message_count: 1,
@@ -335,21 +348,19 @@
 	/** Which list to render based on the active tab. */
 	/** Reuses `order_detail.status_*` — already translated in all ten locales, and
 	 *  identical to what the chat thread and the order page show. */
-	function orderStatusLabel(order: { status: string; permlink: string }): string {
+	function orderStatusLabelFor(
+		order: { status: string; permlink: string; account: string },
+		peer: string
+	): string {
 		// (v1.8.4 A2) — match the ConversationView header's fast (Paid):
 		// flip to "Paid" the instant THIS thread's local trade phase reaches
 		// paid_verified/released/completed, not only once the durable order status
 		// becomes 'completed' (the indexer lags ~1min). Checked FIRST so it
 		// outranks a stale 'live'. Both sides populate tradeStates, so this reads
 		// true for buyer and seller alike. (t155 already handled the slow path:
-		// order.status === 'completed' → Paid.)
-		const phase = $tradeStates.get(order.permlink)?.phase;
-		if (
-			phase === 'paid_verified' ||
-			phase === 'released' ||
-			phase === 'completed' ||
-			order.status === 'completed'
-		) {
+		// order.status === 'completed' → Paid.) Only the trade with this card's
+		// peer (inboxOrderPaid): another inquirer's payment is not this one's.
+		if (inboxOrderPaid($tradeStates, peer, order)) {
 			// Deliberately `my_orders.filter.paid` ("Paid") — a terse parenthetical
 			// beside the order title that matches the word on the my/orders Paid
 			// pill the user just came from.
@@ -669,7 +680,8 @@
 		void $optimisticFeedbackTick;
 		const durable = feedbackGivenMap.get(`${convo.peer}\u0000${permlink}`) ?? null;
 		const record = durable ?? getOptimisticFeedbackGiven(convo.peer, permlink);
-		const settled = ($tradeStates.get(permlink)?.phase ?? 'address_shared') !== 'address_shared';
+		// The trade with THIS card's peer (inboxTradeSettled).
+		const settled = inboxTradeSettled($tradeStates, convo);
 		const canLeave =
 			settled && record === null && feedbackGivenChecked && $isUnlocked && !$isPairedReadOnly;
 		return { canLeave, record };
@@ -696,10 +708,8 @@
 		}
 		if (!me) return;
 
-		// Intentionally NOT calling ensureChatIdentityPublished() here — the
-		// inbox is a read-only glance surface; publishing intent lives in
-		// /chat/[peer] (opening a specific conversation). Unchanged by the
-		// real-time refactor.
+		// (Nothing publishes a chat identity any more — chat relies on the
+		// posting key only; v1.21.14 full chat audit.)
 		void loadBlocks(me);
 		void refresh(true).finally(() => (inboxLoaded = true));
 		void loadFeedbackGiven();
@@ -750,15 +760,11 @@
 		// message just read, `lastMsg > cursor` stays true, and the thread you
 		// literally just opened stays green.
 		//
-		// `readAckTimestamp` is max(latestSeen, now) — the same watermark idea,
-		// and it already existed; these call sites just weren't using it. With no
-		// message time (fallback-peer list) it degrades to `now`, which is the
-		// best available answer and no worse than before.
-		markConversationRead(
-			peer,
-			orderPermlink,
-			readAckTimestamp(lastMessageAt !== undefined ? new Date(lastMessageAt) : null)
-		);
+		// v1.21.14 full chat audit, W-M3: the ack is the row's newest message
+		// time and nothing else (ackThreadRead) — never max(it, now), which on a
+		// device whose clock runs fast silenced what arrived in that lead. With no
+		// message time (fallback-peer list) there is nothing to ack.
+		ackThreadRead(peer, orderPermlink, lastMessageAt);
 	}
 
 	/** Mark every discussion that still nags (Inbox + Starred) as read, so the
@@ -766,10 +772,12 @@
 	 *  ("once all messages are read … the green dots disappear").
 	 *  Archived threads are already triaged and don't feed the badge. */
 	function handleMarkAllRead(): void {
-		const now = new Date();
 		for (const c of sortedConversations) {
 			if (c.folder !== 'archived' && c.unread) {
-				markConversationRead(c.peer, c.order?.permlink ?? '', now);
+				// v1.21.14 full chat audit, W-L4: each thread at its own newest
+				// message time — a bare device clock running behind the chain left
+				// them unread (ackThreadRead).
+				ackThreadRead(c.peer, c.order?.permlink ?? '', 'fastOnly' in c ? undefined : c.last_message_at);
 			}
 		}
 	}
@@ -780,7 +788,7 @@
 	 *  badge decrements alongside the move. */
 	function handleArchive(row: InboxRow): void {
 		const order = row.order?.permlink ?? '';
-		markConversationRead(row.peer, order, new Date());
+		ackThreadRead(row.peer, order, 'fastOnly' in row ? undefined : row.last_message_at);
 		// v1.7.7 — hand over the thread's newest BLOCK time; see chatFolders.watermark().
 		archiveThread(row.peer, order, row.last_message_at);
 		showToast($_('chat.inbox.archive_toast') as string, 'info');
@@ -993,7 +1001,7 @@
 						<div class="relative flex min-w-0 flex-1 items-center gap-2 p-2 sm:gap-3 sm:p-3">
 							<a
 								href={threadHref(convo)}
-								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '', convo.last_message_at)}
+								onclick={() => handleOpen(convo.peer, convo.order?.permlink ?? '', 'fastOnly' in convo ? undefined : convo.last_message_at)}
 								title={whenTooltip(convo.last_message_at)}
 								class="flex min-w-0 flex-1 items-center gap-2 after:absolute after:inset-0 after:content-[''] sm:gap-3"
 								aria-label={convo.unread
@@ -1056,6 +1064,9 @@
 											)}
 											{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
 											<span class="min-w-0 truncate">{orderTitle}</span>
+											<!-- this card's peer: the label is the trade with them -->
+											{@const orderStatusLabel = (o: ConversationOrderRef) =>
+												orderStatusLabelFor(o, convo.peer)}
 											{#if orderStatusLabel(convo.order)}
 												<span class="flex-none">({orderStatusLabel(convo.order)})</span>
 											{/if}

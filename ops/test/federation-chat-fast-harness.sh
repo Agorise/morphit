@@ -143,12 +143,12 @@
 #         → a peer whose only address is on a briefly-down network is never
 #           attempted again, including the attempt that would have found the
 #           network back.
-#   M40 A hidden peer is dialled over the clearnet transport.
+#   M40 A hidden peer is dialled over the clearnet transport. [RETIRED, see below]
 #         → the SOCKS5/CONNECT/tun branches stop being exercised at all.
-#   M42 Every local fault is treated as conclusive (Lokinet included).
+#   M42 Every local fault is treated as conclusive (Lokinet included). [RETIRED, see below]
 #         → one peer's stale .loki record takes the network away from every
 #           other .loki peer for a minute, and downgrades them to clearnet.
-#   M43 Corroboration is raised beyond what one batch can supply.
+#   M43 Corroboration is raised beyond what one batch can supply. [MOVED to fastchat-transport-harness]
 #         → the Lokinet breaker never fires, so a dead router costs a refused
 #           dial per peer per message.
 #   M44 Every local fault is treated as ambiguous (Tor included).
@@ -156,9 +156,9 @@
 #   M46 The transport stops normalising, so a refused CONNECT is the peer's.
 #         → a router configured to refuse tunnels has I2P chat dead, with the
 #           failures recorded against healthy peers.
-#   M47 The fault's confidence never reaches the breaker.
+#   M47 The fault's confidence never reaches the breaker. [RETIRED, see below]
 #         → one refused CONNECT takes I2P away from every other peer.
-#   M45 Corroboration is counted per network rather than per address.
+#   M45 Corroboration is counted per network rather than per address. [MOVED to fastchat-transport-harness]
 #         → the count never passes one; the breaker never fires; the code
 #           still reads correctly.
 #   M41 A received message is fanned out again by the receiver.
@@ -382,7 +382,10 @@ snapshot "$POOL"
 printf '%s' '	const existing = pool.get(key);' > "$WORK/.needle"
 printf '%s' '	const existing = undefined as ReturnType<typeof pool.get>;' > "$WORK/.repl"
 if mutate "$POOL" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M6 the connection pool is defeated (fresh dispatcher per call)' "$POOL" 'reuse'
+	# Tor pushes no longer go through the pool (each is its own isolated circuit,
+	# postJsonViaTorIsolated); the pool's reuse is asserted on I2P, whose
+	# failures name the tunnels a defeated pool opens.
+	expect_caught 'M6 the connection pool is defeated (fresh dispatcher per call)' "$POOL" 'tunnel'
 else
 	no 'M6 — mutation did not apply (the pool lookup changed; update this harness)'
 	restore "$POOL"
@@ -408,14 +411,14 @@ fi
 # happens: a process-wide lock around the one function that talks to a peer.
 snapshot "$FED"
 cat > "$WORK/.needle" <<'NEEDLE'
-				const res = await sendBatchToPeer(q.peer, batch, this.deps, this.reachability, (f) =>
-					this.note(f)
-				);
+		const res = await sendBatchToPeer(q.peer, batch, this.deps, this.reachability, (f) =>
+			this.note(f)
+		);
 NEEDLE
 cat > "$WORK/.repl" <<'REPL'
-				const res = await serialiseForMutationTest(() =>
-					sendBatchToPeer(q.peer, batch, this.deps, this.reachability, (f) => this.note(f))
-				);
+		const res = await serialiseForMutationTest(() =>
+			sendBatchToPeer(q.peer, batch, this.deps, this.reachability, (f) => this.note(f))
+		);
 REPL
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	cat >> "$FED" <<'EOF'
@@ -460,8 +463,10 @@ fi
 # produce. It is invisible on a single message and caps a peer at one message
 # per round trip, which a federation of any size outruns.
 snapshot "$FED"
-printf '%s' '				const batch = this.takeBatch(q.pending);' > "$WORK/.needle"
-printf '%s' '				const batch = q.pending.splice(0, 1).map((e) => e.trx);' > "$WORK/.repl"
+# takeBatch (v1.21.14 S-H1) takes one sender's messages up to BATCH_MAX; a
+# bound of one is a push per message.
+printf '%s' 'i < pending.length && picked.length < BATCH_MAX; i++) {' > "$WORK/.needle"
+printf '%s' 'i < pending.length && picked.length < 1; i++) {' > "$WORK/.repl"
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	expect_caught 'M10 messages are no longer batched' "$FED" 'round trips'
 else
@@ -474,8 +479,8 @@ fi
 # join. It raises batch sizes and taxes every idle conversation to do it — the
 # exact trade this design refused.
 snapshot "$FED"
-printf '%s' '			if (!q.inFlight) void this.pump(key);' > "$WORK/.needle"
-printf '%s' '			if (!q.inFlight) setTimeout(() => void this.pump(key), 250);' > "$WORK/.repl"
+printf '%s\n' '			q.pending.push({ trx, bytes, signer });' '			this.pump(key);' > "$WORK/.needle"
+printf '%s\n' '			q.pending.push({ trx, bytes, signer });' '			setTimeout(() => this.pump(key), 250);' > "$WORK/.repl"
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	expect_caught 'M11 an idle peer is made to wait before its push leaves' "$FED" 'before leaving'
 else
@@ -640,8 +645,10 @@ else
 fi
 
 # ── M18. The per-IP ceiling is restored to a single-caller value ─────
-# The original 240/min. Harmless-looking, and on a hidden instance it throttles
-# the entire federation, because every peer arrives as 127.0.0.1.
+# The original 240/min. On a hidden instance every peer arrives as 127.0.0.1;
+# that shared bucket now gets SHARED_KEY_MULTIPLIER times the ceiling, so it is
+# a CLEARNET peer — its own bucket, no multiplier — that 240 throttles: one
+# busy peer pushes PEER_PUSHES_IN_FLIGHT at a time (smoke scenario 2j-bis).
 snapshot "$ROUTE"
 printf '%s' 'const PUSHES_PER_MIN = 6_000;' > "$WORK/.needle"
 printf '%s' 'const PUSHES_PER_MIN = 240;' > "$WORK/.repl"
@@ -690,8 +697,8 @@ fi
 # form only when a peer is already busy, so the fast path works while idle and
 #413s itself off under exactly the load it exists to carry.
 snapshot "$FED"
-printf '%s' '			if (n > 0 && total + next.bytes > BATCH_MAX_BYTES) break;' > "$WORK/.needle"
-printf '%s' '			if (false) break;' > "$WORK/.repl"
+printf '%s' '				if (total + next.bytes > BATCH_MAX_BYTES) break;' > "$WORK/.needle"
+printf '%s' '				if (false) break;' > "$WORK/.repl"
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	expect_caught 'M21 a batch may exceed any peer body cap' "$FED" 'over the'
 else
@@ -704,8 +711,8 @@ fi
 # fast path for every pair it serves, and the sender's counters say "failed"
 # with no indication that the messages were perfectly acceptable one at a time.
 snapshot "$FED"
-printf '%s' '				if (res !== null && res.status === 413 && batch.length > 1) {' > "$WORK/.needle"
-printf '%s' '				if (false) {' > "$WORK/.repl"
+printf '%s' '		if (res !== null && res.status === 413 && batch.length > 1) {' > "$WORK/.needle"
+printf '%s' '		if (false) {' > "$WORK/.repl"
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	expect_caught 'M22 a peer that refuses the batch SIZE loses the messages' "$FED" 'of 12 arrived'
 else
@@ -827,10 +834,10 @@ fi
 # `meterFirstContact: true`. The smoke drives that real gate.
 snapshot "$GATE"
 cat > "$WORK/.needle" <<'NEEDLE'
-		return spendFastNotifyBudget(located.signer, located.recipient);
+		if (!spendFastNotifyBudget(located.signer, located.recipient)) return false;
 NEEDLE
 cat > "$WORK/.repl" <<'REPL'
-		return spendFastNotifyBudget(located.recipient, located.recipient);
+		if (!spendFastNotifyBudget(located.recipient, located.recipient)) return false;
 REPL
 if mutate "$GATE" "$WORK/.needle" "$WORK/.repl"; then
 	expect_caught 'M28 the gate spends the victim allowance' "$GATE" 'refused because the first had flooded'
@@ -868,11 +875,11 @@ fi
 # up to sixty-four sequential round trips.
 snapshot "$FED"
 cat > "$WORK/.needle" <<'NEEDLE'
-					this.note({
-						origin: q.peer.origin,
-						reason: `HTTP 413 — batch of ${batch.length} refused, sent one at a time`,
-						status: 413
-					});
+			this.note({
+				origin: q.peer.origin,
+				reason: `HTTP 413 — batch of ${batch.length} refused, sent one at a time`,
+				status: 413
+			});
 NEEDLE
 printf '%s' '' > "$WORK/.repl"
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
@@ -993,16 +1000,18 @@ snapshot "$FED"
 # hidden-only condition, so the mutation adds the old "only if nothing hidden
 # was found" guard to that condition. Re-aimed again in v1.20.0: a hidden
 # origin is now dialled as http (S9, hiddenOriginForDial) and the call wraps.
+# Re-aimed in the v1.21.14 final review at the FAN-OUT builder (fanOutPeerFromRow),
+# the one chat uses: a peer that publishes an onion keeps its https origin as the
+# second address, reached through a Tor exit. (The login-pairing builder,
+# fastPeerFromRow, is covered by fastPeerAddressing.test.ts.)
 cat > "$WORK/.needle" <<'NEEDLE'
-	if (originHidden || !hiddenOnly)
-		add(originHidden ? hiddenOriginForDial(row.origin) : row.origin, originHidden);
+	} else if (originNetwork === null && !clearnetRefused() && /^https:\/\//i.test(row.origin)) {
 NEEDLE
 cat > "$WORK/.repl" <<'REPL'
-	if (addresses.length === 0 && (originHidden || !hiddenOnly))
-		add(originHidden ? hiddenOriginForDial(row.origin) : row.origin, originHidden);
+	} else if (addresses.length === 0 && originNetwork === null && !clearnetRefused() && /^https:\/\//i.test(row.origin)) {
 REPL
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M35 a hidden address discards the clearnet origin' "$FED" 'did not reach the peer'
+	expect_caught 'M35 a hidden address discards the clearnet origin' "$FED" 'unexpected fan-out addresses'
 else
 	no 'M35 — mutation did not apply (the address builder changed; update this harness)'
 	restore "$FED"
@@ -1019,7 +1028,7 @@ cat > "$WORK/.repl" <<'REPL'
 		const localFault = false;
 REPL
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M36 our own dead daemon is blamed on the peer' "$FED" 'did not reach the peer'
+	expect_caught 'M36 our own dead daemon is blamed on the peer' "$FED" 'local Tor outage left no record'
 else
 	no 'M36 — mutation did not apply (the failure classifier changed; update this harness)'
 	restore "$FED"
@@ -1030,11 +1039,13 @@ fi
 # retry, it is a second delivery of the same batch — and the peer cannot tell
 # those apart.
 snapshot "$FED"
+# Since the hedge (v1.21.14) an ANSWER is recognised by its HTTP status: no
+# other address is started after one.
 cat > "$WORK/.needle" <<'NEEDLE'
-		if (res.localFault !== true) {
+				if (res.status !== undefined) {
 NEEDLE
 cat > "$WORK/.repl" <<'REPL'
-		if (false) {
+				if (false) {
 REPL
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	expect_caught 'M37 a peer that refused is dialled again elsewhere' "$FED" 'two roads'
@@ -1048,14 +1059,11 @@ fi
 # size that is the dominant cost of a dead daemon.
 snapshot "$FED"
 cat > "$WORK/.needle" <<'NEEDLE'
-		reach.reportAddressFault(network, peerKey(peer), Date.now(), res.confidence);
-		supersede(res);
+					reach.reportAddressFault(FAN_OUT_NETWORK, peerKey(peer), Date.now(), res.confidence);
 NEEDLE
-cat > "$WORK/.repl" <<'REPL'
-		supersede(res);
-REPL
+printf '%s' '' > "$WORK/.repl"
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M38 a dead network is re-dialled for every message' "$FED" 'dead transport'
+	expect_caught 'M38 a dead network is re-dialled for every message' "$FED" 'local Tor outage left no record'
 else
 	no 'M38 — mutation did not apply (the reachability tracker changed; update this harness)'
 	restore "$FED"
@@ -1079,24 +1087,11 @@ else
 	restore "$FED"
 fi
 
-# ── M40. The I2P branch is routed like clearnet ──────────────────────
-# The three hidden networks are three separate implementations. Until this
-# release only Tor was exercised anywhere, so a change that collapsed the I2P
-# branch would have been invisible.
-snapshot "$FED"
-cat > "$WORK/.needle" <<'NEEDLE'
-		const res = addr.hidden
-NEEDLE
-cat > "$WORK/.repl" <<'REPL'
-		const res = false
-REPL
-if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M40 a hidden peer is dialled over the clearnet transport' "$FED" ''
-else
-	no 'M40 — mutation did not apply (the transport branch changed; update this harness)'
-	restore "$FED"
-fi
-
+# ── M40 — RETIRED (v1.21.14 final review) ─────────────────────────
+# Chat fan-out has ONE transport now: every address, onion or clearnet, is
+# dialled through Tor on its own isolated circuit (postJsonViaTorIsolated), so
+# there is no hidden/clearnet branch left to collapse. The transport choice by
+# hidden-ness lives in the login-pairing forward (pairingForward.ts).
 # ── M41. A received message is fanned out again ──────────────────────
 # The fan-out is ONE hop, and nothing enforces that except `dispatchIfChat`
 # being called from the broadcast route and nowhere else. Re-dispatch on receipt
@@ -1134,57 +1129,25 @@ else
 	restore "$ROUTE"
 fi
 
-# ── M42. Lokinet treated as if its errors named our end ──────────────
-# The breaker's evidence rule, inverted. A .loki DNS miss carries THEIR name,
-# so reading one as our router being gone takes the network away from every
-# other .loki peer for a minute — and, on an instance that also publishes a
-# clearnet origin, quietly moves their traffic onto the clearnet.
-#
-# NOTE ON WHAT THIS MUTATES, because it changed once already. The rule used to
-# live in `SELF_IDENTIFYING_NETWORKS`, and mutating that set is now an
-# EQUIVALENT mutant: since F12 the confidence is classified at the transport
-# entry point and CARRIED on the failure, and a carried verdict overrides the
-# per-network fallback. So the set no longer decides anything for a real fault,
-# and mutating it changes nothing the smoke can see. The thing that decides is
-# the verdict this module attaches, which is what these two force.
-snapshot "$FED"
-cat > "$WORK/.needle" <<'NEEDLE'
-			confidence: localFault ? localFaultConfidence(err, hiddenNetworkOf(addr.origin)) : undefined
-NEEDLE
-cat > "$WORK/.repl" <<'REPL'
-			confidence: localFault ? 'conclusive' : undefined
-REPL
-if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M42 every local fault is treated as conclusive' "$FED" 'marked the whole network down'
-else
-	no 'M42 — mutation did not apply (the evidence rule changed; update this harness)'
-	restore "$FED"
-fi
-
-# ── M43. Corroboration set beyond what a batch can supply ────────────
-# Raise the bar and the breaker stops firing on Lokinet at all: a dead router
-# costs one refused dial per peer per message, which is what it exists to avoid.
-snapshot "$FED"
-cat > "$WORK/.needle" <<'NEEDLE'
-const CORROBORATING_PEERS = 2;
-NEEDLE
-cat > "$WORK/.repl" <<'REPL'
-const CORROBORATING_PEERS = 3;
-REPL
-if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M43 the Lokinet breaker can no longer fire' "$FED" 'left the network on the list'
-else
-	no 'M43 — mutation did not apply (the corroboration constant changed; update this harness)'
-	restore "$FED"
-fi
-
+# ── M42 — RETIRED (v1.21.14 final review) ─────────────────────────
+# Fan-out (and its warm-up) carries Tor addresses only, and a Tor local fault is
+# conclusive whatever the classifier is told, so "every fault conclusive" is
+# the code's own behaviour on this path. The Lokinet/I2P evidence rules are
+# guarded in NetworkReachability by fastchat-transport-harness T35-T42 and
+# fastPeerAddressing.test.ts.
+# ── M43 / M45 — MOVED to fastchat-transport-harness (v1.21.14 final review) ──
+# Both change how the breaker weighs AMBIGUOUS evidence (how many peers must
+# corroborate, and whether two addresses count as two). Chat fan-out carries Tor
+# only, whose evidence is conclusive, so no scenario here can reach that rule any
+# more; the unit tests of NetworkReachability can, and the transport harness
+# plants both bugs against them (T94, T95).
 # ── M44. Tor made to wait for corroboration it does not need ─────────
 # The other half of the rule. Tor's marker is raised only by our OWN proxy
 # failing, so a second opinion buys nothing and costs every onion peer a
 # refused dial while it is collected.
 snapshot "$FED"
 cat > "$WORK/.needle" <<'NEEDLE'
-			confidence: localFault ? localFaultConfidence(err, hiddenNetworkOf(addr.origin)) : undefined
+			confidence: localFault ? localFaultConfidence(err, 'tor') : undefined
 NEEDLE
 cat > "$WORK/.repl" <<'REPL'
 			confidence: localFault ? 'ambiguous' : undefined
@@ -1193,24 +1156,6 @@ if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	expect_caught 'M44 every local fault is treated as ambiguous' "$FED" 'no longer marks Tor down'
 else
 	no 'M44 — mutation did not apply (the evidence rule changed; update this harness)'
-	restore "$FED"
-fi
-
-# ── M45. Corroboration counted per network, not per address ──────────
-# The subtlest of the four: the suspicion map still fills, the rule still reads
-# as written, and the count never passes one — so the breaker never fires and
-# nothing about the code looks wrong.
-snapshot "$FED"
-cat > "$WORK/.needle" <<'NEEDLE'
-		seen.set(addressKey, now);
-NEEDLE
-cat > "$WORK/.repl" <<'REPL'
-		seen.set(network, now);
-REPL
-if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M45 distinct addresses collapse into one suspect' "$FED" 'left the network on the list'
-else
-	no 'M45 — mutation did not apply (the suspicion map changed; update this harness)'
 	restore "$FED"
 fi
 
@@ -1235,48 +1180,18 @@ cat > "$WORK/.repl" <<'REPL'
 		throw err;
 REPL
 if mutate "$POOL" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M46 a refused CONNECT is recorded as the peer refusing' "$POOL" 'refused CONNECT was recorded'
+	expect_caught 'M46 a refused CONNECT is recorded as the peer refusing' "$POOL" 'a refused CONNECT surfaced as'
 else
 	no 'M46 — mutation did not apply (the transport entry point changed; update this harness)'
 	restore "$POOL"
 fi
 
-# ── M47. The fault's confidence is dropped on the way to the breaker ──
-# The evidence is classified at the transport entry point and carried on the
-# failure. Drop it and the breaker falls back to what the NETWORK implies —
-# I2P is otherwise conclusive — so one refused CONNECT takes I2P away from
-# every other peer for a minute.
-snapshot "$FED"
-cat > "$WORK/.needle" <<'NEEDLE'
-		reach.reportAddressFault(network, peerKey(peer), Date.now(), res.confidence);
-NEEDLE
-cat > "$WORK/.repl" <<'REPL'
-		reach.reportAddressFault(network, peerKey(peer), Date.now());
-REPL
-if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M47 the fault confidence never reaches the breaker' "$FED" 'marked the whole I2P network down'
-else
-	no 'M47 — mutation did not apply (the breaker call changed; update this harness)'
-	restore "$FED"
-fi
-
-# ── M50. The breaker counts ADDRESSES again (v1.18.0 review, S2) ────
-# One registration may publish two I2P names. Keyed by address, one instance
-# whose names the proxy refuses convicts I2P for every peer by itself.
-snapshot "$FED"
-cat > "$WORK/.needle" <<'NEEDLE'
-		reach.reportAddressFault(network, peerKey(peer), Date.now(), res.confidence);
-NEEDLE
-cat > "$WORK/.repl" <<'REPL'
-		reach.reportAddressFault(network, addr.origin, Date.now(), res.confidence);
-REPL
-if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	expect_caught 'M50 the breaker counts one instance'"'"'s two names as two witnesses' "$FED" 'two refused I2P names'
-else
-	no 'M50 — mutation did not apply (the breaker call changed; update this harness)'
-	restore "$FED"
-fi
-
+# ── M47 / M50 — RETIRED (v1.21.14 final review) ───────────────────
+# Both changed what reaches the breaker for an I2P fault. Fan-out never reports
+# anything but Tor, and for Tor the breaker's default IS conclusive and one
+# fault convicts, so neither dropping the confidence (M47) nor counting
+# addresses instead of peers (M50) changes a verdict on any path left. The
+# breaker's own rules are guarded by fastchat-transport-harness T35-T42.
 echo ''
 echo '────────────────────────────────────────────────────────'
 if [ "$fails" -eq 0 ]; then

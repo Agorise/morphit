@@ -120,9 +120,18 @@ scenario('the fast path acts only on recipient-reply OR order-response bypass', 
 	// event may be REPLAYED into a chatroom opened moments later. Evaluating
 	// "is this sender established?" twice is precisely how two call sites
 	// silently drift apart. Same rule, one evaluation, shared answer.
+	// v1.21.14 (full chat audit, S-H3): without a reply or an order response,
+	// the gate passes ONLY a sender the durable gate itself admits without a
+	// reply — a paid stranger fee (recorded, or seen and checked at the head) or
+	// an earlier admitted message — and nothing else. The behaviour is proved in
+	// test/integration/chat-notify-gates-audit.test.ts and
+	// chat-head-stranger-fee.test.ts; this pins the shape. Every sender it
+	// admits then meets the durable no-reply caps (noReplyLimitRefusal).
 	assert(
-		/if \(recipientReplied\) return true;[\s\S]*?if \(!orderResponseBypass\) return false;/.test(fastGate),
-		'the shared fast gate lacks the (recipientReplied || orderResponseBypass) safe gate'
+		/if \(recipientReplied\) return true;[\s\S]*?if \(!orderResponseBypass\) \{\s*(?:\/\/[^\n]*\n\s*)*const admitted =\s*hasHeadStrangerFee\(located\.signer, located\.recipient\) \|\|\s*\(await senderAdmittedWithoutReply\(db, \{[^}]*\}\)\);\s*if \(!admitted\) return false;\s*\}[\s\S]*?noReplyLimitRefusal\(/.test(
+			fastGate
+		),
+		'the shared fast gate lacks the (recipientReplied || paid/admitted sender || orderResponseBypass) safe gate'
 	);
 	assert(fastGate.includes('recipientHasReplied(db'), 'the fast gate does not check recipient-reply');
 	assert(

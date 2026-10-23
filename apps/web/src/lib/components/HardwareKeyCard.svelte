@@ -23,6 +23,7 @@
 	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { _ } from 'svelte-i18n';
 	import BusyButton from '$components/BusyButton.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import { currentEnvelope, commitSessionEnvelope } from '$stores/identity';
 	import {
 		enrollYubikey,
@@ -448,22 +449,26 @@
 						</label>
 					</div>
 
-					<label class="mt-4 block">
-						<span class="block text-sm font-semibold">
-							{blurtAccount
-								? $_('settings.hardware_key.current_password_label_named', {
-										values: { account: blurtAccount }
-									})
-								: $_('settings.hardware_key.current_password_label')}
-						</span>
-						<input
-							type="password"
-							maxlength="64"
-							bind:value={enrollPassword}
-							autocomplete="current-password"
-							class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-						/>
-					</label>
+					<!-- Its own form (PasswordScope): outside one, Firefox's password
+					     manager wrote the saved user name into a settings field above. -->
+					<PasswordScope>
+						<label class="mt-4 block">
+							<span class="block text-sm font-semibold">
+								{blurtAccount
+									? $_('settings.hardware_key.current_password_label_named', {
+											values: { account: blurtAccount }
+										})
+									: $_('settings.hardware_key.current_password_label')}
+							</span>
+							<input
+								type="password"
+								maxlength="64"
+								bind:value={enrollPassword}
+								autocomplete="current-password"
+								class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+							/>
+						</label>
+					</PasswordScope>
 
 					<label class="mt-3 block">
 						<span class="block text-sm font-semibold">
@@ -614,32 +619,34 @@
 						{$_('settings.hardware_key.soften_explain')}
 					</p>
 
-					<label class="mt-4 block">
-						<span class="block text-sm font-semibold">
-							{$_('settings.hardware_key.new_password_label')}
-						</span>
-						<input
-							type="password"
-							maxlength="64"
-							bind:value={softenPassword}
-							autocomplete="new-password"
-							minlength="8"
-							class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-						/>
-					</label>
+					<PasswordScope>
+						<label class="mt-4 block">
+							<span class="block text-sm font-semibold">
+								{$_('settings.hardware_key.new_password_label')}
+							</span>
+							<input
+								type="password"
+								maxlength="64"
+								bind:value={softenPassword}
+								autocomplete="new-password"
+								minlength="8"
+								class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+							/>
+						</label>
 
-					<label class="mt-3 block">
-						<span class="block text-sm font-semibold">
-							{$_('settings.hardware_key.confirm_password_label')}
-						</span>
-						<input
-							type="password"
-							maxlength="64"
-							bind:value={softenPasswordConfirm}
-							autocomplete="new-password"
-							class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-						/>
-					</label>
+						<label class="mt-3 block">
+							<span class="block text-sm font-semibold">
+								{$_('settings.hardware_key.confirm_password_label')}
+							</span>
+							<input
+								type="password"
+								maxlength="64"
+								bind:value={softenPasswordConfirm}
+								autocomplete="new-password"
+								class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+							/>
+						</label>
+					</PasswordScope>
 
 					{#if softenPhase !== 'idle'}
 						<p

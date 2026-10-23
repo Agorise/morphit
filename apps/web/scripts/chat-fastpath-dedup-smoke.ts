@@ -76,8 +76,8 @@ const SCENARIOS: readonly Scenario[] = [
 		// copy now also has to clear the "still waiting for the chain" markers
 		// (sentAtMs, provisionalSinceMs, unrecorded) — see neverRecorded.test.ts.
 		mustHave: [
-			'if (isDurable && (m.id === null || m.id === 0)) adoptDurable(m, rec);',
-			'function adoptDurable(m: LocalMessage, rec: ChatMessageRecord): void {',
+			'if (isDurable && (m.id === null || m.id === 0)) {\n\t\t\t\tadoptDurable(m, rec);',
+			'function adoptDurable(\n\t\tm: LocalMessage,\n\t\trec: ChatMessageRecord,',
 			'm.id = rec.id;'
 		]
 	},
@@ -89,19 +89,22 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		// The tag is the SENDER's to choose, so a twin must also carry the same
+		// The tag is the SENDER's to choose, so a twin must carry the same
 		// encrypted bytes (v1.18.0 review, W1) — else a never-recorded message
-		// could inherit a different message's chain proof.
-		name: '5 — incoming twin found by (sender + client_tag + identical wire), durable id adopted, then dedup-continue',
+		// could inherit a different message's chain proof. And since v1.21.14
+		// (full chat audit, W-H3) the bytes DECIDE, whatever the tag: the tag is
+		// outside the encryption, so a re-served old message under a new tag
+		// must not count as new (shown again, its payload applied again).
+		name: '5 — incoming twin found by (sender + identical wire, whatever the tag), durable id adopted, then dedup-continue',
 		mustHave: [
+			'function twinByWire(rec: ChatMessageRecord): LocalMessage | undefined {',
 			'const wire = wireOf(rec);',
-			'const twin = messages.find(',
-			'm.sender === rec.sender &&',
-			'm.clientTag === incomingTag &&',
-			'm.wire === wire',
+			'messages.find((m) => m.sender === rec.sender && m.wire === wire)',
+			'const twin = twinByWire(rec);',
 			'if (isDurable && (twin.id === null || twin.id === 0)) {',
 			'adoptDurable(twin, rec);'
-		]
+		],
+		mustNotHave: ['m.clientTag === incomingTag &&']
 	},
 	{
 		name: '6 — provisional incoming stored with null id + its client_tag tracked (not the old clientTag:null)',
@@ -128,14 +131,19 @@ const SCENARIOS: readonly Scenario[] = [
 		check: () => {
 			// The incoming twin-collapse block must appear (and `continue`)
 			// strictly before the merge's call of the trade side effects
-			// (applyIncomingTradePayload, which holds recordAddressShared /
-			// recordFundsSent since v1.21.6), so an upgraded twin skips them.
-			const twinIdx = body.indexOf('const twin = messages.find(');
-			const callIdx = body.indexOf('else applyIncomingTradePayload(d.text, rec.sender);');
+			// (queueTradeEffects → applyIncomingTradePayload →
+			// recordIncomingTradePayload, which holds recordAddressShared /
+			// recordFundsSent — v1.21.14 full chat audit, W-H1, put the order
+			// checks in between), so an upgraded twin skips them.
+			const twinIdx = body.indexOf('const twin = twinByWire(rec);');
+			const callIdx = body.indexOf('else queueTradeEffects(entry);');
 			if (twinIdx < 0) return 'twin-find not present';
-			if (callIdx < 0) return 'the merge no longer calls applyIncomingTradePayload';
-			if (!/function applyIncomingTradePayload[\s\S]*?recordAddressShared\(\{[\s\S]*?recordFundsSent\(\{/.test(body)) {
-				return 'applyIncomingTradePayload no longer records the address / funds-sent payloads';
+			if (callIdx < 0) return 'the merge no longer queues the trade side effects';
+			if (!/function queueTradeEffects[\s\S]*?applyIncomingTradePayload\(/.test(body)) {
+				return 'queueTradeEffects no longer runs applyIncomingTradePayload';
+			}
+			if (!/function recordIncomingTradePayload[\s\S]*?recordAddressShared\(\{[\s\S]*?recordFundsSent\(\{/.test(body)) {
+				return 'the trade side effects no longer record the address / funds-sent payloads';
 			}
 			if (twinIdx >= callIdx) {
 				return `twin-find (idx ${twinIdx}) must come before the side-effect call (idx ${callIdx})`;
@@ -149,10 +157,10 @@ const SCENARIOS: readonly Scenario[] = [
 			// v1.21.6: the only side effects a twin may run are ones a history
 			// page deferred (effectsDue) — once: the flag is cleared first.
 			const twinBlock = between.slice(0, between.search(/added = true;\s*continue;/));
-			if (/applyIncomingTradePayload\(/.test(twinBlock)) {
+			if (/applyIncomingTradePayload\(|queueTradeEffects\(/.test(twinBlock)) {
 				return 'the twin block calls the side effects directly';
 			}
-			if (!/function runDueEffects[\s\S]*?if \(m\?\.effectsDue !== true\) return;\s*delete m\.effectsDue;\s*applyIncomingTradePayload/.test(body)) {
+			if (!/function runDueEffects[\s\S]*?if \(m\?\.effectsDue !== true\) return;\s*delete m\.effectsDue;\s*queueTradeEffects/.test(body)) {
 				return 'runDueEffects must run deferred side effects at most once (clear effectsDue first)';
 			}
 			return null;

@@ -5,9 +5,8 @@
  *
  * After the PWA is installed, the running app should never need to contact
  * the origin it was installed from for rendering. Every HTML/JS/CSS/font/
- * image/icon ships in the precache. Data (indexer RPC, payment watcher)
- * goes through an in-app configurable endpoint list — not this service
- * worker. See $lib/net/endpoints (Phase 2).
+ * image/icon ships in the precache. Data goes to the instance's own indexer
+ * and relay (same origin) — not through this service worker.
  *
  * ─── Update policy: auto-activate + network-first navigation ──────────────
  *
@@ -371,11 +370,10 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 // We never log payload content (privacy-preserving) and we never
 // raise a notification for malformed payloads — silently dropping
 // is safer than guessing wrong.
-/** v1.5.0 — true when a tab's URL is the SAME chat thread a chat push
- *  targets: same locale-prefixed /chat/[peer] path AND same ?order. Used
- *  to suppress a redundant OS notification while the user is actively
- *  viewing that exact conversation (focused tab). */
-/** true when a tab is viewing a chat thread with the SAME
+/** (The v1.5.0 rule — same thread, same ?order, focused tab — was
+ *  replaced by the one below; v1.21.14 full chat audit doc fix.)
+ *
+ *  true when a tab is viewing a chat thread with the SAME
  *  PEER a chat push targets. While the user is actually chatting with that person
  *  there's no reason to pop a system notification for them, only for someone
  *  else who is trying to reach them. So we deliberately match on the PEER
@@ -449,9 +447,10 @@ self.addEventListener('push', (event: PushEvent) => {
 
 	event.waitUntil(
 		(async () => {
-			// v1.5.0 — suppress a redundant OS notification when a tab the user is
-			// looking at is already on a chat thread with this PEER
-			// (peer, not the exact order thread).
+			// v1.5.0 — suppress a redundant OS notification when a tab of this
+			// device is already on a chat thread with this PEER (peer, not the
+			// exact order thread) — open, whether focused or visible or not; see
+			// the reasoning below.
 			//
 			// ALSO suppress the 'order' category. An order-SCOPED
 			// chat message (someone messaging you from your order card) is sent with
@@ -460,7 +459,7 @@ self.addEventListener('push', (event: PushEvent) => {
 			// SAME chatroom, every reply still popped an OS notification: the
 			// suppression only ran for 'chat'. The fastchat badge poke below already
 			// parses BOTH categories for exactly this reason; the suppression now
-			// matches it. This only ever fires when a VISIBLE tab is on
+			// matches it. This only ever fires when an OPEN tab is on
 			// /chat/<same-peer> (chatPeerMatches), so a true order-LIFECYCLE push —
 			// which deep-links to the order page, not /chat/<peer> — never matches
 			// and still notifies. Feedback always notifies. In-page badges are

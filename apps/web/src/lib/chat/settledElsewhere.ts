@@ -28,12 +28,17 @@
 import type { LiveIdentity } from '$crypto/keygen';
 import { encodeOrderSettledElsewherePayload } from '$lib/chat/payload';
 import { unsealSettled } from '$lib/chat/unsealGate';
+import { WRITE_ENVELOPE_V4, type EnvelopeBinding } from '$lib/chat/crypto';
+import { sendBinding } from '$lib/chat/envelopeBinding';
 
-/** The encrypted envelope shape returned by `encrypt`. */
+/** The encrypted envelope shape returned by `encryptPosting`. */
 interface ChatEnvelope {
-	/** 2 for the sender-authenticated envelope (chat keys), 3 for the
-	 *  posting-key envelope. */
-	readonly v?: 2 | 3;
+	/** The envelope version: encryptPosting makes 3 (the posting-key
+	 *  envelope, the only one sent since v1.21.14), or 4 when given a binding
+	 *  (v3 bound to the order and the send time `t`, review C-M2). */
+	readonly v?: 2 | 3 | 4;
+	readonly t?: number;
+	readonly o?: string;
 	readonly ciphertext: string;
 	readonly ephemeralPub: string;
 	readonly nonce: string;
@@ -51,23 +56,6 @@ export interface SettledElsewhereDeps {
 	 *  so it enumerates EVERY inquirer on the order and is NOT bounded by the
 	 *  owner's total-inbox cap — a busy owner still reaches everyone. */
 	fetchOrderInquirers(owner: string, orderPermlink: string): Promise<readonly string[]>;
-	/** The peer's published X25519 chat pubkey, or null if never published. */
-	fetchPeerChatPub(peer: string): Promise<Uint8Array | null>;
-	/** The owner's chat identity (derived once, reused across recipients). */
-	deriveMyChatIdentity(
-		live: LiveIdentity,
-		account: string
-	): Promise<{ priv: Uint8Array; pub: Uint8Array }>;
-	/** Encrypt plaintext to a recipient (v2: `sender` is the owner's own chat
-	 *  identity, which authenticates the message). */
-	encrypt(
-		plaintext: string,
-		recipientPub: Uint8Array,
-		senderAccount: string,
-		recipientAccount: string,
-		sender: { priv: Uint8Array; pub: Uint8Array },
-		includeSelfCopy: boolean
-	): Promise<ChatEnvelope>;
 	/** Broadcast a chat custom_json op.
 	 *
 	 *  `block_num` is null because a chat message does not wait for a block —
@@ -80,41 +68,38 @@ export interface SettledElsewhereDeps {
 	): Promise<{ block_num: number | null; trx_id: string }>;
 	/** 32-char hex client tag. */
 	generateClientTag(): string;
-	/** v1.21.13 — the posting-key envelope (v3), as the conversation uses it
-	 *  (chatService.seal): an inquirer with no chat key, or an owner with none,
-	 *  still gets the auto-reply. Optional: absent, such inquirers are skipped
-	 *  as before. */
-	fetchPostingPubs?(account: string): Promise<Uint8Array[] | null>;
-	/** Our own chat key's status (chatService.ownChatKeyStatus): only
-	 *  'current' sends v2. Throws when unknown — then nothing is sent. */
-	myChatKeyStatus?(): Promise<'current' | 'stale' | 'none'>;
+	/** The posting-key envelope (v3), exactly as a conversation sends
+	 *  (chatService.seal): since v1.21.14 the only format a message is sent in
+	 *  — chat relies on the posting key only. The inquirer's posting keys as
+	 *  the chain lists them; [] when it has none of its own, null when there
+	 *  is no such account. */
+	fetchPostingPubs(account: string): Promise<Uint8Array[] | null>;
 	/** The posting keys to use for `peer`, through the same pins as the
-	 *  conversation (a changed set throws, and that inquirer is not written
-	 *  to). Absent: the chain's keys (tests). */
-	pinPostingKey?(
-		peer: string,
-		chainKeys: readonly Uint8Array[],
-		opts?: { needsConsent?: boolean }
-	): Promise<Uint8Array[]>;
-	/** The chat keys pinned for `peer`: a pinned peer whose key the indexer
-	 *  now calls absent is not written to (no silent move to posting keys). */
-	pinnedPeerPubs?(peer: string): readonly Uint8Array[];
-	encryptPosting?(
+	 *  conversation: trusted on first use; a changed set throws, and that
+	 *  inquirer is not written to. Absent: the chain's keys (tests). */
+	pinPostingKey?(peer: string, chainKeys: readonly Uint8Array[]): Promise<Uint8Array[]>;
+	encryptPosting(
 		plaintext: string,
 		recipientPostingPubs: readonly Uint8Array[],
 		live: LiveIdentity,
 		senderAccount: string,
 		recipientAccount: string,
-		includeSelfCopy: boolean
+		includeSelfCopy: boolean,
+		binding?: EnvelopeBinding
 	): Promise<ChatEnvelope>;
+	/** Write v4 (WRITE_ENVELOPE_V4 when absent; tests turn it on). */
+	writeEnvelopeV4?: boolean;
+	/** The chain's head time, whole seconds (v4's bound send time). Absent:
+	 *  this device's clock. */
+	chainNowSeconds?(): Promise<number>;
 }
 
 export interface SettledElsewhereResult {
 	/** Inquirers we successfully sent the auto-reply to. */
 	readonly sent: number;
-	/** Inquirers skipped because they could not be encrypted to: no chat key
-	 *  and (without the posting-key envelope) nothing else, or no such account
-	 *  on chain. Harmless — they simply get no auto-reply. */
+	/** Inquirers skipped because they could not be encrypted to: no such
+	 *  account on chain, or no posting key of its own. Harmless — they simply
+	 *  get no auto-reply. */
 	readonly skipped: number;
 	/** Inquirers whose send threw (best-effort — did not block the rest). */
 	readonly failed: number;
@@ -151,15 +136,8 @@ export async function announceSettledElsewhere(
 	}
 	if (inquirers.size === 0) return { sent: 0, skipped: 0, failed: 0 };
 
-	// 2. Derive our chat identity once (reused for every recipient), and encode
-	//    the text-free wire once — the same payload goes to everyone; only the
-	//    per-recipient encryption differs.
-	let myId: { priv: Uint8Array; pub: Uint8Array };
-	try {
-		myId = await deps.deriveMyChatIdentity(live, me);
-	} catch {
-		return { sent: 0, skipped: 0, failed: 0 };
-	}
+	// 2. Encode the text-free wire once — the same payload goes to everyone;
+	//    only the per-recipient encryption differs.
 	const wire = encodeOrderSettledElsewherePayload({
 		v: 1,
 		kind: 'morphit_order_settled_elsewhere',
@@ -172,54 +150,44 @@ export async function announceSettledElsewhere(
 	let failed = 0;
 	// The pins a Lock sealed are read only once the unlock's unseal landed.
 	await unsealSettled();
-	const postingCapable = deps.fetchPostingPubs !== undefined && deps.encryptPosting !== undefined;
-	// The same choice as a conversation's send (chatService.seal): our own
-	// status first; v2 only when ours is current and the inquirer has a chat
-	// key; otherwise v3 to their PINNED posting keys, every one of them.
-	let mine: 'current' | 'stale' | 'none' | null = 'current';
-	if (postingCapable && deps.myChatKeyStatus !== undefined) {
-		mine = await deps.myChatKeyStatus().catch(() => null);
-	}
 	for (const peer of inquirers) {
 		try {
-			if (mine === null) throw new Error('own chat key status unknown');
-			const peerPub = mine === 'current' ? await deps.fetchPeerChatPub(peer) : null;
-			if (
-				mine === 'current' &&
-				peerPub === null &&
-				(deps.pinnedPeerPubs?.(peer) ?? []).length > 0
-			) {
-				throw new Error('a pinned chat key the indexer calls absent');
-			}
-			let envelope: ChatEnvelope;
+			// Always the posting-key envelope (v3) to the inquirer's PINNED posting
+			// keys, like every message of a conversation (chatService.seal) —
+			// trusted on first use whatever chat key of theirs is pinned here.
 			// Keep a sender self-copy so the owner can reread the auto-reply in
 			// their own thread with this inquirer (matches keep-history default).
-			if (peerPub !== null) {
-				envelope = await deps.encrypt(wire, peerPub, me, peer, myId, true);
-			} else if (postingCapable) {
-				const pubs = await deps.fetchPostingPubs!(peer);
-				if (pubs === null || pubs.length === 0) {
-					skipped++;
-					continue;
-				}
-				const targets =
-					deps.pinPostingKey !== undefined
-						? await deps.pinPostingKey(peer, pubs, {
-								// A peer whose chat key is pinned: no posting keys on first use.
-								needsConsent: (deps.pinnedPeerPubs?.(peer) ?? []).length > 0
-							})
-						: pubs;
-				envelope = await deps.encryptPosting!(wire, targets, live, me, peer, true);
-			} else {
-				// No chat key and no other way to encrypt to them.
+			const pubs = await deps.fetchPostingPubs(peer);
+			if (pubs === null || pubs.length === 0) {
 				skipped++;
 				continue;
 			}
+			const targets =
+				deps.pinPostingKey !== undefined ? await deps.pinPostingKey(peer, pubs) : pubs;
+			// v4: bound to the order thread it goes to (ours: we posted the
+			// order), and the chain's time — or v3 (sendBinding).
+			const binding: EnvelopeBinding | undefined = await sendBinding({
+				write: deps.writeEnvelopeV4 ?? WRITE_ENVELOPE_V4,
+				order: orderPermlink,
+				ownerOf: () => Promise.resolve(me),
+				chainNowSeconds:
+					deps.chainNowSeconds ?? (() => Promise.resolve(Math.floor(Date.now() / 1000)))
+			});
+			const envelope = await deps.encryptPosting(
+				wire,
+				targets,
+				live,
+				me,
+				peer,
+				true,
+				...(binding !== undefined ? [binding] : [])
+			);
 			const payload: Record<string, unknown> = {
 				recipient: peer,
 				ciphertext: envelope.ciphertext,
 				header: {
-					...(envelope.v === 2 || envelope.v === 3 ? { v: envelope.v } : {}),
+					...(envelope.v !== undefined ? { v: envelope.v } : {}),
+					...(envelope.v === 4 ? { t: envelope.t, o: envelope.o } : {}),
 					client_tag: deps.generateClientTag(),
 					ephemeral_pub: envelope.ephemeralPub,
 					nonce: envelope.nonce,

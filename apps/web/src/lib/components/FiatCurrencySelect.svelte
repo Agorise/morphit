@@ -20,6 +20,7 @@
 -->
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
+	import { typedByUser } from '$lib/ui/typedByUser';
 	import type { Currency } from '$lib/data/currencies';
 
 	/** Selected ISO codes, uppercase (e.g. ["USD","EUR"]). In `single`
@@ -260,6 +261,12 @@
 			aria-describedby={describedById}
 			onfocus={onFocus}
 			oninput={() => {
+				// Only the person's own typing opens the menu: a password manager
+				// filling this field must not blur the page (typedByUser).
+				if (!typedByUser(inputEl)) {
+					query = '';
+					return;
+				}
 				open = true;
 				activeIndex = 0;
 			}}

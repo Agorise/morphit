@@ -597,9 +597,10 @@
 
 <!-- Phase F.5 audit fix (F-23) — cross-page trade events toggle.
      Separate section because it's a privacy choice, not a
-     notifications choice: governs whether the global SSE
+     notifications choice: governs whether the cross-page trade
      listener runs at all (and thus whether Morphit decrypts
-     incoming chat messages ambiently across recent peers).
+     incoming chat messages ambiently, for the conversations the
+     account-wide activity stream reports).
      Default ON; users who care about ambient-decryption privacy
      can opt out at the cost of losing cross-page badge updates. -->
 <section class="card mt-6" aria-labelledby="privacy-heading" id="privacy">

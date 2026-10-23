@@ -47,7 +47,13 @@
  */
 
 import { Hono } from 'hono';
-import { acquireStreamSlot, streamCapResponse } from '$api/streamCaps';
+import {
+	acquireStreamSlot,
+	clientGoneSignal,
+	streamCapResponse,
+	streamTicketRefused
+} from '$api/streamCaps';
+import { instanceHosts, verifyStreamTicket, type TicketKeyLookup } from '$api/streamTicket';
 
 import { logger } from '$log';
 import { chatEventBus } from '$indexer/chatEventBus';
@@ -59,18 +65,39 @@ const log = logger('chat-activity-stream');
 /** Keep-alive comment every 25s to defeat proxy idle-killers. */
 const KEEPALIVE_INTERVAL_MS = 25_000;
 
-export function chatActivityStreamRoute(): Hono {
+export function chatActivityStreamRoute(opts: {
+	readonly lookupKey: TicketKeyLookup;
+	/** Configured names of this instance (origins, hidden addresses). */
+	readonly instanceHosts?: readonly (string | undefined)[];
+}): Hono {
 	const app = new Hono();
 
-	app.get('/:account/stream', (c) => {
+	app.get('/:account/stream', async (c) => {
 		const account = c.req.param('account');
 		if (!isAccountName(account)) {
 			return c.json(errorBody('bad_request', 'invalid account name'), 400);
 		}
 
+		// Only the account itself may watch its activity (v1.21.14 full chat
+		// audit, S-M8): a ticket signed by its posting key, for this host.
+		// Before the first await (review B, F1): see clientGoneSignal.
+		const gone = clientGoneSignal(c);
+		const ticket = await verifyStreamTicket(
+			c.req.query('ticket'),
+			[account],
+			instanceHosts(opts.instanceHosts ?? [], c.req.header('host')),
+			opts.lookupKey
+		);
+		if (!ticket.ok)
+			return ticket.reason === 'busy'
+				? streamCapResponse(c)
+				: streamTicketRefused(c, ticket.reason);
+
 		// v1.20.0 (E4): a slot under the open-stream caps, released exactly
 		// once when this stream ends however it ends.
-		const releaseSlot = acquireStreamSlot(c);
+		// The client left while its ticket was checked: no stream, no slot.
+		if (gone.aborted) return new Response(null, { status: 204 });
+		const releaseSlot = acquireStreamSlot(c, account);
 		if (releaseSlot === null) return streamCapResponse(c);
 
 		const encoder = new TextEncoder();
@@ -112,6 +139,14 @@ export function chatActivityStreamRoute(): Hono {
 					}
 				};
 
+				// A client that leaves now, or left while the ticket was checked,
+				// is never seen by the server's own cancel (review B, F1).
+				if (gone.aborted) {
+					cleanup();
+					return;
+				}
+				gone.addEventListener('abort', cleanup, { once: true });
+
 				// Push a lightweight activity ping: the peer account, the order the
 				// thread is about, and whether the message was INBOUND — all
 				// on-chain-public metadata, never content.
@@ -152,12 +187,17 @@ export function chatActivityStreamRoute(): Hono {
 				unsubscribeBus = chatEventBus.on((ev) => {
 					if (cancelled) return;
 					if (ev.lo !== account && ev.hi !== account) return;
-					// ChatEvent carries only the canonical pair, so there's no order and
-					// no direction here — and none is needed: this fires AFTER the row is
+					// No order here, and none is needed: this fires AFTER the row is
 					// inserted, so the client's re-poll reads the real thing. `order:
 					// null` tells the client "no fast hint, just reconcile", which is
-					// exactly right for the durable path.
-					pushActivity(ev.lo === account ? ev.hi : ev.lo, null, false);
+					// exactly right for the durable path. The DIRECTION is real
+					// (v1.21.14 full chat audit, S-L5 — it was always `false`, so a
+					// client could not tell an inbound durable message from its own).
+					pushActivity(
+						ev.lo === account ? ev.hi : ev.lo,
+						null,
+						ev.sender !== undefined && ev.sender !== account
+					);
 				});
 
 				// Fast path (head tailer + verified peer pushes) — sub-second,
@@ -228,8 +268,8 @@ export function chatActivityStreamRoute(): Hono {
 					}
 				} catch (err) {
 					// A replay failure must never stop the live stream from starting.
+					// No account names in the log (v1.21.14 full chat audit, S-L6).
 					log.warn('chat_activity_replay_failed', {
-						account,
 						error: err instanceof Error ? err.message : String(err)
 					});
 				}
@@ -262,7 +302,7 @@ export function chatActivityStreamRoute(): Hono {
 			}
 		});
 
-		log.debug('activity_stream_open', { account });
+		log.debug('activity_stream_open', {});
 
 		c.header('Content-Type', 'text/event-stream');
 		c.header('Cache-Control', 'no-store, no-transform');

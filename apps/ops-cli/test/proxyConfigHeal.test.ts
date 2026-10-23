@@ -44,8 +44,15 @@ import {
 	frontendEdgePort,
 	frontendFileMissesAre404,
 	frontendDottedNamesServed,
+	frontendStreamsPassUnbuffered,
 	frontendForwardsOneAddress,
 	frontendCspStrict,
+	frontendCspSelfOnly,
+	cspConnectSources,
+	cspConnectsSelfOnly,
+	cspForeignConnectSources,
+	frontendCspForeignSources,
+	frontendDnsPrefetchSent,
 	frontendHidesInternals,
 	identifyContainers,
 	isMorphitCsp,
@@ -1586,6 +1593,61 @@ describe('an account name ending like a file reaches the indexer and the app (v1
 	});
 });
 
+/** The frontend before v1.21.14: live streams' X-Accel-Buffering not passed on to BunkerWeb. */
+const buffered = (conf: string): string =>
+	conf.replace(/\n\s*proxy_pass_header X-Accel-Buffering;/, '');
+
+describe('live streams pass "do not buffer" on to BunkerWeb (v1.21.14)', () => {
+	it('reads it from what nginx serves: the release config does, the v1.21.13 one does not', () => {
+		expect(buffered(SHIPPED_FE)).not.toBe(SHIPPED_FE);
+		expect(frontendStreamsPassUnbuffered(SERVED_OK)).toBe(true);
+		expect(frontendStreamsPassUnbuffered(dumpOf(buffered(SHIPPED_FE)))).toBe(false);
+		// At server level it counts, unless the stream location sets its own.
+		expect(
+			frontendStreamsPassUnbuffered(
+				'http { server { proxy_pass_header X-Accel-Buffering; location /v1/ { proxy_pass http://i; } } }'
+			)
+		).toBe(true);
+		expect(
+			frontendStreamsPassUnbuffered(
+				'http { server { proxy_pass_header X-Accel-Buffering; location /v1/ { proxy_pass_header Server; } } }'
+			)
+		).toBe(false);
+		expect(frontendStreamsPassUnbuffered('http { server { location / { } } }')).toBe(false);
+	});
+	it('every live stream the app opens counts — the directory stream and the sign-in pairing wait too (review D, F3/F4)', () => {
+		// A stream location narrowed to chat alone left /v1/instances/stream
+		// buffered while the check said all was well.
+		const chatOnly = SHIPPED_FE.replace(
+			/location ~ \^\/v1\/[^{]*\{/,
+			'location ~ ^/v1/chat.*/stream$ {'
+		);
+		expect(chatOnly).not.toBe(SHIPPED_FE);
+		expect(frontendStreamsPassUnbuffered(dumpOf(chatOnly))).toBe(false);
+		// The pairing wait (/v1/login-pairing/:pid/wait) is a live stream too.
+		const noWait = SHIPPED_FE.replace(/\|login-pairing[^)$]*/, '');
+		expect(frontendStreamsPassUnbuffered(dumpOf(noWait))).toBe(false);
+	});
+	it('an otherwise current frontend without it is rebuilt from the release once, and says so', async () => {
+		const s = oldBox();
+		s.served = dumpOf(buffered(SHIPPED_FE));
+		const out = await s.run();
+		expect(out.forwarding).toBe('refreshed');
+		expect(s.refreshes).toBe(1);
+		expect(s.info.join(' ')).toMatch(/passes the indexer's "do not buffer" mark on to BunkerWeb/);
+	});
+	it('still without it after the rebuild: a calm warning naming it, with the command', async () => {
+		const s = oldBox();
+		s.served = dumpOf(buffered(SHIPPED_FE));
+		s.servedAfterRefresh = s.served;
+		const out = await s.run();
+		expect(out.forwarding).toBe('stale');
+		const w = s.warn.join(' ');
+		expect(w).toMatch(/lets BunkerWeb hold live chat/);
+		expect(w).toContain('up -d --no-deps --build --force-recreate frontend');
+	});
+});
+
 describe('the frontend answers a missing file with 404, not the app page (v1.20.2)', () => {
 	it('reads it from what nginx serves: the release config does, the v1.20.1 one does not', () => {
 		expect(no404(SHIPPED_FE)).not.toBe(SHIPPED_FE);
@@ -1647,7 +1709,7 @@ describe('the frontend REALLY sends one address to the indexer (served config, n
 		for (const loc of [
 			'/v1/broadcast',
 			'/v1/federation',
-			'~ ^/v1/.*/stream$',
+			'~ ^/v1/(?:.*/stream|login-pairing/[^/]+/wait)$',
 			'/rss/',
 			'/relay/'
 		]) {
@@ -2245,6 +2307,73 @@ describe('the frontend sends a strict page CSP, hides its version and drops visi
 	});
 });
 
+describe("visitors' browsers connect to this site only (v1.21.14)", () => {
+	// What v1.21.13 shipped: the browser's release check read Blurt RPC nodes
+	// itself, so connect-src listed them — clearnet ones by default, the hidden
+	// nodes on .onion and .i2p names.
+	const CLEAR_RPC =
+		"connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com";
+	const ONION_RPC =
+		"connect-src 'self' http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091 http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091";
+	const I2P_RPC =
+		"connect-src 'self' http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091 http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091";
+	const v1_21_13 = (connect: string): string => MORPHIT_CSP.replace("connect-src 'self'", connect);
+	/** The frontend's map as v1.21.13 shipped it. */
+	const oldMap = (conf: string): string =>
+		conf.replace(
+			/map \$host \$morphit_csp \{[\s\S]*?\n\}/,
+			`map $host $morphit_csp {\n    default     "${v1_21_13(CLEAR_RPC)}";\n    ~*\\.onion$  "${v1_21_13(ONION_RPC)}";\n    ~*\\.i2p$    "${v1_21_13(I2P_RPC)}";\n}`
+		);
+	const SERVED_V1_21_13 = dumpOf(oldMap(SHIPPED_FE));
+
+	it('this release: connect-src is exactly the site itself', () => {
+		expect(cspConnectSources(MORPHIT_CSP)).toEqual(["'self'"]);
+	});
+	it("the frontend's served CSP: this release passes; v1.21.13's node lists (any name) fail", () => {
+		expect(oldMap(SHIPPED_FE)).not.toBe(SHIPPED_FE);
+		expect(frontendCspSelfOnly(SERVED_OK)).toBe(true);
+		expect(frontendCspSelfOnly(SERVED_V1_21_13)).toBe(false);
+		// one hidden name still listing nodes is enough
+		const oneOnion = SHIPPED_FE.replace(
+			/(map \$host \$morphit_csp \{\n[^\n]*\n)/,
+			`$1    ~*\\.onion$  "${v1_21_13(ONION_RPC)}";\n`
+		);
+		expect(oneOnion).not.toBe(SHIPPED_FE);
+		expect(frontendCspSelfOnly(dumpOf(oneOnion))).toBe(false);
+	});
+	it("a frontend on v1.21.13's CSP is rebuilt from the release once, and says so", async () => {
+		const s = oldBox();
+		s.served = SERVED_V1_21_13;
+		const out = await s.run();
+		expect(out.forwarding).toBe('refreshed');
+		expect(s.refreshes).toBe(1);
+		expect(s.info.join(' ')).toMatch(/connect to this site only/);
+	});
+	it('still listing nodes after the rebuild: a calm warning naming it, with the command', async () => {
+		const s = oldBox();
+		s.served = SERVED_V1_21_13;
+		s.servedAfterRefresh = SERVED_V1_21_13;
+		const out = await s.run();
+		expect(out.forwarding).toBe('stale');
+		const w = s.warn.join(' ');
+		expect(w).toMatch(/connect to Blurt RPC nodes/);
+		expect(w).toContain('up -d --no-deps --build --force-recreate frontend');
+	});
+	it("BunkerWeb's env: v1.21.13's CSP becomes this release's; an operator's own sources are kept", () => {
+		const p = planBunkerwebEnv(`CONTENT_SECURITY_POLICY=${v1_21_13(CLEAR_RPC)}\n`);
+		expect(p.text).toContain(`CONTENT_SECURITY_POLICY=${MORPHIT_CSP}\n`);
+		expect(p.text).not.toContain('rpc.drakernoise.com');
+		const own = MORPHIT_CSP.replace(
+			"connect-src 'self'",
+			"connect-src 'self' https://indexer.trade.example.org"
+		);
+		expect(cspConnectsSelfOnly(own)).toBe(true);
+		expect(planBunkerwebEnv(`CONTENT_SECURITY_POLICY=${own}\n`).text).toContain(
+			`CONTENT_SECURITY_POLICY=${own}\n`
+		);
+	});
+});
+
 describe("the frontend is built from this release's pinned nginx base", () => {
 	const DOCKERFILE = readFileSync(join(REPO, 'ops/bunkerweb/frontend/Dockerfile'), 'utf8');
 	it('the Dockerfile pins the base by digest and labels it with the value the heal expects', () => {
@@ -2361,7 +2490,197 @@ describe("the frontend is built from this release's pinned nginx base", () => {
 	});
 });
 
+describe("an operator's own page CSP that lets browsers connect elsewhere is kept AND reported", () => {
+	const ownExtra = MORPHIT_CSP.replace(
+		"connect-src 'self'",
+		"connect-src 'self' https://indexer.trade.example.org"
+	);
+	it('names the sources beyond this site: connect-src, else default-src, else any address', () => {
+		expect(cspForeignConnectSources(ownExtra)).toEqual(['https://indexer.trade.example.org']);
+		// no connect-src: the browser falls back to default-src
+		expect(
+			cspForeignConnectSources("default-src 'self' https://cdn.example.org wss:; img-src *")
+		).toEqual(['https://cdn.example.org', 'wss:']);
+		expect(cspForeignConnectSources("script-src 'self'")).toEqual(['*']);
+		// this site only, or nothing at all: nothing to say
+		expect(cspForeignConnectSources("default-src 'self'")).toEqual([]);
+		expect(cspForeignConnectSources("default-src 'none'; frame-ancestors 'none'")).toEqual([]);
+		// a policy Morphit wrote (any release) is replaced by the heals, not reported
+		expect(cspForeignConnectSources(MORPHIT_CSP)).toEqual([]);
+		expect(
+			cspForeignConnectSources(
+				MORPHIT_CSP.replace("connect-src 'self'", "connect-src 'self' https://rpc.blurt.one")
+			)
+		).toEqual([]);
+	});
+	it("BunkerWeb's env: kept byte for byte, and a warning names the extra source and the file", async () => {
+		const s = oldBox(`${OLD_ENV}CONTENT_SECURITY_POLICY=${ownExtra}\n`);
+		await s.run();
+		expect(readFileSync(s.path('bunkerweb.env'), 'utf8')).toContain(
+			`CONTENT_SECURITY_POLICY=${ownExtra}\n`
+		);
+		const w = s.warn.join('\n');
+		expect(w).toContain('https://indexer.trade.example.org');
+		expect(w).toContain(`CONTENT_SECURITY_POLICY in ${s.path('bunkerweb.env')}`);
+		expect(s.warn).toHaveLength(1);
+		// said again on the next run: it is still so
+		await s.run();
+		expect(s.warn).toHaveLength(2);
+	});
+	it("BunkerWeb's env: no warning for Morphit's policy or an own one that allows this site only", async () => {
+		for (const csp of [MORPHIT_CSP, "default-src 'self'"]) {
+			const s = oldBox(`${OLD_ENV}CONTENT_SECURITY_POLICY=${csp}\n`);
+			await s.run();
+			expect(s.warn, csp).toEqual([]);
+		}
+	});
+	it('the frontend: an own CSP it serves is not rebuilt away, and is reported', async () => {
+		const own = SHIPPED_FE.replace(
+			/(map \$host \$morphit_csp \{\n\s*default\s+)"[^"]*"/,
+			`$1"${ownExtra}"`
+		);
+		expect(own).not.toBe(SHIPPED_FE);
+		expect(frontendCspForeignSources(dumpOf(own))).toEqual(['https://indexer.trade.example.org']);
+		expect(frontendCspForeignSources(SERVED_OK)).toEqual([]);
+		const s = oldBox(`${OLD_ENV}CONTENT_SECURITY_POLICY=${MORPHIT_CSP}\n`);
+		s.served = dumpOf(own);
+		const out = await s.run();
+		expect(out.forwarding).toBe('ok');
+		expect(s.refreshes).toBe(0);
+		const w = s.warn.join('\n');
+		expect(w).toContain('https://indexer.trade.example.org');
+		expect(w).toContain('the frontend morphit-frontend');
+		expect(w).toContain('up -d --no-deps --build --force-recreate frontend');
+	});
+});
+
+describe('a BunkerWeb setting written with spaces (`KEY = value`, as Compose accepts) is read and rewritten in place', () => {
+	const own = "default-src 'self'; img-src 'self' https://img.example.org";
+	const lines = (t: string, key: string): string[] =>
+		t.split('\n').filter((l) => new RegExp(`^\\s*${key}\\s*[=:]`).test(l));
+	it("an operator's own CSP stays the one Compose uses (no second line appended after it)", () => {
+		const p = planBunkerwebEnv(`CONTENT_SECURITY_POLICY = ${own}\nX_FRAME_OPTIONS: SAMEORIGIN\n`);
+		expect(lines(p.text, 'CONTENT_SECURITY_POLICY')).toHaveLength(1);
+		expect(envFileEntries(p.text).get('CONTENT_SECURITY_POLICY')).toBe(own);
+		expect(lines(p.text, 'X_FRAME_OPTIONS')).toHaveLength(1);
+		expect(envFileEntries(p.text).get('X_FRAME_OPTIONS')).toBe('SAMEORIGIN');
+	});
+	it('an earlier Morphit CSP or an address-logging LOG_FORMAT written that way is replaced where it stands', () => {
+		const older = MORPHIT_CSP.replace(
+			"connect-src 'self'",
+			"connect-src 'self' https://rpc.blurt.one"
+		);
+		const p = planBunkerwebEnv(
+			`SERVER_NAME=example.org\nexport CONTENT_SECURITY_POLICY = ${older}\nLOG_FORMAT = $remote_addr $request\nUSE_GZIP=yes\n`
+		);
+		expect(lines(p.text, '(?:export\\s+)?CONTENT_SECURITY_POLICY')).toEqual([
+			`export CONTENT_SECURITY_POLICY=${MORPHIT_CSP}`
+		]);
+		expect(lines(p.text, 'LOG_FORMAT')).toEqual([`LOG_FORMAT=${MORPHIT_LOG_FORMAT}`]);
+		// in place: the order of the file is kept
+		const t = p.text.split('\n');
+		expect(t.slice(0, 4)).toEqual([
+			'SERVER_NAME=example.org',
+			`export CONTENT_SECURITY_POLICY=${MORPHIT_CSP}`,
+			`LOG_FORMAT=${MORPHIT_LOG_FORMAT}`,
+			'USE_GZIP=yes'
+		]);
+		expect(planBunkerwebEnv(p.text).changes).toEqual([]);
+	});
+	it("on a box: BunkerWeb runs with the operator's own CSP after the heal", async () => {
+		const s = oldBox(`${OLD_ENV}CONTENT_SECURITY_POLICY = ${own}\n`);
+		await s.run();
+		expect(s.c.get('bunkerweb')!.env).toContain(`CONTENT_SECURITY_POLICY=${own}`);
+		expect(s.c.get('bunkerweb')!.env).not.toContain(`CONTENT_SECURITY_POLICY=${MORPHIT_CSP}`);
+	});
+	it("REVERSE_PROXY_HOST written with spaces moves to the frontend's edge port in place", () => {
+		const p = planBunkerwebEnv('REVERSE_PROXY_HOST = http://frontend:80\n', {
+			edgeTarget: { hosts: ['frontend'], port: 8088 }
+		});
+		expect(lines(p.text, 'REVERSE_PROXY_HOST')).toEqual([
+			'REVERSE_PROXY_HOST=http://frontend:8088'
+		]);
+		expect(p.changes.some((c) => c.includes(':8088'))).toBe(true);
+	});
+});
+
+describe('pages send X-DNS-Prefetch-Control: off wherever they send the CSP', () => {
+	const DNS = 'X-DNS-Prefetch-Control: off';
+	it('the shipped BunkerWeb env and template carry it; the heal adds it to an older env, once', () => {
+		for (const rel of [
+			'ops/bunkerweb/bunkerweb.env.example',
+			'ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2'
+		])
+			expect([...envFileEntries(readFileSync(join(REPO, rel), 'utf8')).values()]).toContain(DNS);
+		const p = planBunkerwebEnv(OLD_ENV);
+		expect(envFileEntries(p.text).get('CUSTOM_HEADER_1')).toBe(DNS);
+		expect(planBunkerwebEnv(p.text).changes).toEqual([]);
+	});
+	it("next to the operator's own CUSTOM_HEADERs, under a free number; their own value for it is kept", () => {
+		const env = `${OLD_ENV}CUSTOM_HEADER=Onion-Location: http://abc.onion\nCUSTOM_HEADER_1=X-Shop: yes\n`;
+		const p = planBunkerwebEnv(env);
+		const e = envFileEntries(p.text);
+		expect(e.get('CUSTOM_HEADER')).toBe('Onion-Location: http://abc.onion');
+		expect(e.get('CUSTOM_HEADER_1')).toBe('X-Shop: yes');
+		expect(e.get('CUSTOM_HEADER_2')).toBe(DNS);
+		const mine = `${OLD_ENV}CUSTOM_HEADER_7 = x-dns-prefetch-control: on\n`;
+		const q = planBunkerwebEnv(mine);
+		expect([...envFileEntries(q.text).values()].filter((v) => /dns-prefetch/i.test(v))).toEqual([
+			'x-dns-prefetch-control: on'
+		]);
+	});
+	it('on a box: BunkerWeb runs with it', async () => {
+		const s = oldBox();
+		await s.run();
+		expect(s.c.get('bunkerweb')!.env).toContain(`CUSTOM_HEADER_1=${DNS}`);
+	});
+	const noDns = (conf: string): string =>
+		conf.replace(/\n\s*add_header X-DNS-Prefetch-Control "off" always;/g, '');
+	it('the frontend: read from what nginx serves, block by block', () => {
+		expect(noDns(SHIPPED_FE)).not.toBe(SHIPPED_FE);
+		expect(frontendDnsPrefetchSent(SERVED_OK)).toBe(true);
+		expect(frontendDnsPrefetchSent(dumpOf(noDns(SHIPPED_FE)))).toBe(false);
+		// one location that sets its own headers without it is enough
+		const one = SHIPPED_FE.replace(
+			/(location @spa \{[\s\S]*?)\n\s*add_header X-DNS-Prefetch-Control "off" always;/,
+			'$1'
+		);
+		expect(one).not.toBe(SHIPPED_FE);
+		expect(frontendDnsPrefetchSent(dumpOf(one))).toBe(false);
+	});
+	it('a frontend without it is rebuilt from the release once, and says so; still without it: a warning with the command', async () => {
+		const s = oldBox();
+		s.served = dumpOf(noDns(SHIPPED_FE));
+		expect((await s.run()).forwarding).toBe('refreshed');
+		expect(s.refreshes).toBe(1);
+		expect(s.info.join(' ')).toMatch(/X-DNS-Prefetch-Control: off/);
+		const t = oldBox();
+		t.served = dumpOf(noDns(SHIPPED_FE));
+		t.servedAfterRefresh = dumpOf(noDns(SHIPPED_FE));
+		expect((await t.run()).forwarding).toBe('stale');
+		const w = t.warn.join(' ');
+		expect(w).toMatch(/X-DNS-Prefetch-Control: off/);
+		expect(w).toContain('up -d --no-deps --build --force-recreate frontend');
+	});
+});
+
 // keep the simulator honest: its `docker inspect` state stays parseable
 it('the simulator writes nothing outside its temp dir', () => {
 	expect(readdirSync(tmpdir()).some((f) => f === 'docker-compose.yml')).toBe(false);
+});
+
+describe('serverNameOf reads every form Compose accepts', () => {
+	it('KEY=v, KEY = v, export KEY=v, quoted; the last entry wins; a template is no name', async () => {
+		const { serverNameOf } = await import('../src/lib/proxyConfigHeal.js');
+		expect(serverNameOf('SERVER_NAME=morphit.example www.morphit.example\n')).toBe(
+			'morphit.example'
+		);
+		expect(serverNameOf('SERVER_NAME = morphit.example\n')).toBe('morphit.example');
+		expect(serverNameOf('export SERVER_NAME="morphit.example"\n')).toBe('morphit.example');
+		expect(serverNameOf('SERVER_NAME=old.example\nSERVER_NAME = new.example\n')).toBe(
+			'new.example'
+		);
+		expect(serverNameOf('SERVER_NAME={{ domain }}\n')).toBeNull();
+		expect(serverNameOf('OTHER=1\n')).toBeNull();
+	});
 });

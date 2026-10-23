@@ -101,6 +101,19 @@ const LOW_ORDER_X25519_POINTS: ReadonlyArray<Uint8Array> = [
 	])
 ];
 
+/**
+ * Is this one of the small-order encodings in the byte list above?
+ *
+ * The byte list misses encodings X25519 reduces to the same small-order point
+ * (p and p + 1, and 0 and 1 with bit 255 set). v1.21.14's audit (S-L3) first
+ * refused those too, comparing keys as numbers — but that is a NEW rejection
+ * rule: applied to history it gave a different verdict than every older node
+ * for the same op, and applied from the consensus-v2 activation it would need
+ * every instance to run it before that date (v1.21.14 review A, F4). It buys
+ * nothing now: since v1.21.14 no client sends to a chat key (every message is
+ * encrypted to posting keys), so a small-order chat key stored for someone
+ * stops nobody writing to them. So the verdict stays the byte list, as before.
+ */
 function isLowOrderX25519Point(pub: Uint8Array): boolean {
 	if (pub.length !== 32) return false;
 	for (const lo of LOW_ORDER_X25519_POINTS) {

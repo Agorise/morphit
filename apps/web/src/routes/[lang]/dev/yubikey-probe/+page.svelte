@@ -46,6 +46,7 @@
 		type TransportLogEntry
 	} from '$crypto/yubikey/transport';
 	import { DEFAULT_YUBIKEY_SLOT, type YubikeySlot } from '$crypto/yubikey/protocol';
+	import { keyField } from '$lib/ui/keyField';
 
 	let slot = $state<YubikeySlot>(DEFAULT_YUBIKEY_SLOT);
 	let challengeHex = $state(
@@ -252,6 +253,8 @@
 					type="password"
 					maxlength="64"
 					bind:value={secretHex}
+					readonly
+					use:keyField
 					autocomplete="off"
 					class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 font-mono text-sm focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 					placeholder="Optional — paste the HMAC-SHA1 key you programmed into the slot"

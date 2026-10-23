@@ -76,7 +76,7 @@ import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contrac
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateChatOrderPermlink } from '$indexer/permlink';
 import { logger } from '$log';
-import { checkChatOrder } from '$indexer/chatGates';
+import { checkChatOrder, noReplyLimitRefusal, noReplyLimits } from '$indexer/chatGates';
 import { enqueueChatPush } from '$indexer/chatPushEnqueue';
 import { inSavepoint } from '$indexer/savepoint';
 
@@ -125,14 +125,9 @@ const CHAT_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/
  *  reply, and following up once or twice is well within these
  *  budgets. */
 
-/** Max unique new senders (i.e. senders the recipient has not
- *  replied to) allowed in a rolling 24h window per recipient. */
-const FAN_IN_UNIQUE_SENDERS_24H = 20;
-
-/** Max messages a single sender can send to a single recipient
- *  who has not replied, over ALL time. Once the recipient
- *  replies once, this cap lifts. */
-const PER_PAIR_NO_REPLY_CAP = 50;
+// FAN_IN_UNIQUE_SENDERS_24H and PER_PAIR_NO_REPLY_CAP live in chatGates.ts,
+// with the query that counts against them: the fast-notify gate applies the
+// same caps (v1.21.14, independent review of the audit fixes, finding 2).
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -363,7 +358,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// send up to 50 unanswered messages, 1,000 a day in all. The
 	// NOTIFICATIONS are capped separately: until the recipient
 	// replies, a sender earns one push per 24h
-	// (chatPushEnqueue.ts), so 20 socks make at most 20 pushes.
+	// (chatPushEnqueue.ts). The fast routes push before this handler
+	// runs; they apply these same two caps (fastNotifyGate.ts, counting
+	// messages announced but not stored yet), so a 21st sock or a 51st
+	// unanswered message earns no push there either.
 	if (!orderResponseBypass) {
 		const admitCheck = await client.query<{ admitted: boolean }>(
 			`SELECT EXISTS (
@@ -405,60 +403,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// conversations including ones already shut down." The
 	// blocks-table lookup is a primary-key hit (blocker,
 	// blocked), so the cost is negligible.
-	const limits = await client.query<{
-		unique_fan_in: string; // BIGINT
-		per_pair_count: string | null; // BIGINT, NULL when recipient has replied
-	}>(
-		`SELECT
-		   (
-		     -- Count distinct senders (incl. this one) in the last
-		     -- 24h whom the recipient has never replied to AND has
-		     -- not blocked.
-		     SELECT COUNT(DISTINCT s)::bigint FROM (
-		       SELECT sender AS s FROM chat_messages
-		        WHERE recipient = $1
-		          AND created_at > $3::timestamptz - INTERVAL '24 hours'
-		       UNION
-		       SELECT $2::text AS s
-		     ) candidates
-		     WHERE NOT EXISTS (
-		       SELECT 1 FROM chat_messages r
-		        WHERE r.sender = $1 AND r.recipient = candidates.s
-		     )
-		     AND NOT EXISTS (
-		       SELECT 1 FROM blocks b
-		        WHERE b.blocker = $1 AND b.blocked = candidates.s
-		          AND b.state = 'blocked'
-		     )
-		   ) AS unique_fan_in,
-		   CASE
-		     WHEN EXISTS (
-		       SELECT 1 FROM chat_messages
-		        WHERE sender = $1 AND recipient = $2
-		     ) THEN NULL
-		     ELSE (
-		       SELECT COUNT(*)::bigint FROM chat_messages
-		        WHERE sender = $2 AND recipient = $1
-		     )
-		   END AS per_pair_count`,
-		[recipient, ctx.signer, ctx.blockTime]
-	);
-	const row = limits.rows[0];
-	if (row) {
-		const fanIn = Number(row.unique_fan_in);
-		if (Number.isFinite(fanIn) && fanIn > FAN_IN_UNIQUE_SENDERS_24H) {
-			return { ok: false, reason: 'recipient_fan_in_exceeded' };
-		}
-		if (row.per_pair_count !== null) {
-			const perPair = Number(row.per_pair_count);
-			// perPair is the count BEFORE this new message. We
-			// reject when accepting this would push the count
-			// past the cap — i.e. when already ≥ cap.
-			if (Number.isFinite(perPair) && perPair >= PER_PAIR_NO_REPLY_CAP) {
-				return { ok: false, reason: 'sender_no_reply_cap_exceeded' };
-			}
-		}
-	}
+	const limits = await noReplyLimits(client, {
+		recipient,
+		sender: ctx.signer,
+		at: ctx.blockTime
+	});
+	const refused = noReplyLimitRefusal(limits);
+	if (refused !== null) return { ok: false, reason: refused };
 
 	try {
 		const insertRes = await client.query<{ id: string }>(
@@ -541,10 +492,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				inTransaction: true
 			})
 		).catch((err: unknown) => {
-			log.warn('push_enqueue_failed', {
-				recipient,
-				err: String((err as Error)?.message ?? err)
-			});
+			// No account names in the log (v1.21.14 full chat audit, S-L6).
+			log.warn('push_enqueue_failed', { err: String((err as Error)?.message ?? err) });
 		});
 	} catch (err) {
 		if (isUniqueViolation(err)) {

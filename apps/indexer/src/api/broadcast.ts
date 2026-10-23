@@ -48,7 +48,7 @@ import { isTransportError } from '$blurt/client';
 import { errorBody } from '$api/shared';
 import type { ChatFastDispatcher } from '$indexer/chatFastDispatcher';
 import { CHAT_OP_ID as CHAT_MESSAGE_OP_ID, type LocatedChatOp } from '$indexer/headTailer';
-import { computeTrxId, structuralCheckChatOp } from '$indexer/chatFastFederation';
+import { computeTrxId, sentAtFromExpiry, structuralCheckChatOp } from '$indexer/chatFastFederation';
 import { noteOutboundChat } from '$indexer/recentOutboundChat';
 
 /** Every custom_json id Morphit broadcasts is versioned `morphit_<name>_vN`. */
@@ -243,17 +243,21 @@ export function broadcastRoute(
 	 * read, which on a privacy-only instance runs to 6.8 seconds for two people
 	 * on the same server.
 	 *
-	 * Called only for a message whose signature verified HERE, against this
-	 * instance's own record of the sender's posting key (the fast dispatcher's
-	 * pre-send check, decision 'dispatched'), and only after the node accepted
-	 * the transaction. The node's acceptance alone is not enough: the broadcast
+	 * Called only for a message whose signature verified HERE against the
+	 * sender's posting key — by the fast dispatcher's pre-send check, or, when
+	 * that key needed the chain, by a bounded quorum read once the node had
+	 * accepted the transaction (v1.21.14 audit, S-C1/S-M4) — and only after the
+	 * node accepted it. The node's acceptance alone is not enough: the broadcast
 	 * goes to ONE pool node, and a hostile or broken node can "accept" a
 	 * transaction signed by the wrong key, which would then reach the named
-	 * recipient's open chat and Web Push as if from the named sender. A message
-	 * that cannot be verified here reaches local listeners through the head
-	 * tailer instead, a few seconds later.
+	 * recipient's open chat and Web Push as if from the named sender.
+	 *
+	 * `sentAt` is the sender's time read off the signed expiry, exactly as the
+	 * peer route stamps the same message (S-L1: this route used the server's
+	 * own clock, so with a clock 90 s off the same message sat 90 s apart in
+	 * the two people's transcripts).
 	 */
-	localChatDeliver?: (located: LocatedChatOp, trxId: string) => void,
+	localChatDeliver?: (located: LocatedChatOp, trxId: string, sentAt: Date) => void,
 	/** Tuning, for tests. `duplicateLookupDelayMs` spaces the block lookups
 	 *  made after a duplicate answer (default 3 s, one block). */
 	opts: { readonly duplicateLookupDelayMs?: number } = {}
@@ -389,8 +393,12 @@ export function broadcastRoute(
 			fast?.chainAccepted();
 			// Did the signature verify HERE? Local effects — the outbound-pair
 			// note and the delivery to our own listeners — need that, not just the
-			// node's word (see localChatDeliver). A local check, no chain read.
+			// node's word (see localChatDeliver). At once when the pre-send check
+			// passed; otherwise (a sender whose key needs the chain: no row, an
+			// unconfirmed row) once a bounded chain read of the key has answered,
+			// off this response (v1.21.14 audit, S-C1/S-M4).
 			const verifiedHere = fast !== undefined && (await fast.decision) === 'dispatched';
+			const located = structuralCheckChatOp(trx);
 			// Record that this account just wrote to that one — only for a
 			// message verified here, and only after the node accepted it.
 			// Recording on the node's word alone would let one lying node assert
@@ -400,7 +408,6 @@ export function broadcastRoute(
 			// six seconds, instead of waiting out the 45-63s the durable table
 			// takes to admit the message we have just relayed ourselves. See
 			// recentOutboundChat.ts.
-			const located = structuralCheckChatOp(trx);
 			if (located.ok && verifiedHere) {
 				noteOutboundChat(located.located.signer, located.located.recipient);
 			}
@@ -430,8 +437,19 @@ export function broadcastRoute(
 			}
 			// Deliver to our OWN listeners. Fire-and-forget: the sender is waiting
 			// on this response and must not also wait on the recipient's gates.
+			const sentAt = sentAtFromExpiry((trx as { expiration?: unknown }).expiration, new Date());
 			if (located.ok && verifiedHere && localChatDeliver !== undefined) {
-				localChatDeliver(located.located, trx_id);
+				localChatDeliver(located.located, trx_id, sentAt);
+			} else if (located.ok && fast !== undefined && !verifiedHere) {
+				// Checked after the node took it, off this response: note the pair
+				// and deliver locally once the key read confirms the signature.
+				const loc = located.located;
+				const id = trx_id;
+				void fast.verifiedHere().then((ok) => {
+					if (!ok) return;
+					noteOutboundChat(loc.signer, loc.recipient);
+					localChatDeliver?.(loc, id, sentAt);
+				});
 			}
 
 			// Only a client that ASKED for it gets the null. One that did not is

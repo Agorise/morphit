@@ -20,23 +20,29 @@
  *     visitor typed);
  *  E. cache policy: hashed bundles immutable, pages (incl. the @spa fallback)
  *     no-cache, in the frontend config AND web.conf, with one Cache-Control
- *     header only (C14);
+ *     header only (C14); and every live stream the browser holds open (the
+ *     sign-in pairing wait too) is relayed with proxy buffering off, in the
+ *     frontend config, web.conf and indexer.conf;
  *  F. BEHAVIOUR, when an `nginx` binary is present: the frontend config, run
  *     under the official nginx image's own top-level config (which logs
  *     "$http_x_forwarded_for"), writes NOTHING to the access log, forwards the
  *     proxy's address instead of a forged X-Forwarded-For, sends no X-Real-IP,
- *     and serves the headers/caching above. Skipped (and said so) without nginx.
- *     An I2P request arrives exactly as i2pd forwards it and gets the hidden CSP.
+ *     and serves the headers/caching above, and passes a live stream's
+ *     `X-Accel-Buffering: no` on to the edge (BunkerWeb buffers otherwise —
+ *     v1.21.14, chat a minute late). Skipped (and said so) without nginx.
+ *     A clearnet, an .onion and an I2P request (exactly as i2pd forwards it)
+ *     all get the SAME page CSP, whose connect-src is 'self' alone: since
+ *     v1.21.14 the browser contacts nothing but this site, on every name.
  *  G. I2P visitors are recognised by their Host (wave 4). i2pd's HTTP server
  *     tunnel passes the visitor's Host through unchanged UNLESS `hostoverride`
  *     is set (I2PTunnel.cpp, I2PServerTunnelConnectionHTTP::Write, the same in
  *     2.40.0, 2.45.1, 2.49.0 and master: m_Host = hostoverride, default "",
  *     "forward as is"), and the visitor's i2pd HTTP proxy sets
- *     `Host: <dest>.i2p` (HTTPProxy.cpp). So the frontend's `~*\.i2p$` map entry
- *     selects the hidden CSP only while both tunnel definitions Morphit writes
+ *     `Host: <dest>.i2p` (HTTPProxy.cpp). Both tunnel definitions Morphit writes
  *     (the Ansible role and ops-cli's i2pTunnelStanza) stay `type = http`
- *     without a hostoverride (e.g. `hostoverride = 127.0.0.1` would send every
- *     I2P visitor the clearnet policy).
+ *     without a hostoverride. The page CSP no longer depends on the Host
+ *     (v1.21.14: one policy, connect-src 'self', for every name), and G checks
+ *     that too: every entry of the frontend's `$host` CSP map is that policy.
  *
  * MORPHIT_PROXY_CONF_ROOT=<dir containing ops/…> runs it against another tree
  * (e.g. an older release) to watch it fail.
@@ -67,6 +73,19 @@ const check = (name: string, ok: boolean, detail = ''): void => {
 };
 
 const FRONTEND = 'ops/bunkerweb/frontend/nginx.conf';
+/** The sources a CSP lets the browser connect to: connect-src, or default-src
+ *  when connect-src is absent (the browser's own fallback). Null: neither. */
+const connectSources = (csp: string): string[] | null => {
+	const dirs = new Map(
+		csp
+			.split(';')
+			.map((d) => d.trim().split(/\s+/))
+			.filter((t) => t[0])
+			.map((t) => [t[0]!.toLowerCase(), t.slice(1)] as const)
+	);
+	return dirs.get('connect-src') ?? dirs.get('default-src') ?? null;
+};
+const sameOnly = (src: string[] | null): boolean => src?.length === 1 && src[0] === "'self'";
 const NGINX_CONFS = [
 	FRONTEND,
 	'ops/nginx/web.conf',
@@ -219,6 +238,39 @@ for (const rel of [FRONTEND, 'ops/nginx/web.conf']) {
 	}
 }
 
+// ── E2. live streams are relayed unbuffered ──
+// The paths the browser holds open (chat, inbox, orderbook, instance
+// directory, and the sign-in pairing wait): in every server that serves /v1/,
+// the location nginx picks for each (the first matching regex, else /v1/) must
+// turn proxy buffering off, or events arrive late, in batches.
+const STREAM_PATHS = [
+	'/v1/chat-activity/alice/stream',
+	'/v1/chat/alice/bob/stream',
+	'/v1/orderbook/stream',
+	'/v1/instances/stream',
+	'/v1/login-pairing/p1/wait'
+];
+for (const rel of [FRONTEND, 'ops/nginx/web.conf', 'ops/nginx/indexer.conf']) {
+	for (const server of findBlocks(parseNginx(read(rel)), 'server')) {
+		const locs = (server.block ?? []).filter((d) => d.name === 'location');
+		const prefix = locs.find((l) => l.args.length === 1 && l.args[0] === '/v1/');
+		if (!prefix) continue;
+		const regexes = locs.filter((l) => l.args[0] === '~' || l.args[0] === '~*');
+		const buffered = STREAM_PATHS.filter((path) => {
+			const l =
+				regexes.find((r) =>
+					new RegExp(r.args[1] ?? '', r.args[0] === '~*' ? 'i' : '').test(path)
+				) ?? prefix;
+			return !direct(l.block, 'proxy_buffering').some((d) => d.args[0] === 'off');
+		});
+		check(
+			`${rel}: every live stream (incl. the sign-in pairing wait) is relayed unbuffered`,
+			buffered.length === 0,
+			buffered.join(', ')
+		);
+	}
+}
+
 async function main(): Promise<void> {
 	// ── G. the i2pd tunnels leave the visitor's Host alone ──
 	{
@@ -257,11 +309,16 @@ async function main(): Promise<void> {
 			i2pTunnelStanza: (keys: string, port: number) => string;
 		};
 		passesHost("ops-cli's i2pTunnelStanza", gen.i2pTunnelStanza('morphit-web.dat', 8090));
-		const map = findBlocks(parseNginx(read(FRONTEND)), 'map').find((m) => m.args[0] === '$host');
+		const map = findBlocks(parseNginx(read(FRONTEND)), 'map').find(
+			(m) => m.args[0] === '$host' && m.args[1] === '$morphit_csp'
+		);
+		const policies = (map?.block ?? []).map((d) => d.args.join(' ').replace(/^"|"$/g, ''));
 		check(
-			'G: the frontend picks its CSP by that Host, with an .i2p entry',
-			map?.block?.some((d) => /\\\.i2p\$$/.test(d.name)) === true,
-			JSON.stringify(map?.block?.map((d) => d.name))
+			"G: the frontend's CSP is the same for every Host, and its connect-src is 'self' alone",
+			policies.length > 0 &&
+				policies.every((p) => p === policies[0]) &&
+				sameOnly(connectSources(policies[0]!)),
+			JSON.stringify(map?.block?.map((d) => [d.name, connectSources(d.args.join(' '))]))
 		);
 	}
 
@@ -301,6 +358,9 @@ async function main(): Promise<void> {
 			const seen: IncomingHttpHeaders[] = [];
 			const up = createServer((req, res) => {
 				seen.push(req.headers);
+				// The indexer marks every live stream unbuffered.
+				if ((req.url ?? '').split('?')[0]!.endsWith('/stream'))
+					res.setHeader('x-accel-buffering', 'no');
 				res.writeHead(200, { 'content-type': 'application/json' });
 				res.end('{"ok":true}');
 			});
@@ -336,7 +396,7 @@ async function main(): Promise<void> {
 				const home = await get('/', forged);
 				await get('/offers', forged);
 				await get('/v1/health', forged);
-				await get('/v1/orderbook/stream', forged);
+				const stream = await get('/v1/orderbook/stream', forged);
 				const onion = await get('/', {
 					host: 'abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrstuv.onion'
 				});
@@ -362,6 +422,14 @@ async function main(): Promise<void> {
 						seen.every((h) => h['x-forwarded-for'] === '127.0.0.1' && h['x-real-ip'] === undefined),
 					JSON.stringify(seen.map((h) => [h['x-forwarded-for'], h['x-real-ip']]))
 				);
+				// BunkerWeb buffers what it relays unless the response says not to;
+				// nginx drops X-Accel-* headers from its upstream on its own, so
+				// without proxy_pass_header the edge held every chat event (v1.21.14).
+				check(
+					"F: a live stream passes the indexer's X-Accel-Buffering: no on to the edge",
+					stream.headers.get('x-accel-buffering') === 'no',
+					String(stream.headers.get('x-accel-buffering'))
+				);
 				check(
 					'F: pages are no-cache',
 					home.headers.get('cache-control') === 'no-cache',
@@ -374,24 +442,16 @@ async function main(): Promise<void> {
 				);
 				const cspClear = home.headers.get('content-security-policy') ?? '';
 				const cspOnion = onion.headers.get('content-security-policy') ?? '';
-				check(
-					'F: a clearnet page carries a CSP whose connect-src is the clearnet RPC pool',
-					/connect-src 'self' https:\/\//.test(cspClear),
-					cspClear.slice(0, 60)
-				);
-				check(
-					'F: an .onion page carries the hidden CSP (connect-src: .onion RPC only)',
-					/connect-src 'self' http:\/\/[a-z2-7]+\.onion:\d+/.test(cspOnion) &&
-						!/connect-src[^;]*https:/.test(cspOnion),
-					cspOnion.slice(0, 60)
-				);
 				const cspI2p = i2p.headers.get('content-security-policy') ?? '';
 				check(
-					'F: an I2P request as i2pd forwards it carries the I2P CSP (.b32.i2p RPC only, no clearnet host)',
-					/connect-src 'self' http:\/\/[a-z2-7]+\.b32\.i2p/.test(cspI2p) &&
-						!/connect-src[^;]*https:/.test(cspI2p) &&
-						!/\.onion/.test(cspI2p),
-					cspI2p.slice(0, 60)
+					'F: a clearnet, an .onion and an I2P page (as i2pd forwards it) carry the identical CSP',
+					cspClear !== '' && cspOnion === cspClear && cspI2p === cspClear,
+					JSON.stringify([cspClear, cspOnion, cspI2p].map(connectSources))
+				);
+				check(
+					"F: on every one of those Hosts the CSP's connect-src is 'self' alone",
+					[cspClear, cspOnion, cspI2p].every((c) => sameOnly(connectSources(c))),
+					JSON.stringify([cspClear, cspOnion, cspI2p].map(connectSources))
 				);
 				check(
 					'F: security headers present, no HSTS on this plain-http hop',

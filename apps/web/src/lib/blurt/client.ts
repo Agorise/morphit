@@ -5,9 +5,9 @@
  * operator's OWN indexer via `chainRelay` (POST /v1/chain/condenser), so these
  * reads never contact a Blurt RPC node from the browser (privacy #1).
  *
- * The one browser→node read in the app is the release check
- * ($net/releaseFetch), which talks to the nodes through the rotator
- * ($net/endpoints) and does not use this client.
+ * The release check ($net/releaseFetch) reads through the same instance, by
+ * its agreed-read relay (POST /v1/chain/agreed), and does not use this
+ * client. The browser contacts no Blurt RPC node at all.
  *
  * Helpers:
  *   - getAccount(name) — fetch a Blurt account's public keys + metadata

@@ -31,6 +31,15 @@ import type { BlockTransaction } from '$blurt/client';
 /** Did `signer` sign `trx` with its posting key? */
 export type TrxSignerCheck = (trx: BlockTransaction, signer: string) => Promise<boolean>;
 
+/** The same question with its three answers: 'valid'; 'invalid' (a key for
+ *  `signer` is on file and the transaction is not signed by it — a background
+ *  chain read is started in case it was just rotated); 'unknown' (the key
+ *  needs a chain read first, started in the background). */
+export type TrxSignerState = (
+	trx: BlockTransaction,
+	signer: string
+) => Promise<'valid' | 'invalid' | 'unknown'>;
+
 /** Every public key the transaction's signatures recover to, lazily, up to
  *  `max` signatures. Returns a predicate; recovery happens at most once per
  *  signature. Unusable transaction → a predicate that is always false. */
@@ -83,6 +92,16 @@ async function signedByPredicate(
  * the next message from that sender) and THIS message is not shown live.
  */
 export function trxSignedByPostingKey(lookup: PostingKeyLookup): TrxSignerCheck {
+	const state = trxPostingSignatureState(lookup);
+	return async (trx, signer) => (await state(trx, signer)) === 'valid';
+}
+
+/** {@link trxSignedByPostingKey} with the three answers (TrxSignerState). The
+ *  head tailer needs the difference for a block op: one whose blocker's key
+ *  needs a chain read is held back while it is read; one whose blocker's key is
+ *  on file and did not sign it is not (independent review 2, finding 6 — a
+ *  lone node could otherwise hold any pair back with forged block ops). */
+export function trxPostingSignatureState(lookup: PostingKeyLookup): TrxSignerState {
 	const background = (p: Promise<unknown>): void => {
 		void p.catch(() => undefined);
 	};
@@ -95,9 +114,9 @@ export function trxSignedByPostingKey(lookup: PostingKeyLookup): TrxSignerCheck 
 			key = await lookup(signer, { network: false, signedBy });
 		} catch (err) {
 			if (isPending(err)) background(lookup(signer, { signedBy }));
-			return false;
+			return 'unknown';
 		}
-		if (key !== null && key.length > 0 && signedBy(key)) return true;
+		if (key !== null && key.length > 0 && signedBy(key)) return 'valid';
 		if (key !== null && key.length > 0) {
 			// Maybe a rotation the column has not caught up with: ask (bounded by
 			// the refresh budget), in the background.
@@ -106,8 +125,9 @@ export function trxSignedByPostingKey(lookup: PostingKeyLookup): TrxSignerCheck 
 			} catch (err) {
 				if (isPending(err)) background(lookup(signer, { refresh: true }));
 			}
+			return 'invalid';
 		}
-		return false;
+		return 'unknown';
 	};
 }
 
@@ -126,5 +146,65 @@ export function reconciledColumnLookup(db: FastFederationDb): PostingKeyLookup {
 		const row = r.rows[0];
 		if (row === undefined || row.posting_key_reconciled !== true) return null;
 		return row.posting_pubkey;
+	};
+}
+
+/** The quorum account read the active-authority check needs (BlurtClient). */
+export interface AgreedActiveReader {
+	getAccountsAgreed(
+		names: readonly string[],
+		agreeOn: (
+			account:
+				| {
+						readonly active: {
+							readonly weight_threshold: number;
+							readonly key_auths: readonly (readonly [string, number])[];
+						};
+				  }
+				| undefined
+		) => string
+	): Promise<ReadonlyMap<
+		string,
+		{
+			readonly active: {
+				readonly weight_threshold: number;
+				readonly key_auths: readonly (readonly [string, number])[];
+			};
+		}
+	> | null>;
+}
+
+/**
+ * Did `account`'s ACTIVE authority sign this block transaction — by keys two
+ * RPC operators agree it holds? Keys only (account authorities are not
+ * followed); the recovered keys' weights must reach the threshold. Used for the
+ * head-block stranger fee (headStrangerFees.ts): a transfer needs active
+ * authority, and a head block is one endpoint's word. No agreement → false.
+ */
+export function trxSignedByActiveAuthority(reader: AgreedActiveReader) {
+	return async (trx: BlockTransaction, account: string): Promise<boolean> => {
+		const fingerprint = (
+			acc:
+				| {
+						readonly active: {
+							readonly weight_threshold: number;
+							readonly key_auths: readonly (readonly [string, number])[];
+						};
+				  }
+				| undefined
+		): string =>
+			acc === undefined
+				? '∅ unknown account'
+				: JSON.stringify([
+						acc.active.weight_threshold,
+						[...acc.active.key_auths].map(([k, w]) => `${k}:${w}`).sort()
+					]);
+		const agreed = await reader.getAccountsAgreed([account], fingerprint);
+		const acc = agreed?.get(account);
+		if (acc === undefined) return false;
+		const signedBy = await signedByPredicate(trx);
+		let weight = 0;
+		for (const [key, w] of acc.active.key_auths) if (signedBy(key)) weight += w;
+		return weight >= acc.active.weight_threshold && acc.active.weight_threshold > 0;
 	};
 }

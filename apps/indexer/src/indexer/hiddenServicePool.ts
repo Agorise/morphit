@@ -3,31 +3,32 @@
  * and the one-circuit-per-push Tor transport chat fan-out uses.
  *
  * WHO USES WHICH. The pooled dispatcher below serves the login-pairing forward
- * and the fan-out's background onion visits (chatFastDispatcher.warmAll). Chat
- * pushes do NOT use it: since an earlier release each push goes through
- * {@link postJsonViaTorIsolated} (end of file) on a fresh circuit, because a
- * shared connection let a peer tie every account it carried to one instance.
- * The rest of this header describes the pool's original purpose.
+ * (`postJsonViaHiddenService`) and the fan-out's background onion visits
+ * (chatFastDispatcher.warmAll, `warmHiddenOrigin`). Chat pushes do NOT use it:
+ * since the 2026-10 transport change each push goes through
+ * {@link postJsonViaTorIsolated} (end of file) on a fresh circuit that is
+ * closed afterwards, because a shared connection let a peer tie every account
+ * it carried to one instance. The rest of this header records why the pool was
+ * built, when chat pushes still rode it; it no longer describes the chat path.
  *
- * WHY THIS EXISTS
+ * WHY THIS EXISTED
  * `fetchJsonViaHiddenService` builds a brand-new undici `Agent`/`ProxyAgent` for
  * every call and closes it again in a `finally`. For the federation probe, which
  * runs once every ten minutes per peer, that is exactly right: no idle sockets,
  * no state.
  *
- * For chat it is fatal. A message that has to reach the other person in under
- * six seconds cannot spend the first part of that budget on a SOCKS handshake
- * and a fresh TCP connection through a Tor circuit or an I2P tunnel — and the
- * per-call agent guarantees it does, every single time, because the connection
- * it opened was thrown away as soon as the previous message finished.
+ * For chat, as first built, that was the problem: a message that had to reach
+ * the other person in under six seconds spent part of that budget on a SOCKS
+ * handshake and a fresh connection through a Tor circuit or an I2P tunnel,
+ * every time.
  *
  * So this module keeps ONE dispatcher per (network, proxy) and lets undici pool
- * connections per origin underneath it. The first message to a peer pays setup;
- * every message after it reuses an established connection. A periodic warm-up
- * (see `warmHiddenOrigin`) pays even that first cost in the background, before
- * anyone is waiting, so the first message of a conversation is fast too — which
- * is the case that matters, because it is the one where the other person has no
- * reason to be looking at their screen yet.
+ * connections per origin underneath it. The first request to a peer pays setup;
+ * every request after it reuses an established connection. A periodic warm-up
+ * (see `warmHiddenOrigin`) pays even that first cost in the background. Chat
+ * now pays a fresh circuit per push instead (see `postJsonViaTorIsolated`); the
+ * warm-up still lets Tor cache each peer's onion descriptor and notices a dead
+ * local Tor before a user's message does.
  *
  * WHAT KEEPS A TUNNEL ALIVE
  * Tor drops an idle circuit after roughly ten minutes and I2P an idle tunnel on
@@ -103,7 +104,7 @@ export const KEEP_ALIVE_MAX_MS = 8 * 60 * 1000;
  * the second message of every conversation.
  *
  * With one connection per origin, undici QUEUES instead. Queueing behind an
- * in-flight chat push costs one round trip; building a parallel circuit costs
+ * in-flight request costs one round trip; building a parallel circuit costs
  * thirty to sixty seconds. There is no version of this trade where the extra
  * connection wins.
  *
@@ -228,8 +229,9 @@ export interface HiddenPostResult {
 /**
  * POST JSON to a hidden-service URL over the pooled dispatcher.
  *
- * There was no POST path at all before this: the probe only ever GETs. Delivery
- * needs to hand a peer a payload, and it needs to do it on a warm connection.
+ * There was no POST path at all before this: the probe only ever GETs. It was
+ * written for chat delivery on a warm connection; chat pushes now use
+ * `postJsonViaTorIsolated` instead, and this serves the login-pairing forward.
  */
 /**
  * Read a response body, bounded. A peer that streams forever must not be able to
@@ -448,7 +450,11 @@ export function makeIsolatedTorConnector(
 	socksHost: string,
 	socksPort: number,
 	isolation: { user: string; pass: string },
-	handshakeTimeoutMs: number = HIDDEN_HANDSHAKE_TIMEOUT_MS
+	handshakeTimeoutMs: number = HIDDEN_HANDSHAKE_TIMEOUT_MS,
+	/** The request was given up (its budget ran out, or another address took
+	 *  the push): the stream is closed NOW, mid-handshake or mid-TLS, rather
+	 *  than left to the handshake timeout (v1.21.14 full chat audit, S-L9). */
+	signal?: AbortSignal
 ) {
 	return (
 		opts: { hostname: string; port: number | string; protocol?: string },
@@ -465,16 +471,30 @@ export function makeIsolatedTorConnector(
 			cb(new Error(`refusing an IP-literal federation peer: ${targetHost}`), null);
 			return;
 		}
+		if (signal?.aborted === true) {
+			cb(new Error('push abandoned'), null);
+			return;
+		}
 		const sock = netConnect({ host: socksHost, port: socksPort });
 		let stage: 'greet' | 'auth' | 'connect' = 'greet';
 		let acc = Buffer.alloc(0);
 		let settled = false;
+		let handedOver = false;
 		const fail = (err: Error): void => {
 			if (settled) return;
 			settled = true;
 			sock.destroy();
 			cb(err, null);
 		};
+		const onAbort = (): void => {
+			if (handedOver) return;
+			fail(new Error('push abandoned'));
+			// Past the SOCKS reply (TLS still running) `fail` is a no-op: close
+			// the stream anyway, which fails the TLS handshake.
+			sock.destroy();
+		};
+		signal?.addEventListener('abort', onAbort, { once: true });
+		sock.once('close', () => signal?.removeEventListener('abort', onAbort));
 		const ours = (why: string): Error =>
 			new ProxyUnavailableError(`Tor SOCKS proxy ${socksHost}:${socksPort} ${why}`);
 		sock.once('error', (err) =>
@@ -549,11 +569,15 @@ export function makeIsolatedTorConnector(
 				process.nextTick(() => sock.resume());
 			}
 			if (!https) {
+				handedOver = true;
 				cb(null, sock);
 				return;
 			}
 			const tls = tlsConnect({ socket: sock, servername: targetHost, ALPNProtocols: ['http/1.1'] });
-			tls.once('secureConnect', () => cb(null, tls as unknown as Socket));
+			tls.once('secureConnect', () => {
+				handedOver = true;
+				cb(null, tls as unknown as Socket);
+			});
 			tls.once('error', (err) => {
 				sock.destroy();
 				cb(new Error(`peer TLS over Tor failed: ${err.message}`), null);
@@ -578,21 +602,32 @@ export async function postJsonViaTorIsolated(
 	body: unknown,
 	config: HiddenServiceProxyConfig,
 	timeoutMs: number,
-	isolation: { user: string; pass: string } = freshTorIsolation()
+	isolation: { user: string; pass: string } = freshTorIsolation(),
+	/** Abandon the push early (another address of the peer took it). */
+	signal?: AbortSignal
 ): Promise<HiddenPostResult> {
 	if (config.torSocks.length === 0) {
 		throw new ProxyUnavailableError('Tor SOCKS proxy not configured');
 	}
 	const { host, port } = parseHostPort(config.torSocks, 9050);
+	const ctrl = new AbortController();
 	const dispatcher = new Agent({
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- undici's
 		// connect type doesn't model a custom SOCKS connector cleanly.
-		connect: makeIsolatedTorConnector(host, port, isolation) as any,
+		connect: makeIsolatedTorConnector(
+			host,
+			port,
+			isolation,
+			HIDDEN_HANDSHAKE_TIMEOUT_MS,
+			ctrl.signal
+		) as any,
 		connections: 1,
 		pipelining: 0
 	});
-	const ctrl = new AbortController();
 	const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+	const onOuterAbort = (): void => ctrl.abort();
+	if (signal?.aborted === true) ctrl.abort();
+	else signal?.addEventListener('abort', onOuterAbort, { once: true });
 	try {
 		const res = await fetch(url, {
 			method: 'POST',
@@ -613,6 +648,7 @@ export async function postJsonViaTorIsolated(
 		throw asLocalTransportFault(err, 'tor', config);
 	} finally {
 		clearTimeout(timer);
+		signal?.removeEventListener('abort', onOuterAbort);
 		// Never reused: the next push gets a new circuit.
 		await dispatcher.destroy().catch(() => undefined);
 	}

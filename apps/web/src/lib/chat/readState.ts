@@ -158,14 +158,63 @@ export const readState: Readable<ReadStateMap> = {
 export function markConversationRead(
 	peer: string,
 	orderPermlink: string,
-	at: Date = new Date()
+	at: Date = new Date(),
+	opts: { readonly newestIsFast?: boolean } = {}
 ): void {
 	if (!ACCOUNT_NAME_RE.test(peer)) return;
 	if (orderPermlink === PEER_WIDE || orderPermlink.length > 256) return;
 	const current = get(readStateStore);
 	const next = cap({ ...current, [threadKey(peer, orderPermlink)]: at.toISOString() });
+	localAcks.set(threadKey(peer, orderPermlink), Date.now());
+	if (opts.newestIsFast === true) fastCopyAcks.set(threadKey(peer, orderPermlink), at.getTime());
+	else fastCopyAcks.delete(threadKey(peer, orderPermlink));
 	writeRaw(next);
 	readStateStore.set(next);
+}
+
+/**
+ * Threads whose newest message, when acknowledged here, was a FAST copy
+ * (v1.21.14 review C, M3) → that copy's time. A fast copy is dated with the
+ * head time its sender signed at (the transaction's expiry minus 60 s); its
+ * chain copy lands with its block's time, a few seconds later and never past
+ * the expiry. Without this, the chain copy's `last_message_at` lit the badge
+ * and the inbox border again for a message already read. A different message
+ * on the thread reaches this device as a push or live ping, which cancels the
+ * cover (noteThreadActivity). In memory only: a reload forgets it.
+ */
+const fastCopyAcks = new Map<string, number>();
+/** How long after a fast copy's time its chain copy can land: the 60 s
+ *  expiry the client signs, plus a little for the stamp's rounding. */
+export const FAST_COPY_CHAIN_WINDOW_MS = 75_000;
+/** A push or live ping for this thread (`atMs`: the message's own time, when
+ *  known). Anything newer than the fast copy acknowledged — or of unknown time
+ *  — ends that copy's cover. */
+export function noteThreadActivity(peer: string, orderPermlink: string, atMs?: number): void {
+	const key = threadKey(peer, orderPermlink);
+	const at = fastCopyAcks.get(key);
+	if (at === undefined) return;
+	if (atMs === undefined || !(atMs <= at)) fastCopyAcks.delete(key);
+}
+
+/**
+ * When THIS device last acknowledged a thread, on THIS device's clock (in
+ * memory only). v1.21.14 full chat audit, W-M3: the stored cursor is a chain
+ * time (the newest message seen), never the device clock — but a fast-push
+ * badge (chatUnread) is dated by the device clock when the push arrived. Such
+ * a badge is judged against this, device time against device time, so neither
+ * clock's skew decides whether a thread reads as unread.
+ */
+const localAcks = new Map<string, number>();
+export function lastLocalAck(peer: string, orderPermlink: string): number | null {
+	return localAcks.get(threadKey(peer, orderPermlink)) ?? null;
+}
+/** Everything pushed for this thread so far has been seen here (a "Mark all
+ *  read" of a thread the indexer has no row for yet): the device-time ack
+ *  only — there is no chain time to store as the cursor. */
+export function markSeenLocally(peer: string, orderPermlink: string): void {
+	if (!ACCOUNT_NAME_RE.test(peer)) return;
+	localAcks.set(threadKey(peer, orderPermlink), Date.now());
+	readStateStore.update((m) => ({ ...m }));
 }
 
 /**
@@ -289,7 +338,13 @@ export function isUnread(
 	// the thread, and then it clears, exactly like any other message.
 	const at = sanitizeBlockTime(lastMessageAt);
 	const atMs = at === null ? Date.now() : at.getTime();
-	return atMs > new Date(visited).getTime();
+	const visitedMs = new Date(visited).getTime();
+	if (atMs <= visitedMs) return false;
+	// The chain copy of the fast copy acknowledged here (review C, M3).
+	const fastAt = fastCopyAcks.get(threadKey(peer, orderPermlink));
+	if (fastAt === visitedMs && at !== null && atMs <= fastAt + FAST_COPY_CHAIN_WINDOW_MS)
+		return false;
+	return true;
 }
 
 /**
@@ -298,6 +353,8 @@ export function isUnread(
  */
 export function clearReadState(): void {
 	personRemove(KEY);
+	localAcks.clear();
+	fastCopyAcks.clear();
 	readStateStore.set({});
 }
 
@@ -319,10 +376,10 @@ export function __reloadFromStorage(): void {
  * "newer" than your acknowledgement, and the conversation stays lit green in
  * the inbox forever.
  *
- * So: acknowledge with the newest message we have actually SEEN, and fall back
- * to the local clock only when there is nothing to point at (an empty
- * conversation, or a list of still-pending sends that the chain has not stamped
- * yet). When the chain is running ahead of us, take the chain's word for it.
+ * So: acknowledge with the newest message we have actually SEEN — and only
+ * that (v1.21.14: not the later of it and the local clock; see the function).
+ * Null when there is nothing to point at (an empty conversation, or only
+ * still-pending sends the chain has not stamped yet): then nothing is acked.
  *
  * @param latestSeenAt the newest CONFIRMED message time in view, or null.
  */
@@ -376,10 +433,22 @@ export function sanitizeBlockTime(
 	return d;
 }
 
-export function readAckTimestamp(latestSeenAt: Date | null, now: Date = new Date()): Date {
-	// v1.7.7 — sanitise BEFORE clamping. `max(seen, now)` is exactly the shape
-	// that hands a poisoned future timestamp straight through to the cursor.
+export function readAckTimestamp(latestSeenAt: Date | null, now: Date = new Date()): Date | null {
+	// v1.21.14 full chat audit, W-M3 / W-L4 — the ack is the newest message
+	// SEEN, a chain time, and never the device clock in either direction. It
+	// used to be max(seen, now): on a device whose clock runs fast, `now` is
+	// ahead of the chain, so every message that arrived in that lead after
+	// the user left the thread was acked as read before it was ever shown — no
+	// badge, no border. (On a slow clock the old bare `now` left the thread
+	// lit; seen alone covers that too.)
+	//
+	// Nothing seen (an empty thread, only unsent messages): nothing to ack.
+	if (latestSeenAt === null) return null;
+	// v1.7.7 — sanitise first: a poisoned future stamp must never become the
+	// cursor. isUnread() reads such a stamp as "now", so the ack that clears
+	// it is now as well — the one case the device clock still answers, and
+	// only for a stamp the chain cannot have produced.
 	const seen = sanitizeBlockTime(latestSeenAt, now.getTime());
 	if (seen === null || Number.isNaN(seen.getTime())) return now;
-	return seen.getTime() > now.getTime() ? seen : now;
+	return seen;
 }

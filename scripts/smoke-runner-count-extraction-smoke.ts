@@ -31,7 +31,14 @@
  * behavioural check below runs the REAL chunk runner on a throwaway repo with
  * one passing and one failing smoke and asserts the status.
  */
-import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, copyFileSync, chmodSync } from 'node:fs';
+import {
+	readFileSync,
+	writeFileSync,
+	mkdtempSync,
+	mkdirSync,
+	copyFileSync,
+	chmodSync
+} from 'node:fs';
 import { execSync, spawnSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -77,12 +84,30 @@ function extract(line: string): string {
 	return execSync(`sed -f "${sedFile}" < "${lineFile}"`, { encoding: 'utf8' }).trim();
 }
 
-check('extracts 19 from an assemble-install line (the CI failure)', extract('✓ all 19 assemble-install checks passed') === '19');
-check('extracts 12 from a local-install line (the CI failure)', extract('✓ all 12 local-install checks passed') === '12');
-check('extracts 8 from a price-primary-fallback line', extract('✓ all 8 price-primary-fallback scenarios passed') === '8');
-check('extracts 140 from a normal multi-word line', extract('✓ all 140 ansible-env-var-consumer checks passed') === '140');
-check('extracts 1668 from a large count', extract('✓ all 1668 whatever scenarios passed') === '1668');
-check('extracts a count when a later word also ends in "all " (wall)', extract('✓ all 7 draw-the-wall checks passed') === '7');
+check(
+	'extracts 19 from an assemble-install line (the CI failure)',
+	extract('✓ all 19 assemble-install checks passed') === '19'
+);
+check(
+	'extracts 12 from a local-install line (the CI failure)',
+	extract('✓ all 12 local-install checks passed') === '12'
+);
+check(
+	'extracts 8 from a price-primary-fallback line',
+	extract('✓ all 8 price-primary-fallback scenarios passed') === '8'
+);
+check(
+	'extracts 140 from a normal multi-word line',
+	extract('✓ all 140 ansible-env-var-consumer checks passed') === '140'
+);
+check(
+	'extracts 1668 from a large count',
+	extract('✓ all 1668 whatever scenarios passed') === '1668'
+);
+check(
+	'extracts a count when a later word also ends in "all " (wall)',
+	extract('✓ all 7 draw-the-wall checks passed') === '7'
+);
 
 // Document the regression: the OLD greedy pattern captured EMPTY on the install
 // line. This asserts the bug was real (and would return if the anchor is lost).
@@ -92,7 +117,10 @@ function extractGreedy(line: string): string {
 	writeFileSync(lineFile, line + '\n');
 	return execSync(`sed -f "${greedyFile}" < "${lineFile}"`, { encoding: 'utf8' }).trim();
 }
-check('regression documented: the greedy sed DID capture empty on install', extractGreedy('✓ all 19 assemble-install checks passed') === '');
+check(
+	'regression documented: the greedy sed DID capture empty on install',
+	extractGreedy('✓ all 19 assemble-install checks passed') === ''
+);
 
 // Behavioural: the chunk runner's exit status. A throwaway repo whose
 // run-smokes.sh lists a passing and a failing smoke, and whose tsx is a stub
@@ -100,23 +128,66 @@ check('regression documented: the greedy sed DID capture empty on install', extr
 const fake = mkdtempSync(join(tmpdir(), 'morphit-chunk-'));
 mkdirSync(join(fake, 'scripts'));
 mkdirSync(join(fake, 'node_modules', '.bin'), { recursive: true });
-copyFileSync(join(REPO, 'scripts', 'run-smokes-chunk.sh'), join(fake, 'scripts', 'run-smokes-chunk.sh'));
-writeFileSync(join(fake, 'scripts', 'run-smokes.sh'), 'SMOKES=(\n\t".:pass-smoke"\n\t".:fail-smoke"\n)\n');
+copyFileSync(
+	join(REPO, 'scripts', 'run-smokes-chunk.sh'),
+	join(fake, 'scripts', 'run-smokes-chunk.sh')
+);
+writeFileSync(
+	join(fake, 'scripts', 'run-smokes.sh'),
+	'SMOKES=(\n\t".:pass-smoke"\n\t".:fail-smoke"\n)\n'
+);
 writeFileSync(join(fake, 'scripts', 'pass-smoke.ts'), "echo '✓ all 3 pass scenarios passed'\n");
 writeFileSync(join(fake, 'scripts', 'fail-smoke.ts'), "echo '✗ 1 of 1 FAILED'; exit 1\n");
 const tsx = join(fake, 'node_modules', '.bin', 'tsx');
 writeFileSync(tsx, '#!/usr/bin/env bash\nexec bash "$3"\n');
 chmodSync(tsx, 0o755);
 function chunk(start: number, end: number): { status: number | null; out: string } {
-	const r = spawnSync('bash', [join(fake, 'scripts', 'run-smokes-chunk.sh'), String(start), String(end)], {
-		encoding: 'utf8'
-	});
+	const r = spawnSync(
+		'bash',
+		[join(fake, 'scripts', 'run-smokes-chunk.sh'), String(start), String(end)],
+		{
+			encoding: 'utf8',
+			// Its deliberate failure's output goes to a throwaway folder, not the caller's.
+			env: { ...process.env, MORPHIT_SMOKE_FAIL_DIR: mkdtempSync(join(tmpdir(), 'morphit-fail-')) }
+		}
+	);
 	return { status: r.status, out: r.stdout + r.stderr };
 }
 const ok = chunk(1, 1);
-check('chunk runner: a chunk whose runners all pass exits 0', ok.status === 0 && /3 scenarios, 0 runners failed/.test(ok.out));
+check(
+	'chunk runner: a chunk whose runners all pass exits 0',
+	ok.status === 0 && /3 scenarios, 0 runners failed/.test(ok.out)
+);
 const bad = chunk(1, 2);
-check('chunk runner: a chunk with a failing runner exits non-zero', bad.status !== 0 && /1 runners failed/.test(bad.out));
+check(
+	'chunk runner: a chunk with a failing runner exits non-zero',
+	bad.status !== 0 && /1 runners failed/.test(bad.out)
+);
+
+// Behavioural (v1.21.14 review): a failing smoke's FULL output is kept. The
+// chunk runner prints only the last lines, and twice a vitest-must-pass failure
+// under load could not be traced: the workspace that failed had scrolled away.
+writeFileSync(
+	join(fake, 'scripts', 'long-fail-smoke.ts'),
+	'for i in $(seq 1 40); do echo "line $i"; done; exit 1\n'
+);
+writeFileSync(join(fake, 'scripts', 'run-smokes.sh'), 'SMOKES=(\n\t".:long-fail-smoke"\n)\n');
+const failDir = mkdtempSync(join(tmpdir(), 'morphit-fail-'));
+const kept = spawnSync('bash', [join(fake, 'scripts', 'run-smokes-chunk.sh'), '1', '1'], {
+	encoding: 'utf8',
+	env: { ...process.env, MORPHIT_SMOKE_FAIL_DIR: failDir }
+});
+const keptPath = /full output: (\S+)/.exec(kept.stdout + kept.stderr)?.[1];
+let keptText = '';
+try {
+	keptText = keptPath ? readFileSync(keptPath, 'utf8') : '';
+} catch {
+	keptText = '';
+}
+check(
+	"chunk runner: a failing smoke's whole output is kept in a file it names",
+	/^line 1$/m.test(keptText) && /^line 40$/m.test(keptText)
+);
 
 if (failed > 0) {
 	console.log(`\n✗ ${failed} of ${checks} smoke-runner-count-extraction checks FAILED`);

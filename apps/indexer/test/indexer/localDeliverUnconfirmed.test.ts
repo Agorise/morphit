@@ -12,15 +12,24 @@
  *
  * The key on file may be UNCONFIRMED: an account_update in a block is one RPC
  * node's word, and the dispatcher records it with posting_key_reconciled =
- * FALSE. Such a key must never authenticate a local delivery — not through the
- * lookup main.ts wires in, and not through the dispatcher's default lookup.
+ * FALSE. Such a key must never authenticate a local delivery by itself — not
+ * through the lookup main.ts wires in, and not through the dispatcher's default
+ * lookup.
+ *
+ * v1.21.14 (full chat audit, S-C1/S-M4): with the lookup main.ts wires in, an
+ * unconfirmed key is asked about ONCE THE NODE HAS ACCEPTED the message, through
+ * the quorum read (two agreeing operators — the same read every peer's intake
+ * trusts). If the chain's key verifies the signature, the message is delivered
+ * locally a moment later; otherwise never. Before, nothing looked again, and a
+ * new account's messages reached the person on the same instance only through
+ * the durable poller, 45-63 s later.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type pg from 'pg';
 
 import { broadcastRoute } from '$api/broadcast';
 import { ChatFastDispatcher } from '$indexer/chatFastDispatcher';
-import { postingKeyLookupFromDb } from '$indexer/chatFastFederation';
+import { postingKeyLookupFromDb, _resetKeyRefreshForTest } from '$indexer/chatFastFederation';
 import type { LocatedChatOp } from '$indexer/headTailer';
 import type { BlurtClient } from '$blurt/client';
 
@@ -65,7 +74,8 @@ const acceptingNode = {
  *  the one main.ts passes); alice's row as given. */
 function dispatcherWithRow(
 	row: { posting_pubkey: string; posting_key_reconciled: boolean },
-	asMainBuildsIt = false
+	asMainBuildsIt = false,
+	chainKey: string = MALLORY_PUB
 ): ChatFastDispatcher {
 	const db = {
 		async query<R extends pg.QueryResultRow>(sql: string): Promise<pg.QueryResult<R>> {
@@ -84,7 +94,7 @@ function dispatcherWithRow(
 		// answers with the attacker's key, should it ever be asked here).
 		...(asMainBuildsIt
 			? {
-					lookupPostingKey: postingKeyLookupFromDb(db, async () => MALLORY_PUB, {
+					lookupPostingKey: postingKeyLookupFromDb(db, async () => chainKey, {
 						durableIsCurrent: () => true
 					})
 				}
@@ -108,10 +118,18 @@ async function deliveredVia(
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({ trx: chatTrx(signer, tag), chat_async: true })
 	});
+	// A message verified before the chain is delivered before the answer; one
+	// checked after the node accepted it, a few turns of the event loop later
+	// (v1.21.14). Nothing here does I/O, so yielding is enough.
+	for (let i = 0; i < 50; i++) await new Promise((r) => setTimeout(r, 0));
 	return delivered.map((d2) => `${d2.signer}->${d2.recipient}`);
 }
 
 describe('local delivery never trusts an unconfirmed posting key (VT1-4)', () => {
+	// The chain-read cache is process-wide: one case's confirmed key must not
+	// answer for the next.
+	beforeEach(() => _resetKeyRefreshForTest());
+
 	it('a message signed by an UNCONFIRMED key on file is not delivered locally', async () => {
 		const d = dispatcherWithRow({ posting_pubkey: MALLORY_PUB, posting_key_reconciled: false });
 		expect(await deliveredVia(d, MALLORY, 'forged-unconfirmed')).toEqual([]);
@@ -122,15 +140,25 @@ describe('local delivery never trusts an unconfirmed posting key (VT1-4)', () =>
 		expect(await deliveredVia(d, ALICE, 'genuine')).toEqual(['alice->bob']);
 	});
 
-	it('with the lookup main.ts wires in, an unconfirmed key is not trusted either', async () => {
+	it('with the lookup main.ts wires in, a key the chain does not confirm is never trusted', async () => {
 		const d = dispatcherWithRow(
 			{ posting_pubkey: MALLORY_PUB, posting_key_reconciled: false },
-			true
+			true,
+			ALICE_PUB
 		);
 		expect(await deliveredVia(d, MALLORY, 'forged-main')).toEqual([]);
 	});
 
-	it('the genuine key, still unconfirmed, waits for the chain too', async () => {
+	it('with the lookup main.ts wires in, the genuine unconfirmed key is delivered once the chain confirms it', async () => {
+		const d = dispatcherWithRow(
+			{ posting_pubkey: ALICE_PUB, posting_key_reconciled: false },
+			true,
+			ALICE_PUB
+		);
+		expect(await deliveredVia(d, ALICE, 'genuine-main')).toEqual(['alice->bob']);
+	});
+
+	it('with no chain to ask (the default lookup), the genuine unconfirmed key is not delivered locally', async () => {
 		const d = dispatcherWithRow({ posting_pubkey: ALICE_PUB, posting_key_reconciled: false });
 		expect(await deliveredVia(d, ALICE, 'genuine-unconfirmed')).toEqual([]);
 	});

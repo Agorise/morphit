@@ -74,7 +74,7 @@ const bad = (m: string): void => {
 // 3. main.ts mounts the keys route on the account app.
 {
 	const s = read(P.main);
-	if (/import \{ accountKeysRoute \}/.test(s) && /accountApp\.route\('\/', accountKeysRoute\(blurt\)\)/.test(s))
+	if (/import \{ accountKeysRoute \}/.test(s) && /accountApp\.route\('\/', accountKeysRoute\(blurt[,)]/.test(s))
 		ok('main.ts mounts accountKeysRoute on /v1/account');
 	else bad('main.ts does not mount accountKeysRoute');
 }
@@ -116,8 +116,8 @@ for (const [label, path] of [['onboarding/import', P.importPage], ['settings', P
 	else ok('tamper caught: re-adding getBlurtClient to the import page turns its check red');
 }
 {
-	const mutated = read(P.main).replace(/\n\taccountApp\.route\('\/', accountKeysRoute\(blurt\)\);/, '');
-	const stillOk = /accountApp\.route\('\/', accountKeysRoute\(blurt\)\)/.test(mutated);
+	const mutated = read(P.main).replace(/\n\taccountApp\.route\('\/', accountKeysRoute\(blurt[^\n]*\);/, '');
+	const stillOk = /accountApp\.route\('\/', accountKeysRoute\(blurt[,)]/.test(mutated);
 	if (mutated === read(P.main)) bad('tamper wiring error: could not drop the /keys mount');
 	else if (stillOk) bad('tamper NOT caught: dropping the /keys mount still passes (toothless)');
 	else ok('tamper caught: dropping the /keys mount turns the mount check red');

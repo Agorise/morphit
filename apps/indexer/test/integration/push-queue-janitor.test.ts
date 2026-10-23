@@ -21,11 +21,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { INTEGRATION_ENABLED, setupWithMigrations, type IntegrationFixture } from './harness';
 import { enqueueChatPush } from '../../src/indexer/chatPushEnqueue';
 import {
+	CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS,
 	PushQueueJanitor,
-	PUSH_TOMBSTONE_RETENTION_SECONDS
+	pushTombstoneRetentionSeconds
 } from '../../../relay/src/policy/pushQueueJanitor.ts';
 
 const MAX_AGE = 3600;
+/** These are chat pushes: their tombstones are kept a day, because the
+ *  one-push-per-day-until-reply cap reads them (v1.21.14 full chat audit,
+ *  S-M3; the case is in chat-notify-gates-audit.test.ts). */
+const RETENTION = CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS;
 const RECIPIENT = 'bob';
 
 describe.skipIf(!INTEGRATION_ENABLED)('push_pending stays bounded with push off', () => {
@@ -97,11 +102,32 @@ describe.skipIf(!INTEGRATION_ENABLED)('push_pending stays bounded with push off'
 		await fx.db.query(
 			`UPDATE push_pending SET sent_at = NOW() - ($1::int * INTERVAL '1 second')
 			  WHERE source_trx_id = 'old-tomb'`,
-			[PUSH_TOMBSTONE_RETENTION_SECONDS + 60]
+			[RETENTION + 60]
 		);
 		const r = await janitor().runOnce();
 		expect(r.pruned).toBe(1);
 		expect(await state()).toEqual({ 'young-tomb': 'retired' });
+	});
+
+	/** Every other category keeps its tombstone for the shorter retention
+	 *  (pushTombstoneRetentionSeconds) — and still for the WHOLE of it: a late
+	 *  durable copy of a review must land on the conflict, not notify again. */
+	it('a non-chat tombstone is pruned after its own retention — and not before', async () => {
+		const retention = pushTombstoneRetentionSeconds(MAX_AGE);
+		for (const [trx, ageSec] of [
+			['fb-young', retention - 60],
+			['fb-old', retention + 60]
+		] as const) {
+			await fx.db.query(
+				`INSERT INTO push_pending (account, category, title, body, click_path, event_at, source_trx_id, sent_at)
+				 VALUES ($1, 'feedback', 't', 'b', '/', NOW() - INTERVAL '2 days', $2,
+				         NOW() - ($3::int * INTERVAL '1 second'))`,
+				[RECIPIENT, trx, ageSec]
+			);
+		}
+		const r = await janitor().runOnce();
+		expect(r.pruned).toBe(1);
+		expect(await state()).toEqual({ 'fb-young': 'retired' });
 	});
 
 	/** THE DEDUP. The sender retires rather than deletes so a durable enqueue
@@ -118,7 +144,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('push_pending stays bounded with push off'
 		for (let i = 0; i < 20; i++) await queue(`b${String(i).padStart(2, '0')}`, MAX_AGE * 5);
 		await janitor().runOnce();
 		await fx.db.query(`UPDATE push_pending SET sent_at = NOW() - ($1::int * INTERVAL '1 second')`, [
-			PUSH_TOMBSTONE_RETENTION_SECONDS + 60
+			RETENTION + 60
 		]);
 		await janitor().runOnce();
 		expect(await state()).toEqual({});

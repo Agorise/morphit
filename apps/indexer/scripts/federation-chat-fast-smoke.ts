@@ -54,6 +54,7 @@ import {
 	MAX_AGE_MS,
 	MAX_FUTURE_MS,
 	SEEN_TTL_MS,
+	PEER_PUSHES_IN_FLIGHT,
 	type FastDeliveryGates,
 	type PostingKeyLookup,
 	type FastPeer
@@ -1466,7 +1467,9 @@ console.log('');
 // push in a minute was refused no matter how many distinct instances sent them,
 // which would have throttled the federation to a crawl on exactly the nodes this
 // feature was built for. The limit now has to accommodate the whole federation,
-// and this scenario exists to stop anyone quietly lowering it back.
+// and this scenario exists to stop anyone quietly lowering it back. (This
+// loopback bucket is shared, so it now gets SHARED_KEY_MULTIPLIER times the
+// endpoint's value; 2j-bis below is where that value decides on its own.)
 {
 	_resetSeenForTest();
 	const db: FastFederationDb = {
@@ -1522,6 +1525,65 @@ console.log('');
 			`${limited} of ${PUSHES_PER_MINUTE} federation pushes were rate-limited`,
 			'over a hidden transport every peer looks like 127.0.0.1, so a per-IP ceiling sized ' +
 				'for one caller throttles the entire federation'
+		);
+}
+
+// ── 2j-bis. ONE BUSY CLEARNET PEER ───────────────────────────────────
+//
+// The loopback bucket above is SHARED, so it gets SHARED_KEY_MULTIPLIER times
+// the tier's ceiling (ratelimit.ts) — and the endpoint's own per-minute value
+// stopped being what decides it. Where that value still decides alone is a
+// clearnet peer: its own address, its own bucket, no multiplier. Such a peer
+// pushes to us up to PEER_PUSHES_IN_FLIGHT at a time (one per sender, v1.21.14
+// S-H1), and over the clearnet a round trip is a fraction of a second, so one
+// busy peer alone can send well over a thousand pushes a minute. A ceiling
+// sized for one human caller (the endpoint's first 240) refuses most of them,
+// and every refused push is a message that waits for the chain.
+{
+	_resetSeenForTest();
+	const db: FastFederationDb = {
+		async query<R extends pg.QueryResultRow>(text: string): Promise<pg.QueryResult<R>> {
+			const rows: unknown[] = [];
+			if (text.includes('posting_pubkey')) rows.push({ posting_pubkey: senderPub });
+			else if (text.includes('FROM blocks')) rows.push({ exists: false });
+			else if (text.includes('FROM chat_messages')) rows.push({ exists: true });
+			return {
+				rows: rows as R[],
+				rowCount: rows.length,
+				command: 'SELECT',
+				oid: 0,
+				fields: []
+			} as pg.QueryResult<R>;
+		}
+	};
+	const intake = federationChatFastRoute(db);
+	const CLEARNET_RTT_MS = 300;
+	const PUSHES_PER_MINUTE = Math.round((PEER_PUSHES_IN_FLIGHT * 60_000) / CLEARNET_RTT_MS);
+	// A public address on the socket: not a proxy this instance trusts, so
+	// the socket is the client and the bucket is this peer's alone.
+	const clearnetEnv = { incoming: { socket: { remoteAddress: '198.51.100.7' } } };
+	const body = JSON.stringify({ trx: buildSignedChatTx() });
+
+	let limited = 0;
+	for (let i = 0; i < PUSHES_PER_MINUTE; i++) {
+		const r = await intake.app.request(
+			'/',
+			{ method: 'POST', headers: { 'content-type': 'application/json' }, body },
+			clearnetEnv
+		);
+		if (r.status === 429) limited++;
+	}
+
+	if (limited === 0)
+		ok(
+			`one clearnet peer's ${PUSHES_PER_MINUTE} pushes a minute (${PEER_PUSHES_IN_FLIGHT} in flight, ` +
+				`${CLEARNET_RTT_MS} ms round trips) pass through its own bucket without being throttled`
+		);
+	else
+		bad(
+			`${limited} of one clearnet peer's ${PUSHES_PER_MINUTE} pushes were rate-limited`,
+			'a clearnet peer has a bucket of its own with no shared-address multiplier, so the ' +
+				"endpoint's per-minute ceiling must cover one busy peer"
 		);
 }
 

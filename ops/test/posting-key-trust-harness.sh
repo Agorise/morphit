@@ -153,14 +153,14 @@ fi
 # is charged to a `verify` or `mismatch` budget. K1 and K11 each drop their own
 # half of that condition; K2 falls back to the stale column when the read is empty.
 try 'K1 the fast path trusts an unconfirmed row again' "$FED" \
-	'			(row.posting_key_reconciled === false || options.durableIsCurrent?.() === false)
+	'			row.posting_key_reconciled === false || options.durableIsCurrent?.() === false;
 ' \
-	'			(options.durableIsCurrent?.() === false)
+	'			options.durableIsCurrent?.() === false;
 '
 try 'K2 a chain that does not answer falls back to the stale row' "$FED" \
-	'			return refreshKey(refreshFromChain, account, opts?.network, budget);
+	'			return refreshKey(refreshFromChain, account, opts?.network, charged(budget));
 ' \
-	'			return (await refreshKey(refreshFromChain, account, opts?.network, budget)) ?? row.posting_pubkey ?? null;
+	'			return (await refreshKey(refreshFromChain, account, opts?.network, charged(budget))) ?? row.posting_pubkey ?? null;
 '
 # K3/K4/K5/K16 re-aimed after the v1.20.0 E1 fix: the reconcile's guard is now
 # the KEY it read (not the flag), a block-read account_update is recorded
@@ -194,9 +194,9 @@ try 'K10 an update leaving no single signing key is skipped' "$DSP" \
 	'			out.push({ account: b.account, postingPubkey: signingPostingKey(b.posting) });' \
 	'			const k = signingPostingKey(b.posting); if (k !== null) out.push({ account: b.account, postingPubkey: k });'
 try 'K11 a durable record far behind the chain vouches for a key again' "$FED" \
-	'			(row.posting_key_reconciled === false || options.durableIsCurrent?.() === false)
+	'			row.posting_key_reconciled === false || options.durableIsCurrent?.() === false;
 ' \
-	'			(row.posting_key_reconciled === false)
+	'			row.posting_key_reconciled === false;
 '
 try 'K12 the intake worker waits on the chain again' "$ROUTE" \
 	'					const verdict = await verifyPushedChatOp({ trx }, lookupPostingKey, undefined, {
@@ -241,8 +241,10 @@ try 'Q2 the janitor deletes where the sender retires' "$JAN" \
 	'		`DELETE FROM push_pending
 		  WHERE sent_at IS NULL'
 try 'Q3 the janitor prunes before the tombstone retention' "$JAN" \
-	'		    AND sent_at < NOW() - ($1::int * INTERVAL '"'"'1 second'"'"')`,' \
-	'		    AND sent_at < NOW() + ($1::int * INTERVAL '"'"'1 second'"'"')`,'
+	'		    AND sent_at < NOW() - ($1::int * INTERVAL '"'"'1 second'"'"')
+		    AND (category' \
+	'		    AND sent_at < NOW() + ($1::int * INTERVAL '"'"'1 second'"'"')
+		    AND (category'
 try 'Q4 the janitor re-retires tombstones, restarting their retention' "$JAN" \
 	'		  WHERE sent_at IS NULL
 		    AND event_at' \

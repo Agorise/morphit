@@ -84,7 +84,8 @@ await admin.query(
 await admin.query(v69);
 // The two chain-derived tables the worker reads (columns it uses).
 await admin.query(
-	`CREATE TABLE chat_messages (sender TEXT NOT NULL, recipient TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL)`
+	`CREATE TABLE chat_messages (sender TEXT NOT NULL, recipient TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+		order_permlink TEXT)`
 );
 await admin.query(`CREATE TABLE chat_read_state (reader_account TEXT NOT NULL, peer_account TEXT NOT NULL,
 	order_permlink TEXT NOT NULL DEFAULT '', last_read_at TIMESTAMPTZ NOT NULL)`);
@@ -696,6 +697,14 @@ try {
 			`INSERT INTO offline_notify_pending (account, sender, order_permlink, event_at, due_at) VALUES ($4, $1, $2, $3, $3::timestamptz + interval '10 minutes') ON CONFLICT DO NOTHING`,
 			[sender, order, at, account]
 		);
+		// The message itself, as the chain stores it: a notice is only ever sent
+		// for a stored message she has not read or answered (S-L8).
+		await pool.query(`INSERT INTO chat_messages VALUES ($1, $2, $3, $4)`, [
+			sender,
+			account,
+			at,
+			order === '' ? null : order
+		]);
 	};
 	await pool.query(`INSERT INTO chat_messages VALUES ('grandma', 'trader-joe', $1)`, [
 		new Date(clock.getTime() - 86_400_000)
@@ -805,6 +814,9 @@ try {
 		// A first try that failed everywhere left a link behind; its retry is the
 		// same notice, not a second one from the stranger.
 		await store.createLink('grandma', 'stranger-y', '', clock);
+		await pool.query(`INSERT INTO chat_messages VALUES ('stranger-y', 'grandma', $1, NULL)`, [
+			clock
+		]);
 		const v = await worker.handle(
 			{ account: 'grandma', sender: 'stranger-y', orderPermlink: '', eventAt: clock, attempts: 1 },
 			clock
@@ -939,6 +951,12 @@ try {
 		);
 		await pool.query(
 			`INSERT INTO blocks VALUES ('chloe', 'mallory', 'blocked'), ('chloe', 'oscar', 'unblocked')`
+		);
+		// Their messages, stored (a notice is only for a stored message, S-L8).
+		await pool.query(
+			`INSERT INTO chat_messages VALUES ('mallory', 'chloe', $1, 'blocked-thread'), ('oscar', 'chloe', $1, 'unblocked-thread'),
+			   ('pat', 'chloe', $1, 'change-thread'), ('trader-joe', 'chloe', $1, 'failed-thread')`,
+			[clock]
 		);
 		const mailsBefore = smtp.mails.length;
 		const toMallory = await w.handle(

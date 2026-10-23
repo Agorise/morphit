@@ -29,7 +29,18 @@ export type TradePhase =
 
 export type MismatchField = 'to' | 'from' | 'amount' | 'memo';
 
+/**
+ * Store key of the trade on `orderOwner`'s order `orderPermlink` (review
+ * C-L3). A permlink is unique per owner only, so the key names both. NUL
+ * occurs in neither a Blurt account name nor a permlink.
+ */
+export function tradeKey(orderOwner: string, orderPermlink: string): string {
+	return `${orderOwner}\u0000${orderPermlink}`;
+}
+
 export interface TradeState {
+	/** The account that posted the order. */
+	readonly orderOwner: string;
 	readonly orderPermlink: string;
 	readonly peer: string;
 	readonly method: ChatAssetTicker;
@@ -146,6 +157,54 @@ export function phaseForVerify(r: VerifyResult): TradePhase {
 	return 'paid_unverifiable';
 }
 
+/** The entry of `orderOwner`'s order `orderPermlink`, or null (also when
+ *  either is unknown). */
+export function tradeStateOf(
+	states: ReadonlyMap<string, TradeState>,
+	orderOwner: string | null | undefined,
+	orderPermlink: string | null | undefined
+): TradeState | null {
+	if (!orderOwner || !orderPermlink) return null;
+	return states.get(tradeKey(orderOwner, orderPermlink)) ?? null;
+}
+
+/**
+ * The entry of `orderOwner`'s order `orderPermlink` as it concerns the trade
+ * with `peer`, or null when the entry describes the trade with someone else.
+ *
+ * v1.21.14 full chat audit, W-H1. The store keeps ONE entry per order, and an
+ * order the local user posted can have several inquirers. Every view that
+ * shows a thread (peer + order) used to read the entry by order alone, so a
+ * claim from one inquirer ("paid") hid Pay now and Share address in the
+ * thread with another and offered Leave feedback there. A thread reads the
+ * entry only when it is about that thread's peer: the engaged counterparty
+ * once there is one, otherwise the peer the entry was last recorded for.
+ */
+export function tradeStateWith(
+	states: ReadonlyMap<string, TradeState>,
+	orderOwner: string | null | undefined,
+	orderPermlink: string | null | undefined,
+	peer: string | null | undefined
+): TradeState | null {
+	if (!peer) return null;
+	const st = tradeStateOf(states, orderOwner, orderPermlink);
+	if (st === null) return null;
+	return (st.engagedPeer ?? st.peer) === peer ? st : null;
+}
+
+/**
+ * The entry a new record for `peer` builds on: the existing one, unless it
+ * describes the trade with a DIFFERENT peer and nobody is engaged yet — then a
+ * fresh one. v1.21.14 full chat audit, W-H1: before, a second inquirer's
+ * payload inherited the first one's phase, txid and asked amount, so one
+ * peer's "paid" claim became the other peer's state.
+ */
+function baseFor(existing: TradeState | undefined, peer: string): TradeState | undefined {
+	if (existing === undefined) return undefined;
+	if (existing.engagedPeer === undefined && existing.peer !== peer) return undefined;
+	return existing;
+}
+
 // ────────────────────────────────────────────────────────────────
 // Pure mutators — take a Map snapshot, return the next Map
 // ────────────────────────────────────────────────────────────────
@@ -153,6 +212,8 @@ export function phaseForVerify(r: VerifyResult): TradePhase {
 export function recordAddressSharedPure(
 	current: ReadonlyMap<string, TradeState>,
 	args: {
+		/** The account that posted the order. */
+		orderOwner: string;
 		orderPermlink: string;
 		peer: string;
 		method: ChatAssetTicker;
@@ -167,7 +228,8 @@ export function recordAddressSharedPure(
 		direction: 'outgoing' | 'incoming';
 	}
 ): ReadonlyMap<string, TradeState> {
-	const existing = current.get(args.orderPermlink);
+	const key = tradeKey(args.orderOwner, args.orderPermlink);
+	const existing = current.get(key);
 
 	// F-40 lock: incoming from a non-engaged peer is dropped.
 	if (
@@ -181,21 +243,23 @@ export function recordAddressSharedPure(
 
 	const next = new Map(current);
 	const now = args.now ?? new Date();
+	const base = baseFor(existing, args.peer);
 	// Outgoing engages.  Once engaged, engagement sticks — the
 	// user can't accidentally re-engage with a different peer
 	// for the same permlink (would only happen via UI bug).
 	const engagedPeer =
-		args.direction === 'outgoing' ? (existing?.engagedPeer ?? args.peer) : existing?.engagedPeer;
-	next.set(args.orderPermlink, {
-		...(existing ?? {}),
+		args.direction === 'outgoing' ? (base?.engagedPeer ?? args.peer) : base?.engagedPeer;
+	next.set(key, {
+		...(base ?? {}),
+		orderOwner: args.orderOwner,
 		orderPermlink: args.orderPermlink,
 		peer: args.peer,
 		method: args.method,
-		phase: advancePhase(existing?.phase, 'address_shared'),
+		phase: advancePhase(base?.phase, 'address_shared'),
 		address: args.address,
 		expectedAmount: args.expectedAmount,
 		expectedMemo: args.expectedMemo,
-		addressSharedAt: existing?.addressSharedAt ?? now,
+		addressSharedAt: base?.addressSharedAt ?? now,
 		engagedPeer,
 		updatedAt: now
 	});
@@ -205,6 +269,8 @@ export function recordAddressSharedPure(
 export function recordFundsSentPure(
 	current: ReadonlyMap<string, TradeState>,
 	args: {
+		/** The account that posted the order. */
+		orderOwner: string;
 		orderPermlink: string;
 		peer: string;
 		method: ChatAssetTicker;
@@ -216,7 +282,8 @@ export function recordFundsSentPure(
 		direction: 'outgoing' | 'incoming';
 	}
 ): ReadonlyMap<string, TradeState> {
-	const existing = current.get(args.orderPermlink);
+	const key = tradeKey(args.orderOwner, args.orderPermlink);
+	const existing = current.get(key);
 
 	// F-40 lock.
 	if (
@@ -230,10 +297,22 @@ export function recordFundsSentPure(
 
 	const next = new Map(current);
 	const now = args.now ?? new Date();
+	const base = baseFor(existing, args.peer);
 	const engagedPeer =
-		args.direction === 'outgoing' ? (existing?.engagedPeer ?? args.peer) : existing?.engagedPeer;
-	next.set(args.orderPermlink, {
-		...(existing ?? {
+		args.direction === 'outgoing' ? (base?.engagedPeer ?? args.peer) : base?.engagedPeer;
+	// v1.21.14 full chat audit, W-M4: the SAME claim recorded again (its
+	// durable copy after the fast one, a second listener, a reopened thread)
+	// keeps the verification it already has. Resetting it to 'pending' left a
+	// verified receipt reading "Verifying…" for good: the verifier's cached
+	// answer then changes no phase, so nothing ever overwrote 'pending' again.
+	const sameClaim =
+		base !== undefined &&
+		base.txid === args.txid &&
+		base.verifyResult !== undefined &&
+		base.verifyResult !== 'pending';
+	next.set(key, {
+		...(base ?? {
+			orderOwner: args.orderOwner,
 			orderPermlink: args.orderPermlink,
 			peer: args.peer,
 			method: args.method,
@@ -241,13 +320,13 @@ export function recordFundsSentPure(
 		}),
 		peer: args.peer,
 		method: args.method,
-		phase: advancePhase(existing?.phase, 'paid'),
+		phase: advancePhase(base?.phase, 'paid'),
 		txid: args.txid,
 		claimedMemo: args.claimedMemo,
-		expectedAmount: existing?.expectedAmount ?? args.amount,
-		verifyResult: args.method === 'blurt' ? 'pending' : undefined,
-		mismatchField: undefined,
-		fundsSentAt: existing?.fundsSentAt ?? now,
+		expectedAmount: base?.expectedAmount ?? args.amount,
+		verifyResult: sameClaim ? base.verifyResult : args.method === 'blurt' ? 'pending' : undefined,
+		mismatchField: sameClaim ? base.mismatchField : undefined,
+		fundsSentAt: base?.fundsSentAt ?? now,
 		engagedPeer,
 		updatedAt: now
 	});
@@ -261,6 +340,7 @@ export function recordFundsSentPure(
 export function recordVerificationPure(
 	current: ReadonlyMap<string, TradeState>,
 	args: {
+		orderOwner: string;
 		orderPermlink: string;
 		verifyResult: VerifyResult;
 		/** The other party of this payment (the buyer on the seller's side,
@@ -271,7 +351,8 @@ export function recordVerificationPure(
 		now?: Date;
 	}
 ): ReadonlyMap<string, TradeState> {
-	const existing = current.get(args.orderPermlink);
+	const key = tradeKey(args.orderOwner, args.orderPermlink);
+	const existing = current.get(key);
 	if (existing === undefined || existing.engagedPeer !== args.counterparty) return current;
 	const next = new Map(current);
 	const now = args.now ?? new Date();
@@ -282,14 +363,14 @@ export function recordVerificationPure(
 	// keep the entire verification record consistent with the
 	// phase rather than splitting them.
 	if (newPhase === existing.phase) {
-		next.set(args.orderPermlink, {
+		next.set(key, {
 			...existing,
 			updatedAt: now
 		});
 		return next;
 	}
 
-	next.set(args.orderPermlink, {
+	next.set(key, {
 		...existing,
 		phase: newPhase,
 		verifyResult: args.verifyResult,

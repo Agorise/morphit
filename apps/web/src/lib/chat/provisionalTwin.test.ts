@@ -66,6 +66,9 @@ function record(over: Partial<ChatMessageRecord> & { text?: string } = {}): Chat
 		// the payload decode this file is about.
 		header: { client_tag: TAG, ephemeral_pub: b64('e'), nonce: b64('n') },
 		created_at: '2026-04-23T12:00:00.000Z',
+		// The thread these copies arrive in is the order the payloads name: a
+		// payload moves a trade only in its own order's thread (v1.21.14, W-H1).
+		order_permlink: 'order-1',
 		...rest
 	} as ChatMessageRecord;
 }
@@ -81,7 +84,7 @@ function makeDeps(fetchMock: ReturnType<typeof vi.fn>): ChatControllerDeps {
 	return {
 		me: 'alice',
 		peer: 'bob',
-		orderPermlink: null,
+		orderPermlink: 'order-1',
 		getLiveIdentity: () => fakeLive,
 		now: () => new Date('2026-04-23T12:00:00Z'),
 		visibilityState: () => 'visible',
@@ -91,11 +94,13 @@ function makeDeps(fetchMock: ReturnType<typeof vi.fn>): ChatControllerDeps {
 		broadcast: (async () => ({ block_num: 1, trx_id: 'x' })) as ChatControllerDeps['broadcast'],
 		fetchPeerChatPub: (async () => fakePub) as unknown as ChatControllerDeps['fetchPeerChatPub'],
 		deriveMyChatIdentity: async () => ({ priv: fakePriv, pub: fakePub }),
-		encrypt: (async (p: string) => ({
+		// Every message goes to the peer's posting keys (v1.21.14).
+		fetchPostingPubs: async () => [new Uint8Array(33).fill(2)],
+		encryptPosting: (async (p: string) => ({
 			ciphertext: b64(p),
 			ephemeralPub: b64('e'),
 			nonce: b64('n')
-		})) as unknown as ChatControllerDeps['encrypt'],
+		})) as unknown as ChatControllerDeps['encryptPosting'],
 		// A proved sender (v2): only those drive trade state.
 		decrypt: (async (env: { ciphertext: string }) => ({
 			text: new TextDecoder().decode(Uint8Array.from(atob(env.ciphertext), (c) => c.charCodeAt(0))),

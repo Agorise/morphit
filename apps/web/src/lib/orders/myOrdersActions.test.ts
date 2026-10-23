@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { OrderRecord } from '@morphit/indexer-client';
-import type { TradeState } from '$lib/trades/tradeStatusPure';
+import { tradeKey, type TradeState } from '$lib/trades/tradeStatusPure';
 
 import {
 	autoCompleteCounterparty,
@@ -12,6 +12,7 @@ import {
 
 function st(over: Partial<TradeState>): TradeState {
 	return {
+		orderOwner: 'sally',
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'BLURT',
@@ -79,27 +80,37 @@ describe('mergeNewestPage (the poll re-reads one page, not all of them)', () => 
 	});
 });
 
+/** The store's map of these entries, keyed as the store keys them. */
+const statesOf = (...entries: TradeState[]) =>
+	new Map(entries.map((e) => [tradeKey(e.orderOwner, e.orderPermlink), e]));
+
 describe('paidPermlinksOf (VT1-8: what /my/orders counts as Paid)', () => {
 	it('a payment checked against the amount the seller asked for is Paid', () => {
 		const paid = paidPermlinksOf(
-			new Map([['o-1', st({ phase: 'paid_verified', amountConfirmed: true })]])
+			statesOf(st({ orderPermlink: 'o-1', phase: 'paid_verified', amountConfirmed: true })),
+			'sally'
 		);
 		expect(paid.has('o-1')).toBe(true);
 	});
 	it('a payment received with no amount asked is NOT Paid (Feature/Cancel stay available)', () => {
-		const states = new Map([
-			['o-1', st({ phase: 'paid_verified', amountConfirmed: false })],
-			['o-2', st({ phase: 'paid_verified', amountConfirmed: undefined })]
-		]);
-		expect([...paidPermlinksOf(states)]).toEqual([]);
+		const states = statesOf(
+			st({ orderPermlink: 'o-1', phase: 'paid_verified', amountConfirmed: false }),
+			st({ orderPermlink: 'o-2', phase: 'paid_verified', amountConfirmed: undefined })
+		);
+		expect([...paidPermlinksOf(states, 'sally')]).toEqual([]);
 	});
 	it('released and completed trades are Paid; other phases are not', () => {
-		const states = new Map([
-			['r', st({ phase: 'released' })],
-			['c', st({ phase: 'completed' })],
-			['s', st({ phase: 'paid' })],
-			['m', st({ phase: 'paid_mismatch' })]
-		]);
-		expect([...paidPermlinksOf(states)].sort()).toEqual(['c', 'r']);
+		const states = statesOf(
+			st({ orderPermlink: 'r', phase: 'released' }),
+			st({ orderPermlink: 'c', phase: 'completed' }),
+			st({ orderPermlink: 's', phase: 'paid' }),
+			st({ orderPermlink: 'm', phase: 'paid_mismatch' })
+		);
+		expect([...paidPermlinksOf(states, 'sally')].sort()).toEqual(['c', 'r']);
+	});
+	it('only trades on the given owner’s orders (C-L3)', () => {
+		const states = statesOf(st({ orderOwner: 'bob', orderPermlink: 'o-1', phase: 'completed' }));
+		expect([...paidPermlinksOf(states, 'sally')]).toEqual([]);
+		expect([...paidPermlinksOf(states, 'bob')]).toEqual(['o-1']);
 	});
 });

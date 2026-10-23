@@ -56,6 +56,7 @@
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { liveIdentity } from '$stores/identity';
 	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import sodium from 'libsodium-wrappers-sumo';
 	import {
 		validateBlurtAmount,
@@ -599,31 +600,34 @@
 					onCancel={onCancel}
 				/>
 			{:else}
-				<!-- Password input -->
-				<label class="mt-5 block">
-					<span class="text-sm font-semibold">
-						<!-- "Active key password" / "Your password" told the user
-						     nothing. Morphit stores the ACTIVE KEY encrypted; this field is
-						     the password that unlocks it. One field, not two. -->
-						{$_('chat.pay_blurt.password_label', { values: { account: myAccount ?? '' } })}
-					</span>
-					<input
-						type="password"
-						maxlength="64"
-						bind:value={passwordInput}
-						autocomplete="current-password"
-						disabled={phase.kind === 'paying'}
-						class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
-					/>
-					<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
-						{$_('chat.pay_blurt.password_hint')}
-					</p>
-					{#if passwordError}
-						<p class="mt-1 text-xs text-red-600 dark:text-red-400">
-							{passwordError}
+				<!-- Password input, in its own form (PasswordScope): outside one, a
+				     password manager writes the saved user name into a field above. -->
+				<PasswordScope account={myAccount}>
+					<label class="mt-5 block">
+						<span class="text-sm font-semibold">
+							<!-- "Active key password" / "Your password" told the user
+							     nothing. Morphit stores the ACTIVE KEY encrypted; this field is
+							     the password that unlocks it. One field, not two. -->
+							{$_('chat.pay_blurt.password_label', { values: { account: myAccount ?? '' } })}
+						</span>
+						<input
+							type="password"
+							maxlength="64"
+							bind:value={passwordInput}
+							autocomplete="current-password"
+							disabled={phase.kind === 'paying'}
+							class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
+						/>
+						<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+							{$_('chat.pay_blurt.password_hint')}
 						</p>
-					{/if}
-				</label>
+						{#if passwordError}
+							<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+								{passwordError}
+							</p>
+						{/if}
+					</label>
+				</PasswordScope>
 
 
 

@@ -31,7 +31,7 @@ export type PairingState =
 			compactWire: string;
 			expSeconds: number;
 	  }
-	| { kind: 'received'; account: string; chatPubkey: string }
+	| { kind: 'received'; account: string; chatPubkey: string; streamTicket?: string }
 	| { kind: 'expired' }
 	| { kind: 'rejected'; reason: string }
 	| { kind: 'cancelled' };
@@ -118,7 +118,10 @@ export async function startPairingSession(args: {
 			args.onState({
 				kind: 'received',
 				account: result.envelope.bundle.account,
-				chatPubkey: result.envelope.bundle.account_chat_pubkey
+				chatPubkey: result.envelope.bundle.account_chat_pubkey,
+				...(result.envelope.stream_ticket !== undefined
+					? { streamTicket: result.envelope.stream_ticket }
+					: {})
 			});
 		} catch (err) {
 			if (typeof console !== 'undefined') {
@@ -139,7 +142,7 @@ export async function startPairingSession(args: {
 }
 
 /** Default chain-backed verifier.  Looks up `account`'s posting
- *  authority via the existing chain rotator, recovers the
+ *  authority through this instance's indexer, recovers the
  *  signing pubkey from the signature, and checks that the
  *  recovered pubkey appears in `posting.key_auths` with weight
  *  sufficient to clear `weight_threshold`.
@@ -176,7 +179,7 @@ const defaultVerifier: SignatureVerifier = async (account, canonicalBytes, signa
 	try {
 		// Lazy-load these at call time — keeps the pairing client
 		// importable in environments (smoke tests, server-side
-		// rendering) where the chain rotator might not be wired.
+		// rendering) where the indexer client might not be wired.
 		const { fetchAccountKeys } = await import('$blurt/accountKeys');
 		const { resolveOrigin, MORPHIT_INDEXER_ORIGIN } = await import('$net/config');
 		const { Signature } = await import('@beblurt/dblurt');

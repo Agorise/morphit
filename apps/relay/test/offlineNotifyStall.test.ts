@@ -50,6 +50,7 @@ describe('offline notices: a stuck send', () => {
 			requeue: async () => undefined,
 			telegramCodeWaiting: async () => false,
 			repliedSince: async () => false,
+			unreadStoredFrom: async () => true,
 			blocked: async () => false,
 			dropLink: async () => undefined,
 			readSince: async () => false,

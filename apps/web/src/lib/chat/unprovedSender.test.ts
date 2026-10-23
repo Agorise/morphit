@@ -12,7 +12,7 @@
  * VT1 harness.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readable, get } from 'svelte/store';
+import { readable } from 'svelte/store';
 
 vi.mock(
 	'svelte',
@@ -112,6 +112,7 @@ describe('unproved senders cannot pay, verify or badge', () => {
 		const ts = await import('$lib/trades/tradeStatus');
 		// Seller alice asked bob for 500 BLURT with memo M.
 		ts.recordAddressShared({
+			orderOwner: 'alice',
 			orderPermlink: 'sell-blurt-1',
 			peer: 'bob',
 			method: 'blurt',
@@ -135,16 +136,17 @@ describe('unproved senders cannot pay, verify or badge', () => {
 		await mount({
 			me: 'alice',
 			peer: 'bob',
+			orderOwner: 'alice',
 			message: msg({ text: forged, senderUnverified: true })
 		});
 		// Give the unproved claim every chance to move the trade.
 		await vi
 			.waitFor(
-				() => expect(get(ts.tradeStates).get('sell-blurt-1')?.phase).not.toBe('address_shared'),
+				() => expect(ts.getTradeState('alice', 'sell-blurt-1')?.phase).not.toBe('address_shared'),
 				{ timeout: 300 }
 			)
 			.catch(() => undefined);
-		expect(get(ts.tradeStates).get('sell-blurt-1')?.phase).toBe('address_shared');
+		expect(ts.getTradeState('alice', 'sell-blurt-1')?.phase).toBe('address_shared');
 		const genuine = encodeFundsSentPayload({
 			v: 1,
 			kind: 'morphit_funds_sent',
@@ -154,16 +156,22 @@ describe('unproved senders cannot pay, verify or badge', () => {
 			orderPermlink: 'sell-blurt-1',
 			memo: 'mabcdefghijk'
 		} as never);
-		await mount({ me: 'alice', peer: 'bob', message: msg({ id: 2, localSeq: 2, text: genuine }) });
+		await mount({
+			me: 'alice',
+			peer: 'bob',
+			orderOwner: 'alice',
+			message: msg({ id: 2, localSeq: 2, text: genuine })
+		});
 		await vi
-			.waitFor(() => expect(get(ts.tradeStates).get('sell-blurt-1')?.phase).toBe('paid_verified'))
+			.waitFor(() => expect(ts.getTradeState('alice', 'sell-blurt-1')?.phase).toBe('paid_verified'))
 			.catch(() => undefined);
-		expect(get(ts.tradeStates).get('sell-blurt-1')?.phase).toBe('paid_verified');
+		expect(ts.getTradeState('alice', 'sell-blurt-1')?.phase).toBe('paid_verified');
 	});
 
 	it('no amount asked: a payment found on chain shows as received, not "Verified"', async () => {
 		const ts = await import('$lib/trades/tradeStatus');
 		ts.recordAddressShared({
+			orderOwner: 'alice',
 			orderPermlink: 'sell-blurt-2',
 			peer: 'bob',
 			method: 'blurt',
@@ -185,13 +193,14 @@ describe('unproved senders cannot pay, verify or badge', () => {
 		const { target, flushSync } = await mount({
 			me: 'alice',
 			peer: 'bob',
+			orderOwner: 'alice',
 			message: msg({ id: 3, localSeq: 3, text: claim, orderPermlink: 'sell-blurt-2' })
 		});
 		await vi
-			.waitFor(() => expect(get(ts.tradeStates).get('sell-blurt-2')?.phase).toBe('paid_verified'))
+			.waitFor(() => expect(ts.getTradeState('alice', 'sell-blurt-2')?.phase).toBe('paid_verified'))
 			.catch(() => undefined);
 		flushSync();
-		const st = get(ts.tradeStates).get('sell-blurt-2');
+		const st = ts.getTradeState('alice', 'sell-blurt-2');
 		expect(st?.phase).toBe('paid_verified');
 		expect(st?.amountConfirmed).toBe(false);
 		expect(target.textContent?.includes('chat.funds_sent.verify_verified')).toBe(false);

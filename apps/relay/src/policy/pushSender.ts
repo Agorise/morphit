@@ -76,9 +76,43 @@ export interface PushSendTickResult {
 // The tombstone retention, the prune interval and the prune itself live in
 // pushQueueJanitor.ts, so a relay with push OFF prunes by the same rule (v1.18.0).
 
+/**
+ * Rows being sent at once, across overlapping passes (v1.21.14 full chat audit,
+ * S-L7). The queue was worked one row at a time and, within a row, one device
+ * at a time, each with up to SEND_TIMEOUT_MS to answer — so ONE stalled push
+ * service delayed every notification queued behind it, and a pass that hit one
+ * did not end until it timed out. Now a row's devices are pushed side by side,
+ * rows are pushed side by side, and the next pass starts on time while a slow
+ * one is still waiting, skipping the rows it holds.
+ */
+export const PUSH_ROWS_IN_FLIGHT = 32;
+
+/** Passes running at once. A pass waiting on a slow push service no longer
+ *  holds the next one back, but a stalled DATABASE would otherwise start a new
+ *  pass — and a new query — every poll interval without end (independent
+ *  review of the audit fixes, finding 10). */
+export const PUSH_PASSES_IN_FLIGHT = 4;
+
+/** How long a finished row is remembered against a stale read: longer than
+ *  any one query can take to come back. */
+export const PUSH_DONE_MEMORY_MS = 5 * 60_000;
+
+/** How long one push service may take to answer. They answer in well under a
+ *  second; this only bounds a stalled one, which no longer holds anyone else. */
+export const SEND_TIMEOUT_MS = 15_000;
+
 export class PushSender {
 	private abort = new AbortController();
 	private runningLoop: Promise<void> | null = null;
+	/** Rows a pass is sending right now; the next pass leaves them alone. */
+	private readonly inFlight = new Set<string>();
+	/** Passes still running (the loop does not wait for them; stop() does). */
+	private readonly passes = new Set<Promise<unknown>>();
+	/** Rows a pass finished lately (id → when). A pass whose query started
+	 *  before another pass marked a row sent can still read it as unsent; this
+	 *  keeps such a stale read from sending it twice (independent review 2,
+	 *  finding 8). Kept PUSH_DONE_MEMORY_MS. */
+	private readonly recentlyDone = new Map<string, number>();
 
 	constructor(
 		private readonly config: Config,
@@ -114,6 +148,7 @@ export class PushSender {
 		const loop = this.runningLoop;
 		this.runningLoop = null;
 		if (loop) await loop;
+		await Promise.allSettled([...this.passes]);
 	}
 
 	private async loop(): Promise<void> {
@@ -125,16 +160,27 @@ export class PushSender {
 		let lastPruneMs = 0;
 		while (!this.abort.signal.aborted) {
 			try {
-				const r = await this.tick();
-				if (r.attempted > 0 || r.delivered > 0) {
-					log.info('tick', {
-						attempted: r.attempted,
-						delivered: r.delivered,
-						dropped_expired: r.droppedExpired,
-						dropped_no_subs: r.droppedNoSubscriptions,
-						subs_deleted: r.subscriptionsDeleted
-					});
-				}
+				// NOT awaited (S-L7): a pass waiting on a stalled push service must
+				// not hold back rows queued after it. The next pass skips the rows
+				// this one holds (`inFlight`). At most PUSH_PASSES_IN_FLIGHT at once.
+				const pass = (
+					this.passes.size >= PUSH_PASSES_IN_FLIGHT ? Promise.resolve(null) : this.tick()
+				).then(
+					(r) => {
+						if (r !== null && (r.attempted > 0 || r.delivered > 0)) {
+							log.info('tick', {
+								attempted: r.attempted,
+								delivered: r.delivered,
+								dropped_expired: r.droppedExpired,
+								dropped_no_subs: r.droppedNoSubscriptions,
+								subs_deleted: r.subscriptionsDeleted
+							});
+						}
+					},
+					(err: unknown) => log.error('tick_failed', {}, err as Error)
+				);
+				this.passes.add(pass);
+				void pass.finally(() => this.passes.delete(pass));
 				const now = Date.now();
 				if (now - lastPruneMs >= PUSH_PRUNE_INTERVAL_MS) {
 					lastPruneMs = now;
@@ -159,20 +205,54 @@ export class PushSender {
 
 		// Drain at most `pushBatchSize` rows per tick.  Order by
 		// enqueued_at so older events go first; the worker is FIFO.
+		// Rows an earlier pass is still sending are skipped (S-L7).
+		const room = Math.min(this.config.pushBatchSize, PUSH_ROWS_IN_FLIGHT - this.inFlight.size);
+		if (room <= 0) return out;
 		const result = await this.db.query<PendingRow>(
 			`SELECT id, account, category, title, body, click_path,
 			        event_at, enqueued_at, notification_id
 			   FROM push_pending
 			  WHERE sent_at IS NULL
+			    AND NOT (id = ANY($2::bigint[]))
 			  ORDER BY enqueued_at ASC
 			  LIMIT $1`,
-			[this.config.pushBatchSize]
+			[room, [...this.inFlight]]
 		);
 
 		const maxAgeMs = this.config.pushMaxAgeSeconds * 1000;
 		const now = Date.now();
 
-		for (const row of result.rows) {
+		const doneSince = Date.now() - PUSH_DONE_MEMORY_MS;
+		for (const [id, at] of this.recentlyDone) if (at < doneSince) this.recentlyDone.delete(id);
+		const rows = result.rows.filter(
+			(row) => !this.inFlight.has(String(row.id)) && !this.recentlyDone.has(String(row.id))
+		);
+		for (const row of rows) this.inFlight.add(String(row.id));
+		await Promise.all(
+			rows.map(async (row) => {
+				try {
+					await this.sendRow(row, out, now, maxAgeMs);
+					// Remembered as done only once it IS done (review B, F6): a pass
+					// that threw before sending (a database blip) left the row unsent,
+					// and remembering it then held it back for PUSH_DONE_MEMORY_MS —
+					// a chat push five minutes late. Now the next pass retries it.
+					this.recentlyDone.set(String(row.id), Date.now());
+				} finally {
+					this.inFlight.delete(String(row.id));
+				}
+			})
+		);
+		return out;
+	}
+
+	/** Push one queued row to every device of its account, side by side. */
+	private async sendRow(
+		row: PendingRow,
+		out: { -readonly [K in keyof PushSendTickResult]: number },
+		now: number,
+		maxAgeMs: number
+	): Promise<void> {
+		{
 			out.attempted++;
 
 			// Drop expired rows — pushing stale notifications is
@@ -181,7 +261,7 @@ export class PushSender {
 			if (ageMs > maxAgeMs) {
 				out.droppedExpired++;
 				await this.markSent(row.id);
-				continue;
+				return;
 			}
 
 			// Fetch the account's devices that HAVEN'T opted out of this
@@ -192,7 +272,7 @@ export class PushSender {
 				// No subscribed devices for this category — nothing to deliver.
 				out.droppedNoSubscriptions++;
 				await this.markSent(row.id);
-				continue;
+				return;
 			}
 
 			// Build the payload once.  The web-push library will
@@ -213,12 +293,16 @@ export class PushSender {
 			});
 
 			// Fan out.  We update subscription state per-device;
-			// at the end, we always delete the pending row (the
-			// indexer enqueued it once; we don't retry once we've
-			// attempted delivery to all of the user's devices).
+			// at the end, we always retire the pending row (stamp
+			// sent_at — see markSent; the indexer enqueued it once; we
+			// don't retry once we've attempted delivery to all of the
+			// user's devices).
 			let anySubDeleted = false;
-			for (const dev of devices) {
-				const sendOutcome = await this.sendOne(dev, payload);
+			// Every device at once (S-L7): one slow device no longer delays the
+			// others. The outcomes are then recorded in turn, as before.
+			const outcomes = await Promise.all(devices.map((dev) => this.sendOne(dev, payload)));
+			for (const [i, dev] of devices.entries()) {
+				const sendOutcome = outcomes[i];
 				if (sendOutcome === 'delivered') {
 					out.delivered++;
 					await this.subs.markDelivery(dev.account, dev.endpoint);
@@ -247,8 +331,6 @@ export class PushSender {
 				log.info('subscriptions_pruned', {});
 			}
 		}
-
-		return out;
 	}
 
 	/**
@@ -278,7 +360,9 @@ export class PushSender {
 	 * The retention must comfortably outlive the gap between the fast enqueue
 	 * and the durable one (~60s in practice, and far more when the indexer is
 	 * catching up), or the duplicate comes straight back. An hour is ~60x the
-	 * observed gap and still bounds the table.
+	 * observed gap and still bounds the table. Chat and order tombstones are
+	 * kept 24 h (pushQueueJanitor.CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS): the
+	 * indexer's one-push-a-day-until-reply cap reads them (v1.21.14, S-M3).
 	 */
 	async prune(): Promise<number> {
 		// rv2-11: the retention is never shorter than the push max age.
@@ -319,8 +403,8 @@ export class PushSender {
 					// address that was checked (pushEndpoint.ts).
 					agent: pushAgent(),
 					// A push service answers in well under this; a
-					// stalled one must not hold the queue.
-					timeout: 15_000
+					// stalled one holds only its own device (S-L7).
+					timeout: SEND_TIMEOUT_MS
 				}
 			);
 			return 'delivered';

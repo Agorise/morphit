@@ -80,15 +80,20 @@ export function mergeNewestPage(
  *  figure (no amount was asked: the chat says "Received … (no amount was
  *  asked)") is not Paid: the seller still decides, so the order keeps its
  *  Feature / Cancel actions. */
-export function paidPermlinksOf(states: ReadonlyMap<string, TradeState>): Set<string> {
+export function paidPermlinksOf(
+	states: ReadonlyMap<string, TradeState>,
+	/** The account whose orders the page lists: only trades on ITS orders. */
+	orderOwner: string
+): Set<string> {
 	const paid = new Set<string>();
-	for (const [permlink, st] of states) {
+	for (const st of states.values()) {
+		if (st.orderOwner !== orderOwner) continue;
 		if (
 			st.phase === 'released' ||
 			st.phase === 'completed' ||
 			(st.phase === 'paid_verified' && st.amountConfirmed === true)
 		) {
-			paid.add(permlink);
+			paid.add(st.orderPermlink);
 		}
 	}
 	return paid;

@@ -100,20 +100,29 @@ check('…and re-keys the primary key', /ADD PRIMARY KEY \(reader_account, peer_
 check('…and warns about the indexer downgrade hazard', /DOWNGRADE HAZARD/.test(schema));
 
 // ─── every caller passes the thread ──────────────────────────────────
-check('the conversation view acks the thread it is showing', /markConversationRead\(peer, orderPermlink \?\? '', readAckTimestamp/.test(view));
-check('the thread route acks on-chain with the order', /broadcastChatRead\(live, peer, orderPermlink \?\? ''\)/.test(thread));
+check('the conversation view acks the thread it is showing', /markConversationRead\(peer, orderPermlink \?\? '', at(?:, \{ newestIsFast: newestIsFastCopy\(\) \})?\)/.test(view));
+// v1.21.14 full chat audit, W-M3: the on-chain ack moved from the route (which
+// sent it as the view loaded, with the device clock) into the view, once per
+// visit with the newest message shown — still for THIS thread.
+check(
+	'the conversation acks on-chain with the order (once per visit, the newest message time)',
+	/const order = orderPermlink \?\? '';[\s\S]{0,160}broadcastChatRead\(live, peer, order, at\)/.test(view) &&
+		!/broadcastChatRead\(/.test(thread)
+);
 // v1.7.7 — pins the REQUIREMENT (handleOpen is discussion-scoped: it takes an
 // order permlink and acks THAT thread), not the literal signature. The old regex
 // spelled the parameter list out exactly, so adding the `lastMessageAt` argument
 // needed for the block-time clamp failed a check whose own name — "not a person"
 // — the change never violated. A guard that fails on a correct change teaches
 // people to edit the guard, which is how it ends up guarding nothing.
+// v1.21.14 full chat audit, W-M3 / W-L4: through ackThreadRead (the row's
+// newest message time, never the device clock) — still per discussion.
 check(
 	'the inbox marks one discussion read, not a person',
 	/function handleOpen\(\s*peer: string,\s*orderPermlink: string/.test(inbox) &&
-		/markConversationRead\(\s*peer,\s*orderPermlink[,)]/.test(inbox)
+		/ackThreadRead\(\s*peer,\s*orderPermlink[,)]/.test(inbox)
 );
-check('mark-all-read walks discussions', /markConversationRead\(c\.peer, c\.order\?\.permlink \?\? '', now\)/.test(inbox));
+check('mark-all-read walks discussions', /ackThreadRead\(c\.peer, c\.order\?\.permlink \?\? '', /.test(inbox));
 check(
 	'the unread badge counts unread discussions, excluding archived',
 	/const order = c\.order\?\.permlink \?\? '';/.test(badge) &&

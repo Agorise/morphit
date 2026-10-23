@@ -465,15 +465,18 @@ console.log('');
 		ok('a chain-relay failure is not a PubPinError, so it cannot be read as a tamper signal');
 	else bad('ChainRelayError is being treated as a PubPinError');
 
-	// peerPubFetch's contract: only PubPinError becomes `tamper_detected`.
-	// Anything else must land in a non-accusatory branch.
+	// The Verify-peer panel compares POSTING keys only since v1.21.14 (the
+	// chat-key fetch it made through peerPubFetch is gone, and with it its
+	// tamper banner): a key read that could not be made is the calm "chain
+	// unreachable" message, never an accusation.
 	const src = (await import('node:fs')).readFileSync(
-		new URL('../src/lib/chat/peerPubFetch.ts', import.meta.url),
+		new URL('../src/lib/components/VerifyPeerPanel.svelte', import.meta.url),
 		'utf8'
 	);
-	if (/ChainRelayError[\s\S]{0,200}kind:\s*'chain_unreachable'/.test(src))
-		ok("peerPubFetch routes a relay failure to 'chain_unreachable', not 'tamper_detected'");
-	else bad("peerPubFetch does not route ChainRelayError to a 'chain_unreachable' result");
+	if (/catch \{\s*if \(!aborted\) unreachable\(\);/.test(src) && !src.includes('tamper_detected'))
+		ok("the Verify-peer panel reports a failed key read as 'chain unreachable', never tampering");
+	else
+		bad('the Verify-peer panel does not route a failed key read to the chain-unreachable message');
 
 	// And the quorum verifier must RE-THROW a transport error rather than
 	// collapsing it into the null that pubPin reads as "the chain says none".

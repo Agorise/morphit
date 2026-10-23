@@ -23,7 +23,10 @@
  *  - the env file the edge's Compose service reads (`env_file`, as Compose
  *    itself reports it): a LOG_FORMAT that names no visitor, and Morphit's
  *    CONTENT_SECURITY_POLICY / PERMISSIONS_POLICY / REFERRER_POLICY /
- *    X_FRAME_OPTIONS. A value the operator set is kept, except a LOG_FORMAT
+ *    X_FRAME_OPTIONS, and X-DNS-Prefetch-Control: off (a CUSTOM_HEADER_<n>).
+ *    A Content-Security-Policy of the operator's own that lets browsers
+ *    connect anywhere but this site is kept and reported (a warning naming
+ *    the extra sources). A value the operator set is kept, except a LOG_FORMAT
  *    that logs addresses, and the BunkerWeb features that send visitor data
  *    to third parties (BunkerNet, DNSBL, the reverse-DNS black/white/grey
  *    lists, the anonymous report, a third-party or misplaced anti-bot), which
@@ -107,13 +110,14 @@ import {
 	parseCountryRemoval,
 	planBunkerwebPrivacy,
 	type CountryDb,
-	type CountryRow
+	type CountryRow,
+	type EnvEntry
 } from './bunkerwebPrivacy.ts';
 
 // ── Canonical values (kept equal to ops/bunkerweb/bunkerweb.env.example by the
 //    vitest; the csp-header-consistency smoke keeps that file equal to the rest).
 export const MORPHIT_CSP =
-	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'";
+	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'";
 /** The base image ops/bunkerweb/frontend/Dockerfile pins (its label; the
  *  vitest keeps the two equal). A frontend built from another is rebuilt. */
 export const FRONTEND_BASE_LABEL = 'org.morphit.frontend-base';
@@ -122,6 +126,12 @@ export const FRONTEND_BASE =
 export const MORPHIT_PERMISSIONS_POLICY =
 	'camera=(self), microphone=(), geolocation=(), interest-cohort=()';
 export const MORPHIT_LOG_FORMAT = `'$host [$time_local] "$request_method $uri" $status $body_bytes_sent'`;
+/** Sent wherever the page CSP is: no DNS lookup of a link on the page before a
+ *  click (a browser may do that, mostly on plain-http .onion/.i2p pages, and
+ *  the CSP does not cover it). BunkerWeb 1.5 has no setting of its own for
+ *  it, so there it is a CUSTOM_HEADER (ops/bunkerweb/bunkerweb.env.example). */
+export const DNS_PREFETCH_HEADER = 'X-DNS-Prefetch-Control';
+export const DNS_PREFETCH_VALUE = 'off';
 
 /** upgrade.ts kills the whole `__post-upgrade-selfheal` child after this. */
 export const SELF_HEAL_CHILD_TIMEOUT_MS = 300_000;
@@ -187,30 +197,37 @@ export function planBunkerwebEnv(
 ): Plan {
 	let out = text;
 	const changes: string[] = [];
+	// Every form Compose accepts (`KEY=v`, `KEY = v`, `KEY: v`, `export KEY=v`,
+	// a quoted value over several lines — envEntries), so a setting written
+	// with spaces is read and rewritten IN PLACE: an appended second line would
+	// win in Compose (the last entry does) and silently replace it.
 	if (opts.edgeTarget) {
 		const { hosts, port } = opts.edgeTarget;
-		out = out.replace(
-			/^((?:[A-Za-z0-9.-]+_)?REVERSE_PROXY_HOST(?:_\d+)?)=(.*)$/gm,
-			(line, key: string, raw: string) => {
-				const m = /^http:\/\/([^/:\s]+)(?::(\d+))?(\/\S*)?$/.exec(envFileValue(raw));
-				if (!m || !hosts.includes(m[1]!) || (m[2] ?? '80') !== '80') return line;
-				changes.push(
-					`BunkerWeb -> the frontend's edge port :${port} (${key}: each visitor gets their own rate-limit bucket)`
-				);
-				return `${key}=http://${m[1]}:${port}${m[3] ?? ''}`;
-			}
-		);
-	}
-	const get = (key: string): string | null => {
-		const m = new RegExp(`^${key}=(.*)$`, 'm').exec(out);
-		return m ? (m[1] ?? '') : null;
-	};
-	const set = (key: string, val: string): void => {
-		if (new RegExp(`^${key}=`, 'm').test(out)) {
-			out = out.replace(new RegExp(`^${key}=.*$`, 'm'), () => `${key}=${val}`);
-		} else {
-			out = `${out.replace(/\n*$/, '')}\n${key}=${val}\n`;
+		for (const e of envEntries(out).reverse()) {
+			if (!/^(?:[A-Za-z0-9.-]+_)?REVERSE_PROXY_HOST(?:_\d+)?$/.test(e.key)) continue;
+			const m = /^http:\/\/([^/:\s]+)(?::(\d+))?(\/\S*)?$/.exec(e.value.trim());
+			if (!m || !hosts.includes(m[1]!) || (m[2] ?? '80') !== '80') continue;
+			changes.unshift(
+				`BunkerWeb -> the frontend's edge port :${port} (${e.key}: each visitor gets their own rate-limit bucket)`
+			);
+			out = replaceEntry(out, e, `${e.pre}${e.key}=http://${m[1]}:${port}${m[3] ?? ''}`);
 		}
+	}
+	/** The value Compose uses (the last entry), as written: quotes kept. */
+	const get = (key: string): string | null => {
+		const e = envEntries(out)
+			.filter((x) => x.key === key)
+			.pop();
+		return e ? rawEnvValue(out, e) : null;
+	};
+	/** Every entry of `key` becomes `key=val` where it stands; none: appended. */
+	const set = (key: string, val: string): void => {
+		const es = envEntries(out).filter((x) => x.key === key);
+		if (es.length === 0) {
+			out = `${out.replace(/\n*$/, '')}\n${key}=${val}\n`;
+			return;
+		}
+		for (const e of es.reverse()) out = replaceEntry(out, e, `${e.pre}${key}=${val}`);
 	};
 	if (!opts.keepLogFormat) {
 		const lf = get('LOG_FORMAT');
@@ -239,10 +256,32 @@ export function planBunkerwebEnv(
 			cur.trim() !== val &&
 			isMorphitCsp(envFileValue(cur))
 		) {
-			// An earlier release's policy (inline script and eval allowed, or an
-			// older node list): replaced. An operator's own policy is kept.
+			// An earlier release's policy (inline script and eval allowed, or a
+			// node list for the browser): replaced. An operator's own is kept.
 			set(key, val);
-			changes.push('BunkerWeb header: Content-Security-Policy without inline script or eval');
+			changes.push(
+				'BunkerWeb header: Content-Security-Policy of this release (browsers connect to this site only; no inline script or eval)'
+			);
+		}
+	}
+	// X-DNS-Prefetch-Control: off, as a numbered CUSTOM_HEADER (BunkerWeb takes
+	// CUSTOM_HEADER and every CUSTOM_HEADER_<n>; its configurator accepts only
+	// the `_<n>` form). Any CUSTOM_HEADER that already sets it, whatever its
+	// value, is the operator's own and is kept.
+	{
+		const custom = envEntries(out).filter((e) => /^CUSTOM_HEADER(?:_\d+)?$/.test(e.key));
+		const named = custom.some(
+			(e) =>
+				e.value.trim().split(':')[0]!.trim().toLowerCase() === DNS_PREFETCH_HEADER.toLowerCase()
+		);
+		if (!named) {
+			const used = new Set(custom.map((e) => e.key));
+			let n = 1;
+			while (used.has(`CUSTOM_HEADER_${n}`)) n++;
+			set(`CUSTOM_HEADER_${n}`, `${DNS_PREFETCH_HEADER}: ${DNS_PREFETCH_VALUE}`);
+			changes.push(
+				`BunkerWeb header: ${DNS_PREFETCH_HEADER}: ${DNS_PREFETCH_VALUE} (no DNS lookup of a link on a page before a click)`
+			);
 		}
 	}
 	const privacy = planBunkerwebPrivacy(out);
@@ -259,6 +298,22 @@ export function envFileValue(raw: string): string {
 	if (v.length >= 2 && v.startsWith("'") && v.endsWith("'")) return v.slice(1, -1);
 	if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) return v.slice(1, -1);
 	return v;
+}
+
+/** An entry's value as written in the file (quotes kept, every line of a
+ *  quoted value that runs on), after its `=` or `:`. PURE. */
+function rawEnvValue(text: string, e: EnvEntry): string {
+	const lines = text.split('\n').slice(e.first, e.last + 1);
+	lines[0] = lines[0]!.replace(/^\s*(?:export\s+)?[\p{L}\p{N}_.\-[\]]+[ \t]*[=:]/u, '');
+	return lines.join('\n').replace(/\r$/, '');
+}
+
+/** `text` with entry `e`'s lines replaced by `line` (a CR kept). PURE. */
+function replaceEntry(text: string, e: EnvEntry, line: string): string {
+	const lines = text.split('\n');
+	const cr = /\r$/.test(lines[e.last]!) ? '\r' : '';
+	lines.splice(e.first, e.last - e.first + 1, `${line}${cr}`);
+	return lines.join('\n');
 }
 
 /** The entries of an env file, as Compose reads them (last one wins; every
@@ -280,9 +335,12 @@ function reverseProxyHosts(text: string): Map<string, string> {
 
 /** The SERVER_NAME a BunkerWeb env serves (first name), or null. PURE. */
 export function serverNameOf(envText: string): string | null {
-	const m = /^SERVER_NAME=(.*)$/m.exec(envText);
+	// Every form Compose accepts (`SERVER_NAME = x`, `export …`), its last entry.
+	const e = envEntries(envText)
+		.filter((x) => x.key === 'SERVER_NAME')
+		.pop();
 	const v =
-		(m?.[1] ?? '')
+		(e?.value ?? '')
 			.trim()
 			.replace(/^["']|["']$/g, '')
 			.split(/\s+/)[0] ?? '';
@@ -900,6 +958,68 @@ const DOTTED_NAME_PAGES = ['/en/@bob.old', '/en/chat/max.svg'] as const;
  * location, the FIRST regex location matching each address (nginx's own
  * order) must proxy it (API) or hand it to the app (@spa). PURE.
  */
+/** Live-stream paths the browser opens (chat, inbox, orderbook). */
+const STREAM_PATHS = [
+	'/v1/chat-activity/alice/stream',
+	'/v1/chat/alice/bob/stream',
+	'/v1/orderbook/stream',
+	// The instance directory's live stream and the sign-in pairing wait are
+	// streams too (v1.21.14 review D, F3/F4).
+	'/v1/instances/stream',
+	'/v1/login-pairing/p1/wait'
+];
+
+/**
+ * Does the served frontend pass the indexer's `X-Accel-Buffering: no` on to
+ * BunkerWeb for every live stream (v1.21.14)? nginx never forwards an X-Accel-*
+ * header from its upstream by itself, and BunkerWeb buffers what it relays
+ * unless told not to, so without `proxy_pass_header X-Accel-Buffering` on the
+ * location that serves a stream (or its server), every chat event waited at
+ * the edge until later traffic pushed it out — about a minute on a live
+ * instance. Read from what nginx serves, like the checks above.
+ */
+export function frontendStreamsPassUnbuffered(dump: string): boolean {
+	const servers: NgxDirective[][] = [];
+	const findServers = (list: readonly NgxDirective[]): void => {
+		for (const d of list) {
+			if (d.name === 'server' && d.block) servers.push([...d.block]);
+			else if (d.block && d.name !== 'location') findServers(d.block);
+		}
+	};
+	findServers(parseNgx(dump));
+	const passes = (b: readonly NgxDirective[] | null | undefined): boolean =>
+		(b ?? []).some(
+			(x) =>
+				x.name === 'proxy_pass_header' && (x.args[0] ?? '').toLowerCase() === 'x-accel-buffering'
+		);
+	let checked = 0;
+	for (const server of servers) {
+		const prefix = server.find((d) => d.name === 'location' && d.args[0] === '/v1/');
+		if (prefix === undefined) continue;
+		checked++;
+		const regexes: Array<{ re: RegExp; block: readonly NgxDirective[] | null }> = [];
+		for (const d of server) {
+			if (d.name !== 'location' || (d.args[0] !== '~' && d.args[0] !== '~*')) continue;
+			try {
+				regexes.push({
+					re: new RegExp(d.args[1] ?? '', d.args[0] === '~*' ? 'i' : ''),
+					block: d.block
+				});
+			} catch {
+				return false;
+			}
+		}
+		const serverLevel = passes(server);
+		for (const path of STREAM_PATHS) {
+			const block = regexes.find((r) => r.re.test(path))?.block ?? prefix.block;
+			const own = (block ?? []).some((x) => x.name === 'proxy_pass_header');
+			// A location with its own proxy_pass_header does not inherit the server's.
+			if (!(passes(block) || (!own && serverLevel))) return false;
+		}
+	}
+	return checked > 0;
+}
+
 export function frontendDottedNamesServed(dump: string): boolean {
 	const servers: NgxDirective[][] = [];
 	const findServers = (list: readonly NgxDirective[]): void => {
@@ -959,6 +1079,14 @@ export function cspScriptSrcStrict(csp: string): boolean {
  *  value of the `map $host $morphit_csp`, or a literal Content-Security-Policy
  *  header — free of inline script and eval? false when it sends none. PURE. */
 export function frontendCspStrict(dump: string): boolean {
+	const values = frontendPageCsps(dump);
+	return values.length > 0 && values.every((v) => cspScriptSrcStrict(v));
+}
+
+/** Every page CSP a frontend `nginx -T` dump can send: each value of the
+ *  `map $host $morphit_csp`, and each literal Content-Security-Policy header.
+ *  PURE. */
+function frontendPageCsps(dump: string): string[] {
 	const all = parseNgx(dump);
 	const values: string[] = [];
 	const walk = (list: readonly NgxDirective[]): void => {
@@ -975,14 +1103,125 @@ export function frontendCspStrict(dump: string): boolean {
 		}
 	};
 	walk(all);
-	return values.length > 0 && values.every((v) => cspScriptSrcStrict(v));
+	return values;
+}
+
+/** The Blurt RPC nodes earlier releases let the BROWSER reach (connect-src):
+ *  the clearnet pool, and on .onion / .i2p names the hidden nodes on port 8091.
+ *  Since v1.21.14 the browser reaches none (connect-src 'self'); these only
+ *  let the heals recognise an earlier release's policy. */
+const LEGACY_BROWSER_RPC_ORIGINS: ReadonlySet<string> = new Set([
+	'https://rpc.drakernoise.com',
+	'https://blurtrpc.dagobert.uk',
+	'https://rpc.blurt.blog',
+	'https://rpc.beblurt.com',
+	'https://blurt-rpc.saboin.com',
+	'https://rpc.blurt.one'
+]);
+const LEGACY_HIDDEN_RPC_ORIGIN = /^http:\/\/(?:[a-z2-7]{56}\.onion|[a-z2-7]{52}\.b32\.i2p):8091$/;
+
+/** A policy's connect-src sources. PURE. */
+export function cspConnectSources(csp: string): string[] {
+	for (const part of csp.split(';')) {
+		const [name, ...vals] = part.trim().split(/\s+/);
+		if (name?.toLowerCase() === 'connect-src') return vals;
+	}
+	return [];
+}
+
+/** Does the policy let the browser connect to this site only? An operator's
+ *  own policy (not isMorphitCsp) is theirs to decide and counts as current.
+ *  PURE. */
+export function cspConnectsSelfOnly(csp: string): boolean {
+	if (!isMorphitCsp(csp)) return true;
+	const src = cspConnectSources(csp);
+	return src.length === 1 && src[0] === "'self'";
+}
+
+/**
+ * The sources other than this site that a policy the OPERATOR wrote lets the
+ * browser connect to: its connect-src, or its default-src when it has no
+ * connect-src (the browser falls back to it); `*` when it limits neither.
+ * Keywords such as 'self' or 'none' grant no other host and are not listed.
+ * Empty for a policy Morphit wrote, of any release (the heals replace those),
+ * and for one that allows this site only. PURE.
+ */
+export function cspForeignConnectSources(csp: string): string[] {
+	if (isMorphitCsp(csp)) return [];
+	const dirs = new Map<string, string[]>();
+	for (const part of csp.split(';')) {
+		const [name, ...vals] = part.trim().split(/\s+/);
+		// A repeated directive is ignored by browsers: the first one counts.
+		if (name && !dirs.has(name.toLowerCase())) dirs.set(name.toLowerCase(), vals);
+	}
+	const src = dirs.get('connect-src') ?? dirs.get('default-src');
+	if (src === undefined) return ['*'];
+	return src.filter((t) => t !== '' && !/^'[^']*'$/.test(t));
+}
+
+/** The warning for an operator's own page CSP that lets browsers connect
+ *  beyond this site (`where` names it; `fix` says how to use Morphit's). */
+export function ownCspConnectsWarning(
+	where: string,
+	sources: readonly string[],
+	fix: string
+): string {
+	const what = sources.includes('*')
+		? 'any address (it limits neither connect-src nor default-src)'
+		: sources.join(' ');
+	return (
+		`Your own Content-Security-Policy (${where}) lets visitors' browsers connect to ${what}, not only to this site. ` +
+		"It was left as it is. Morphit's policy allows this site only (connect-src 'self'): each other address a " +
+		`visitor's browser connects to sees that visitor's IP address. To use Morphit's, ${fix}`
+	);
+}
+
+/** In an `nginx -T` dump of the frontend: does every page CSP it can send let
+ *  the browser connect to this site only (v1.21.14)? false when it sends
+ *  none. PURE. */
+export function frontendCspSelfOnly(dump: string): boolean {
+	const values = frontendPageCsps(dump);
+	return values.length > 0 && values.every((v) => cspConnectsSelfOnly(v));
+}
+
+/** In an `nginx -T` dump of the frontend: the sources other than this site
+ *  that the operator's own page CSPs let the browser connect to (none for
+ *  Morphit's own policies). PURE. */
+export function frontendCspForeignSources(dump: string): string[] {
+	return [...new Set(frontendPageCsps(dump).flatMap((v) => cspForeignConnectSources(v)))];
+}
+
+/** In an `nginx -T` dump of the frontend: does every server and location that
+ *  sends a Content-Security-Policy also send X-DNS-Prefetch-Control (nginx's
+ *  inheritance: a block with add_header lines of its own inherits none)? Any
+ *  value counts: an operator's own is theirs. false when no block sends a
+ *  CSP. PURE. */
+export function frontendDnsPrefetchSent(dump: string): boolean {
+	let withCsp = 0;
+	let ok = true;
+	const walk = (list: readonly NgxDirective[], inherited: ReadonlySet<string>): void => {
+		for (const d of list) {
+			if (!d.block) continue;
+			const own = d.block
+				.filter((x) => x.name === 'add_header')
+				.map((x) => (x.args[0] ?? '').toLowerCase());
+			const eff = own.length > 0 ? new Set(own) : inherited;
+			if ((d.name === 'server' || d.name === 'location') && eff.has('content-security-policy')) {
+				withCsp++;
+				if (!eff.has(DNS_PREFETCH_HEADER.toLowerCase())) ok = false;
+			}
+			walk(d.block, eff);
+		}
+	};
+	walk(parseNgx(dump), new Set());
+	return withCsp > 0 && ok;
 }
 
 /** Is `csp` a policy Morphit itself wrote (any release) — same directives as
  *  today's canonical one except for script-src (only 'self', 'unsafe-inline',
  *  'unsafe-eval', 'wasm-unsafe-eval') and connect-src (only 'self' and the
- *  canonical Blurt RPC nodes, `rpc.blurt.one` included)? An operator's own
- *  policy is anything else, and is kept. PURE. */
+ *  Blurt RPC nodes earlier releases listed for the browser)? An operator's
+ *  own policy is anything else, and is kept. PURE. */
 export function isMorphitCsp(csp: string): boolean {
 	const parse = (v: string): Map<string, string> => {
 		const m = new Map<string, string>();
@@ -1000,14 +1239,11 @@ export function isMorphitCsp(csp: string): boolean {
 		if (have.get(k) !== v) return false;
 	}
 	const okScript = new Set(["'self'", "'unsafe-inline'", "'unsafe-eval'", "'wasm-unsafe-eval'"]);
-	const okConnect = new Set([
-		"'self'",
-		...(want.get('connect-src') ?? '').split(' '),
-		'https://rpc.blurt.one'
-	]);
+	const okConnect = (t: string): boolean =>
+		t === "'self'" || LEGACY_BROWSER_RPC_ORIGINS.has(t) || LEGACY_HIDDEN_RPC_ORIGIN.test(t);
 	return (
 		(have.get('script-src') ?? '').split(' ').every((t) => okScript.has(t)) &&
-		(have.get('connect-src') ?? '').split(' ').every((t) => okConnect.has(t))
+		(have.get('connect-src') ?? '').split(' ').every(okConnect)
 	);
 }
 
@@ -1338,6 +1574,14 @@ async function verifyFrontendForwarding(
 		dottedNames: boolean;
 		/** Its page CSP allows no inline script and no eval. */
 		cspStrict: boolean;
+		/** Its page CSP lets the browser connect to this site only. */
+		cspSelfOnly: boolean;
+		/** Every block that sends the CSP also sends X-DNS-Prefetch-Control. */
+		dnsPrefetch: boolean;
+		/** Other sources the operator's own page CSP lets browsers reach. */
+		ownConnect: string[];
+		/** Live streams carry X-Accel-Buffering on to BunkerWeb. */
+		streamsUnbuffered: boolean;
 		/** No nginx version in its headers or error pages. */
 		tokensOff: boolean;
 		/** Proxied locations that pass visitor-set internal headers on. */
@@ -1406,6 +1650,10 @@ async function verifyFrontendForwarding(
 					filesAre404: frontendFileMissesAre404(dump),
 					dottedNames: frontendDottedNamesServed(dump),
 					cspStrict: frontendCspStrict(dump),
+					cspSelfOnly: frontendCspSelfOnly(dump),
+					dnsPrefetch: frontendDnsPrefetchSent(dump),
+					ownConnect: frontendCspForeignSources(dump),
+					streamsUnbuffered: frontendStreamsPassUnbuffered(dump),
 					baseCurrent: baseOf() !== false
 				};
 	};
@@ -1417,6 +1665,9 @@ async function verifyFrontendForwarding(
 		r.filesAre404 &&
 		r.dottedNames &&
 		r.cspStrict &&
+		r.cspSelfOnly &&
+		r.dnsPrefetch &&
+		r.streamsUnbuffered &&
 		r.tokensOff &&
 		r.uncleared.length === 0 &&
 		r.baseCurrent;
@@ -1440,13 +1691,6 @@ async function verifyFrontendForwarding(
 	if (first === null || first.proxied === 0) return { state: 'unknown', edgePort: null };
 	// What was wrong before any rebuild (the type guard below narrows `first`).
 	const before: Seen = first;
-	if (good(first)) {
-		if (reloadFailed)
-			opts.warn(
-				`The frontend's nginx config is current but ${fe.name} could not reload it; run \`sudo docker exec ${fe.name} nginx -s reload\`.`
-			);
-		return { state: 'ok', edgePort: first.edgePort };
-	}
 	const cmd = `sudo ${composeCommand(feRef, ['up', '-d', '--no-deps', '--build', '--force-recreate', feRef.service])}`;
 	// Which file the container really loads, when it is bind-mounted.
 	const release = join(
@@ -1454,7 +1698,29 @@ async function verifyFrontendForwarding(
 		'ops/bunkerweb/frontend/nginx.conf'
 	);
 	const mounted = fe.binds.find((b) => b.destination.startsWith('/etc/nginx/'))?.source ?? null;
+	// A policy the operator wrote is theirs, and kept; one that lets browsers
+	// reach other addresses is said on every run (never rewritten), from what
+	// the frontend serves in the end.
+	const sayOwn = (r: Seen): void => {
+		if (r.ownConnect.length > 0)
+			opts.warn(
+				ownCspConnectsWarning(
+					`the frontend ${fe.name}, in ${mounted ?? 'its nginx config'}`,
+					r.ownConnect,
+					`copy this release's ${release} over it, then run: ${cmd}`
+				)
+			);
+	};
+	if (good(first)) {
+		sayOwn(first);
+		if (reloadFailed)
+			opts.warn(
+				`The frontend's nginx config is current but ${fe.name} could not reload it; run \`sudo docker exec ${fe.name} nginx -s reload\`.`
+			);
+		return { state: 'ok', edgePort: first.edgePort };
+	}
 	const stale = (r: Seen): Forwarding => {
+		sayOwn(r);
 		const why = [
 			r.missing.length > 0
 				? `still forwards a visitor-supplied X-Forwarded-For on ${r.missing.join(', ')}`
@@ -1469,6 +1735,15 @@ async function verifyFrontendForwarding(
 				? 'answers an account name ending like a file (such as bob.old) with its own 404 page, so that member gets no chat key and no profile page'
 				: '',
 			!r.cspStrict ? 'still allows inline script and eval in its Content-Security-Policy' : '',
+			!r.cspSelfOnly
+				? "still lets visitors' browsers connect to Blurt RPC nodes (its Content-Security-Policy connect-src)"
+				: '',
+			!r.dnsPrefetch
+				? 'does not send X-DNS-Prefetch-Control: off everywhere it sends its Content-Security-Policy, so a browser may look up the name of a link on a page before anyone clicks it'
+				: '',
+			!r.streamsUnbuffered
+				? 'lets BunkerWeb hold live chat and orderbook updates (it does not pass the indexer\'s "do not buffer" mark on), so chat messages show up late'
+				: '',
 			!r.tokensOff ? 'still shows its nginx version in headers and error pages' : '',
 			r.uncleared.length > 0
 				? `still passes visitor-set internal headers (such as X-I2P-DestB32) to the relay or indexer on ${r.uncleared.join(', ')}`
@@ -1509,6 +1784,7 @@ async function verifyFrontendForwarding(
 		stop();
 	}
 	if (refreshed && good(after)) {
+		sayOwn(after);
 		if (before.missing.length > 0 || before.edgePort === null)
 			opts.info(
 				'✓ The frontend now sends the relay and indexer one address per visitor (X-Forwarded-For), not a list the visitor can add to.'
@@ -1519,9 +1795,21 @@ async function verifyFrontendForwarding(
 			opts.info(
 				'✓ The frontend now sends an account name ending like a file (such as bob.old) to the indexer and the app, not to its own 404 page.'
 			);
+		if (!before.streamsUnbuffered)
+			opts.info(
+				'✓ The frontend now passes the indexer\'s "do not buffer" mark on to BunkerWeb, so chat messages show up at once (seen in its running config).'
+			);
 		if (!before.cspStrict)
 			opts.info(
 				'✓ The frontend now sends a Content-Security-Policy with no inline script and no eval (seen in its running config).'
+			);
+		if (!before.cspSelfOnly)
+			opts.info(
+				"✓ The frontend now lets visitors' browsers connect to this site only (seen in its running config)."
+			);
+		if (!before.dnsPrefetch)
+			opts.info(
+				'✓ The frontend now sends X-DNS-Prefetch-Control: off with its pages, so no link on them is looked up before a click (seen in its running config).'
 			);
 		if (!before.baseCurrent)
 			opts.info(
@@ -2034,6 +2322,20 @@ async function applyComposeAndEnv(
 		if (c.unchecked) return { kind: 'unchecked', reason: c.unchecked };
 		return c.done.length > 0 ? { kind: 'applied', changes: c.done } : { kind: 'already' };
 	};
+	// The operator's own CSP is kept (planBunkerwebEnv); one that lets browsers
+	// connect anywhere but this site is said, on every run.
+	{
+		const own = envPath !== null ? envFinal.get('CONTENT_SECURITY_POLICY') : undefined;
+		const extra = own === undefined ? [] : cspForeignConnectSources(own);
+		if (extra.length > 0)
+			opts.warn(
+				ownCspConnectsWarning(
+					`CONTENT_SECURITY_POLICY in ${envPath}`,
+					extra,
+					`replace that line with the one in this release's ops/bunkerweb/bunkerweb.env.example, then on this server run: ${applyCmd()}`
+				)
+			);
+	}
 	if (allChanges.length === 0 && !staleEdge && !staleFe) return unchanged();
 
 	const upServices: string[] = [];

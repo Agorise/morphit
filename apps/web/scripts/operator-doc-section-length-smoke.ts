@@ -168,6 +168,7 @@ const ADR_ALLOW_LIST = new Set([
 	'0014-chat-and-counterparty-reputation.md', // 15KB, reputation design
 	'0021-batch-l-payment-methods.md', // 14KB, payment-methods architecture
 	'0015-chat-crypto.md', // 13KB, chat crypto design
+	'0052-federated-fast-chat-delivery.md', // the fast-chat design plus its v1.21.14 audit amendment (one read for operators)
 ]);
 console.log(`▸ docs/adr/ — threshold ${ADR_LINE_THRESHOLD} lines/ADR, ${adrEntries.length} ADRs`);
 let adrFailed = 0;

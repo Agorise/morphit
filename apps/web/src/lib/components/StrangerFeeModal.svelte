@@ -32,6 +32,7 @@
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { liveIdentity } from '$stores/identity';
 	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import sodium from 'libsodium-wrappers-sumo';
 	import { broadcastStrangerFee } from '$blurt/ops/strangerFee';
 	import { getInstanceSnapshot } from '$stores/instance';
@@ -375,32 +376,35 @@
 			{#if hasActiveKey}
 				<!-- Password prompt: this session already holds an active key
 				     (morphit-seed / posting-active). The Morphit password unlocks
-				     the active-key envelope to sign. -->
-				<label class="mt-4 block">
-					<span class="mb-1 block text-sm font-semibold">
-						{$_('chat.stranger_fee.password_label')}
-					</span>
-					<input
-						type="password"
-						maxlength="64"
-						bind:value={passwordInput}
-						disabled={phase.kind === 'paying'}
-						autocomplete="current-password"
-						onkeydown={(e) => {
-							if (e.key === 'Enter' && phase.kind === 'ready') {
-								e.preventDefault();
-								void onConfirm();
-							}
-						}}
-						class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none disabled:opacity-50 dark:border-ink-700 dark:bg-ink-900"
-						placeholder={$_('chat.stranger_fee.password_placeholder') as string}
-					/>
-					{#if passwordError}
-						<p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
-							{passwordError}
-						</p>
-					{/if}
-				</label>
+				     the active-key envelope to sign. Its own form (PasswordScope), so a
+				     password manager fills nothing else on the page. -->
+				<PasswordScope account={getUserBlurtAccount()}>
+					<label class="mt-4 block">
+						<span class="mb-1 block text-sm font-semibold">
+							{$_('chat.stranger_fee.password_label')}
+						</span>
+						<input
+							type="password"
+							maxlength="64"
+							bind:value={passwordInput}
+							disabled={phase.kind === 'paying'}
+							autocomplete="current-password"
+							onkeydown={(e) => {
+								if (e.key === 'Enter' && phase.kind === 'ready') {
+									e.preventDefault();
+									void onConfirm();
+								}
+							}}
+							class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none disabled:opacity-50 dark:border-ink-700 dark:bg-ink-900"
+							placeholder={$_('chat.stranger_fee.password_placeholder') as string}
+						/>
+						{#if passwordError}
+							<p class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+								{passwordError}
+							</p>
+						{/if}
+					</label>
+				</PasswordScope>
 
 				<div class="mt-6 flex flex-col gap-3 sm:flex-row-reverse sm:justify-between">
 					<button

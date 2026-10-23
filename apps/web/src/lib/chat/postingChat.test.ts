@@ -9,8 +9,10 @@
  * published chat key now go to its POSTING keys (crypto.ts v3), which every
  * account has on chain.
  *
- * Two real parties, real crypto (both envelope versions), a shared "chain".
- * Only the network is a fake.
+ * Since v1.21.14 EVERY message is sent to posting keys — chat relies on the
+ * posting key only; the chat-key envelope (v2) is read, never written.
+ *
+ * Two real parties, real crypto, a shared "chain". Only the network is a fake.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as secp from '@noble/secp256k1';
@@ -139,8 +141,6 @@ function deps(
 		fetchPeerChatPub: async (account) => (w.published.has(account) ? chatPubOf(account) : null),
 		deriveMyChatIdentity: async (live, account) =>
 			deriveChatIdentity(live.posting.privateKey, account),
-		encrypt: async (pt, recipientPub, sa, ra, sender, self) =>
-			encryptToRecipient(pt, recipientPub, sender, sa, ra, self) as never,
 		decrypt: async (env, priv, pub, sa, ra, pubs) => {
 			try {
 				return await decryptFromSender(env as never, { priv, pub }, sa, ra, pubs ?? []);
@@ -158,7 +158,6 @@ function deps(
 			}
 		},
 		fetchPostingPubs: async (account) => w.postingKeys.get(account) ?? null,
-		myChatKeyStatus: async () => (w.published.has(me.name) ? 'current' : 'none'),
 		...postingEnvelopeCrypto,
 		onChange: () => undefined,
 		...over,
@@ -270,32 +269,31 @@ describe('a message to someone who never published a chat key', () => {
 });
 
 describe('the first message is not slower (the 6-second delivery budget)', () => {
-	it('the key lookups run as the conversation opens, so Send does not wait on a slow hidden round trip', async () => {
-		const w = world([buyer.name]);
+	it('the posting-key lookup runs as the conversation opens, so Send does not wait on a slow hidden round trip', async () => {
+		const w = world([buyer.name, seller.name]);
 		const slow =
 			<T>(v: () => Promise<T>, ms: number) =>
 			() =>
 				new Promise<T>((r) => setTimeout(() => void v().then(r), ms));
 		const base = deps(w, buyer, seller.name);
 		let postingCalls = 0;
-		let ownCalls = 0;
+		const peerAsked = vi.fn();
 		const d = {
 			...base,
 			// A Tor/I2P instance: every lookup is a 2.6 s hidden round trip.
-			fetchPeerChatPub: (a: string) => slow(() => base.fetchPeerChatPub(a), 2600)(),
-			myChatKeyStatus: () => {
-				ownCalls++;
-				return slow(() => base.myChatKeyStatus!(), 2600)();
+			fetchPeerChatPub: (a: string) => {
+				peerAsked();
+				return slow(() => base.fetchPeerChatPub(a), 2600)();
 			},
 			fetchPostingPubs: (a: string) => {
 				postingCalls++;
-				return slow(() => base.fetchPostingPubs!(a), 2600)();
+				return slow(() => base.fetchPostingPubs(a), 2600)();
 			}
 		};
 		const c = createConversationController(d);
 		c.start();
-		// The user reads the order and types for three seconds; the lookups run
-		// side by side meanwhile.
+		// The user reads the order and types for three seconds; the lookup runs
+		// meanwhile.
 		await vi.advanceTimersByTimeAsync(3000);
 		let sentAt: number | null = null;
 		const t0 = Date.now();
@@ -305,26 +303,20 @@ describe('the first message is not slower (the 6-second delivery budget)', () =>
 		expect(sentAt! - t0).toBe(0); // no further wait at all
 		expect(base.sent).toHaveLength(1);
 		expect(postingCalls).toBe(1); // looked up once, at open — not again on Send
-		expect(ownCalls).toBe(1);
+		// Nothing is sent to a chat key: the peer's is not even asked for
+		// (v1.21.14 — asking pinned it, and that broke first conversations).
+		expect(peerAsked).not.toHaveBeenCalled();
 		c.destroy();
 
-		// Send at once, while the lookups are still on their way: it joins
-		// them rather than starting its own (one round trip each, not two).
-		// Different delays, so each lookup is in flight when the send asks.
-		let peerCalls = 0;
+		// Send at once, while the lookup is still on its way: it joins it
+		// rather than starting its own (one round trip, not two).
 		postingCalls = 0;
-		ownCalls = 0;
-		const w2 = world([buyer.name, seller.name]); // both published: the v2 path asks all three
-		const base2 = deps(w2, buyer, seller.name);
+		const base2 = deps(w, buyer, seller.name);
 		const d2 = {
 			...base2,
-			fetchPeerChatPub: (a: string) => {
-				peerCalls++;
-				return slow(() => base2.fetchPeerChatPub(a), 100)();
-			},
-			myChatKeyStatus: () => {
-				ownCalls++;
-				return slow(() => base2.myChatKeyStatus!(), 2600)();
+			fetchPostingPubs: (a: string) => {
+				postingCalls++;
+				return slow(() => base2.fetchPostingPubs(a), 2600)();
 			}
 		};
 		const c2 = createConversationController(d2);
@@ -335,29 +327,27 @@ describe('the first message is not slower (the 6-second delivery budget)', () =>
 		await vi.advanceTimersByTimeAsync(2600);
 		await s2;
 		expect(done2! - t1).toBe(2600);
-		expect(peerCalls).toBe(1);
-		expect(ownCalls).toBe(1);
+		expect(postingCalls).toBe(1);
 		expect(base2.sent).toHaveLength(1);
 		c2.destroy();
 	});
 });
-
 describe('which envelope a send uses', () => {
-	it('both chat keys published: the chat-key envelope (v2), exactly as before, and it opens', async () => {
+	it('both chat keys published: still the posting-key envelope (v3), and it opens, proved', async () => {
 		const w = world([buyer.name, seller.name]);
 		const kd = deps(w, buyer, seller.name);
 		const kc = await view(kd);
-		await kc.sendMessage('as before');
-		expect((kd.sent[0]!.header as Record<string, unknown>).v).toBe(2);
+		await kc.sendMessage('posting keys only');
+		expect((kd.sent[0]!.header as Record<string, unknown>).v).toBe(3);
 		kc.destroy();
 		const jc = await view(deps(w, seller, buyer.name));
 		expect(jc.snapshot().map((m) => [m.text, m.senderUnverified ?? false])).toEqual([
-			['as before', false]
+			['posting keys only', false]
 		]);
 		jc.destroy();
 	});
 
-	it('a chat-key check that FAILS (a changed key, tampering) still stops the send — no way around it', async () => {
+	it('a chat-key lookup that would fail (a changed key, tampering) does not stop a send: none is made', async () => {
 		const w = world([buyer.name, seller.name]);
 		const kd = deps(w, buyer, seller.name, {
 			fetchPeerChatPub: async () => {
@@ -366,8 +356,8 @@ describe('which envelope a send uses', () => {
 		});
 		const kc = await view(kd);
 		await kc.sendMessage('x');
-		expect(kc.snapshot()[0]!.error).toBe('pub_pin_key_changed');
-		expect(kd.sent).toHaveLength(0);
+		expect(kc.snapshot()[0]!.error).toBeNull();
+		expect(kd.sent).toHaveLength(1);
 		kc.destroy();
 	});
 
@@ -381,7 +371,6 @@ describe('which envelope a send uses', () => {
 		kc.destroy();
 	});
 });
-
 describe('a failed send', () => {
 	const lowFunds = () =>
 		new ChainRejectedError(
@@ -498,8 +487,10 @@ describe('a posting key that changes (pinned like a chat key)', () => {
 		third.destroy();
 
 		// Accepted after comparing the new safety number: sending works again.
-		expect(acceptKeyChange(seller.name, 'chat')).toBe(false); // the other kind: nothing
-		expect(acceptKeyChange(seller.name, 'posting')).toBe(true);
+		expect(acceptKeyChange(seller.name, 'chat', 'x')).toBe(false); // the other kind: nothing
+		expect(acceptKeyChange(seller.name, 'posting', pendingPostingKeyChange(seller.name)!)).toBe(
+			true
+		);
 		await second.retryMessage(m.localSeq);
 		expect(second.snapshot().find((x) => x.text === 'two')!.error).toBeNull();
 		const h = d2.sent[0]!.header as Record<string, unknown>;
@@ -546,63 +537,42 @@ describe('never a silent move off checked keys (review H1)', () => {
 	const chatPinOf = async (p: Party) =>
 		Buffer.from((await deriveChatIdentity(p.priv, p.name)).pub).toString('base64');
 
-	it('a peer whose chat key is pinned here, and the indexer now says has none: not sent, nothing broadcast', async () => {
+	it('a peer whose chat key is pinned here, and the indexer now says has none: sent all the same (no chat key is used)', async () => {
 		const w = world([buyer.name]); // the indexer claims the seller has no chat key
 		setPin(seller.name, { blockNum: 5, trxId: 'a'.repeat(40), pubB64: await chatPinOf(seller) });
 		const peerAsked = vi.fn();
-		const posting = vi.fn(async (a: string) => w.postingKeys.get(a) ?? null);
 		const d = deps(w, buyer, seller.name, {
 			...pinStore,
 			pinnedPeerPubs: () => [new Uint8Array(32).fill(1)],
 			fetchPeerChatPub: async () => {
 				peerAsked();
 				return null;
-			},
-			fetchPostingPubs: posting
-		});
-		const c = await view(d);
-		posting.mockClear();
-		await c.sendMessage('to the pinned key only');
-		expect(c.snapshot()[0]!.error).toBe('pub_pin_withdrawn');
-		expect(d.sent).toHaveLength(0);
-		expect(posting).not.toHaveBeenCalled();
-		c.destroy();
-	});
-
-	it('our own status unknown: not sent (retry), never guessed', async () => {
-		const w = world([buyer.name, seller.name]);
-		const d = deps(w, buyer, seller.name, {
-			myChatKeyStatus: async () => {
-				throw new Error('indexer down');
 			}
 		});
 		const c = await view(d);
-		await c.sendMessage('x');
-		expect(c.snapshot()[0]!.error).toBe(CHAIN_UNREACHABLE_SENTINEL);
-		expect(d.sent).toHaveLength(0);
+		await c.sendMessage('to their posting keys');
+		expect(c.snapshot()[0]!.error).toBeNull();
+		expect((d.sent[0]!.header as Record<string, unknown>).v).toBe(3);
+		expect(peerAsked).not.toHaveBeenCalled();
 		c.destroy();
 	});
 
-	it('a v3 message "from" a peer whose chat key is pinned, while ours is current: readable, not proved, and the indexer is not asked for keys to prove it', async () => {
+	it('a v3 message from a peer whose chat key is pinned here: proved by their posting keys, pinned on first use (v1.21.14)', async () => {
 		const w = world([buyer.name]);
-		// The seller (no chat key published per this world) writes v3.
 		const sd = await view(deps(w, seller, buyer.name));
 		await sd.sendMessage('trust me');
 		sd.destroy();
-		const posting = vi.fn(async (a: string) => w.postingKeys.get(a) ?? null);
 		const c = await view(
 			deps(w, buyer, seller.name, {
 				...pinStore,
 				pinnedPeerPubs: () => [new Uint8Array(32).fill(1)], // chat key pinned here
-				fetchPeerChatPub: async () => new Uint8Array(32).fill(1),
-				fetchPostingPubs: posting
+				fetchPeerChatPub: async () => new Uint8Array(32).fill(1)
 			})
 		);
 		const m = c.snapshot().find((x) => x.sender === seller.name)!;
-		expect(m.text).toBe('trust me');
-		expect(m.senderUnverified).toBe(true);
-		// Only the warm-up's lookup (for sending) — not one to prove the message.
-		expect(posting.mock.calls.length).toBeLessThanOrEqual(1);
+		expect([m.text, m.senderUnverified ?? false]).toEqual(['trust me', false]);
+		expect(pinnedPostingKeysInStore(seller.name)).toEqual([seller.pub]);
+		expect(pendingPostingKeyChange(seller.name)).toBeNull();
 		c.destroy();
 	});
 
@@ -620,38 +590,15 @@ describe('never a silent move off checked keys (review H1)', () => {
 });
 
 describe('lookups: as few as possible, and none remembered wrongly (review H3, M5, M6)', () => {
-	it('our status none/stale: the peer’s chat key is never asked for a send', async () => {
-		const w = world([seller.name]); // the seller has a chat key; we have none
+	it('a send never asks for the peer’s chat key (every message goes to posting keys)', async () => {
+		const w = world([buyer.name, seller.name]);
 		const peerAsked = vi.fn(async () => null);
 		const d = deps(w, buyer, seller.name, { fetchPeerChatPub: peerAsked });
 		const c = await view(d);
-		peerAsked.mockClear(); // the warm-up's
 		await c.sendMessage('one');
 		await c.sendMessage('two');
 		expect(peerAsked).not.toHaveBeenCalled();
 		expect(d.sent.map((p) => (p.header as Record<string, unknown>).v)).toEqual([3, 3]);
-		c.destroy();
-	});
-
-	it('a peer with no chat key is asked once per conversation, not once per message; Retry asks again', async () => {
-		const w = world([buyer.name]);
-		const peerAsked = vi.fn(async () => null);
-		let fail = true;
-		const base = deps(w, buyer, seller.name, { fetchPeerChatPub: peerAsked });
-		const d = {
-			...base,
-			broadcast: async (l: LiveIdentity, p: Record<string, unknown>, a: string) => {
-				if (fail) throw new Error('boom');
-				return base.broadcast(l, p, a);
-			}
-		};
-		const c = await view(d);
-		await c.sendMessage('one');
-		await c.sendMessage('two');
-		expect(peerAsked).toHaveBeenCalledTimes(1);
-		fail = false;
-		await c.retryMessage(c.snapshot()[0]!.localSeq);
-		expect(peerAsked).toHaveBeenCalledTimes(2);
 		c.destroy();
 	});
 
@@ -777,7 +724,10 @@ describe('destroy mode chosen after a send failed (review L5)', () => {
 	});
 });
 
-describe('a peer whose chat key is pinned never gets posting keys on an indexer’s word (review 2, M-1)', () => {
+describe('a pinned chat key no longer holds a first set of posting keys back (v1.21.14; was review 2, M-1)', () => {
+	// Chat relies on the posting key only: posting keys are trusted on first use
+	// whatever chat key is pinned. The hold this replaces made a normal first
+	// conversation refuse every reply and show every message as unproved.
 	const pinStore = {
 		pinPostingKey: pinPostingKeyInStore,
 		pinnedPostingKeys: pinnedPostingKeysInStore
@@ -786,53 +736,52 @@ describe('a peer whose chat key is pinned never gets posting keys on an indexer�
 	const chatPin = (peer: string) =>
 		setPin(peer, { blockNum: 5, trxId: 'a'.repeat(40), pubB64: b64(new Uint8Array(32).fill(9)) });
 
-	it('send: our key "none", their posting keys new here — not sent; held for Verify peer; sent after Accept', async () => {
-		const w = world([]); // the indexer says neither of us has a chat key
+	it('send: their posting keys new here — sent, and pinned; a later CHANGE is still held for Verify peer', async () => {
+		const w = world([]);
 		chatPin(seller.name);
-		const mallory = party('mallory');
-		w.postingKeys.set(seller.name, [mallory.pub]); // …and lists a substituted posting key
 		const d = deps(w, buyer, seller.name, {
 			...pinStore,
 			pinnedPeerPubs: () => [new Uint8Array(32).fill(9)]
 		});
 		const c = await view(d);
-		await c.sendMessage('to the keys I checked only');
-		expect(c.snapshot()[0]!.error).toBe('pub_pin_posting_key_changed');
-		expect(d.sent).toHaveLength(0);
-		expect(pinnedPostingFor(seller.name)).toEqual([]);
-		expect(pendingPostingKeyChange(seller.name)).toEqual([b64(mallory.pub)]);
-		// The user compares the number in Verify peer (here: the real keys) and accepts.
-		w.postingKeys.set(seller.name, [seller.pub]);
-		localStorage_setPending(seller.name, [b64(seller.pub)]);
-		expect(acceptKeyChange(seller.name, 'posting')).toBe(true);
-		await c.retryMessage(c.snapshot()[0]!.localSeq);
+		await c.sendMessage('first message');
 		expect(c.snapshot()[0]!.error).toBeNull();
-		const h = d.sent[0]!.header as Record<string, unknown>;
-		expect((h.rk as string[]).map((k) => Buffer.from(k, 'base64'))).toEqual([
-			Buffer.from(seller.pub)
-		]);
+		expect(pinnedPostingFor(seller.name)).toEqual([b64(seller.pub)]);
+		// Their account gets another key (or someone substitutes one): held.
+		const mallory = party('mallory');
+		w.postingKeys.set(seller.name, [mallory.pub]);
+		const d2 = deps(w, buyer, seller.name, { ...pinStore });
+		const c2 = await view(d2);
+		await c2.sendMessage('second');
+		const second = () => c2.snapshot().find((m) => m.text === 'second')!;
+		expect(second().error).toBe('pub_pin_posting_key_changed');
+		expect(d2.sent).toHaveLength(0);
+		expect(pendingPostingKeyChange(seller.name)).toEqual([b64(mallory.pub)]);
+		// Accepted in Verify peer after comparing the number: it goes.
+		localStorage_setPending(seller.name, [b64(mallory.pub)]);
+		expect(acceptKeyChange(seller.name, 'posting', [b64(mallory.pub)])).toBe(true);
+		await c2.retryMessage(second().localSeq);
+		expect(second().error).toBeNull();
 		c.destroy();
+		c2.destroy();
 	});
 
-	it('receive: our key "stale", a v3 "from" them made with a key not pinned — readable, NOT proved, nothing pinned', async () => {
+	it('receive: a v3 message from the keys on their account — proved, whatever chat key is pinned', async () => {
 		const w = world([]);
-		const mallory = party(seller.name);
-		w.postingKeys.set(seller.name, [mallory.pub]);
-		const md = await view(deps(w, mallory, buyer.name));
-		await md.sendMessage('send the coins to X');
-		md.destroy();
+		const sd = await view(deps(w, seller, buyer.name));
+		await sd.sendMessage('send the coins to X');
+		sd.destroy();
 		chatPin(seller.name);
 		const c = await view(
 			deps(w, buyer, seller.name, {
 				...pinStore,
-				pinnedPeerPubs: () => [new Uint8Array(32).fill(9)],
-				myChatKeyStatus: async () => 'stale'
+				pinnedPeerPubs: () => [new Uint8Array(32).fill(9)]
 			})
 		);
 		const m = c.snapshot().find((x) => x.sender === seller.name)!;
-		expect([m.text, m.senderUnverified]).toEqual(['send the coins to X', true]);
-		expect(pinnedPostingFor(seller.name)).toEqual([]);
-		expect(pendingPostingKeyChange(seller.name)).toEqual([b64(mallory.pub)]);
+		expect([m.text, m.senderUnverified ?? false]).toEqual(['send the coins to X', false]);
+		expect(pinnedPostingFor(seller.name)).toEqual([b64(seller.pub)]);
+		expect(pendingPostingKeyChange(seller.name)).toBeNull();
 		c.destroy();
 	});
 });
@@ -847,29 +796,37 @@ function localStorage_setPending(peer: string, keys: string[]): void {
 	);
 }
 
-describe('answering in the format the peer proved themselves in (review 2, M-3)', () => {
-	it('our key current and theirs on chain, but their last proved message is v3: we answer in v3 (their chat key may be stale)', async () => {
+describe('every answer is in the posting-key format, whatever the peer wrote last (v1.21.14; was review 2, M-3)', () => {
+	it('their last message in the older chat-key format (v2): we answer in v3 all the same', async () => {
 		const w = world([buyer.name, seller.name]);
-		const pinStore = {
-			pinPostingKey: pinPostingKeyInStore,
-			pinnedPostingKeys: pinnedPostingKeysInStore
-		};
-		// Before: v2 both ways.
-		const d0 = deps(w, buyer, seller.name, pinStore);
-		const c0 = await view(d0);
-		await c0.sendMessage('v2 first');
-		expect((d0.sent[0]!.header as Record<string, unknown>).v).toBe(2);
-		c0.destroy();
-		// The seller's key goes stale on their side: they write v3.
-		const sd = await view(
-			deps(w, seller, buyer.name, { ...pinStore, myChatKeyStatus: async () => 'stale' })
+		// An older Morphit on the seller's side writes v2.
+		const sellerId = await deriveChatIdentity(seller.priv, seller.name);
+		const buyerId = await deriveChatIdentity(buyer.priv, buyer.name);
+		const env = await encryptToRecipient(
+			'from an older version',
+			buyerId.pub,
+			sellerId,
+			seller.name,
+			buyer.name,
+			true
 		);
-		await sd.sendMessage('my key changed, write to my posting key');
-		sd.destroy();
-		const d = deps(w, buyer, seller.name, pinStore);
+		chain.push({
+			id: nextId++,
+			sender: seller.name,
+			recipient: buyer.name,
+			ciphertext: env.ciphertext,
+			header: {
+				v: 2,
+				client_tag: 'b'.repeat(32),
+				ephemeral_pub: env.ephemeralPub,
+				nonce: env.nonce
+			},
+			created_at: new Date(Date.UTC(2026, 9, 20, 12, 0, nextId)).toISOString()
+		} as ChatMessageRecord);
+		const d = deps(w, buyer, seller.name);
 		const c = await view(d);
 		const theirs = c.snapshot().find((x) => x.sender === seller.name)!;
-		expect(theirs.senderUnverified ?? false).toBe(false);
+		expect(theirs.text).toBe('from an older version');
 		await c.sendMessage('answered in v3');
 		expect((d.sent[0]!.header as Record<string, unknown>).v).toBe(3);
 		c.destroy();
@@ -899,26 +856,6 @@ describe('smaller gaps (review 2, lows)', () => {
 		w.postingKeys.set(seller.name, [seller.pub]);
 		await c.sendMessage('two');
 		expect(c.snapshot()[1]!.error).toBeNull();
-		c.destroy();
-	});
-
-	it('a failed chat-key lookup is asked again only after a pause; Retry asks at once', async () => {
-		const w = world([buyer.name]);
-		let down = true;
-		const peerAsked = vi.fn(async () => {
-			if (down) throw new Error('timed out');
-			return null;
-		});
-		const d = deps(w, buyer, seller.name, { fetchPeerChatPub: peerAsked });
-		const c = await view(d);
-		expect(peerAsked).toHaveBeenCalledTimes(1);
-		await c.sendMessage('one');
-		await c.sendMessage('two');
-		expect(peerAsked).toHaveBeenCalledTimes(1);
-		down = false;
-		await c.retryMessage(c.snapshot()[0]!.localSeq);
-		expect(peerAsked).toHaveBeenCalledTimes(2);
-		expect(c.snapshot()[0]!.error).toBeNull();
 		c.destroy();
 	});
 
@@ -967,40 +904,28 @@ describe('pins a Lock sealed are waited for (review 2, low 1)', () => {
 		(await import('./unsealGate')).setUnsealPending(Promise.resolve());
 	});
 
-	it('receive: a chat pin still being unsealed is honoured — no posting keys pinned on first use', async () => {
+	it('receive: posting pins still being unsealed are honoured — not replaced on "first use"', async () => {
 		const w = world([]);
 		const sd = await view(deps(w, seller, buyer.name));
 		await sd.sendMessage('hello');
 		sd.destroy();
 		const gate = await sealedPinLandingLater();
+		const other = party('other');
+		const pinned = vi.fn(async () => [seller.pub]);
 		const c = createConversationController(
 			deps(w, buyer, seller.name, {
-				pinPostingKey: pinPostingKeyInStore,
-				pinnedPostingKeys: pinnedPostingKeysInStore,
-				pinnedPeerPubs: () => (gate.visible() ? [new Uint8Array(32).fill(9)] : [])
+				pinPostingKey: pinned,
+				// The seller's pin sealed by a Lock holds another key: visible only
+				// once the unseal landed.
+				pinnedPostingKeys: () => (gate.visible() ? [other.pub] : [])
 			})
 		);
 		c.start();
 		await vi.runOnlyPendingTimersAsync();
 		await vi.runOnlyPendingTimersAsync();
 		expect(c.snapshot().map((m) => [m.text, m.senderUnverified])).toEqual([['hello', true]]);
-		expect(pinnedPostingFor(seller.name)).toEqual([]);
-		c.destroy();
-	});
-
-	it('send: a chat pin still being unsealed counts — the indexer saying "none" is refused', async () => {
-		const w = world([buyer.name]);
-		const gate = await sealedPinLandingLater();
-		const d = deps(w, buyer, seller.name, {
-			pinnedPeerPubs: () => (gate.visible() ? [new Uint8Array(32).fill(9)] : [])
-		});
-		const c = createConversationController(d);
-		c.start();
-		const sending = c.sendMessage('x');
-		await vi.runOnlyPendingTimersAsync();
-		await sending;
-		expect(c.snapshot()[0]!.error).toBe('pub_pin_withdrawn');
-		expect(d.sent).toHaveLength(0);
+		// The chain's keys were not taken as a first use over the sealed pin.
+		expect(pinned).not.toHaveBeenCalled();
 		c.destroy();
 	});
 });

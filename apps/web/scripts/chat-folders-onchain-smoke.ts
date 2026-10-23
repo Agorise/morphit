@@ -44,7 +44,7 @@ check('handler bounds the ciphertext size', /enc_too_large/.test(handler) && /96
 check(
 	'handler upserts chat_folders latest-by-block',
 	/INSERT INTO chat_folders/.test(handler) &&
-		/source_block_num < EXCLUDED\.source_block_num/.test(handler)
+		/source_block_num <= EXCLUDED\.source_block_num/.test(handler)
 );
 
 // ── Migration: BOTH migrations.ts and schema.sql baseline ──

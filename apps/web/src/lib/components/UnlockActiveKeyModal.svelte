@@ -38,6 +38,8 @@
 	import { keepActiveKeyOnThisDevice } from '$crypto/keepActiveKey';
 	import sodium from 'libsodium-wrappers-sumo';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import PasswordScope from '$components/PasswordScope.svelte';
+	import { keyField } from '$lib/ui/keyField';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 
 	interface Props {
@@ -151,9 +153,15 @@
 		       an invalid key and an error the user cannot see the cause of.
 		     `py-3` gives a comfortable touch target without changing the desktop
 		     look meaningfully. -->
+		<!-- `readonly` + keyField: a password manager fills a saved site password
+		     into the first password field it sees, and Firefox wrote the Morphit
+		     password here, where the Active key goes. It skips a read-only field;
+		     the field unlocks on the first touch or focus. -->
 		<input
 			type="password"
 			bind:value={secret}
+			readonly
+			use:keyField
 			maxlength="128"
 			autocomplete="off"
 			spellcheck="false"
@@ -198,22 +206,24 @@
 	</fieldset>
 
 	{#if retention === 'keep'}
-		<label class="block">
-			<span class="text-sm font-semibold">
-				{$_('unlock_active.device_password_label', { values: { account } })}
-			</span>
-			<input
-				type="password"
-				bind:value={devicePassword}
-				maxlength="64"
-				autocomplete="current-password"
-				disabled={busy}
-				class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
-			/>
-			<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
-				{$_('unlock_active.device_password_help')}
-			</p>
-		</label>
+		<PasswordScope {account} class="block">
+			<label class="block">
+				<span class="text-sm font-semibold">
+					{$_('unlock_active.device_password_label', { values: { account } })}
+				</span>
+				<input
+					type="password"
+					bind:value={devicePassword}
+					maxlength="64"
+					autocomplete="current-password"
+					disabled={busy}
+					class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
+				/>
+				<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+					{$_('unlock_active.device_password_help')}
+				</p>
+			</label>
+		</PasswordScope>
 	{/if}
 
 	<div class="flex justify-center gap-2">

@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+	dnsPrefetchWithCsp,
 	dumpSections,
 	healNginxVhosts,
 	isMorphitVhost,
@@ -52,6 +53,51 @@ server {
     }
 }
 `;
+
+describe("the bare-metal site's page CSP lets browsers connect to this site only (v1.21.14)", () => {
+	const v1_21_13 = (connect: string): string => MORPHIT_CSP.replace("connect-src 'self'", connect);
+	const CLEAR = v1_21_13(
+		"connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com"
+	);
+	const ONION = v1_21_13(
+		"connect-src 'self' http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091"
+	);
+	const site = (a: string, b: string): string => `server {
+    listen 443 ssl http2;
+    server_name trade.example.org;
+    server_tokens off;
+    add_header Content-Security-Policy "${a}" always;
+}
+server {
+    listen 127.0.0.1:8090;
+    server_name abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrstuv.onion;
+    server_tokens off;
+    add_header Content-Security-Policy "${b}" always;
+}
+`;
+	it("v1.21.13's node lists, clearnet and .onion, become this release's policy", () => {
+		const old = site(CLEAR, ONION);
+		expect(vhostLoadedOk(old).why).toContain(
+			"a page CSP still lets visitors' browsers connect to Blurt RPC nodes"
+		);
+		const p = planVhost(old);
+		expect(p.text).not.toContain('rpc.drakernoise.com');
+		expect(p.text).not.toContain('.onion:8091');
+		expect(
+			p.text.split(`add_header Content-Security-Policy "${MORPHIT_CSP}" always;`)
+		).toHaveLength(3);
+		expect(vhostLoadedOk(p.text).ok).toBe(true);
+	});
+	it("an operator's own connect-src (their indexer subdomain) is kept", () => {
+		const own = MORPHIT_CSP.replace(
+			"connect-src 'self'",
+			"connect-src 'self' https://indexer.trade.example.org"
+		);
+		const p = planVhost(site(own, own));
+		expect(p.text).toContain('https://indexer.trade.example.org');
+		expect(vhostLoadedOk(p.text).ok).toBe(true);
+	});
+});
 
 describe('the bare-metal nginx site heals like a fresh copy (planner)', () => {
 	it('an earlier vhost: every gap closed, and what nginx would load passes', () => {
@@ -210,9 +256,10 @@ class Box {
 		oldClientLines: () => 3,
 		sleep: async () => {}
 	};
+	warned: string[] = [];
 	run() {
 		return healNginxVhosts(
-			{ info: () => {}, warn: () => {}, spinner: () => () => {} },
+			{ info: () => {}, warn: (m) => this.warned.push(m), spinner: () => () => {} },
 			{ runtime: this.rt }
 		);
 	}
@@ -270,5 +317,113 @@ describe('the bare-metal nginx heal on a box', () => {
 		]);
 		expect((await b.run()).strategy).toBe('skipped');
 		expect(b.reloads).toBe(0);
+	});
+});
+
+/** A page-serving vhost (web.conf's shape): the CSP at server level and in a
+ *  location that sets its own headers, before X-DNS-Prefetch-Control. */
+const PAGES = `server {
+    listen 443 ssl http2;
+    server_name trade.example.org;
+    server_tokens off;
+    error_log stderr crit;
+    root /var/www/morphit-frontend;
+    add_header X-Frame-Options "DENY" always;
+    add_header Content-Security-Policy "${MORPHIT_CSP}" always;
+    location /_app/immutable/ {
+        add_header Cache-Control "public, immutable, max-age=31536000" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Content-Security-Policy "${MORPHIT_CSP}" always;
+    }
+    location /fonts/ {
+        add_header Cache-Control "public, max-age=2592000" always;
+    }
+    location / {
+        try_files $uri @spa;
+    }
+}
+`;
+
+describe('pages send X-DNS-Prefetch-Control: off wherever they send the CSP (bare metal)', () => {
+	/** The body of the block that starts with `head` (up to its closing brace). */
+	const block = (t: string, head: string): string => {
+		const at = t.indexOf(`${head} {`);
+		return t.slice(at, t.indexOf('\n    }', at));
+	};
+	it('added at server level and in every location that sets its own headers; checked in what nginx loads', () => {
+		expect(dnsPrefetchWithCsp(PAGES)).toBe(false);
+		expect(vhostLoadedOk(PAGES).ok).toBe(false);
+		const p = planVhost(PAGES);
+		const server = p.text.slice(0, p.text.indexOf('location'));
+		expect(server).toContain('add_header X-DNS-Prefetch-Control "off" always;');
+		expect(block(p.text, 'location /_app/immutable/')).toContain(
+			'add_header X-DNS-Prefetch-Control "off" always;'
+		);
+		// a location that sets its own headers also gets the CSP back, and the header with it
+		expect(block(p.text, 'location /fonts/')).toContain(
+			'add_header X-DNS-Prefetch-Control "off" always;'
+		);
+		expect(block(p.text, 'location /fonts/')).toContain('add_header Content-Security-Policy');
+		expect(dnsPrefetchWithCsp(p.text)).toBe(true);
+		expect(vhostLoadedOk(p.text)).toEqual({ ok: true, why: [] });
+		expect(planVhost(p.text).text).toBe(p.text); // idempotent
+	});
+	it("an operator's own value is kept (and repeated where nginx would drop it), never replaced", () => {
+		const own = PAGES.replace(
+			'    add_header X-Frame-Options "DENY" always;\n    add_header Content-Security-Policy',
+			'    add_header X-Frame-Options "DENY" always;\n    add_header X-DNS-Prefetch-Control "on" always;\n    add_header Content-Security-Policy'
+		);
+		expect(own).not.toBe(PAGES);
+		const p = planVhost(own).text;
+		expect(p).not.toContain('X-DNS-Prefetch-Control "off"');
+		expect(block(p, 'location /_app/immutable/')).toContain(
+			'add_header X-DNS-Prefetch-Control "on" always;'
+		);
+		expect(dnsPrefetchWithCsp(p)).toBe(true);
+	});
+	it('a CSP set only in a location (none at server level): that location gets it', () => {
+		const loc = PAGES.replace(
+			`    add_header Content-Security-Policy "${MORPHIT_CSP}" always;\n    location /_app`,
+			'    location /_app'
+		);
+		expect(loc).not.toBe(PAGES);
+		const p = planVhost(loc).text;
+		expect(p.slice(0, p.indexOf('location'))).not.toContain('X-DNS-Prefetch-Control');
+		expect(block(p, 'location /_app/immutable/')).toContain(
+			'add_header X-DNS-Prefetch-Control "off" always;'
+		);
+		expect(dnsPrefetchWithCsp(loc)).toBe(false);
+		expect(dnsPrefetchWithCsp(p)).toBe(true);
+	});
+	it('a vhost that serves no page (the API: indexer.conf, relay.conf) is not given it', () => {
+		const api = PAGES.replace('    root /var/www/morphit-frontend;\n', '').replace(
+			'        try_files $uri @spa;',
+			'        proxy_pass http://127.0.0.1:8081;'
+		);
+		expect(dnsPrefetchWithCsp(api)).toBe(true);
+		expect(planVhost(api).text).not.toContain('X-DNS-Prefetch-Control');
+	});
+});
+
+describe("an operator's own page CSP that lets browsers connect elsewhere (bare metal)", () => {
+	const own = MORPHIT_CSP.replace(
+		"connect-src 'self'",
+		"connect-src 'self' https://indexer.trade.example.org"
+	);
+	it('is kept, and the heal warns naming the source and the file, on every run', async () => {
+		const b = new Box();
+		b.files.set(SITE, OLD.replace(`"${OLD_CSP}"`, `"${own}"`));
+		await b.run();
+		expect(b.files.get(SITE)).toContain(own);
+		expect(b.warned).toHaveLength(1);
+		expect(b.warned[0]).toContain('https://indexer.trade.example.org');
+		expect(b.warned[0]).toContain(SITE);
+		await b.run();
+		expect(b.warned).toHaveLength(2);
+	});
+	it("Morphit's policy, of this or an earlier release: no such warning", async () => {
+		const b = new Box();
+		await b.run();
+		expect(b.warned).toEqual([]);
 	});
 });

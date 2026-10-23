@@ -30,7 +30,11 @@ import {
 	readState,
 	isUnread,
 	mergeRemoteReadState,
-	markConversationRead
+	markConversationRead,
+	readAckTimestamp,
+	noteThreadActivity,
+	lastLocalAck,
+	markSeenLocally
 } from '$lib/chat/readState';
 import { chatFolders, isArchived, resurrectArchivedOnNewActivity } from '$lib/chat/chatFolders';
 import { hiddenAccounts } from '$lib/utils/hiddenAccounts';
@@ -120,6 +124,22 @@ export function threadIsUnread(
 	// The durable row landed and already had its say above — don't re-judge it.
 	const landed = new Date(lastMessageAt).getTime();
 	if (Number.isFinite(landed) && landed >= at) return false;
+	return pushUnread(peer, orderPermlink, at);
+}
+
+/**
+ * Is a pushed message (`at`: when its push reached THIS device, on this
+ * device's clock — or its chain time, for a replay) still unread?
+ *
+ * v1.21.14 full chat audit, W-M3: the read cursor is now a chain time (the
+ * newest message seen), never the device clock. A push is dated by the device
+ * clock, so it is judged first against when this device last acknowledged
+ * the thread — device time against device time — and the stored cursor only
+ * when this device has not acknowledged it since the page loaded.
+ */
+function pushUnread(peer: string, orderPermlink: string, at: number): boolean {
+	const acked = lastLocalAck(peer, orderPermlink);
+	if (acked !== null && acked >= at) return false;
 	// A Web Push is inbound by definition — nobody pushes you your own message.
 	return isUnread(peer, orderPermlink, new Date(at).toISOString(), false);
 }
@@ -152,6 +172,8 @@ export function noteFastChatPush(peer: string, orderPermlink: string, atMs?: num
 	// past the user's read cursor, and light a badge for something they already
 	// read. Live callers pass nothing and keep the old behaviour.
 	fastPending.set(fastKey(peer, orderPermlink), atMs ?? Date.now());
+	// A message newer than a fast copy read here is not that copy's chain twin.
+	noteThreadActivity(peer, orderPermlink, atMs);
 	fastPendingTick.update((n) => n + 1);
 	recount();
 }
@@ -298,13 +320,29 @@ function recount(): void {
 		// — it would sit lit until the TTL expired.
 		// A Web Push is inbound by definition — nobody pushes you your own message
 		// — so `false` here is a statement of fact, not a default.
-		if (!isUnread(peer, order, new Date(at).toISOString(), false)) {
+		if (!pushUnread(peer, order, at)) {
 			fastPending.delete(key);
 			continue;
 		}
 		n++;
 	}
 	setCategoryCount('chat', n);
+}
+
+/**
+ * Acknowledge ONE thread as read up to its newest message, `lastMessageAt` —
+ * the indexer's chain time for it. v1.21.14 full chat audit, W-L4: the inbox
+ * acked "Mark all read" (and Archive) with the bare device clock, so on a
+ * clock running behind the chain those threads stayed unread; on one running
+ * ahead, messages arriving in that lead were silenced. Never the device clock:
+ * with no message time (a thread only a push has announced yet) only this
+ * device's own "seen" mark is set, which clears the push badge and moves no
+ * cursor.
+ */
+export function ackThreadRead(peer: string, orderPermlink: string, lastMessageAt?: string): void {
+	const ack = lastMessageAt !== undefined ? readAckTimestamp(new Date(lastMessageAt)) : null;
+	if (ack !== null) markConversationRead(peer, orderPermlink, ack);
+	else markSeenLocally(peer, orderPermlink);
 }
 
 /** Acknowledge EVERY badge-eligible unread discussion as read, so the
@@ -314,26 +352,22 @@ function recount(): void {
  *  chat count — so it could never clear a chat badge. This gives it a real way
  *  to acknowledge chat, over the SAME (peer, order) read-state the inbox uses.
  *
- *  Clock-safe ack: markConversationRead is latest-call-wins (stores the ack
- *  verbatim), and isUnread compares against the chain's last_message_at — so a
- *  browser clock running behind chain would leave the thread lit if we acked
- *  with a bare now(). Ack no earlier than the newest message we can see. */
+ *  Clock-safe ack (ackThreadRead): each thread at its own newest message
+ *  time, never the device clock (W-M3 / W-L4). */
 export function markAllChatRead(): void {
 	const me = getUserBlurtAccount();
 	if (!me) return;
 	const meLc = me.toLowerCase();
 	const hidden = get(hiddenAccounts);
 	const blocked = get(blockedAccounts);
-	const now = new Date();
 	for (const c of convos) {
 		if (!badgeEligible(c, meLc, hidden, blocked)) continue;
 		const order = c.order?.permlink ?? '';
 		if (!isUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true)) continue;
-		const lastAt = new Date(c.last_message_at);
-		const ack =
-			Number.isFinite(lastAt.getTime()) && lastAt.getTime() > now.getTime() ? lastAt : now;
-		markConversationRead(c.peer, order, ack);
+		ackThreadRead(c.peer, order, c.last_message_at);
 	}
+	// Threads only a push has announced so far (no row yet): seen here.
+	for (const { peer, orderPermlink } of listFastPending()) ackThreadRead(peer, orderPermlink);
 	recount();
 }
 

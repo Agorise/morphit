@@ -9,6 +9,7 @@
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
+	import LoginNameField from '$components/LoginNameField.svelte';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import {
 		bootFromEnvelope,
@@ -642,6 +643,9 @@
 				}}
 			>
 				<div>
+					<!-- The account name as the form's user name (LoginNameField), so a
+					     password manager offers the password saved for THIS account. -->
+					<LoginNameField />
 					<label for="unlock-password" class="mb-1 block text-sm font-semibold">
 						{$_('login.welcome_back.password_label')}
 					</label>
@@ -677,11 +681,15 @@
 				{/if}
 
 				<div class="flex items-center justify-between gap-3">
+					<!-- type="submit": the form's onsubmit unlocks, so Enter in the password
+					     field works. Without a submit button a form submits on Enter only
+					     when it has ONE text-like field, and the account name
+					     (LoginNameField) is a second one. -->
 					<BusyButton
 						variant="primary"
+						type="submit"
 						{busy}
 						busyLabel={$_('login.welcome_back.unlocking')}
-						onclick={submitUnlock}
 					>
 						{$_('common.unlock')}
 					</BusyButton>

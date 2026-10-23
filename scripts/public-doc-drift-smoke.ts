@@ -392,7 +392,7 @@ const VALUE_PINS: ValuePin[] = [
 	{
 		label: 'chat fan-in cap (unique never-replied senders / 24h)',
 		code: {
-			file: 'apps/indexer/src/indexer/handlers/chat.ts',
+			file: 'apps/indexer/src/indexer/chatGates.ts',
 			re: /FAN_IN_UNIQUE_SENDERS_24H\s*=\s*(\d+)/
 		},
 		docs: [{ file: 'docs/OPERATIONS.md', re: /fan-in \(\u2264(\d+) unique/ }]
@@ -400,7 +400,7 @@ const VALUE_PINS: ValuePin[] = [
 	{
 		label: 'chat per-pair no-reply cap',
 		code: {
-			file: 'apps/indexer/src/indexer/handlers/chat.ts',
+			file: 'apps/indexer/src/indexer/chatGates.ts',
 			re: /PER_PAIR_NO_REPLY_CAP\s*=\s*(\d+)/
 		},
 		docs: [{ file: 'docs/OPERATIONS.md', re: /per-pair no-reply cap \(\u2264(\d+)/ }]

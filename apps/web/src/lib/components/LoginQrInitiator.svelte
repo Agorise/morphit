@@ -183,7 +183,10 @@
 				account,
 				chatPubkey,
 				pairingId: pairingId ?? `synthetic-${account}-${Math.floor(Date.now() / 1000)}`,
-				pairedAt: Math.floor(Date.now() / 1000)
+				pairedAt: Math.floor(Date.now() / 1000),
+				...(pairingState.streamTicket !== undefined
+					? { streamTicket: pairingState.streamTicket }
+					: {})
 			};
 			const booted = bootFromPairedSession(session);
 			if (booted) {

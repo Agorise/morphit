@@ -18,9 +18,12 @@
  * single indexer means the user trusts their chosen instance operator for these
  * reads (as they already do for the orderbook and balances). For the two
  * security-critical verifications this feeds — a payment landing and a chat
- * counterparty's identity — the UI additionally offers an independent
- * "Verify on a block explorer" link so a cautious user can confirm without
- * trusting the operator.
+ * counterparty's identity — there is NO independent check in the app
+ * (v1.21.14 full chat audit, doc fix; this said there was): the BLURT
+ * payment's explorer link opens this instance's own /explorer/tx page, which
+ * reads through this same relay, and the chat identity has no explorer link at
+ * all. Only the safety number, compared out of band, does not rest on the
+ * operator. (Other coins' payment links do go to third-party explorers.)
  */
 
 import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
@@ -102,6 +105,29 @@ function indexerUrl(path: string): URL {
  * the chain.
  */
 export async function chainRelay<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
+	return relayTo<T>('/v1/chain/condenser', method, params);
+}
+
+/** The agreed read may take the instance up to 45 s (two operators, on a
+ *  cold hidden pool): a visitor's background check waits for it. */
+export const AGREED_RELAY_TIMEOUT_MS = 60_000;
+
+/**
+ * The same read, answered only when two RPC operators of the instance's pool
+ * agree on it (`POST /v1/chain/agreed`). Only the release check's two reads
+ * are allowed there: @morphit's newest release entry and that release's
+ * transaction in its block.
+ */
+export async function chainAgreed<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
+	return relayTo<T>('/v1/chain/agreed', method, params, AGREED_RELAY_TIMEOUT_MS);
+}
+
+async function relayTo<T>(
+	path: string,
+	method: string,
+	params: unknown[],
+	atLeastMs = 0
+): Promise<T> {
 	const bareMethod = method.startsWith(CONDENSER_PREFIX)
 		? method.slice(CONDENSER_PREFIX.length)
 		: method;
@@ -109,13 +135,16 @@ export async function chainRelay<T = unknown>(method: string, params: unknown[] 
 	let res: Response;
 	try {
 		res = await fetchWithTimeout(
-			indexerUrl('/v1/chain/condenser'),
+			indexerUrl(path),
 			{
 				method: 'POST',
 				headers: { 'content-type': 'application/json', accept: 'application/json' },
 				body: JSON.stringify({ method: bareMethod, params })
 			},
-			chainRelayTimeoutMs(typeof window === 'undefined' ? null : window.location.hostname)
+			Math.max(
+				atLeastMs,
+				chainRelayTimeoutMs(typeof window === 'undefined' ? null : window.location.hostname)
+			)
 		);
 	} catch (e) {
 		throw new ChainRelayError(

@@ -30,7 +30,7 @@ describe('hostile indexer timestamps', () => {
 
 	it('THE BAD ONE: a far-future last_message_at cannot deafen the user', () => {
 		// Poison the cursor by "opening" a thread the indexer claims is from 2099.
-		markConversationRead(PEER, ORDER, readAckTimestamp(new Date(EVIL)));
+		markConversationRead(PEER, ORDER, readAckTimestamp(new Date(EVIL))!);
 
 		// A genuine message arrives a day later — and so the CLOCK is a day later
 		// too. That pairing matters: an earlier draft of this test left the clock at
@@ -59,21 +59,21 @@ describe('hostile indexer timestamps', () => {
 		// once the cursor is clamped to `now`, a raw `2099 > cursor` stays true
 		// forever. Opening the thread must still clear it.
 		expect(isUnread(PEER, ORDER, EVIL, false)).toBe(true); // shouts once…
-		markConversationRead(PEER, ORDER, readAckTimestamp(new Date(EVIL)));
+		markConversationRead(PEER, ORDER, readAckTimestamp(new Date(EVIL))!);
 		expect(isUnread(PEER, ORDER, EVIL, false)).toBe(false); // …and then shuts up
 	});
 
 	it('a hostile PAST timestamp cannot silence a real message either', () => {
 		// The sanitiser only bounds the future; both consumers floor at `now`, so a
 		// past lie can only fail to advance the cursor — never move it forward.
-		markConversationRead(PEER, ORDER, readAckTimestamp(new Date('1970-01-01T00:00:00.000Z')));
+		markConversationRead(PEER, ORDER, readAckTimestamp(new Date('1970-01-01T00:00:00.000Z'))!);
 		const real = new Date(NOW.getTime() + 60_000).toISOString();
 		expect(isUnread(PEER, ORDER, real, false)).toBe(true);
 	});
 
 	it('honest clock skew is still believed (30s ahead is normal, not an attack)', () => {
 		const soon = new Date(NOW.getTime() + 30_000);
-		expect(readAckTimestamp(soon).getTime()).toBe(soon.getTime());
+		expect(readAckTimestamp(soon)!.getTime()).toBe(soon.getTime());
 	});
 
 	it('sanitizeBlockTime: rejects only the implausible', () => {

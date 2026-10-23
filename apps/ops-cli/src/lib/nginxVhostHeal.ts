@@ -22,6 +22,13 @@
  *    'unsafe-eval' 'wasm-unsafe-eval'`) loses inline script and eval;
  *  - a location that sets its own add_header lines gets the enclosing
  *    security headers it would otherwise lose (nginx inherits none then);
+ *  - in a vhost that serves pages (a `root` or `try_files`), every server and
+ *    location that sends a Content-Security-Policy also sends
+ *    `X-DNS-Prefetch-Control: off` (a browser may look up the name of a link
+ *    on the page before a click, mostly on plain-http .onion/.i2p pages, and
+ *    the CSP does not cover it); an operator's own value is kept;
+ *  - a page CSP of the operator's own that lets browsers connect anywhere but
+ *    this site is kept and reported (a warning naming the extra sources);
  *  - the IPFS gateway location asks for 127.0.0.1, not the visitor's Host.
  *  - the web vhost's `limit_conn web_conn 40;` (as shipped) becomes 256: it
  *    counts every HTTP/2 download, and a first visit asks for every file.
@@ -49,11 +56,16 @@ import { join } from 'node:path';
 import type { HealCtx, HealResult } from './healTypes.ts';
 import { keepOwnerAndMode } from './keepOwner.ts';
 import {
+	DNS_PREFETCH_HEADER,
+	DNS_PREFETCH_VALUE,
 	MORPHIT_CSP,
 	VISITOR_HEADERS_CLEARED,
+	cspConnectsSelfOnly,
+	cspForeignConnectSources,
 	cspScriptSrcStrict,
 	frontendHidesInternals,
-	isMorphitCsp
+	isMorphitCsp,
+	ownCspConnectsWarning
 } from './proxyConfigHeal.ts';
 
 const HEADER_NAMES: Record<string, string> = {
@@ -169,6 +181,14 @@ function scan(text: string): Blk[] {
 }
 
 const has = (b: Blk, name: string): boolean => b.dirs.some((d) => d.name === name);
+const DNS = DNS_PREFETCH_HEADER.toLowerCase();
+const DNS_LINE = `add_header ${DNS_PREFETCH_HEADER} "${DNS_PREFETCH_VALUE}" always;`;
+const DNS_CHANGE = `${DNS_PREFETCH_HEADER}: ${DNS_PREFETCH_VALUE} sent with the pages (no DNS lookup of a link on them before a click)`;
+/** Does this server serve files (pages), not only proxy an API? */
+const servesPages = (s: Blk): boolean => {
+	const walk = (b: Blk): boolean => has(b, 'root') || has(b, 'try_files') || b.kids.some(walk);
+	return walk(s);
+};
 const servers = (list: readonly Blk[]): Blk[] =>
 	list.flatMap((b) => (b.name === 'server' ? [b] : servers(b.kids)));
 const indentOf = (text: string, at: number): string => {
@@ -245,40 +265,59 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 			);
 		}
 		// A location with its own add_header lines loses every inherited one
-		// (nginx's rule): repeat the enclosing security headers it lacks.
+		// (nginx's rule): repeat the enclosing security headers it lacks. In a
+		// vhost that serves pages, wherever the CSP is sent X-DNS-Prefetch-Control
+		// is too (an operator's own value, inherited or set, is the one kept).
 		const SEC =
-			/^(strict-transport-security|x-content-type-options|referrer-policy|x-frame-options|content-security-policy|permissions-policy)$/i;
-		const addHeaders = (b: Blk): Dir[] => b.dirs.filter((d) => d.name === 'add_header');
-		const repeat = (b: Blk, eff: Dir[]): void => {
+			/^(strict-transport-security|x-content-type-options|referrer-policy|x-frame-options|content-security-policy|permissions-policy|x-dns-prefetch-control)$/i;
+		interface Hdr {
+			readonly name: string;
+			readonly line: string;
+		}
+		const pages = servesPages(s);
+		const hdrs = (b: Blk): Hdr[] =>
+			b.dirs
+				.filter((d) => d.name === 'add_header')
+				.map((d) => ({ name: (d.args[0] ?? '').toLowerCase(), line: text.slice(d.start, d.end) }));
+		const sHdrs = hdrs(s);
+		if (
+			pages &&
+			sHdrs.some((h) => h.name === 'content-security-policy') &&
+			!sHdrs.some((h) => h.name === DNS)
+		) {
+			top.push(DNS_LINE);
+			sHdrs.push({ name: DNS, line: DNS_LINE });
+			changes.add(DNS_CHANGE);
+		}
+		const repeat = (b: Blk, eff: readonly Hdr[]): void => {
 			for (const k of b.kids) {
-				const own = addHeaders(k);
+				const own = hdrs(k);
+				const ownNames = new Set(own.map((h) => h.name));
+				const added: Hdr[] = [];
 				if (k.name === 'location' && own.length > 0) {
-					const ownNames = new Set(own.map((d) => (d.args[0] ?? '').toLowerCase()));
-					const missing = eff.filter(
-						(d) => SEC.test(d.args[0] ?? '') && !ownNames.has((d.args[0] ?? '').toLowerCase())
-					);
-					if (missing.length > 0) {
+					const missing = eff.filter((h) => SEC.test(h.name) && !ownNames.has(h.name));
+					added.push(...missing);
+					if (missing.some((h) => h.name !== DNS))
+						changes.add('security headers repeated in locations that set their own headers');
+					const csp = own.concat(added).some((h) => h.name === 'content-security-policy');
+					if (pages && csp && !own.concat(added).some((h) => h.name === DNS))
+						added.push({ name: DNS, line: DNS_LINE });
+					if (added.some((h) => h.name === DNS)) changes.add(DNS_CHANGE);
+					if (added.length > 0)
 						addTo(
 							k,
-							missing.map((d) => text.slice(d.start, d.end))
+							added.map((h) => h.line)
 						);
-						changes.add('security headers repeated in locations that set their own headers');
-					}
 				}
 				repeat(
 					k,
 					own.length > 0
-						? [
-								...own,
-								...eff.filter(
-									(d) => !own.some((o) => o.args[0]?.toLowerCase() === d.args[0]?.toLowerCase())
-								)
-							]
+						? [...own, ...added, ...eff.filter((h) => !ownNames.has(h.name) && !added.includes(h))]
 						: eff
 				);
 			}
 		};
-		repeat(s, addHeaders(s));
+		repeat(s, sHdrs);
 		// The IPFS gateway is asked for itself, never for the visitor's Host
 		// (a name it would otherwise try to resolve as DNSLink).
 		const ipfs = (b: Blk): void => {
@@ -361,7 +400,8 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 	let csp = false;
 	for (let i = 0; i < lines.length; i++) {
 		if (/^\s*#/.test(lines[i]!)) continue;
-		// A page CSP an earlier release shipped (clearnet node list): today's.
+		// A page CSP an earlier release shipped (a node list for the browser,
+		// inline script): today's, which lets the browser reach this site only.
 		const m = /^(\s*add_header\s+Content-Security-Policy\s+")([^"]*)(".*)$/i.exec(lines[i]!);
 		if (m && m[2] !== MORPHIT_CSP && isMorphitCsp(m[2]!)) {
 			lines[i] = `${m[1]}${MORPHIT_CSP}${m[3]}`;
@@ -372,7 +412,10 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 			csp = true;
 		}
 	}
-	if (csp) changes.add('page CSP without inline script or eval');
+	if (csp)
+		changes.add(
+			'page CSP of this release (browsers connect to this site only; no inline script or eval)'
+		);
 	// `http2 on;` needs nginx 1.25.1; Ubuntu 24.04 ships 1.24, which refuses
 	// the whole config. `listen … ssl http2` works on both.
 	if (lines.some((l) => /^\s*http2\s+on\s*;/.test(l))) {
@@ -395,17 +438,55 @@ export function dumpSections(dump: string, files: readonly string[]): string {
 	return out;
 }
 
+/** In a vhost's text: does every server that serves pages send
+ *  X-DNS-Prefetch-Control (any value) wherever it sends a CSP, by nginx's
+ *  inheritance (a block with add_header lines of its own inherits none)? PURE. */
+export function dnsPrefetchWithCsp(text: string): boolean {
+	let ok = true;
+	const walk = (b: Blk, inherited: ReadonlySet<string>): void => {
+		const own = b.dirs
+			.filter((d) => d.name === 'add_header')
+			.map((d) => (d.args[0] ?? '').toLowerCase());
+		const eff = own.length > 0 ? new Set(own) : inherited;
+		if (eff.has('content-security-policy') && !eff.has(DNS)) ok = false;
+		for (const k of b.kids) walk(k, eff);
+	};
+	for (const s of servers(scan(text))) if (servesPages(s)) walk(s, new Set());
+	return ok;
+}
+
+/** The sources other than this site that the operator's own page CSPs in a
+ *  vhost's text let browsers connect to (none for Morphit's policies). PURE. */
+export function vhostForeignConnectSources(text: string): string[] {
+	const out = new Set<string>();
+	for (const line of text.split('\n')) {
+		if (/^\s*#/.test(line)) continue;
+		const m = /^\s*add_header\s+Content-Security-Policy\s+"([^"]*)"/i.exec(line);
+		if (m) for (const s of cspForeignConnectSources(m[1]!)) out.add(s);
+	}
+	return [...out];
+}
+
 /** In loaded config text: every server hides its version, every proxied
- *  location clears the headers, and every page CSP is strict. PURE. */
+ *  location clears the headers, every page CSP is strict, and pages send
+ *  X-DNS-Prefetch-Control with their CSP. PURE. */
 export function vhostLoadedOk(section: string): { ok: boolean; why: string[] } {
 	const h = frontendHidesInternals(section);
-	const loose = [...section.matchAll(/add_header\s+Content-Security-Policy\s+"([^"]*)"/gi)]
-		.map((m) => m[1]!)
-		.filter((v) => !cspScriptSrcStrict(v));
+	const pageCsps = [...section.matchAll(/add_header\s+Content-Security-Policy\s+"([^"]*)"/gi)].map(
+		(m) => m[1]!
+	);
+	const loose = pageCsps.filter((v) => !cspScriptSrcStrict(v));
+	const reaching = pageCsps.filter((v) => !cspConnectsSelfOnly(v));
 	const why = [
 		h.tokensOff ? '' : 'nginx version still shown',
 		h.uncleared.length > 0 ? `internal headers passed on at ${h.uncleared.join(', ')}` : '',
 		loose.length > 0 ? 'a page CSP still allows inline script or eval' : '',
+		reaching.length > 0
+			? "a page CSP still lets visitors' browsers connect to Blurt RPC nodes"
+			: '',
+		dnsPrefetchWithCsp(section)
+			? ''
+			: 'a page is still sent without X-DNS-Prefetch-Control (a browser may look up the name of a link on it before a click)',
 		/^\s*limit_conn\s+web_conn\s+40\s*;/m.test(section)
 			? 'a visitor may still download only 40 files at once'
 			: '',
@@ -535,6 +616,20 @@ export async function healNginxVhosts(
 		}
 		strategy = 'restarted';
 		seen = observe();
+	}
+	// An operator's own page CSP is kept; one that lets browsers connect
+	// anywhere but this site is said, on every run.
+	const finalText = new Map(plans.map((p) => [p.path, p.plan.text] as const));
+	for (const v of ours) {
+		const extra = vhostForeignConnectSources(finalText.get(v.path) ?? v.text);
+		if (extra.length > 0)
+			ctx.warn(
+				ownCspConnectsWarning(
+					`in ${v.path}`,
+					extra,
+					"use the add_header Content-Security-Policy line of this release's ops/nginx/web.conf there, then on this server run: sudo nginx -t && sudo systemctl reload nginx"
+				)
+			);
 	}
 	const old = rt.oldClientLines();
 	const oldNote =

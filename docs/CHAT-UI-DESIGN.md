@@ -15,10 +15,19 @@ but have all closed.
 > **Cipher note.** Earlier drafts of this doc referenced a
 > heavier forward-secrecy protocol — that was the ADR-0014
 > plan.  ADR-0015 replaced it with simpler per-message ECIES
-> (X25519 + ChaCha20-Poly1305).  Anywhere this doc still
-> describes session/envelope shape, the actual on-chain
-> envelope is `{ ciphertext, header: { ephemeralPub, nonce } }`
-> per ADR-0015.
+> (X25519 + ChaCha20-Poly1305); docs/CHAT-CRYPTO.md describes the
+> envelopes (since v1.21.14 every message is sent in v3, to posting keys;
+> the older v2, chat keys, is only read). On chain a
+> message is `{ recipient, ciphertext, header, order_permlink? }`, and
+> the header's fields are snake_case: `v`, `client_tag`,
+> `ephemeral_pub`, `nonce`, the optional self-copy `self_ciphertext` +
+> `self_nonce`, for v3 `sk`, `rk`, `wk`, and on a retry `prior_tags`
+> (`wirePayload` in `chatService.ts`).
+>
+> **v1.21.14 note.** This doc was stale in several places (polling
+> cadence, virtualization, draft key, read receipts, inbox tabs,
+> multi-device, first-use publish). The sections below now describe the
+> code; where the original plan differed, it says so.
 
 ## The one constraint that shapes every decision
 
@@ -95,28 +104,56 @@ up to the size cap.
 
 Shared-types change required: **none.** `header: unknown` stays
 unknown; the client module reads `header.client_tag` at its own risk
-and tolerates its absence gracefully (messages from older clients
-wouldn't have one; they're matched against trx_id as a fallback).
+and tolerates its absence gracefully. There is no trx_id fallback
+(the original plan); what the code does:
 
-## Poll cadence
+- **Our own messages** reconcile by tag — the current one, or one a
+  retry replaced (`priorTags`) — and only against our own records.
+- **Everyone's copies** are matched by SENDER AND ENCRYPTED BYTES
+  (ciphertext, ephemeral key, nonce — `wireOf`), whatever their tag: the
+  fast copy and the durable one of a message are the same bytes. The tag
+  is outside the encryption, so it never decides alone that two records
+  are one message, nor that a re-served old message is a new one
+  (v1.21.14, W-H3). Durable copies are also deduplicated by id.
+- A retry from the peer is folded into the attempt it resends only when
+  its declared `prior_tags` name it AND the decrypted text is identical.
 
-Messages are delivered by polling `/v1/chat/:a/:b` — there's no
-websocket or push channel.
+## Delivery: live streams, a fallback poll
 
-Since blocks are 3s, polling faster than that is pure waste. Cadence:
+(The original plan was polling only, every 3 s / 15 s with a delta
+cursor. The code differs.)
 
-- **Active chat view, tab in foreground**: poll every **3s**,
-  aligned to block-timestamp boundaries with ±500ms jitter to
-  spread load across users
-- **Active chat view, tab in background**: poll every **15s**
-  (document.visibilityState === 'hidden' triggers the backoff)
-- **Inbox view (not in a specific chat)**: poll the per-
-  conversation-count endpoint every **10s**; this is lighter
-  than per-conversation polling
-
-Each poll uses the **latest `created_at` cursor** we've seen, so
-we only fetch the delta since last poll. A fresh page load does
-one full fetch of the most recent 50 messages to populate history.
+- **Open conversation**: a live stream, `/v1/chat/:a/:b/stream` (one
+  `snapshot` event on connect, then `message_appended`, fast copies
+  included), plus a **fallback poll** of the newest 50 messages every
+  4–6 s (4 s + up to 2 s jitter), whether the tab is visible or not. The
+  poll sends no cursor: the `latestSeenAt` watermark in `chatService.ts`
+  is kept but unused. A poll whose answer changes nothing redraws
+  nothing (v1.21.14, W-L3).
+- **Everywhere, signed in**: ONE account-wide stream,
+  `/v1/chat-activity/:me/stream`, whose pings name the thread (peer,
+  order, inbound) — the inbox and badges update from it, with a 5 s
+  inbox poll as the backstop. One per BROWSER and account, not per tab
+  (v1.21.14, C-L5): one tab holds it, elected over the BroadcastChannel
+  `morphit-chat-activity-v1:<account>` (heartbeat every second, takeover
+  after 2.75 s of silence or at once on the holder's goodbye; no Web
+  Locks, which a frozen tab holds forever and plain-http pages lack),
+  and relays its events to the others; a new holder's fresh connection
+  gets the indexer's replay and `ready`, relayed to every tab. Each
+  takeover raises a term, so a holder frozen meanwhile yields when it
+  resumes; one whose stream closes three times without `ready` lets
+  another tab try. Without BroadcastChannel each tab keeps its own
+  stream.
+- **Cross-page trade updates** (`tradeEventListener.ts`): no stream of
+  their own (v1.21.14, W-H2 — it used to hold one open per recent peer,
+  which on a plain-HTTP Tor/I2P instance used up the six connections a
+  browser allows per site). On an activity ping the listener reads that
+  peer's conversation once (a chat stream closed at its snapshot), one
+  peer at a time. So a tab holds at most three long-lived connections
+  to its site, and the browser one activity stream for all of them.
+- A stream closed by an HTTP error (a 502, a 429) is reopened after a
+  pause that doubles from 2 s to 60 s (v1.21.14, W-L2); EventSource
+  itself only retries dropped connections.
 
 **Older history (v1.21.6).** The live paths (stream snapshot, fallback
 poll) only ever carry the pair's newest 50 messages. Scrolling up past
@@ -130,12 +167,9 @@ live path delivers a message, so an old claim can't overwrite a newer
 one. See `loadOlder` / `loadWholeConversation` in
 `apps/web/src/lib/chat/chatService.ts`.
 
-**Block-align trick**: a Blurt block lands roughly on the integer
-3-second second. Aligning our polls to `(Date.now() % 3000)`
-boundaries with jitter maximizes the chance a freshly-mined
-block's messages are in the response. Less than ideal worst case
-is we miss a block and catch it on the next poll (≤3s extra
-latency). Acceptable.
+(The planned "block-align trick" — polls aligned to 3-second block
+boundaries — was never built; the jittered fallback poll above is all
+there is.)
 
 ## Per-message crypto is CPU-bound
 
@@ -160,36 +194,30 @@ freeze the scroll.
   send path (not parallel — we need the ciphertext before
   broadcast). But it's one op, ~50ms worst case, invisible.
 
-## Virtualization
+## Windowing (not virtualization)
 
-A conversation of 500 messages with identicons and timestamps is
-~15MB of DOM. Mobile Safari chokes at around 2000 nodes in a
-scrollable container.
-
-Threshold: **virtualize when `items.length > 50`**. Below that,
-static `{#each}` is fine and avoids the flicker of virtualizer
-warm-up.
-
-Above 50, use a windowed list: render 20 messages above and below
-the viewport; recycle as the user scrolls.
-
-Any library? No need to bundle one — the pattern is small enough
-to write inline:
-- Track `scrollTop`, `viewportHeight`
-- Maintain an estimated message height (updates as real messages
-  render)
-- Render only the window; spacers above/below with `height`
-  equal to `(first-visible-index) * avgHeight`
+The planned virtualized list (recycled rows, spacers) does not exist.
+What `ConversationView.svelte` does: render only the newest 30
+messages when a thread opens, reveal 40 older ones each time the
+reader scrolls near the top (keeping the reader on the message they
+were on), and, past everything loaded, read older pages from the
+indexer (see "Older history" above). Rendered messages are never
+recycled.
 
 ## Draft persistence
 
 If the user closes the tab mid-message, the draft should survive.
 
-**Keyed by conversation**: `localStorage['morphit.chat.draft.<peer-account>']`.
+**Keyed by thread** (peer + order; v1.21.14, W-L7 — it was the peer
+alone, so a draft about one order reappeared in another thread with the
+same person): `localStorage['morphit.draft.chat.<peer>']` for the thread
+that cites no order, `localStorage['morphit.draft.chat.<peer>#<order>']`
+for an order's thread.
 
 **Lifecycle**:
 - Typing anywhere in a compose box → debounced 500ms save
-- Successful send → wipe the key
+- Send → wipe the key at once (the words are in the bubble from then
+  on, with Retry if the send fails)
 - Explicit lock (user taps "Lock now") → wipe all drafts along
   with the identity (same as the existing Lock Session behavior)
 - Auto-lock → **keep** drafts. Auto-lock is an idle timeout; the
@@ -207,7 +235,11 @@ the tradeoff for convenience wins.
 - **Enter**: send
 - **Shift+Enter**: newline
 - **Tab**: default focus behavior (escape the textarea)
-- After send: the composer retains focus but clears its value
+- After send: the composer clears its value and stays usable AT ONCE —
+  it does not wait for the node (v1.21.14, W-M6: it used to stay
+  disabled, the text still in it, through the chain-head read and the
+  broadcast, seconds per message on Tor/I2P). The send continues in its
+  bubble: "sending…", then delivered, or failed with Retry.
 - Sending disabled when the text is empty OR trimmed-empty
 - Sending disabled while the identity is locked (show unlock hint
   where the Send button would be)
@@ -216,9 +248,12 @@ the tradeoff for convenience wins.
   the feedback forms. `redactPrivateKeys()` runs on the plaintext
   before it goes into the ECIES encryption step. The
   ciphertext that gets broadcast contains only the redacted form.
-- 256-codepoint plaintext cap (matches the indexer's
+- 256-codepoint plaintext cap (fits the indexer's
   `MAX_CIPHERTEXT_CHARS` budget after AEAD tag + base64
-  overhead). Live counter next to the input.
+  overhead). Live counter next to the input. Structured messages
+  (address, mailing address, shipment) are checked against the real
+  budget by their forms, and every send by `chatService` before
+  anything is signed (v1.21.14, W-M5).
 
 ## Mobile viewport
 
@@ -247,8 +282,13 @@ CSS `100vh` doesn't.
 **Off-chain** (local state only, never sent anywhere):
 - Draft text
 - Typing indicator ("Alice is typing…")
-- Read receipts (contentious — skip for now; a "read" event
-  taking 3+ seconds to deliver is worse than no read receipts)
+- Read state on this device (`readState.ts`): the newest message
+  seen, as a chain time — never the device clock (v1.21.14, W-M3).
+
+**Also on-chain** (contrary to the original "skip read receipts" plan):
+a `morphit_chat_read_v1` read-ack, broadcast once per visit to a
+thread, carrying the newest message shown (cross-device read state; not
+shown to the peer).
 - Presence (online/offline)
 
 Typing indicators and presence could theoretically be done via
@@ -269,8 +309,9 @@ features inherently laggy on-chain anyway.
   controller. Owns the optimistic-render flow, polling cadence,
   client_tag reconciliation, decrypt-on-read pipeline, retry
   ladder. Wired to the real crypto.
-- `apps/web/src/lib/chat/ensureChatIdentity.ts` — one-time
-  publish-on-first-need flow for the chat identity key.
+- (`ensureChatIdentity.ts`, which published the chat key, was removed in
+  v1.21.14: chat relies on the posting key only and nothing publishes a
+  chat identity.)
 - `apps/web/src/lib/chat/pubPin.ts` — TOFU pinning of the
   peer's chat pubkey + chain re-verification on mismatch.
 - `apps/web/src/lib/chat/blocks.ts` — chain-block management.
@@ -282,8 +323,8 @@ features inherently laggy on-chain anyway.
   per-conversation chat UI. Implements the scroll-to-bottom UX
   in this doc, the block/unblock affordance, and the stranger-
   fee admission flow.
-- `apps/web/src/routes/[lang]/chat/+page.svelte` — inbox with tabbed
-  Messages / Requests partitioning.
+- `apps/web/src/routes/[lang]/chat/+page.svelte` — inbox, one card
+  per thread (peer + order), with Inbox / Starred / Archived tabs.
 - `apps/web/src/routes/[lang]/chat/[peer=account]/+page.svelte` —
   per-conversation route.
 - `apps/indexer/src/api/chat.ts` — `/v1/chat/:a/:b` endpoint
@@ -301,8 +342,8 @@ features inherently laggy on-chain anyway.
 
 ## Routes (implemented)
 
-- `/chat` — inbox: list of conversations with Messages /
-  Requests tabs, unread badge, hidden + blocked filtering.
+- `/chat` — inbox: one card per thread, Inbox / Starred / Archived
+  tabs, unread badge, hidden + blocked filtering.
 - `/chat/[peer]` — conversation view.
 
 ## Entry points still to wire
@@ -316,13 +357,14 @@ features inherently laggy on-chain anyway.
 
 ## Open items deferred
 
-1. **Identity publication**: when and how the user publishes their
-   chat identity key via `morphit_chat_identity_v1`. Implemented
-   as auto-publish on first compose attempt, idempotent (skipped
-   if a key is already on chain). See `ensureChatIdentity.ts`.
-2. **Multi-device**: out of scope for v1. A single device per
-   account. Multi-device requires key-server or linked-device
-   flows — defer to Phase 6.
+1. **Identity publication**: none. Every message goes to the
+   recipient's posting keys (v1.21.14); nothing is published to become
+   reachable, or re-published.
+2. **Multi-device**: supported (docs/CHAT-CRYPTO.md). Every device
+   signed in with a posting key of the account opens posting-key (v3)
+   messages and its own self-copies; older chat-key (v2) messages open
+   on the devices whose posting key derives the chat key they were
+   written to.
 3. **Message deletion**: chain entries are permanent. A client-
    side "hide" is possible (local blocklist of trx_ids) but
    confusing UX — probably skip for v1.

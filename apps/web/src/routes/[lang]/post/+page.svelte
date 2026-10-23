@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode , SUPPORTED_LOCALES} from '$i18n/locales';
 	/**
@@ -4120,27 +4121,31 @@
 			<p class="mb-4 text-ink-600 dark:text-ink-300">
 				{$_('post_order.locked.fee_body')}
 			</p>
-			<label class="block">
-				<span class="mb-1 block text-sm font-semibold">
-					{$_('post_order.locked.password_label', { values: { account: blurtAccount ?? '' } })}
-				</span>
-				<FocusedField focused={password.length === 0} valid={password.length >= 8}>
-					<input
-						use:focusOnMount
-						type="password"
-						maxlength="64"
-						bind:value={password}
-						autocomplete="current-password"
-						onkeydown={(e) => {
-							if (e.key === 'Enter' && password.length >= 8) submitBroadcast();
-						}}
-						class="w-full rounded-2xl bg-transparent px-4 py-3 text-base outline-none dark:text-ink-50"
-					/>
-				</FocusedField>
-				{#if passwordError}
-					<StatusLine kind="error">{passwordError}</StatusLine>
-				{/if}
-			</label>
+			<!-- Its own form (PasswordScope): outside one, a password manager writes
+			     the saved user name into another field on the page. -->
+			<PasswordScope>
+				<label class="block">
+					<span class="mb-1 block text-sm font-semibold">
+						{$_('post_order.locked.password_label', { values: { account: blurtAccount ?? '' } })}
+					</span>
+					<FocusedField focused={password.length === 0} valid={password.length >= 8}>
+						<input
+							use:focusOnMount
+							type="password"
+							maxlength="64"
+							bind:value={password}
+							autocomplete="current-password"
+							onkeydown={(e) => {
+								if (e.key === 'Enter' && password.length >= 8) submitBroadcast();
+							}}
+							class="w-full rounded-2xl bg-transparent px-4 py-3 text-base outline-none dark:text-ink-50"
+						/>
+					</FocusedField>
+					{#if passwordError}
+						<StatusLine kind="error">{passwordError}</StatusLine>
+					{/if}
+				</label>
+			</PasswordScope>
 			<div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
 				<BusyButton
 					variant="link"

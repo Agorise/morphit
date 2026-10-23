@@ -418,7 +418,6 @@ SMOKES=(
 	"apps/web:color-contrast-smoke"
 	"apps/web:i18n-translation-completeness-smoke"
 	"apps/web:sally-walkthrough-smoke"
-	"apps/web:privacy-first-rpc-ordering-smoke"
 	"apps/web:persona-walkthrough-smoke"
 	"apps/web:mediakit-freshness-smoke"
 	"apps/web:wiring-completeness-smoke"
@@ -518,6 +517,7 @@ SMOKES=(
 	"apps/web:coin-carousel-invariants-smoke"
 	"apps/web:svelte-component-import-coverage-smoke"
 	"apps/web:text-input-maxlength-coverage-smoke"
+	"apps/web:password-field-scope-smoke"
 	"apps/web:privacy-asset-sitemap-parity-smoke"
 	"apps/web:faq-jsonld-no-markdown-smoke"
 	"apps/web:faq-inline-render-smoke"
@@ -717,7 +717,6 @@ SMOKES=(
 	"apps/web:focus-opens-scrim-smoke"
 	"apps/web:focus-scrim-guard-execution-smoke"
 	"apps/web:compare-truncation-smoke"
-	"apps/web:rpc-pool-mixed-content-smoke"
 	"apps/web:hidden-chat-verify-budget-smoke"
 	"apps/web:hidden-transport-budget-coverage-smoke"
 	".:ipns-release-wiring-smoke"
@@ -763,7 +762,6 @@ SMOKES=(
 	"apps/relay:drainer-no-double-pay-smoke"
 	"apps/indexer:broadcast-duplicate-landed-smoke"
 	"apps/indexer:hidden-rpc-https-config-smoke"
-	"apps/web:hidden-rpc-browser-tier-canon-smoke"
 	"apps/web:i18n-never-translate-smoke"
 	"packages/hidden-transport:name-mimicry-smoke"
 	"packages/hidden-transport:https-hidden-refused-smoke"
@@ -824,6 +822,7 @@ SMOKES=(
 	".:gitignore-coverage-smoke"
 	".:file-mode-consistency-smoke"
 	".:release-packers-exclude-private-smoke"
+	".:ops-harness-anchors-smoke"
 	"apps/ops-cli:bunkerweb-no-phone-home-smoke"
 	"apps/ops-cli:kubo-no-phone-home-smoke"
 	"apps/ops-cli:tor-plain-probe-execution-smoke"
@@ -941,6 +940,9 @@ for entry in "${SMOKES[@]}"; do
 			echo "  ✗ $name (exit $exit_code)"
 		fi
 		tail -30 "$SMOKE_OUT" | sed 's/^/      /'
+		# The whole output, kept (as run-smokes-chunk.sh does).
+		keep="${MORPHIT_SMOKE_FAIL_DIR:-${TMPDIR:-/tmp}}/morphit-smoke-fail-$name.log"
+		if cp "$SMOKE_OUT" "$keep" 2>/dev/null; then echo "      full output: $keep"; fi
 	fi
 done
 

@@ -61,6 +61,15 @@ function scopedAccountKey(sessionKeyId: string): string {
 	return `morphit.blurtAccount.${sessionKeyId.slice(0, 16)}`;
 }
 
+/** Whether `store` holds an account name scoped to some key: then the
+ *  origin-wide slot was written beside it, not by a build from before. */
+function hasScopedName(store: Storage): boolean {
+	for (let i = 0; i < store.length; i++) {
+		if (store.key(i)?.startsWith('morphit.blurtAccount.')) return true;
+	}
+	return false;
+}
+
 /** Id of the posting key this session holds, or null when locked. */
 function currentSessionKeyId(): string | null {
 	return get(sessionKeyIdStore);
@@ -120,9 +129,15 @@ function readAccountFromStorage(): string | null {
 		}
 		if (pub) {
 			// One-time migration: an origin-wide name written before names were
-			// scoped belongs to whichever key is unlocked when it is first read.
+			// scoped belongs to whichever key is unlocked when it is first read —
+			// but only on a device that has never stored a scoped name. Since
+			// then the origin-wide slot is just the LAST account signed in here,
+			// and a second account signing in took it as its own until its sign-in
+			// set its name: its chat stream, orders and settings named the other
+			// account meanwhile, and the wrong name stayed on disk if the sign-in
+			// stopped there (v1.21.14 final review).
 			const legacy = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
-			if (legacy) {
+			if (legacy && !hasScopedName(window.localStorage)) {
 				window.localStorage.setItem(scopedAccountKey(pub), legacy);
 				return legacy;
 			}

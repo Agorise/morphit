@@ -54,6 +54,9 @@ export interface ChatEvent {
 	readonly hi: string;
 	/** chat_messages.id of the newly-inserted row. */
 	readonly messageId: number;
+	/** Who sent it (v1.21.14 full chat audit, S-L5). Absent from an emitter
+	 *  that does not know, in which case no direction is claimed. */
+	readonly sender?: string;
 }
 
 export type ChatListener = (ev: ChatEvent) => void;
@@ -62,7 +65,10 @@ export type ChatListener = (ev: ChatEvent) => void;
  * head-block fast-path event.
  *
  * Emitted by the headTailer (ADR-0048) for a chat message seen in
- * a chain HEAD block, BEFORE it is irreversible and therefore before
+ * a chain HEAD block, and by chatFastFederation.deliverVerifiedPush for a
+ * verified federation push or a local delivery (ADR-0052), and again by
+ * parkedFirstContacts when a paid first contact's fee is recognised — in every case
+ * BEFORE the message is irreversible and therefore before
  * the durable poller has inserted it into `chat_messages`. Because
  * there is no DB row yet, this event carries the FULL message payload
  * (unlike the durable `ChatEvent`, which carries only a row id the SSE
@@ -73,7 +79,9 @@ export type ChatListener = (ev: ChatEvent) => void;
  * twin by the on-chain `clientTag` (present in the header of every
  * Morphit-composed message), so the two never render twice.
  *
- * INVARIANT: nothing on this path touches the database. A reorg that
+ * INVARIANT: nothing on this path writes message state. (The routes that
+ * emit here also enqueue notifications — `push_pending`,
+ * `offline_notify_pending` — and nothing else.) A reorg that
  * orphans a message shown via the fast path is an accepted trade-off —
  * chat is low-stakes and the message simply never reaches durable
  * history. Orders, fees, and transfers are NEVER carried on this path.
@@ -102,7 +110,11 @@ export interface ChatFastEvent {
 	/** The message header object (ephemeral_pub, nonce, client_tag),
 	 *  opaque to the indexer — forwarded verbatim to the client. */
 	readonly header: unknown;
-	/** Block timestamp of the head block the op appeared in. */
+	/** When the message was sent, for ordering a transcript. From the head
+	 *  tailer: the timestamp of the head block the op appeared in. From a
+	 *  federation push or a local delivery: the sender's time read off the
+	 *  signed expiry (chatFastFederation.sentAtFromExpiry), never later than
+	 *  the receiving server's clock. */
 	readonly createdAt: Date;
 	/** The on-chain `client_tag` from the header, or null if absent —
 	 *  the key the client uses to dedupe this provisional message

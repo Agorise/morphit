@@ -3,11 +3,10 @@
  * Kept SEPARATE from settledElsewhere.ts so the announcer's pure
  * logic stays unit-testable without dragging in the chat/crypto/indexer stack.
  *
- * The chat primitives (fetchPeerChatPub, encrypt, broadcast, identity, client-
- * tag) don't depend on the controller's bound `peer` — they all take the
- * recipient as an argument — so we borrow them from a single `runtimeDeps`
- * rather than re-implementing the (security-sensitive) TOFU-pin and envelope
- * logic here.
+ * The chat primitives (posting keys, envelope, broadcast, client-tag) don't
+ * depend on the controller's bound `peer` — they all take the recipient as an
+ * argument — so we borrow them from a single `runtimeDeps` rather than
+ * re-implementing the (security-sensitive) pin and envelope logic here.
  */
 import type { LiveIdentity } from '$crypto/keygen';
 import { runtimeDeps } from '$lib/chat/chatService';
@@ -26,15 +25,11 @@ export function runtimeSettledElsewhereDeps(
 			const r = await getOrderCounterparties(owner, orderPermlink, { limit: 500 });
 			return r.ok ? r.data.items.map((i) => i.peer) : [];
 		},
-		fetchPeerChatPub: base.fetchPeerChatPub,
-		deriveMyChatIdentity: base.deriveMyChatIdentity,
-		encrypt: base.encrypt,
 		broadcast: base.broadcast,
 		generateClientTag: base.generateClientTag,
 		fetchPostingPubs: base.fetchPostingPubs,
-		myChatKeyStatus: base.myChatKeyStatus,
 		pinPostingKey: base.pinPostingKey,
-		pinnedPeerPubs: base.pinnedPeerPubs,
-		encryptPosting: base.encryptPosting
+		encryptPosting: base.encryptPosting,
+		...(base.chainNowSeconds !== undefined ? { chainNowSeconds: base.chainNowSeconds } : {})
 	};
 }

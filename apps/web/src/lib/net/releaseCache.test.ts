@@ -1,7 +1,7 @@
 /**
  * The release check's outcome — a verified release or a failure — is
- * remembered in the browser for 24 h, so a browser contacts the Blurt nodes
- * (the one browser→third-party request Morphit makes) at most once a day.
+ * remembered in the browser for 24 h (a check that got no answer, 12 h), so
+ * a browser asks its instance at most once a day.
  */
 import { describe, expect, it } from 'vitest';
 import { RUNNING_VERSION, olderThan } from './releaseTestVersions';

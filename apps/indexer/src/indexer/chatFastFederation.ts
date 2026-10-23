@@ -43,9 +43,12 @@
  *     chat, not orders, not receipts, not keys. It emits to
  *     `chatEventBus.emitFast`, exactly as the head tailer does, and the durable
  *     poller remains the sole writer of history once the block is irreversible.
- *     The ONE write, stated (v1.18.0 review, R4): when the notify gate passes
+ *     The writes, stated (v1.18.0 review, R4): when the notify gate passes
  *     and the recipient has a push subscription, one `push_pending` row, keyed
- *     on the transaction id under a unique index. The worst a bad push can achieve is an SSE event
+ *     on the transaction id under a unique index; and through the same
+ *     enqueue, for a recipient with a confirmed offline-notice address, one
+ *     `offline_notify_pending` row per thread (v1.21.9). Notification queues,
+ *     not message state. The worst a bad push can achieve is an SSE event
  *     that no durable row ever backs — which the client already handles,
  *     because that is the head tailer's existing contract.
  *
@@ -101,10 +104,11 @@ import {
 	CHAT_OP_ID,
 	type LocatedChatOp
 } from '$indexer/headTailer';
-import { postJsonViaTorIsolated } from '$indexer/hiddenServicePool';
+import { freshTorIsolation, postJsonViaTorIsolated } from '$indexer/hiddenServicePool';
 import { hiddenOriginForDial } from '$indexer/hiddenOriginForDial';
 import { primaryPostingKey } from '$indexer/postingKeyBackfill';
 import { clearnetRefused } from '@morphit/hidden-transport/router';
+import { parkFirstContact } from '$indexer/parkedFirstContacts';
 import type {
 	HiddenServiceProxyConfig,
 	HiddenNetwork,
@@ -503,6 +507,8 @@ export interface PostingKeyLookup {
 			 * means "unknown", which is charged as a mismatch.
 			 */
 			signedBy?: (key: string) => boolean;
+			/** Charge any chain read to this budget (see RefreshBudget). */
+			budget?: RefreshBudget;
 		}
 	): Promise<string | null>;
 }
@@ -666,8 +672,17 @@ const REFRESH_TRACK_MAX = 5_000;
  * most doubled, and the per-account cooldown is shared (a read for an account
  * answers the question whichever budget paid for it; the answer is cached).
  */
-export type RefreshBudget = 'verify' | 'mismatch';
-const refreshTimes: Record<RefreshBudget, number[]> = { verify: [], mismatch: [] };
+export type RefreshBudget = 'verify' | 'mismatch' | 'unknown' | 'ticket' | 'push';
+/** `ticket`: a chain read made to check a live-stream ticket (api/streamTicket.ts).
+ *  Anyone can present a ticket naming any account, so these reads get their
+ *  own ceiling and can never spend the budgets message delivery depends on. */
+const refreshTimes: Record<RefreshBudget, number[]> = {
+	verify: [],
+	mismatch: [],
+	unknown: [],
+	ticket: [],
+	push: []
+};
 
 /**
  * Chain reads in flight, per account.
@@ -721,8 +736,7 @@ function releaseRefresh(account: string): void {
 /** Test seam — clear the refresh cooldowns between cases. */
 export function _resetKeyRefreshForTest(): void {
 	refreshedAt.clear();
-	refreshTimes.verify.length = 0;
-	refreshTimes.mismatch.length = 0;
+	for (const times of Object.values(refreshTimes)) times.length = 0;
 	refreshInFlight.clear();
 	freshKeys.clear();
 }
@@ -784,6 +798,19 @@ function rememberFreshKey(account: string, key: string, now: number): void {
  *
  * Touches memory only — the fast path still writes nothing (ADR-0048 #1).
  */
+/**
+ * A posting key two RPC operators just agreed on for another reason — the
+ * /v1/account/:account/keys read a browser makes at sign-in (api/accountKeys.ts,
+ * a stricter quorum than the refresher's: every authority and the memo key
+ * must agree). Remembered like a refresh answer, so the stream ticket and the
+ * first message that follow need no chain read of their own — which a flood of
+ * junk tickets could otherwise have kept from them (independent review of the
+ * audit fixes, finding 1).
+ */
+export function notePostingKeyFromQuorum(account: string, key: string): void {
+	if (key.length > 0) rememberFreshKey(account, key, Date.now());
+}
+
 export function forgetFreshKey(account: string): void {
 	freshKeys.delete(account);
 }
@@ -830,6 +857,16 @@ export function postingKeyLookupFromDb(
 		 * always current (tests that drive the column alone).
 		 */
 		durableIsCurrent?: () => boolean;
+		/**
+		 * Charge the reads anyone can cause for free — an account with no row
+		 * ('unknown'), a signature that does not match ('mismatch') — to this
+		 * budget instead. The federation intake passes 'push': a message pushed
+		 * by a peer need never reach the chain, so pushes naming made-up senders
+		 * cost nothing, and they must not spend the reads that messages ON the
+		 * chain (head tailer, local delivery) need (independent review 2,
+		 * finding 10).
+		 */
+		freeReadsBudget?: RefreshBudget;
 	} = {}
 ): PostingKeyLookup {
 	const refreshKey = async (
@@ -899,12 +936,21 @@ export function postingKeyLookupFromDb(
 			refresh?: boolean;
 			network?: boolean;
 			signedBy?: (key: string) => boolean;
+			/** Charge any chain read this lookup makes to this budget instead of
+			 *  the one the situation would pick (stream tickets: `ticket`). */
+			budget?: RefreshBudget;
 		}
 	): Promise<string | null> => {
+		const charged = (situation: RefreshBudget): RefreshBudget =>
+			opts?.budget ??
+			(options.freeReadsBudget !== undefined &&
+			(situation === 'unknown' || situation === 'mismatch')
+				? options.freeReadsBudget
+				: situation);
 		if (opts?.refresh === true && refreshFromChain !== undefined) {
 			// An explicit refresh is the verifier's "the signature did not match
 			// the key on file": the attacker-reachable budget.
-			return refreshKey(refreshFromChain, account, opts.network, 'mismatch');
+			return refreshKey(refreshFromChain, account, opts.network, charged('mismatch'));
 		}
 		// A correction we have already been told about beats the stale column.
 		// Checked before the query, so a rotated account is not re-refreshed on
@@ -916,7 +962,20 @@ export function postingKeyLookupFromDb(
 			[account]
 		);
 		const row = r.rows[0];
-		if (row === undefined) return null;
+		// AN ACCOUNT WITH NO ROW IS ASKED ABOUT, NOT REFUSED (v1.21.14 audit, S-C1).
+		// Rows exist only for accounts created after MORPHIT_GENESIS_BLOCK, or that
+		// claimed a waiver / first trade. Every older Blurt account — nearly every
+		// account that existed before Morphit — has none, and answering null here
+		// sent all of their messages the slow way on every route (local delivery,
+		// peer intake, head tailer): 45-63 s instead of seconds, with no error.
+		// Such an account's key comes from the chain, through the same quorum read,
+		// cooldown and cache as an unconfirmed row. Its own budget: anyone can name
+		// an account without a row, so these reads must not be able to starve the
+		// `verify` budget, and junk mismatches on rows must not starve these.
+		if (row === undefined) {
+			if (refreshFromChain === undefined) return null;
+			return refreshKey(refreshFromChain, account, opts?.network, charged('unknown'));
+		}
 		// v1.18.0 (F37) — A KEY NOBODY HAS CONFIRMED IS NOT TRUSTED. Rows written
 		// before this release recorded the key once and never again, so an owner
 		// who rotated away from a LEAKED key before upgrading still has the leaked
@@ -945,7 +1004,7 @@ export function postingKeyLookupFromDb(
 				stored !== null && stored.length > 0 && opts?.signedBy?.(stored) === true
 					? 'verify'
 					: 'mismatch';
-			return refreshKey(refreshFromChain, account, opts?.network, budget);
+			return refreshKey(refreshFromChain, account, opts?.network, charged(budget));
 		}
 		return row.posting_pubkey ?? null;
 	};
@@ -1485,6 +1544,18 @@ export async function deliverVerifiedPush(
 
 	if (fastAllowed) {
 		await gates.enqueuePush(located, trxId, createdAt).catch(() => undefined);
+	} else {
+		// A paid first contact can arrive before its fee is recognised at the
+		// head: wait for it briefly (S-H3, parkedFirstContacts.ts).
+		parkFirstContact({
+			located,
+			trxId,
+			createdAt,
+			gateAt,
+			blocked: (l) => gates.recipientBlockedSender(l.recipient, l.signer),
+			gate: (l, at) => gates.fastNotifyAllowed(l, at),
+			notify: (l, id, at) => gates.enqueuePush(l, id, at)
+		});
 	}
 	return 'emitted';
 }
@@ -1771,9 +1842,23 @@ export interface DispatchDeps {
 		url: string,
 		body: unknown,
 		proxies: HiddenServiceProxyConfig,
-		timeoutMs: number
+		timeoutMs: number,
+		/** Aborted when another address of the same peer took the push. */
+		signal?: AbortSignal
 	): Promise<{ status: number; body: string }>;
+	/** How long the first address gets before the next one is tried beside it
+	 *  (S-M5). Defaults to HEDGE_AFTER_MS; tests shorten it. */
+	readonly hedgeAfterMs?: number;
 }
+
+/**
+ * How long a push to a peer's first address (its onion) runs alone before its
+ * next address (its clearnet origin through a Tor exit) is tried beside it
+ * (v1.21.14 full chat audit, S-M5). A fresh onion rendezvous usually completes
+ * well inside this; when it does not, the exit path gets the rest of the
+ * delivery target instead of the message missing it.
+ */
+export const HEDGE_AFTER_MS = 2_000;
 
 /** Why one peer did not take the message. Kept because "failed: 1" is not a
  *  diagnosis: a peer whose circuit timed out and a peer we never tried because
@@ -1837,6 +1922,25 @@ export const BATCH_MAX = 64;
  */
 export const BATCH_MAX_BYTES = 200_000;
 
+/**
+ * The most pushes to ONE peer in flight at once, each for a different sender
+ * on its own circuit (S-H1). Bounds the circuits this instance builds towards
+ * one peer, and the requests that peer receives from it at once; a burst of
+ * more senders than this waits one push for a free slot.
+ */
+export const PEER_PUSHES_IN_FLIGHT = 8;
+
+/**
+ * The most pushes in flight at once across ALL peers. Each push builds a fresh
+ * Tor circuit (two when it hedges), so without a ceiling a busy moment in a
+ * large federation — forty peers × eight senders — asked Tor for hundreds of
+ * circuits at once (independent review of the audit fixes, finding 9). Above
+ * the federation's present size times PEER_PUSHES_IN_FLIGHT, so it changes
+ * nothing for today's traffic; past it, pushes wait for a free slot, peers
+ * taking turns.
+ */
+export const PUSHES_IN_FLIGHT_TOTAL = 96;
+
 /** The account that signed a queued chat transaction ('' when it cannot be
  *  read). Batches never mix two of them: one push = one sender. */
 function pushSigner(trx: unknown): string {
@@ -1861,8 +1965,9 @@ function approxJsonBytes(trx: unknown): number {
 }
 
 /**
- * PeerSender — one in-flight push per peer, with the messages that arrive
- * meanwhile coalesced into the next one.
+ * PeerSender — per peer, one push in flight per SENDER (up to
+ * PEER_PUSHES_IN_FLIGHT), with that sender's messages that arrive meanwhile
+ * coalesced into their next push.
  *
  * WHY BATCHING, AND WHY THIS KIND
  *
@@ -1889,7 +1994,9 @@ function approxJsonBytes(trx: unknown): number {
  * needed under load.
  *
  * The worst latency this adds is therefore one round trip, and only to a message
- * that arrives while the peer is mid-push.
+ * whose OWN SENDER is mid-push to that peer: other senders' pushes go out side
+ * by side (v1.21.14 full chat audit, S-H1 — they used to wait in line, so a
+ * handful of people writing to one instance at once broke six seconds).
  *
  * PEERS DO NOT QUEUE BEHIND EACH OTHER. The queue is per ORIGIN, so a slow or
  * dead peer holds up only its own stream; every other peer is pushed to at the
@@ -1897,8 +2004,8 @@ function approxJsonBytes(trx: unknown): number {
  *
  * ONE SENDER PER BATCH. A batch is one request, and one request on one
  * circuit tells the peer its messages came from the same instance — so a batch
- * only ever carries consecutive messages of ONE signing account, whose messages
- * are linked to each other anyway. Every push builds its own Tor circuit (see
+ * only ever carries messages of ONE signing account, whose messages are linked
+ * to each other anyway. Every push builds its own Tor circuit (see
  * postJsonViaTorIsolated), so a push costs more than a round trip on a warm
  * connection; batching still amortises that for a busy sender.
  */
@@ -1908,10 +2015,15 @@ export class PeerSender {
 		{
 			peer: FastPeer;
 			pending: { trx: unknown; bytes: number; signer: string }[];
-			inFlight: boolean;
+			/** Pushes to this peer in flight right now. */
+			inFlight: number;
+			/** The senders those pushes carry: one push per sender at a time. */
+			senders: Set<string>;
 		}
 	>();
 
+	/** Pushes in flight across every peer (PUSHES_IN_FLIGHT_TOTAL). */
+	private totalInFlight = 0;
 	private delivered = 0;
 	private failed = 0;
 	private batches = 0;
@@ -1948,7 +2060,7 @@ export class PeerSender {
 		if (this.queues.size > peers.length) {
 			const live = new Set(peers.map((p) => peerKey(p)));
 			for (const [key, q] of this.queues) {
-				if (!live.has(key) && !q.inFlight && q.pending.length === 0) {
+				if (!live.has(key) && q.inFlight === 0 && q.pending.length === 0) {
 					this.queues.delete(key);
 				}
 			}
@@ -1961,7 +2073,7 @@ export class PeerSender {
 			const key = peerKey(peer);
 			let q = this.queues.get(key);
 			if (q === undefined) {
-				q = { peer, pending: [], inFlight: false };
+				q = { peer, pending: [], inFlight: 0, senders: new Set() };
 				this.queues.set(key, q);
 			} else {
 				// Keep the freshest address list. The directory is re-read every
@@ -1974,93 +2086,169 @@ export class PeerSender {
 			// is not coming back inside anyone's six seconds, and holding the
 			// Backlog only costs memory. Dropping is safe: the chain still carries
 			// every one of these messages durably.
+			//
+			// Who gives way when it is full is the SENDER holding the most of it
+			// (review B, F4), the way the intake sheds (pickShedVictim): messages
+			// are fanned out before the node accepts them, so one account could
+			// fill a peer's queue for free and every OTHER sender's message to that
+			// peer was the one dropped. Now the newcomer is dropped only when its
+			// own sender holds (or would hold) the most; otherwise the biggest
+			// holder's newest queued message makes room.
 			if (q.pending.length >= BATCH_MAX * 4) {
 				this.dropped++;
-				continue;
+				const counts = new Map<string, number>();
+				for (const e of q.pending) counts.set(e.signer, (counts.get(e.signer) ?? 0) + 1);
+				let top = '';
+				let topN = 0;
+				for (const [who, n] of counts) {
+					if (n > topN) {
+						top = who;
+						topN = n;
+					}
+				}
+				if ((counts.get(signer) ?? 0) + 1 >= topN) continue;
+				for (let i = q.pending.length - 1; i >= 0; i--) {
+					if (q.pending[i]?.signer === top) {
+						q.pending.splice(i, 1);
+						break;
+					}
+				}
 			}
 			q.pending.push({ trx, bytes, signer });
-			if (!q.inFlight) void this.pump(key);
+			this.pump(key);
 		}
 	}
 
-	/** Take the next batch off a queue, bounded by the count, the byte budget
-	 *  and the sender: it stops at the first message of a different signer.
-	 *  Always takes at least one, so an oversized lone message still travels
-	 *  (alone) rather than wedging the queue behind itself forever. */
-	private takeBatch(pending: { trx: unknown; bytes: number; signer: string }[]): unknown[] {
-		let n = 0;
-		let total = 0;
-		const signer = pending[0]?.signer;
-		while (n < pending.length && n < BATCH_MAX) {
-			const next = pending[n];
-			if (next === undefined) break;
-			if (n > 0 && (next.signer !== signer || next.signer === '')) break;
-			if (n > 0 && total + next.bytes > BATCH_MAX_BYTES) break;
-			total += next.bytes;
-			n++;
+	/** Take the next batch off a queue: the oldest message whose sender has no
+	 *  push to this peer in flight, and that sender's later messages behind it,
+	 *  bounded by the count and the byte budget. Always takes at least one, so
+	 *  an oversized lone message still travels (alone) rather than wedging the
+	 *  queue behind itself forever. Null when every queued sender is in flight.
+	 *  A message whose sender cannot be read travels alone. */
+	private takeBatch(
+		pending: { trx: unknown; bytes: number; signer: string }[],
+		busy: ReadonlySet<string>
+	): { signer: string; batch: unknown[] } | null {
+		const first = pending.findIndex((e) => e.signer === '' || !busy.has(e.signer));
+		if (first < 0) return null;
+		const signer = pending[first]?.signer ?? '';
+		const picked: number[] = [first];
+		let total = pending[first]?.bytes ?? 0;
+		if (signer !== '') {
+			for (let i = first + 1; i < pending.length && picked.length < BATCH_MAX; i++) {
+				const next = pending[i];
+				if (next === undefined || next.signer !== signer) continue;
+				if (total + next.bytes > BATCH_MAX_BYTES) break;
+				total += next.bytes;
+				picked.push(i);
+			}
 		}
-		return pending.splice(0, Math.max(1, n)).map((e) => e.trx);
+		const batch: unknown[] = [];
+		for (let k = picked.length - 1; k >= 0; k--) {
+			const [e] = pending.splice(picked[k] ?? 0, 1);
+			if (e !== undefined) batch.unshift(e.trx);
+		}
+		return { signer, batch };
 	}
 
-	private async pump(key: string): Promise<void> {
+	/**
+	 * Start every push this peer's queue allows: one per SENDER, up to
+	 * PEER_PUSHES_IN_FLIGHT at once (v1.21.14 full chat audit, S-H1).
+	 *
+	 * It used to be one push per peer, full stop, and a batch stopped at the
+	 * first message from a different signer — so N people messaging users of
+	 * the same instance at the same moment paid N fresh circuits BACK TO BACK,
+	 * and the fourth or fifth of them missed six seconds. Pushes for different
+	 * senders now go out side by side, each on its own circuit (two senders
+	 * were never allowed to share one, so nothing about what a peer can link
+	 * changes). One sender's messages still go one push at a time, in order.
+	 */
+	private pump(key: string): void {
 		const q = this.queues.get(key);
-		if (q === undefined || q.inFlight) return;
-		q.inFlight = true;
-		try {
-			while (q.pending.length > 0) {
-				const batch = this.takeBatch(q.pending);
-				this.batches++;
-				if (batch.length > this.largestBatch) this.largestBatch = batch.length;
-				const res = await sendBatchToPeer(q.peer, batch, this.deps, this.reachability, (f) =>
+		if (q === undefined) return;
+		while (
+			q.inFlight < PEER_PUSHES_IN_FLIGHT &&
+			this.totalInFlight < PUSHES_IN_FLIGHT_TOTAL &&
+			q.pending.length > 0
+		) {
+			const next = this.takeBatch(q.pending, q.senders);
+			if (next === null) return;
+			q.inFlight++;
+			this.totalInFlight++;
+			if (next.signer !== '') q.senders.add(next.signer);
+			void this.push(q, next.batch).finally(() => {
+				q.inFlight--;
+				this.totalInFlight--;
+				if (next.signer !== '') q.senders.delete(next.signer);
+				this.pumpFrom(key);
+			});
+		}
+	}
+
+	/** A slot came free: the waiting peers with the FEWEST pushes in flight get
+	 *  it first, so under the overall ceiling every peer keeps getting pushes —
+	 *  giving it back to the peer that just finished let the busiest peers keep
+	 *  every slot while a late one never got one (independent review 2,
+	 *  finding 2). */
+	private pumpFrom(key: string): void {
+		const waiting = [...this.queues.entries()]
+			.filter(([, q]) => q.pending.length > 0)
+			.sort((a, b) => a[1].inFlight - b[1].inFlight || (a[0] === key ? 1 : b[0] === key ? -1 : 0));
+		for (const [k] of waiting) {
+			if (this.totalInFlight >= PUSHES_IN_FLIGHT_TOTAL) return;
+			this.pump(k);
+		}
+	}
+
+	private async push(q: { peer: FastPeer }, batch: readonly unknown[]): Promise<void> {
+		this.batches++;
+		if (batch.length > this.largestBatch) this.largestBatch = batch.length;
+		const res = await sendBatchToPeer(q.peer, batch, this.deps, this.reachability, (f) =>
+			this.note(f)
+		);
+
+		// A peer that refuses the SIZE is not a peer that refuses the
+		// MESSAGES. Our own budget keeps us under a correctly configured
+		// peer's cap, but a peer running an older or tighter configuration
+		// is entitled to say no — and dropping the batch would silently
+		// disable the fast path for that pair, which is the failure this
+		// whole block exists to avoid. Send them one at a time instead:
+		// one extra pass, no recursion, and the slow answer is still an
+		// answer. A peer that 413s a SINGLE message cannot take it at all,
+		// so that is left as a plain failure.
+		if (res !== null && res.status === 413 && batch.length > 1) {
+			// RECORDED EVEN WHEN THE SPLIT SUCCEEDS. If every single then
+			// gets through, `failed` stays zero and an operator sees a
+			// healthy delivery count beside a mysteriously large backlog —
+			// with nothing anywhere naming the peer that is refusing whole
+			// batches. That peer turns each batch into up to sixty-four
+			// sequential round trips, which over a hidden transport is a
+			// minute and a half per batch and is precisely the condition
+			// worth seeing. This class exists on the principle that
+			// "failed: 3" is not a diagnosis; neither is silence.
+			this.note({
+				origin: q.peer.origin,
+				reason: `HTTP 413 — batch of ${batch.length} refused, sent one at a time`,
+				status: 413
+			});
+			let ok = 0;
+			for (const one of batch) {
+				const r = await sendBatchToPeer(q.peer, [one], this.deps, this.reachability, (f) =>
 					this.note(f)
 				);
-
-				// A peer that refuses the SIZE is not a peer that refuses the
-				// MESSAGES. Our own budget keeps us under a correctly configured
-				// peer's cap, but a peer running an older or tighter configuration
-				// is entitled to say no — and dropping the batch would silently
-				// disable the fast path for that pair, which is the failure this
-				// whole block exists to avoid. Send them one at a time instead:
-				// one extra pass, no recursion, and the slow answer is still an
-				// answer. A peer that 413s a SINGLE message cannot take it at all,
-				// so that is left as a plain failure.
-				if (res !== null && res.status === 413 && batch.length > 1) {
-					// RECORDED EVEN WHEN THE SPLIT SUCCEEDS. If every single then
-					// gets through, `failed` stays zero and an operator sees a
-					// healthy delivery count beside a mysteriously large backlog —
-					// with nothing anywhere naming the peer that is refusing whole
-					// batches. That peer turns each batch into up to sixty-four
-					// sequential round trips, which over a hidden transport is a
-					// minute and a half per batch and is precisely the condition
-					// worth seeing. This class exists on the principle that
-					// "failed: 3" is not a diagnosis; neither is silence.
-					this.note({
-						origin: q.peer.origin,
-						reason: `HTTP 413 — batch of ${batch.length} refused, sent one at a time`,
-						status: 413
-					});
-					let ok = 0;
-					for (const one of batch) {
-						const r = await sendBatchToPeer(q.peer, [one], this.deps, this.reachability, (f) =>
-							this.note(f)
-						);
-						if (r === null) ok++;
-						else this.note(r);
-					}
-					this.delivered += ok;
-					this.failed += batch.length - ok;
-					continue;
-				}
-
-				if (res === null) {
-					this.delivered += batch.length;
-				} else {
-					this.failed += batch.length;
-					this.note(res);
-				}
+				if (r === null) ok++;
+				else this.note(r);
 			}
-		} finally {
-			q.inFlight = false;
+			this.delivered += ok;
+			this.failed += batch.length - ok;
+			return;
+		}
+
+		if (res === null) {
+			this.delivered += batch.length;
+		} else {
+			this.failed += batch.length;
+			this.note(res);
 		}
 	}
 
@@ -2071,11 +2259,13 @@ export class PeerSender {
 		while (this.recentFailures.length > 20) this.recentFailures.shift();
 	}
 
-	/** Is there traffic to this peer right now? Asked by the warm-up, which must
-	 *  not take the peer's single pooled connection away from a real message. */
+	/** Is there traffic to this peer right now? Asked by the warm-up, which
+	 *  skips such a peer: its pushes are already showing whether Tor works.
+	 *  (Pushes do not share the warm-up's pooled connection; each has its own
+	 *  circuit.) */
 	isBusy(origin: string): boolean {
 		const q = this.queues.get(origin);
-		return q !== undefined && (q.inFlight || q.pending.length > 0);
+		return q !== undefined && (q.inFlight > 0 || q.pending.length > 0);
 	}
 
 	/**
@@ -2090,7 +2280,7 @@ export class PeerSender {
 	async drain(deadlineMs = 30_000): Promise<void> {
 		const until = Date.now() + deadlineMs;
 		for (;;) {
-			const busy = [...this.queues.values()].some((q) => q.inFlight || q.pending.length > 0);
+			const busy = [...this.queues.values()].some((q) => q.inFlight > 0 || q.pending.length > 0);
 			if (!busy || Date.now() >= until) return;
 			await new Promise<void>((r) => {
 				setTimeout(r, 10);
@@ -2122,15 +2312,25 @@ export class PeerSender {
 async function sendBatchToAddress(
 	addr: FastPeerAddress,
 	batch: readonly unknown[],
-	deps: DispatchDeps
+	deps: DispatchDeps,
+	signal?: AbortSignal
 ): Promise<DispatchFailure | null> {
 	const url = `${addr.origin.replace(/\/+$/, '')}/v1/federation/chat-fast`;
 	// A single transaction is sent in the single-transaction shape, so the
 	// common case stays the simplest thing on the wire and is readable in a log.
 	const body = batch.length === 1 ? { trx: batch[0] } : { trxs: batch };
 	try {
-		const post = deps.postIsolated ?? postJsonViaTorIsolated;
-		const res = await post(url, body, deps.proxies, deps.timeoutMs);
+		const res =
+			deps.postIsolated !== undefined
+				? await deps.postIsolated(url, body, deps.proxies, deps.timeoutMs, signal)
+				: await postJsonViaTorIsolated(
+						url,
+						body,
+						deps.proxies,
+						deps.timeoutMs,
+						freshTorIsolation(),
+						signal
+					);
 		if (res.status >= 200 && res.status < 300) return null;
 		// AN ANSWER, even an unhappy one. The peer was reached, so this is never
 		// a local fault however bad the status is — and must not be, or a peer
@@ -2210,38 +2410,99 @@ async function sendBatchToPeer(
 	// message SURVIVED. Those are logged but not counted as failures, because
 	// no message was lost to them — `failed` stays a count of undelivered
 	// messages rather than of unlucky attempts.
-	let last: DispatchFailure | null = null;
-	const supersede = (next: DispatchFailure | null): void => {
-		if (last !== null) note?.(last);
-		last = next;
-	};
-
-	for (const addr of order) {
-		const network = FAN_OUT_NETWORK;
-		const res = await sendBatchToAddress(addr, batch, deps);
-		if (res === null) {
-			reach.markUp(network);
-			supersede(null);
-			return null;
-		}
-		if (res.localFault !== true) {
-			// The peer answered. Whatever went wrong before this is history worth
-			// keeping, and this failure is the caller's to record.
-			supersede(null);
-			return res;
-		}
-		// The failover below is unconditional — any local fault moves to this
-		// peer's next address, because that is about THIS message. Whether the
-		// NETWORK comes off the list for every other peer is a separate and
-		// larger claim, and `reportAddressFault` is where the evidence for it is
-		// weighed rather than assumed.
-		// Keyed on the PEER, not the address: one instance's two bad names are
-		// one piece of evidence about that instance, never two about our router
-		// (S2 — see CORROBORATING_PEERS).
-		reach.reportAddressFault(network, peerKey(peer), Date.now(), res.confidence);
-		supersede(res);
-	}
-	return last;
+	//
+	// THE ADDRESSES ARE HEDGED, NOT ONLY FAILED OVER (v1.21.14 full chat
+	// audit, S-M5). The next address is tried:
+	//   - at once, when this one failed LOCALLY (our Tor could not use it);
+	//   - at once, when this one gave up without an answer (a rendezvous that
+	//     timed out says nothing about the peer: it was never reached);
+	//   - beside it, when it has not answered within HEDGE_AFTER_MS.
+	// It used to stop at the first address unless the fault was local, so an
+	// onion rendezvous slower than the push budget lost the push — blamed on
+	// the peer — while the same peer's clearnet origin through a Tor exit was
+	// never tried. A peer that ANSWERED (any HTTP status) has spoken: that is
+	// final, and asking it again elsewhere would be a duplicate, not a retry.
+	// The first success wins and the others are abandoned; a duplicate that
+	// lands anyway is collapsed by the receiver's replay memory.
+	const hedgeAfterMs = deps.hedgeAfterMs ?? HEDGE_AFTER_MS;
+	const controllers = order.map(() => new AbortController());
+	const failures: DispatchFailure[] = [];
+	return await new Promise<DispatchFailure | null>((resolve) => {
+		let launched = 0;
+		let settled = 0;
+		let done = false;
+		let hedge: NodeJS.Timeout | undefined;
+		/** A refusal (an HTTP answer that was not a success) that came while
+		 *  another address was still in flight (review B, F3). */
+		let answered: DispatchFailure | undefined;
+		const finish = (verdict: DispatchFailure | null): void => {
+			if (done) return;
+			done = true;
+			if (hedge !== undefined) clearTimeout(hedge);
+			for (const c of controllers) c.abort();
+			// EVERY FAILURE IS RECORDED EXACTLY ONCE: the verdict by the caller
+			// (which also counts it against `failed`), every other one here — a
+			// fault the message survived, or one superseded by a later address.
+			for (const f of failures) if (f !== verdict) note?.(f);
+			resolve(verdict);
+		};
+		const launchNext = (): void => {
+			if (done || answered !== undefined || launched >= order.length) return;
+			const index = launched++;
+			const addr = order[index] as FastPeerAddress;
+			if (hedge !== undefined) clearTimeout(hedge);
+			hedge = undefined;
+			if (launched < order.length) {
+				hedge = setTimeout(launchNext, hedgeAfterMs);
+				hedge.unref?.();
+			}
+			void sendBatchToAddress(addr, batch, deps, controllers[index]?.signal).then((res) => {
+				settled++;
+				if (done) return;
+				if (res === null) {
+					reach.markUp(FAN_OUT_NETWORK);
+					finish(null);
+					return;
+				}
+				failures.push(res);
+				if (res.status !== undefined) {
+					// The peer answered. Whatever went wrong before this is history
+					// worth keeping, and this answer is the caller's to record.
+					// No other address is started after an answer. But one still in
+					// flight is let finish (review B, F3): the answer may come from
+					// an edge in front of the peer — a clearnet name refusing Tor
+					// exits, rate-limiting a shared exit, a WAF — while the onion,
+					// slower on a fresh circuit, is about to deliver. Its success
+					// wins; otherwise this answer is the verdict.
+					if (settled === launched) {
+						finish(answered ?? res);
+						return;
+					}
+					answered ??= res;
+					if (hedge !== undefined) clearTimeout(hedge);
+					hedge = undefined;
+					return;
+				}
+				if (res.localFault === true) {
+					// Whether the NETWORK comes off the list for every other peer
+					// is a larger claim than "this address failed", and
+					// `reportAddressFault` is where the evidence for it is weighed.
+					// Keyed on the PEER, not the address: one instance's two bad
+					// names are one piece of evidence about that instance, never two
+					// about our router (S2 — see CORROBORATING_PEERS).
+					reach.reportAddressFault(FAN_OUT_NETWORK, peerKey(peer), Date.now(), res.confidence);
+				}
+				if (launched < order.length && answered === undefined) {
+					launchNext();
+					return;
+				}
+				// Every address has been tried; the last to fail decides once the
+				// others are in — an answered refusal before a silent failure.
+				if (settled === launched) finish(answered ?? res);
+			});
+		};
+		launchNext();
+	});
 }
 
 /** The one transport chat fan-out uses: Tor, a fresh circuit per push. */

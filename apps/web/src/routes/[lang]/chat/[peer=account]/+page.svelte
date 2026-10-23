@@ -48,13 +48,11 @@
 	import { page } from '$app/stores';
 	import { gotoLocale } from '$i18n/navigate';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
-	import { get } from 'svelte/store';
 
 	import Head from '$components/Head.svelte';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { recordRecentPeer } from '$lib/chat/recentPeers';
-	import { markConversationRead } from '$lib/chat/readState';
-	import { liveIdentity, hasAnySession } from '$lib/stores/identity';
+	import { hasAnySession } from '$lib/stores/identity';
 
 	// peer is a route parameter; always defined when this page
 	// renders.  The non-null assertion is safe because SvelteKit
@@ -172,64 +170,11 @@
 					orderPermlink?: string;
 				}>;
 
-				// Phase B read-ack — moved INSIDE the lazy-load .then
-				// callback. Pre-Part-72 this fired in the
-				// onMount body unconditionally, so a chunk-load failure
-				// would still mark the conversation read despite the
-				// user never having seen it. Now the ack only fires
-				// once the view has actually loaded and is about to be
-				// rendered. The "user is looking at the conversation"
-				// claim is now actually true.
-				//
-				// The local write happens unconditionally; the on-chain
-				// broadcast only runs if the user has an unlocked
-				// session identity (broadcastChatRead signs with the
-				// posting key). If the session is locked, the local
-				// state still updates and we'll ack next time the user
-				// is unlocked and re-opens.
-				//
-				// v1.7.7 — this ack CANNOT be clamped, and that is fine.
-				// This page is a shell: it lazy-loads ConversationView and holds
-				// no messages, so there is no block time here to clamp against
-				// (`readAckTimestamp` needs the newest message it is acking).
-				// It does not need one, because it is the WEAKEST of three acks
-				// and the only unclamped one:
-				//   1. inbox `handleOpen` — clamped against the row's
-				//      last_message_at, fires on navigation (v1.7.7).
-				//   2. this one — a belt-and-braces ack in case ConversationView
-				//      never renders.
-				//   3. ConversationView `ackRead()` — clamped against
-				//      latestConfirmedAt(), and authoritative.
-				// A slow clock makes THIS ack a no-op (the cursor lands behind
-				// the message, so the thread simply stays unread) rather than
-				// wrong — and (1) and (3) both correct it with real block times.
-				// Never make this one "smarter" by inventing a timestamp: an
-				// unclamped cursor that RUNS AHEAD would silence a message the
-				// user never saw, which is the one failure that actually costs
-				// something.
-				//
-				// Ack timestamp is Date.now(): the user is looking at
-				// the conversation now, so any message they haven't
-				// yet seen would not be in their view either. Slight
-				// over-ack if a new message arrives during the mount
-				// frame; mitigated by re-opening the conversation
-				// (which re-acks).
-				// the on-chain ack names the discussion, so reading one thread
-				// with a peer never silences the others, on this device or any other.
-				markConversationRead(peer, orderPermlink ?? '');
-				const live = get(liveIdentity);
-				if (live) {
-					void import('$blurt/ops/chatRead').then(async (m) => {
-						try {
-							await m.broadcastChatRead(live, peer, orderPermlink ?? '');
-						} catch {
-							// Network / node error — silent. The local
-							// read state is still correct; cross-device
-							// sync will catch up when the user next
-							// acks successfully.
-						}
-					});
-				}
+				// v1.21.14 full chat audit, W-M3: no read-ack here any more, local
+				// or on chain. This page holds no messages, so it acked with the
+				// device clock — and a clock running FAST silenced every message
+				// that arrived in that lead after the reader left. ConversationView
+				// acks (both kinds) with the newest message it has shown.
 			})
 			.catch((err) => {
 				// Network/parse error fetching the chunk.  Surface
@@ -240,16 +185,10 @@
 				lazyLoadError = $_('chat.lazy_load_failed');
 			});
 
-		// Background auto-publish of our chat identity (ADR-0015).
-		// Dynamic import so the crypto module (which pulls in
-		// libsodium work for the derivation) only loads on this
-		// route, not on any page that statically imports from here.
-		// Non-blocking — the user never waits for this. Kept
-		// outside the lazy-load .then because identity publication
-		// is independent of whether the conversation view loaded
-		// (a future revisit could surface a "your chat is
-		// receivable" badge in some other route once this resolves).
-		void import('$lib/chat/ensureChatIdentity').then((m) => m.ensureChatIdentityPublished());
+		// (No chat identity is published or re-published any more: chat
+		// relies on the posting key only — every message is in the
+		// posting-key format, and a chat key is derived locally just to read
+		// old messages. v1.21.14 full chat audit, posting-key-only chat.)
 	}
 </script>
 

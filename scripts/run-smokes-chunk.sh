@@ -69,6 +69,10 @@ for entry in "${SMOKES[@]}"; do
     else total=$((total+n)); fi
   else
     failed=$((failed+1)); echo "  ✗ [$idx] $name"; tail -10 "$SMOKE_OUT" | sed 's/^/      /'
+    # The whole output, kept: the tail above often misses which part failed
+    # (v1.21.14 review: a vitest-must-pass failure under load could not be traced).
+    keep="${MORPHIT_SMOKE_FAIL_DIR:-${TMPDIR:-/tmp}}/morphit-smoke-fail-$name.log"
+    if cp "$SMOKE_OUT" "$keep" 2>/dev/null; then echo "      full output: $keep"; fi
   fi
 done
 echo "──────────────────────────────────────────────────────"

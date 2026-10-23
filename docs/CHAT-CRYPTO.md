@@ -20,13 +20,22 @@ going to read the source.
 
 ## The scheme in one paragraph
 
+**Since v1.21.14 chat relies on the POSTING KEY only.** Every new message
+is sent in the posting-key envelope (v3, below); nothing publishes a chat
+identity any more; the safety number is made from posting keys. The
+chat-key envelope (v2) described first is READ, never written: old
+history, and messages from older Morphit versions (on any instance) that
+still write it for a while. Its chat key is derived locally, as before,
+just to open them.
+
 Each Blurt account has a long-term X25519 chat-identity keypair
 derived deterministically from the posting private key via
 BLAKE2b-256 (`morphit-chat-v1/identity/<account>`
-domain-separated label). The public half is published on chain in
-a `morphit_chat_identity_v1` op. To send a message (envelope v2,
-`v: 2`), the sender generates a fresh X25519 ephemeral keypair and
-derives the message key from TWO Diffie-Hellman results:
+domain-separated label). Older versions published the public half on
+chain in a `morphit_chat_identity_v1` op. To send a message (envelope v2,
+`v: 2` — older versions only), the sender generates a fresh X25519
+ephemeral keypair and derives the message key from TWO Diffie-Hellman
+results:
 
 ```
 dh1 = X25519(ephemeral, recipient)      — fresh per message
@@ -38,7 +47,12 @@ key = BLAKE2b-256(key = dh1 ‖ dh2,
 
 It encrypts under ChaCha20-Poly1305-IETF with a random 12-byte
 nonce, the two account names as AAD. The recipient computes `dh2`
-from their own private key and the sender's **pinned** chat key.
+from their own private key and the sender's chat key. Since v1.21.14 a v2
+message is **proved** only by a chat key pinned here (pinned by a
+conversation before v1.21.14 — nothing pins a chat key any more). Opened
+with any other key (the one the chain confirms the sender publishes now, a
+replaced one), it is readable and shown with a calm "sent from an older
+version" note, never as proved, and it moves no trade.
 The sender's optional self-copy uses `X25519(ephemeral, sender)`
 with the same `dh2`. All primitives from libsodium-sumo.
 
@@ -46,7 +60,8 @@ Code: `apps/web/src/lib/chat/crypto.ts`. The on-wire envelope
 (`ChatEnvelopeWire`) carries the version, the ephemeral public, the
 nonce, and the AEAD output (with its 16-byte Poly1305 tag).
 
-**v3 envelopes — the posting-key envelope (v1.21.13).** v2 needs a
+**v3 envelopes — the posting-key envelope (v1.21.13; the only one sent
+since v1.21.14).** v2 needs a
 published chat key on BOTH sides, and until v1.21.13 a key was published
 only when its owner opened chat, from their own BLURT. A message to anyone
 who had not (a new member answering nobody yet; one with no BLURT left)
@@ -90,25 +105,26 @@ them. A posting pin is the SET of the peer's keys that can sign alone:
 first contact pins the set read from chain; a key removed from the account
 narrows the pin; a key added is refused as a changed key
 (`pub_pin_posting_key_changed`) until the user compares the new safety number
-and accepts it — accepting one kind of key never accepts the other. A peer
-whose CHAT key is pinned gets no posting set on first use at all: it is held
-as a pending change for the same comparison, and their v3 messages stay
-unproved until then. Verify peer pins a first set only when the user says
-the numbers matched. A message from a pinned sender opens and is proved
-without any lookup.
+in Verify peer and accepts it — Accept pins exactly the set the number was
+made from (v1.21.14). First contact pins the set whatever chat key of the
+peer's is pinned here (v1.21.14: until then a pinned chat key held a first
+set back as a "change" — and since opening a conversation pinned the peer's
+chat key, a normal first conversation with someone an older version had
+published a key for showed every message from them as "Sender not
+verified" and refused every reply until the user accepted the "new key").
+Verify peer pins a first set when the user says the numbers matched. A
+message from a pinned sender opens and is proved without any lookup.
 
-**Which envelope a send uses.** Our own status is decided first:
-`current` (our published chat key is the one we derive — remembered once seen,
-so an indexer's later "none" cannot change it), `stale`, `none`, or unknown.
-Unknown fails the send (retry); nothing is guessed. Only `current` with a
-peer chat key sends v2 — every pair that chatted before, unchanged — unless
-the peer's latest PROVED message was v3: they wrote v3 because, from their
-side, our chat key cannot be used (theirs is stale, for one), so we answer
-in v3 to the posting keys that proved them. A peer
-whose chat key is pinned here and whom the indexer now calls keyless is
-refused (`pub_pin_withdrawn`): an op on chain is never withdrawn. Everything
-else sends v3. Nothing is published on first use any more; a published chat
-key is still re-published after its owner changes their posting key.
+**Which envelope a send uses.** Always v3, to the peer's pinned posting
+keys (v1.21.14) — every message, retry and structured payload, the
+"settled with someone else" auto-reply included. Nothing about chat keys
+is looked up to send. (v1.21.13 chose per pair: v2 when our published chat
+key was current and the peer had one, unless the peer's last proved message
+was v3; the Verify-peer panel had to apply the same rule. Two formats meant
+two sets of keys to pin per person, a format memory that scrolling back
+could corrupt, and the first-conversation failure above.) No chat identity
+is published or re-published any more, so the re-publication rules of
+v1.21.13/v1.21.14 (ADR-0015's amendment) are gone with it.
 
 Same claims as v2 (confidentiality, deniable sender authentication, no
 forward secrecy): the posting key itself takes part instead of a key derived
@@ -118,6 +134,43 @@ message from a sender, 3 ms for later ones (they reuse its static secret). Clien
 than v1.21.13 cannot open v3 (they show "couldn't be decrypted") and cannot
 send to an account without a published chat key, so every instance has to
 upgrade.
+
+**v4 envelopes — v3 bound to its order and its send time (v1.21.14
+reads them; a later release sends them).** v3 authenticates the words, not
+where or when they were said: the order a message is about travels beside
+the ciphertext (the record's `order_permlink`) and its time is the indexer's
+`created_at`. An indexer, or anyone rebroadcasting the same bytes, could show
+an authenticated "funds sent" under another order between the same two
+people, or at another time (review C-M2). v4 is v3 with three more inputs the
+sender binds:
+
+- the thread's order permlink (`''` for a direct message; the record's own
+  field);
+- that order's owner, `o` in the header — one of the two people (`''` for a
+  direct message). A permlink is unique per owner only, and either person may
+  have an order by the same permlink;
+- `t`, the chain's head time when it was sealed, in whole seconds (header).
+
+All three go into the content AAD (`"morphit-chat-aad-v4/" sender 0
+recipient 0 owner 0 order 0 t`) and the commit, and every label says v4, so
+a v4 message opens only under that order, owner and time — for the
+recipient and for the sender's own copy. A trade message moves a trade only
+when the order's owner as looked up is the one it names. The time shown is
+the indexer's while it lies within 2 minutes before and 5 minutes after `t`
+(a head read, a 60-second transaction expiry and a block fit inside), and `t`
+otherwise. The head time is read through the sender's own instance, so the
+sender's device checks it against its own clock: more than 2 minutes apart,
+or the head or the order's owner not known, and the message is sealed as v3
+(its words still authenticated; its order and time then the indexer's word).
+A retry is sealed afresh, with its own `t`.
+
+Read first: a client that does not know v4 shows a v4 message as
+"couldn't be decrypted", so v1.21.14 reads v4 — in a conversation and in
+the trade listener that works across pages — and still sends v3
+(`WRITE_ENVELOPE_V4` in `crypto.ts`). The release after it — once every
+instance runs a v1.21.14 reader — turns sending v4 on. Until then the order
+and time of a v3 message are as trustworthy as the indexer that serves it;
+v3 stays readable with no end date (old history).
 
 **v1 envelopes** (older clients, no `v`) were anonymous ECIES: the
 key depended only on the ephemeral and the recipient key. They still
@@ -154,11 +207,20 @@ anyone holding the recipient's public key could have written one.
    AAD use different labels.
 
 6. **Key pinning, with explicit acceptance of changes.** The first
-   chat key the app sees for a peer is pinned (trust on first use).
-   If a newer identity op later carries a different key, the app no
-   longer re-pins silently: the message is held back ("Not sent:
-   this person's chat key changed …") until the user compares the
-   new safety number and accepts it. The "chain" check behind pins
+   set of posting keys the app sees for a peer is pinned (trust on first
+   use). If their account later lists a key that is not pinned, the app
+   does not re-pin silently: the message is held back ("Not sent: this
+   person's account keys have changed …") until the user opens Verify
+   peer, compares the new safety number and accepts it there. Accept
+   pins exactly the keys that number was made from: if the account
+   changed again meanwhile, those are still the keys pinned, and the
+   panel then shows the number for what the account lists now (v1.21.14 —
+   it used to pin whatever was pending at the tap, and the refused message
+   offered a one-tap "accept the new key" with no number shown at all;
+   that button now opens Verify peer, and the message is sent again once
+   accepted). Chat keys pinned before v1.21.14 stay, and prove that
+   peer's older-format (v2) messages; none is pinned any more.
+   The "chain" check behind pins
    reads through the operator's own relay, so it catches a broken
    or stale indexer but **not** a forging operator; only comparing
    the safety number out of band rules out a swapped key at first
@@ -174,27 +236,40 @@ anyone holding the recipient's public key could have written one.
 
 7. **Safety number.** "Verify peer" shows 60 digits in 12 groups of
    5. Each person's 30 digits are computed from that person's own
-   account name and chat key only (SHA-512, 5,200 iterations, the
-   shape Signal uses), and both sides show the same 60 digits —
+   account name and posting keys only — the keys every message is sent
+   to since v1.21.14; chat keys are not compared any more (SHA-512,
+   5,200 iterations, the shape Signal uses), and both sides show the
+   same 60 digits —
    about 199 bits, so a hostile indexer must find a second preimage
    for each half. It needs no WebCrypto, so it works on I2P.
+   Your own half is made from the posting keys this instance lists for
+   your account — the same list your partner's app pinned for you — and
+   the panel checks that list against the key you signed in with
+   (v1.21.14 review): if your key is not listed it shows no number, and
+   any OTHER key listed for you is named above the number, because
+   messages to you are encrypted to it too. Without that check an
+   instance serving both of you could add a key of its own to your list:
+   both halves were built from the same doctored list, the numbers
+   matched, and the operator read your messages and could write
+   "proved" ones in your name. (A paired read-only desktop holds no key,
+   so it cannot make this check; compare on the phone.)
 
 ---
 
 ## What we don't claim
 
-1. **Forward secrecy — in either mode.** The recipient's chat
-   private key is the same until their posting key changes, and it
-   decrypts every message ever sent to them. In the default 'keep'
-   mode the sender's own chat key also decrypts the self-copy of
-   every message they sent. 'Destroy' mode (no self-copy) only
+1. **Forward secrecy — in either mode.** The recipient's posting
+   key (and, for older-format messages, the chat key derived from it)
+   is the same until they change it, and it decrypts every message
+   ever sent to them. In the default 'keep' mode the sender's own key
+   also decrypts the self-copy of every message they sent. 'Destroy' mode (no self-copy) only
    removes the sender's own ability to reread; the recipient's key
    still opens everything. A later leak of either posting key
    exposes that side's whole chat history from chain.
 
 2. **Post-compromise security (a.k.a. "self-healing").** If the
-   attacker has your chat private key, they decrypt all past *and*
-   future messages until you rotate your posting key. No automatic
+   attacker has your posting key, they decrypt all past *and*
+   future messages until you rotate it. No automatic
    recovery.
 
 3. **Metadata privacy.** Sender, recipient, timestamp, ciphertext
@@ -205,7 +280,10 @@ anyone holding the recipient's public key could have written one.
 4. **Replay protection beyond what AEAD gives you.** A bit-for-bit
    replay of the same envelope authentication-passes. On chain this
    is not a meaningful attack — replays are de-duplicated by op id at
-   the indexer layer — but it's worth being explicit.
+   the indexer layer — but it's worth being explicit. A v4 message
+   cannot be replayed into another order's thread or shown at another
+   time (above); a v3 one can, and the app shows the same bytes from the
+   same sender as one message, never two (v1.21.14).
 
 5. **Non-repudiation of content.** The broadcast op is signed by the
    sender's posting key, so the chain proves the sender broadcast
@@ -320,7 +398,7 @@ per-message rotation.
 Per the FAQ entry, we say:
 
 - "Morphit chat has no forward secrecy, in either mode" — true:
-  the recipient's chat key opens every message they received, and
+  the recipient's posting key opens every message they received, and
   in the default mode the sender's key reopens what they sent.
 - "Destroy" mode only removes your own ability to reread.
 - We never claim PFS we don't have.

@@ -3,7 +3,7 @@
 	 * PaymentStatusBadge — reactive trade-phase indicator for an
 	 * order row.
 	 *
-	 * Phase F.5.  Subscribes to the tradeStatus store by permlink
+	 * Phase F.5.  Subscribes to the tradeStatus store by owner + permlink
 	 * and renders a colored badge matching the current trade
 	 * phase.  Auto-updates the moment any payload landing
 	 * anywhere in the app advances the trade — chat, /my/orders,
@@ -19,10 +19,12 @@
 	 */
 
 	import { _ } from 'svelte-i18n';
-	import { tradeStates } from '$lib/trades/tradeStatus';
+	import { tradeStates, tradeStateOf } from '$lib/trades/tradeStatus';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 
 	interface Props {
+		/** The account that posted the order. */
+		orderOwner: string;
 		orderPermlink: string;
 		/** for a COMPLETED order with no client trade-state
 		 *  (e.g. a cash-in-person trade with no verifiable on-chain payment, or a
@@ -32,13 +34,13 @@
 		completedCounterparty?: string | null;
 	}
 
-	let { orderPermlink, completedCounterparty = null }: Props = $props();
+	let { orderOwner, orderPermlink, completedCounterparty = null }: Props = $props();
 
 	// Phase F.5 audit fix (F-39) — read from the shared map
 	// directly rather than allocating a per-permlink derived store.
 	// One subscription on the underlying map, no per-instance
 	// derived store overhead at scale.
-	const state = $derived($tradeStates.get(orderPermlink) ?? null);
+	const state = $derived(tradeStateOf($tradeStates, orderOwner, orderPermlink));
 </script>
 
 {#if state !== null}

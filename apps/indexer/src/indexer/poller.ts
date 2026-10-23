@@ -47,7 +47,10 @@ import {
 	hiddenServiceProxyConfigFromEnv,
 	type HiddenServiceProxyConfig
 } from '@morphit/hidden-transport';
-import { BlockNotConfirmedError } from '$indexer/fee/btcFeeBlockConfirm';
+import {
+	BlockNotConfirmedError,
+	prefetchBlockConfirmations
+} from '$indexer/fee/btcFeeBlockConfirm';
 import { reconcileAfterUpgrade } from '$indexer/reconcileUpgrade';
 import { ExternalFeeRechecker } from '$indexer/fee/externalFeeRecheck';
 import { healForeignDatabaseCode } from '$indexer/foreignCodeHeal';
@@ -966,11 +969,14 @@ export class Poller {
 				/** Block timestamp, for `indexedBlockTime`. */
 				time: string;
 				orderbookChanges: readonly string[];
-				chatChanges: readonly { lo: string; hi: string; messageId: number }[];
+				chatChanges: readonly { lo: string; hi: string; messageId: number; sender?: string }[];
 				applied: number;
 				rejected: number;
 			};
 			const committed: Committed[] = [];
+			// The second operator's copy of each chat block, asked for ahead and
+			// side by side (v1.21.14 review A, F2; btcFeeBlockConfirm.ts).
+			prefetchBlockConfirmations(this.blurt, lo, blocks as never);
 			let stop = false; // hole or abort → commit the prefix, then stop the pipeline
 			let holeBackoff = false;
 			let lastAppliedN = -1;

@@ -53,16 +53,12 @@ GOAL a: learn a user's IP or identity, link two accounts, or link account ↔ in
 │         stop: accepted (short-lived by design, documented)
 ├── a2  Get the visitor's IP from a third party
 │   ├── a2.1  Run a Blurt RPC node that the release check reaches (A-RPC)
-│   │     pre: be one of the clearnet nodes (or a hidden one, for Tor/I2P pages) · cost: medium
-│   │     stop: accepted and documented with the exact budget: 1 × get_account_history (100)
-│   │           + 1 × get_block to ONE node; +1 read of up to 10 000 entries if the release is
-│   │           old (each POST may follow a CORS preflight); a second node only if the first fails, serves an unverifiable
-│   │           record or another version; cached 24 h per build, success or failure, shared
-│   │           by all tabs. Per-origin pools: https → clearnet, .onion → onion,
-│   │           .i2p → I2P, plain-http clearnet → clearnet
-│   │     guard: apps/web/src/lib/net/releaseVerify.test.ts,
-│   │           apps/web/scripts/ip-disclosure-single-source-smoke.ts,
-│   │           apps/web/scripts/rpc-privacy-routing-smoke.ts
+│   │     stop: FIXED (v1.21.14) — the browser contacts no node: the release check reads
+│   │           through its instance (POST /v1/chain/agreed, two RPC operators must agree)
+│   │           and every page's CSP allows connect-src 'self' only
+│   │     guard: apps/web/src/lib/net/releaseBudget.test.ts (every request same-origin),
+│   │           scripts/csp-header-consistency-smoke.ts C2,
+│   │           apps/web/scripts/ip-disclosure-single-source-smoke.ts
 │   ├── a2.2  Second browser request: past treasury BTC key proof
 │   │     stop: FIXED — the request is gone: an older key is accepted only from releases
 │   │           this browser already verified
@@ -71,7 +67,7 @@ GOAL a: learn a user's IP or identity, link two accounts, or link account ↔ in
 │   │     stop: accepted (documented in the push FAQ); push is off on hidden-only instances
 │   │     guard: apps/relay/test/pushOffOnPurpose.test.ts
 │   └── a2.4  Any other website sees the visitor (CDN, fonts, images)
-│         stop: CSP `connect-src`/`img-src`/`font-src` limited to self and the browser's RPC pool
+│         stop: CSP `connect-src`/`img-src`/`font-src` limited to self
 │         guard: scripts/csp-header-consistency-smoke.ts
 ├── a3  Link account ↔ instance
 │   ├── a3.1  Register an instance on chain and receive every pushed chat
@@ -107,8 +103,20 @@ GOAL a: learn a user's IP or identity, link two accounts, or link account ↔ in
       ├── a6.4  Silent key swap after first contact — FIXED: changes held until
       │         accepted; 60-digit safety number; first contact is trust-on-first-use
       │         guard: fingerprint / pubPin tests
-      └── a6.5  Read old messages after a posting-key leak — known: no forward secrecy in either
-                chat mode (documented in CHAT-CRYPTO.md)
+      ├── a6.5  Read old messages after a posting-key leak — known: no forward secrecy in either
+      │         chat mode (documented in CHAT-CRYPTO.md)
+      ├── a6.6  Re-file a real message under another order of the same two people, or show it
+      │         at another time (an indexer, or a rebroadcast of the same bytes)
+      │         stop: PARTLY FIXED (v1.21.14) — the v4 envelope binds order, owner and send time
+      │               and is READ now; it is SENT from the next release (read first). Until
+      │               then v3 messages carry the indexer's order and time
+      │         guard: envelopeV4.test.ts, openTradeMessage.test.ts, listenerTradeEffects.test.ts
+      └── a6.7  Two orders with the same permlink (two owners) share one trade state
+                stop: FIXED (v1.21.14) — the trade store is keyed by owner and permlink
+                guard: tradeOwnerKey.test.ts, listenerTradeEffects.test.ts
+                residual: a thread names only the permlink; when both people have an order by
+                it, the thread is about the peer's (as the inbox resolves it) until v4 names
+                the owner
 ```
 
 ## (b) De-anonymise a zero-clearnet operator
@@ -170,9 +178,10 @@ GOAL c: users' fees, the relay wallet, the operator's 90 % or the treasury's 10 
 ├── c1  Redirect users' BTC/XMR fee payments
 │   ├── c1.1  One hostile RPC node forges @morphit's history for the browser's release check
 │   │         stop: FIXED — the transaction id is recomputed from the block and the
-│   │               signature must recover to the pinned posting key; anything unverifiable
-│   │               sends the check to a second node; a node can make it fail, not pass, but can
-│   │               withhold the newest genuine release (late update notice)
+│   │               signature must recover to the pinned posting key; since v1.21.14 the
+│   │               instance answers only with what two RPC operators agree on, so one node
+│   │               cannot even make it fail; the instance can withhold the newest genuine
+│   │               release (late update notice), never pass a forged one
 │   │         guard: apps/web/src/lib/net/releaseVerify.test.ts
 │   ├── c1.2  Forged release op applied by an indexer (treasury pin, upgrade hash)
 │   │         stop: FIXED — signature recovered from the block's own transaction
@@ -254,7 +263,7 @@ GOAL d: run attacker code as root on operator boxes
 ```
 GOAL e: fake release, fake trades or reputation, fake chat, fake directory
 ├── e1  Fake release
-│   ├── e1.1  In the browser via one RPC node (fake update, fake tamper alarm, fake green check)
+│   ├── e1.1  In the browser via one RPC node or the instance (fake update, fake tamper alarm, fake green check)
 │   │         stop: FIXED — see c1.1
 │   ├── e1.2  In indexers — FIXED, see c1.2
 │   └── e1.3  For upgrades — FIXED, see d1.1, d2.2
@@ -266,7 +275,7 @@ GOAL e: fake release, fake trades or reputation, fake chat, fake directory
 │   └── e2.3  A stranger makes a seller's client show "paid ✓" and auto-complete
 │             stop: FIXED — only the engaged counterparty, against the seller's own ask
 │             guard: tradeVerifyGate.test.ts, myOrdersActions.test.ts
-├── e3  Fake chat — see a6.1–a6.4
+├── e3  Fake chat — see a6.1–a6.4, a6.6
 ├── e4  Fake directory entries or phishing contact links — stop: origin/alt/contact validation,
 │         reserved names · guard: operatorRegisterOrigin.test.ts, operator-tag-reserved-l3.test.ts
 ├── e5  Fake warrant canary — signed offline by the maintainer; verified with scripts/canary/verify.ts
@@ -313,5 +322,6 @@ GOAL f: deny service to users or to the federation
 | 5    | d6 sidecars running as root                                                                | d    | OPEN                                  |
 | 6    | f4 directory Sybil                                                                         | f    | known                                 |
 | 7    | c1.3 / d3 operator agreement on hidden RPC pools: the default hidden nodes are project-run | c, d | known; the op signatures stop forgery |
+| 8    | a6.6 v3 chat messages carry the indexer's order and time (v4 is sent from next release)    | a, e | PARTLY FIXED; read first             |
 | —    | b1.8 MCP on tor-only, d1.4 tarball flags                                                   | b, d | ASSERTED (no test)                    |
 | —    | a1.1 ModSecurity audit state inside the BunkerWeb container; d4 tag-pinned BunkerWeb image | a, d | not covered by a test                 |

@@ -82,16 +82,16 @@ describe("v1.7.7 — the no-order thread ('') is a REAL thread, not an absence",
 		// messages and therefore a block time, exactly like an order thread.
 		const block = new Date('2026-07-17T12:00:00.000Z');
 		vi.setSystemTime(new Date('2026-07-17T11:58:30.000Z')); // clock 90s SLOW
-		markConversationRead(PEER, NO_ORDER, readAckTimestamp(block));
+		markConversationRead(PEER, NO_ORDER, readAckTimestamp(block)!);
 		expect(isUnread(PEER, NO_ORDER, block.toISOString(), false)).toBe(false);
 		vi.useRealTimers();
 	});
 
-	it('the v1.7.7 clamp degrades to now when there is no block time (fallback-peer list)', () => {
-		// handleOpen(peer, '') — no messages loaded, so nothing to clamp against.
+	it('with no block time (fallback-peer list) nothing is acked (v1.21.14, W-M3)', () => {
+		// handleOpen(peer, '') — no messages loaded: there is nothing to ack, and
+		// the device clock is never the cursor (a fast one silenced what came next).
 		vi.setSystemTime(new Date('2026-07-17T12:00:05.000Z'));
-		markConversationRead(PEER, NO_ORDER, readAckTimestamp(null));
-		expect(isUnread(PEER, NO_ORDER, '2026-07-17T12:00:00.000Z', false)).toBe(false);
+		expect(readAckTimestamp(null)).toBeNull();
 		vi.useRealTimers();
 	});
 });

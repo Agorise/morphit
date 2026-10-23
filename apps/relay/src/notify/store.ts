@@ -739,7 +739,7 @@ export class OfflineNotifyStore {
 		}));
 	}
 
-	async requeue(n: DueNotice, due: Date): Promise<void> {
+	async requeue(n: DueNotice, due: Date, countAsAttempt = true): Promise<void> {
 		// A newer message in the thread may have been queued meanwhile: one row
 		// stands for both — the later message's time (what "has she read or
 		// replied since" must be measured from) and the retry's count.
@@ -749,7 +749,7 @@ export class OfflineNotifyStore {
 			   event_at = GREATEST(offline_notify_pending.event_at, EXCLUDED.event_at),
 			   due_at = LEAST(offline_notify_pending.due_at, EXCLUDED.due_at),
 			   attempts = GREATEST(offline_notify_pending.attempts, EXCLUDED.attempts)`,
-			[n.account, n.sender, n.orderPermlink, n.eventAt, due, n.attempts + 1]
+			[n.account, n.sender, n.orderPermlink, n.eventAt, due, n.attempts + (countAsAttempt ? 1 : 0)]
 		);
 	}
 
@@ -775,6 +775,30 @@ export class OfflineNotifyStore {
 		const r = await this.db.query(
 			`SELECT 1 FROM chat_messages WHERE sender = $1 AND recipient = $2 AND created_at > $3 LIMIT 1`,
 			[account, peer, since]
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
+	/**
+	 * Is there a stored (durable, on-chain) message from `peer` to her in this
+	 * thread that she has not read or answered yet? Any one, not only the
+	 * newest: a queued notice carries its thread's LATEST message time, and a
+	 * real unread message must not lose its notice because a later one never
+	 * reached the chain (independent review of the audit fixes, finding 6).
+	 */
+	async unreadStoredFrom(account: string, peer: string, orderPermlink: string): Promise<boolean> {
+		const r = await this.db.query(
+			`SELECT 1 FROM chat_messages m
+			  WHERE m.sender = $2 AND m.recipient = $1 AND COALESCE(m.order_permlink, '') = $3
+			    AND m.created_at > COALESCE((
+			          SELECT max(last_read_at) FROM chat_read_state
+			           WHERE reader_account = $1 AND peer_account = $2 AND order_permlink IN ($3, '*')),
+			          '-infinity'::timestamptz)
+			    AND m.created_at > COALESCE((
+			          SELECT max(created_at) FROM chat_messages WHERE sender = $1 AND recipient = $2),
+			          '-infinity'::timestamptz)
+			  LIMIT 1`,
+			[account, peer, orderPermlink]
 		);
 		return (r.rowCount ?? 0) > 0;
 	}

@@ -43,10 +43,9 @@ export interface ChainChatIdentity {
 	readonly trxId: string;
 }
 
-/** Shape of the morphit_chat_identity_v1 op payload (from
- *  apps/web/src/lib/blurt/ops/chatIdentity.ts).  We don't
- *  import the type to avoid a circular dependency with the
- *  broadcaster module; we narrow defensively here. */
+/** Shape of the morphit_chat_identity_v1 op payload. Since v1.21.14 this app
+ *  no longer publishes the op (chat uses the posting key only); records older
+ *  clients wrote are still read, so the shape is narrowed defensively here. */
 interface ChatIdentityPayloadShape {
 	readonly v: 1;
 	readonly chat_pub: string;
@@ -297,8 +296,10 @@ export async function verifyClaimedChatIdentityOnChain(
 }
 
 /**
- * Peer chat-identity chain verification used by the chat send + fingerprint
- * paths (chatService, peerPubFetch).  Prefers the O(1) claimed-op check
+ * Peer chat-identity chain verification, used by chatService to confirm the
+ * chat key it opens a peer's older-format (v2) message with (since v1.21.14
+ * nothing is sent to a chat key, and the safety number is made from posting
+ * keys).  Prefers the O(1) claimed-op check
  * (verifyClaimedChatIdentityOnChain) so high-activity accounts like witnesses
  * verify correctly; if the claimed op can't be validated (e.g. an older
  * indexer that didn't serve a usable trx_id, or a transient miss), falls back

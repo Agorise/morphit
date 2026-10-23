@@ -223,6 +223,12 @@ describe.skipIf(!INTEGRATION_ENABLED)('a rotated posting key stops verifying', (
 	 * verify", not "the column holds some value".
 	 */
 	it('an update that moves posting authority OFF keys stops the old key verifying', async () => {
+		// The steady state: the quorum reconcile has CONFIRMED key A. A row
+		// still unconfirmed is never trusted without the chain, so a test that
+		// starts there cannot tell whether the update was recorded at all.
+		await fx.db.query('UPDATE accounts SET posting_key_reconciled = TRUE WHERE name = $1', [
+			ACCOUNT
+		]);
 		// How an owner kills a leaked key without minting a new one: posting
 		// authority handed to another account, no keys at all.
 		await apply([
@@ -246,25 +252,39 @@ describe.skipIf(!INTEGRATION_ENABLED)('a rotated posting key stops verifying', (
 	});
 
 	it('a 2-of-2 authority is not satisfied by one of its keys', async () => {
+		const twoOfTwo = {
+			weight_threshold: 2,
+			account_auths: [],
+			key_auths: [
+				[pubA, 1],
+				[pubB, 1]
+			] as [string, number][]
+		};
+		await fx.db.query('UPDATE accounts SET posting_key_reconciled = TRUE WHERE name = $1', [
+			ACCOUNT
+		]);
 		await apply([
 			[
 				'account_update',
 				{
 					account: ACCOUNT,
-					posting: {
-						weight_threshold: 2,
-						account_auths: [],
-						key_auths: [
-							[pubA, 1],
-							[pubB, 1]
-						]
-					},
+					posting: twoOfTwo,
 					memo_key: pubA,
 					json_metadata: '',
 					posting_json_metadata: ''
 				}
 			]
 		]);
+		// The update leaves the row unconfirmed, and an unconfirmed row is
+		// trusted for nothing — so the key it stores matters once the quorum
+		// reconcile CONFIRMS what the chain says. Run that reconcile, against a
+		// chain that answers with this very authority: the key it confirms is
+		// what the fast path will trust from then on.
+		await reconcilePostingKeys(
+			fx.db,
+			{ getAccounts: async (names) => new Map(names.map((n) => [n, { posting: twoOfTwo }])) },
+			{ pauseMs: 0 }
+		);
 		const lookup = postingKeyLookupFromDb(fx.db);
 		for (const [label, key] of [
 			['A', keyA],
@@ -697,6 +717,27 @@ describe.skipIf(!INTEGRATION_ENABLED)('the intake never waits on the chain', () 
 		} finally {
 			off();
 		}
+	});
+
+	it("pushes naming made-up senders spend their own reads, not the chain route's (review 2, finding 10)", async () => {
+		let pushReads = 0;
+		const intake = federationChatFastRoute(fx.db, async () => {
+			pushReads++;
+			return null; // no such account
+		});
+		const junk = Array.from({ length: 40 }, (_, i) =>
+			chatSignedWith(PrivateKey.fromSeed(`junk-${i}`), `junk${i}nobody`)
+		);
+		const res = await intake.app.request('/', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ trxs: junk })
+		});
+		expect(res.status).toBe(202);
+		expect(await waitFor(() => pushReads >= 30, 5_000)).toBe(true);
+		// The head tailer meets a real message from an account with no row here.
+		const onChain = postingKeyLookupFromDb(fx.db, async (a) => (a === 'dave' ? pubC : null));
+		expect(await onChain('dave', { signedBy: (k) => k === pubC })).toBe(pubC);
 	});
 
 	it('a durable record far behind the chain does not vouch for a stored key', async () => {

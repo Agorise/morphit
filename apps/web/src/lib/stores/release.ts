@@ -18,11 +18,10 @@
  *      onMount.  Subsequent calls are no-ops (the inflight or
  *      completed result is cached in the store).
  *   2. Fetches a verified release via `fetchVerifiedRelease()` —
- *      read from one Blurt RPC node (one more operator's node only when
- *      that one fails or serves something unverifiable or older than
- *      this build), signature recovered to the pinned @morphit key,
- *      payload validated — or reuses the outcome remembered in the last
- *      24 h by any tab of this browser.
+ *      read through this instance from two RPC operators that agree
+ *      (the browser contacts nothing else), signature recovered to the
+ *      pinned @morphit key, payload validated — or reuses the outcome
+ *      remembered in the last 24 h by any tab of this browser.
  *   3. If verified AND this tab runs the announced version, runs the
  *      hash-manifest check against the files this site serves
  *      (checkRunningBuild). Asynchronous: the staleBuild banner can
@@ -31,16 +30,16 @@
  * Failure modes don't trigger user-visible alarms unless we have
  * positive evidence:
  *
- *   - Chain RPC unreachable → silent.  We can't tell what the
+ *   - No verifiable answer → silent.  We can't tell what the
  *     announced version is.  Showing a "your build might be
  *     stale!" banner with no evidence would be more annoying than
  *     informative.
  *   - Pubkey mismatch → CRITICAL alert.  The newest release op on
- *     chain (named alike by two operators' nodes) is signed by another key:
+ *     chain (as two RPC operators agree) is signed by another key:
  *     either @morphit rotated its key (our pin is stale) or the
  *     account was taken over.  Either way, the release can't be
  *     trusted; the banner says exactly that.  One lying RPC node
- *     cannot cause this.
+ *     cannot cause this; the instance could, on its own site only.
  *   - Asset hash mismatch → CRITICAL alert. The check runs whenever the
  *     running bundle IS the announced version — decided by the build and
  *     the signed release alone; nothing the operator serves (such as
@@ -298,7 +297,7 @@ export async function initRelease(): Promise<void> {
 			peek,
 			run: async () => {
 				const { fetchVerifiedRelease } = await import('$net/releaseFetch');
-				const fetched = await fetchVerifiedRelease({ runningVersion: RUNNING_VERSION });
+				const fetched = await fetchVerifiedRelease();
 				// A verified release OLDER than this build is not the current one: it
 				// never supplies the treasury; a newer release this browser verified
 				// does, or the outcome is 'older_release' — re-checked within the hour

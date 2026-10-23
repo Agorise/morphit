@@ -20,6 +20,21 @@
 > the pinned posting key (`apps/web/src/lib/net/releaseVerifyCore.ts`).
 > At most once per 24 h per build, success or failure. Text below that
 > says "it does not re-verify the op signature" describes the old code.
+>
+> **v1.21.14 amendment (owner decision: privacy first).** The release check
+> no longer reads the chain from the browser at all. The reason it went direct
+> — an operator relaying the read could forge a "verified" release — stopped
+> holding once the browser verified the signature itself (above): no relay can
+> make a forged op pass. So the browser now reads through its own instance,
+> `POST /v1/chain/agreed`, which relays `@morphit`'s newest release entry and
+> the release's transaction only when two RPC operators of its pool agree on
+> them (the quorum chat blocks use), and asks the pool for a block only when an
+> agreed history named it; the browser recomputes the transaction id and checks
+> the signature as before. What the instance can still do: withhold a newer
+> release or not answer (the check then claims nothing), or show its own
+> visitors a false alarm. The rotator (`net/endpoints.ts`) is gone, and every
+> page's CSP is `connect-src 'self'`: no RPC node ever sees a visitor. The
+> sections below describe the earlier designs.
 
 ## Context
 

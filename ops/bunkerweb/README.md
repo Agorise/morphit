@@ -45,9 +45,10 @@ BunkerWeb source code.
   paths) to the relay + indexer on the host.  Its routing mirrors
   `ops/nginx/web.conf` minus TLS (BunkerWeb terminates it). It sends the
   security headers itself (CSP, Permissions-Policy, X-Frame-Options,
-  nosniff, Referrer-Policy) because Tor/I2P visitors reach it directly,
-  without BunkerWeb; on a `.onion`/`.i2p` name its CSP's `connect-src` is
-  narrowed to the hidden Blurt RPC nodes. It keeps no access log.
+  nosniff, Referrer-Policy, X-DNS-Prefetch-Control) because Tor/I2P visitors reach it directly,
+  without BunkerWeb; its CSP's `connect-src` is `'self'` on every name
+  (clearnet, `.onion`, `.i2p`), since the browser contacts no Blurt RPC
+  node. It keeps no access log.
 - `bunkerweb.env.example` — environment variables with sensible
   defaults: a single `REVERSE_PROXY_HOST` pointing BunkerWeb at the
   `frontend` container, OWASP CRS paranoia level 3, every BunkerWeb
@@ -55,7 +56,8 @@ BunkerWeb source code.
   (BunkerNet, DNSBL, the black/white/grey lists, anonymous report,
   anti-bot, metrics), Real-IP forwarding wired for the relay's
   trusted-proxy chain, and the **security headers** (`CONTENT_SECURITY_POLICY`,
-  `REFERRER_POLICY`, `X_FRAME_OPTIONS`, `PERMISSIONS_POLICY`) for clearnet
+  `REFERRER_POLICY`, `X_FRAME_OPTIONS`, `PERMISSIONS_POLICY`, and
+  `CUSTOM_HEADER_1` for `X-DNS-Prefetch-Control: off`) for clearnet
   visitors. BunkerWeb keeps the frontend's own values for these headers
   where the frontend sends them (its default `KEEP_UPSTREAM_HEADERS`) —
   that is how the strict "never runs anything" policy on SVG images reaches

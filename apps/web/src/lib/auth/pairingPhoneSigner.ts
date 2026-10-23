@@ -41,6 +41,7 @@ import { get } from 'svelte/store';
 import { PrivateKey, cryptoUtils } from '@beblurt/dblurt';
 
 import { liveIdentity } from '$lib/stores/identity';
+import { mintStreamTicket, PAIRED_TTL_S } from '$lib/chat/streamTicketCore';
 import { getUserBlurtAccount } from '$lib/blurt/ops/profile';
 import { deriveChatIdentity, encodeChatPub } from '$lib/chat/crypto';
 import { computeBundleSigningDigest, type BundleSigner } from './desktopPairing';
@@ -80,6 +81,9 @@ export async function getPostingKeyForPairing(): Promise<{
 	readonly signer: BundleSigner;
 	readonly account: string;
 	readonly chatPubkey: string;
+	/** A chat-stream ticket for the desktop's instance host, valid for the
+	 *  pairing's life (PAIRED_TTL_S). */
+	readonly streamTicketFor: (host: string) => string;
 }> {
 	const live = get(liveIdentity);
 	if (live === null) {
@@ -228,5 +232,8 @@ export async function getPostingKeyForPairing(): Promise<{
 		return out;
 	};
 
-	return { signer, account, chatPubkey };
+	const streamTicketFor = (host: string): string =>
+		mintStreamTicket(live.posting.privateKey, account, host, PAIRED_TTL_S);
+
+	return { signer, account, chatPubkey, streamTicketFor };
 }

@@ -443,11 +443,15 @@ describe('sending — every address is reached over Tor', () => {
 	});
 
 	/**
-	 * A TIMEOUT IS NOT A LOCAL FAULT: the peer may well have RECEIVED the push —
-	 * what was lost is the answer. Treating it as our transport failing would
-	 * send the same batch down a second road to the same instance.
+	 * A TIMEOUT IS NOT A LOCAL FAULT — and, since v1.21.14 (full chat audit,
+	 * S-M5), not the end of the push either. A push that got no answer says
+	 * nothing about the peer: its onion rendezvous may simply be slow. The next
+	 * address (the clearnet origin through a Tor exit) is tried, so the message
+	 * is not lost for the sake of avoiding a second copy. A second copy is
+	 * harmless: the intake answers 202 to both and its replay memory drops the
+	 * later one before anything is shown. Tor itself is not marked down.
 	 */
-	it('does not fail over when the push merely TIMED OUT', async () => {
+	it('a push that merely TIMED OUT moves on to the next address, without marking Tor down', async () => {
 		const { sender, attempts } = makeSender(
 			TOR_ONLY,
 			// What the isolated post throws when its own timer (`timeoutMs`, 50 here)
@@ -461,10 +465,11 @@ describe('sending — every address is reached over Tor', () => {
 		]);
 		await sender.drain(5_000);
 
-		expect(attempts, 'a lost answer must not become a second delivery').toEqual([
-			`http://${ONION}/v1/federation/chat-fast`
+		expect(attempts).toEqual([
+			`http://${ONION}/v1/federation/chat-fast`,
+			'https://peer.example/v1/federation/chat-fast'
 		]);
-		expect(sender.stats().failures[0]?.localFault).not.toBe(true);
+		expect(sender.stats().failures.every((f) => f.localFault !== true)).toBe(true);
 		expect(sender.reachability.downNetworks()).toEqual([]);
 	});
 

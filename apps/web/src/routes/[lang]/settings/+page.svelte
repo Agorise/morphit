@@ -19,6 +19,7 @@
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import NotificationSettings from '$components/NotificationSettings.svelte';
@@ -2801,69 +2802,76 @@
 						{$_('settings.change_password.help')}
 					</p>
 
-					<div class="mt-3 grid gap-3">
-						<label class="block">
-							<span class="block text-sm font-semibold">
-								{$_('settings.change_password.old_label')}
-							</span>
-							<input
-								type="password"
-								maxlength="64"
-								bind:value={pwOldInput}
-								autocomplete="current-password"
-								class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-							/>
-						</label>
+					<!-- The three password fields are their own form (PasswordScope), with
+					     the account name as its user name (v1.21.14). Outside a form,
+					     Firefox's password manager wrote the saved user name into the
+					     "Also show orders in" language field, which opened its menu and
+					     left the page blurred. The button below does the change. -->
+					<PasswordScope>
+						<div class="mt-3 grid gap-3">
+							<label class="block">
+								<span class="block text-sm font-semibold">
+									{$_('settings.change_password.old_label')}
+								</span>
+								<input
+									type="password"
+									maxlength="64"
+									bind:value={pwOldInput}
+									autocomplete="current-password"
+									class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								/>
+							</label>
 
-						<label class="block">
-							<span class="block text-sm font-semibold">
-								{$_('settings.change_password.new_label')}
-							</span>
-							<input
-								type="password"
-								maxlength="64"
-								bind:value={pwNewInput}
-								autocomplete="new-password"
-								minlength="8"
-								class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-							/>
-							{#if pwNewStrength === 'common'}
-								<p class="mt-1 text-xs text-red-600 dark:text-red-400">
-									⚠ {$_('settings.change_password.strength_common')}
-								</p>
-							{:else if pwNewStrength === 'trivial'}
-								<p class="mt-1 text-xs text-red-600 dark:text-red-400">
-									⚠ {$_('settings.change_password.strength_trivial')}
-								</p>
-							{:else if pwNewStrength === 'short'}
-								<p class="mt-1 text-xs text-red-700 dark:text-red-400">
-									{$_('settings.change_password.strength_short')}
-								</p>
-							{:else if pwNewStrength === 'ok'}
-								<p class="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
-									✓ {$_('settings.change_password.strength_ok')}
-								</p>
-							{/if}
-						</label>
+							<label class="block">
+								<span class="block text-sm font-semibold">
+									{$_('settings.change_password.new_label')}
+								</span>
+								<input
+									type="password"
+									maxlength="64"
+									bind:value={pwNewInput}
+									autocomplete="new-password"
+									minlength="8"
+									class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								/>
+								{#if pwNewStrength === 'common'}
+									<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+										⚠ {$_('settings.change_password.strength_common')}
+									</p>
+								{:else if pwNewStrength === 'trivial'}
+									<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+										⚠ {$_('settings.change_password.strength_trivial')}
+									</p>
+								{:else if pwNewStrength === 'short'}
+									<p class="mt-1 text-xs text-red-700 dark:text-red-400">
+										{$_('settings.change_password.strength_short')}
+									</p>
+								{:else if pwNewStrength === 'ok'}
+									<p class="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+										✓ {$_('settings.change_password.strength_ok')}
+									</p>
+								{/if}
+							</label>
 
-						<label class="block">
-							<span class="block text-sm font-semibold">
-								{$_('settings.change_password.confirm_label')}
-							</span>
-							<input
-								type="password"
-								maxlength="64"
-								bind:value={pwConfirmInput}
-								autocomplete="new-password"
-								class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-							/>
-							{#if pwConfirmInput.length > 0 && pwNewInput !== pwConfirmInput}
-								<p class="mt-1 text-xs text-red-600 dark:text-red-400">
-									{$_('settings.change_password.err.mismatch')}
-								</p>
-							{/if}
-						</label>
-					</div>
+							<label class="block">
+								<span class="block text-sm font-semibold">
+									{$_('settings.change_password.confirm_label')}
+								</span>
+								<input
+									type="password"
+									maxlength="64"
+									bind:value={pwConfirmInput}
+									autocomplete="new-password"
+									class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+								/>
+								{#if pwConfirmInput.length > 0 && pwNewInput !== pwConfirmInput}
+									<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+										{$_('settings.change_password.err.mismatch')}
+									</p>
+								{/if}
+							</label>
+						</div>
+					</PasswordScope>
 
 					{#if pwError}
 						<p class="mt-3 text-sm text-red-600 dark:text-red-400" role="alert" aria-live="polite">

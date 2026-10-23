@@ -44,7 +44,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 	// Full-replace, latest-block-wins. A later broadcast supersedes an earlier
 	// one; an out-of-order (older-block) op is a no-op but still ok:true — the
-	// signer did nothing wrong, their update was simply superseded.
+	// signer did nothing wrong, their update was simply superseded. Two in ONE
+	// block: the later wins (ops are applied in block order). It was a strict
+	// `<`, so the first of them was kept and the user's newer folder state was
+	// lost (v1.21.14 full chat audit, S-L4).
 	await client.query(
 		`INSERT INTO chat_folders (
 			account, enc, source_block_num, source_trx_id, updated_at
@@ -54,7 +57,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			source_block_num = EXCLUDED.source_block_num,
 			source_trx_id = EXCLUDED.source_trx_id,
 			updated_at = EXCLUDED.updated_at
-		WHERE chat_folders.source_block_num < EXCLUDED.source_block_num`,
+		WHERE chat_folders.source_block_num <= EXCLUDED.source_block_num`,
 		[ctx.signer, enc, ctx.blockNum, ctx.trxId, ctx.blockTime]
 	);
 

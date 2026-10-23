@@ -131,7 +131,7 @@ const BANNED: Banned[] = [
 	{
 		id: 'never-exposes-ip',
 		re: /never (?:exposes|reveals|leaks|shares) (?:your |the |a )?(?:visitor'?s? )?IP/i,
-		why: 'the instance and the release-check nodes see the visitor IP on clearnet'
+		why: 'the instance sees the visitor IP (unless they use Tor or a VPN)'
 	},
 	{
 		id: 'operators-tag-route',
@@ -315,28 +315,9 @@ try {
 	faq = '';
 }
 
-const NET = 'apps/web/src/lib/net/config.ts';
-claimEquals(
-	'2.faq clearnet release-check nodes',
-	faq,
-	/the (one|two|three|four|five|six|seven|eight|nine|ten|\d+) public clearnet nodes/i,
-	arrayCount(NET, 'DEFAULT_RPC_ENDPOINTS')?.length ?? null,
-	'FAQ ip_address_and_rpc_nodes'
-);
-claimEquals(
-	'2.faq onion release-check nodes',
-	faq,
-	/only the (one|two|three|four|five|six|seven|eight|nine|ten|\d+) \.onion nodes/i,
-	arrayCount(NET, 'DEFAULT_HIDDEN_RPC_ENDPOINTS')?.length ?? null,
-	'FAQ ip_address_and_rpc_nodes'
-);
-claimEquals(
-	'2.faq I2P release-check nodes',
-	faq,
-	/only the (one|two|three|four|five|six|seven|eight|nine|ten|\d+) \.b32\.i2p nodes/i,
-	arrayCount(NET, 'DEFAULT_I2P_RPC_ENDPOINTS')?.length ?? null,
-	'FAQ ip_address_and_rpc_nodes'
-);
+// The FAQ's release-check budget is pinned against the code by
+// apps/web/scripts/ip-disclosure-single-source-smoke.ts (the browser contacts
+// no RPC node since v1.21.14, so there are no node counts to state).
 
 // The default fee-source lists live in ONE place (operator-config feeSources.ts):
 // the XMR default is the onion explorers, then the clearnet sources.

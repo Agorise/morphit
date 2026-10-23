@@ -54,6 +54,7 @@ import { broadcastRoute } from '../src/api/broadcast';
 import { chatEventBus } from '../src/indexer/chatEventBus';
 import { federationChatFastRoute, gatesFromDb } from '../src/api/federationChatFast';
 import { chatActivityStreamRoute } from '../src/api/chatActivityStream';
+import { streamTickets } from '../test/testutils/streamTickets';
 import { ChatFastDispatcher } from '../src/indexer/chatFastDispatcher';
 import {
 	deliverVerifiedPush,
@@ -68,6 +69,8 @@ import type { BlurtClient } from '../src/blurt/client';
 
 let pass = 0;
 let fail = 0;
+const smokeTickets = streamTickets();
+
 const ok = (m: string) => {
 	pass++;
 	console.log(`  ✓ ${m}`);
@@ -391,7 +394,7 @@ async function startInstance(
 	const db = instanceDbWithKeys();
 	const gates = gatesFromDb(db);
 	const federation = federationChatFastRoute(db).app;
-	const activity = chatActivityStreamRoute();
+	const activity = chatActivityStreamRoute((await smokeTickets).routeOpts);
 
 	// A DISTINCT id per transaction, as a real node gives. The stub used to
 	// return the same constant every time, which is not a harmless
@@ -542,7 +545,10 @@ interface InboxWatch {
 }
 
 async function watchInbox(activity: Hono, account: string, oneWayMs: number): Promise<InboxWatch> {
-	const res = await activity.request(`/${account}/stream`, { method: 'GET' });
+	// Opened the way a signed-in browser opens it: with a stream ticket its
+	// account signed (v1.21.14, S-M8).
+	const T = await smokeTickets;
+	const res = await activity.request(T.path(`/${account}/stream`, account), T.as(account, { method: 'GET' }));
 	const reader = res.body?.getReader();
 
 	// Armed per direction, NOT once per case — and REPLAYED frames are discarded

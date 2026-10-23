@@ -1,17 +1,19 @@
 /**
- * The browser's release check must not take any one Blurt RPC node's word.
+ * The browser's release check must not take its source's word.
  *
- * A node can answer `get_account_history` with an op it made up. The release
- * check proves the op instead: the block that holds it is read from the same
- * node, the transaction id is recomputed from the block's content, and the
- * transaction's signature must recover to the pinned @morphit posting key. Only
- * the payload parsed from that block is used. (The request budget itself is
- * pinned by ./releaseBudget.test.ts.)
+ * The source is the instance's agreed-read relay (`POST /v1/chain/agreed`:
+ * what two RPC operators of its pool return alike). The instance — or two
+ * operators that agree — could still answer `get_account_history` with an op
+ * that was made up. The release check proves the op instead: the block that
+ * holds it is read too, the transaction id is recomputed from the block's
+ * content, and the transaction's signature must recover to the pinned
+ * @morphit posting key. Only the payload parsed from that block is used. (The
+ * request budget itself is pinned by ./releaseBudget.test.ts.)
  *
- * These tests drive the real releaseFetch → chain client → rotator stack; only
- * `fetch` is replaced, by a small simulated chain served by several nodes, some
- * of them hostile. The pinned key is swapped for a test key whose private half
- * signs the genuine release.
+ * These tests drive the real releaseFetch → chainRelay stack; only `fetch` is
+ * replaced, by a small simulated chain the instance serves, honest or not.
+ * The pinned key is swapped for a test key whose private half signs the
+ * genuine release.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RUNNING_VERSION, newerThan } from './releaseTestVersions';
@@ -105,7 +107,8 @@ function blockWith(num: number, txs: Tx[]): unknown {
 
 type NodeAnswer = (method: string, params: unknown) => unknown;
 const calls: Array<{ url: string; method: string }> = [];
-let nodes: Record<string, NodeAnswer | 'down'> = {};
+/** What the instance's agreed-read relay answers ('down': 502, no agreement). */
+let instance: NodeAnswer | 'down' = 'down';
 
 /** A chain every honest node agrees on. */
 const GENUINE_TX = releaseTx(releaseJson(RUNNING_VERSION, GENUINE_BTC), OFFICIAL);
@@ -131,31 +134,28 @@ const honest: NodeAnswer = (method, params) => {
 	return null;
 };
 
+const ORIGIN = 'https://morphit.example';
 function serve(): void {
-	vi.stubGlobal('fetch', async (url: string, init: { body: string }) => {
-		const req = JSON.parse(init.body) as { id: number; method: string; params: unknown };
-		calls.push({ url, method: req.method.replace(/^condenser_api\./, '') });
-		const node = nodes[url];
-		if (node === undefined || node === 'down') throw new TypeError('Failed to fetch');
+	vi.stubGlobal('fetch', async (input: string | URL, init: { body: string }) => {
+		const url = String(input);
+		const req = JSON.parse(init.body) as { method: string; params: unknown };
+		calls.push({ url, method: req.method });
+		if (url !== `${ORIGIN}/v1/chain/agreed`) throw new TypeError('Failed to fetch');
+		if (instance === 'down')
+			return new Response(JSON.stringify({ status: 'error', code: 'internal' }), { status: 502 });
 		return new Response(
-			JSON.stringify({ jsonrpc: '2.0', id: req.id, result: node(req.method, req.params) }),
-			{
-				status: 200
-			}
+			JSON.stringify({ result: instance(`condenser_api.${req.method}`, req.params) }),
+			{ status: 200 }
 		);
 	});
-}
-
-async function pool(): Promise<string[]> {
-	const { DEFAULT_RPC_ENDPOINTS } = await import('$net/config');
-	return [...DEFAULT_RPC_ENDPOINTS];
 }
 
 beforeEach(() => {
 	vi.resetModules();
 	calls.length = 0;
-	nodes = {};
+	instance = 'down';
 	vi.stubGlobal('location', { protocol: 'https:', hostname: 'morphit.example' });
+	vi.stubGlobal('window', { location: { origin: ORIGIN, hostname: 'morphit.example' } });
 	serve();
 });
 afterEach(() => {
@@ -164,7 +164,7 @@ afterEach(() => {
 });
 
 describe('a forged release op is refused', () => {
-	it('every reachable node serves an unsigned op naming @morphit → not verified', async () => {
+	it('the instance serves an unsigned op naming @morphit → not verified', async () => {
 		const forged = releaseTx(releaseJson(RUNNING_VERSION, ATTACKER_BTC, ATTACKER_XMR), null, 9);
 		const lying: NodeAnswer = (method, params) => {
 			if (method === 'condenser_api.get_account_history')
@@ -175,13 +175,13 @@ describe('a forged release op is refused', () => {
 					: null;
 			return honest(method, params);
 		};
-		for (const u of await pool()) nodes[u] = lying;
+		instance = lying;
 		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
 		const r = await fetchVerifiedRelease();
 		expect(r.ok).toBe(false);
 	});
 
-	it('nodes serve a block whose op is signed by another key → pubkey_mismatch, nothing usable', async () => {
+	it('the agreed answer is a block whose op is signed by another key → pubkey_mismatch, nothing usable', async () => {
 		const forged = releaseTx(releaseJson(RUNNING_VERSION, ATTACKER_BTC, ATTACKER_XMR), ATTACKER, 9);
 		const lying: NodeAnswer = (method, params) => {
 			if (method === 'condenser_api.get_account_history')
@@ -192,7 +192,7 @@ describe('a forged release op is refused', () => {
 					: null;
 			return honest(method, params);
 		};
-		for (const u of await pool()) nodes[u] = lying;
+		instance = lying;
 		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
 		const r = await fetchVerifiedRelease();
 		expect(r.ok).toBe(false);
@@ -200,33 +200,7 @@ describe('a forged release op is refused', () => {
 		expect(r.error.kind).toBe('pubkey_mismatch');
 	});
 
-	it('ONE hostile node among honest ones cannot decide: the genuine release wins', async () => {
-		// Math.random → 0 makes the rotator's shuffle deterministic, so the node
-		// asked first is known — and it is the hostile one.
-		vi.spyOn(Math, 'random').mockReturnValue(0);
-		const urls = await pool();
-		const { EndpointRotator } = await import('$net/endpoints');
-		const first = new EndpointRotator(urls).getAll()[0]!.url;
-		const forged = releaseTx(releaseJson(RUNNING_VERSION, ATTACKER_BTC, ATTACKER_XMR), null, 9);
-		for (const u of urls) nodes[u] = honest;
-		nodes[first] = (method, params) => {
-			if (method === 'condenser_api.get_account_history')
-				return [historyEntry(9, GENUINE_BLOCK + 5, forged)];
-			if (method === 'condenser_api.get_block')
-				return (params as number[])[0] === GENUINE_BLOCK + 5
-					? blockWith(GENUINE_BLOCK + 5, [forged])
-					: honest(method, params);
-			return honest(method, params);
-		};
-		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
-		const r = await fetchVerifiedRelease();
-		expect(r.ok).toBe(true);
-		if (!r.ok) return;
-		expect(r.value.payload.treasury?.btc?.address).toBe(GENUINE_BTC);
-		expect(r.value.trxId).toBe(trxIdOf(GENUINE_TX));
-	});
-
-	it('a node that pairs the real trx id with altered operations is not believed', async () => {
+	it('an answer that pairs the real trx id with altered operations is not believed', async () => {
 		const altered = {
 			...GENUINE_TX,
 			operations: [
@@ -251,16 +225,16 @@ describe('a forged release op is refused', () => {
 					: null;
 			return honest(method, params);
 		};
-		for (const u of await pool()) nodes[u] = lying;
+		instance = lying;
 		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
 		const r = await fetchVerifiedRelease();
 		expect(r.ok).toBe(false);
 	});
 });
 
-describe('the genuine release is verified from one node', () => {
-	it('verified; one history read and one block read, to the same node', async () => {
-		for (const u of await pool()) nodes[u] = honest;
+describe('the genuine release is verified, through the instance alone', () => {
+	it('verified; one history read and one block read, both to the instance', async () => {
+		instance = honest;
 		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
 		const r = await fetchVerifiedRelease();
 		expect(r.ok).toBe(true);
@@ -268,23 +242,11 @@ describe('the genuine release is verified from one node', () => {
 		expect(r.value.payload.version).toBe(RUNNING_VERSION);
 		expect(r.value.blockNumber).toBe(GENUINE_BLOCK);
 		expect(calls.map((c) => c.method)).toEqual(['get_account_history', 'get_block']);
-		expect(new Set(calls.map((c) => c.url)).size).toBe(1);
+		expect(new Set(calls.map((c) => c.url))).toEqual(new Set([`${ORIGIN}/v1/chain/agreed`]));
 	});
 
-	it('one reachable node with a genuinely signed release is enough: its signature proves it', async () => {
-		vi.spyOn(Math, 'random').mockReturnValue(0);
-		const urls = await pool();
-		const { EndpointRotator } = await import('$net/endpoints');
-		const first = new EndpointRotator(urls).getAll()[0]!.url;
-		for (const u of urls) nodes[u] = 'down';
-		nodes[first] = honest;
-		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
-		const r = await fetchVerifiedRelease();
-		expect(r.ok).toBe(true);
-	});
-
-	it('nothing reachable: rpc_failed', async () => {
-		for (const u of await pool()) nodes[u] = 'down';
+	it('no agreed answer (or no instance): rpc_failed, nothing claimed', async () => {
+		instance = 'down';
 		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
 		const r = await fetchVerifiedRelease();
 		expect(!r.ok && r.error.kind).toBe('rpc_failed');
@@ -293,7 +255,7 @@ describe('the genuine release is verified from one node', () => {
 
 describe('how far back the release check reads', () => {
 	it('starts with the last 100 entries and stops there when the release is in them', async () => {
-		for (const u of await pool()) nodes[u] = honest;
+		instance = honest;
 		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
 		await fetchVerifiedRelease();
 		const sizes = calls.filter((c) => c.method === 'get_account_history');
@@ -311,7 +273,7 @@ describe('how far back the release check reads', () => {
 			}
 			return honest(method, params);
 		};
-		for (const u of await pool()) nodes[u] = deep;
+		instance = deep;
 		const { fetchVerifiedRelease, RELEASE_HISTORY_WINDOWS } = await import('$net/releaseFetch');
 		const r = await fetchVerifiedRelease();
 		expect(r.ok).toBe(true);
@@ -322,17 +284,18 @@ describe('how far back the release check reads', () => {
 	it('no release anywhere: no_release after the full window', async () => {
 		const empty: NodeAnswer = (method, params) =>
 			method === 'condenser_api.get_account_history' ? [] : honest(method, params);
-		for (const u of await pool()) nodes[u] = empty;
+		instance = empty;
 		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
 		expect(await fetchVerifiedRelease()).toEqual({ ok: false, error: { kind: 'no_release' } });
 		expect(calls.some((c) => c.method === 'get_block')).toBe(false);
 	});
 });
 
-describe('the release check reaches the nodes at most once a day, whatever the outcome', () => {
+describe('the release check asks at most once a day, whatever the outcome', () => {
 	function browserStorage(): Map<string, string> {
 		const data = new Map<string, string>();
 		vi.stubGlobal('window', {
+			location: { origin: ORIGIN, hostname: 'morphit.example' },
 			localStorage: {
 				getItem: (k: string) => data.get(k) ?? null,
 				setItem: (k: string, v: string) => void data.set(k, v),
@@ -349,9 +312,9 @@ describe('the release check reaches the nodes at most once a day, whatever the o
 		return get(store.release);
 	}
 
-	it('a verified answer is reused for 24 h: the second page load contacts no node', async () => {
+	it('a verified answer is reused for 24 h: the second page load asks nothing', async () => {
 		browserStorage();
-		for (const u of await pool()) nodes[u] = honest;
+		instance = honest;
 		expect((await boot()).kind).toBe('ok');
 		const first = calls.length;
 		expect(first).toBeGreaterThan(0);
@@ -359,9 +322,9 @@ describe('the release check reaches the nodes at most once a day, whatever the o
 		expect(calls.length).toBe(first);
 	});
 
-	it('a failed check is remembered too: no node is asked again on every page load', async () => {
+	it('a failed check is remembered too: nothing is asked again on every page load', async () => {
 		browserStorage();
-		for (const u of await pool()) nodes[u] = 'down';
+		instance = 'down';
 		expect((await boot()).kind).toBe('error');
 		const first = calls.length;
 		expect((await boot()).kind).toBe('error');
@@ -380,7 +343,7 @@ describe('the release check reaches the nodes at most once a day, whatever the o
 					: null;
 			return honest(method, params);
 		};
-		for (const u of await pool()) nodes[u] = ahead;
+		instance = ahead;
 		expect((await boot()).kind).toBe('ok');
 		const first = calls.length;
 		expect((await boot()).kind).toBe('ok');
@@ -400,7 +363,7 @@ describe('the release check reaches the nodes at most once a day, whatever the o
 			}
 		};
 		data.set('morphit.releaseCheck.v1', JSON.stringify(forged));
-		for (const u of await pool()) nodes[u] = honest;
+		instance = honest;
 		const store = await import('$stores/release');
 		await boot();
 		const { get } = await import('svelte/store');
@@ -423,6 +386,7 @@ describe('past treasury BTC keys (orders numbered before a key rotation)', () =>
 	function browserStorage(): void {
 		const data = new Map<string, string>();
 		vi.stubGlobal('window', {
+			location: { origin: ORIGIN, hostname: 'morphit.example' },
 			localStorage: {
 				getItem: (k: string) => data.get(k) ?? null,
 				setItem: (k: string, v: string) => void data.set(k, v),
@@ -437,7 +401,7 @@ describe('past treasury BTC keys (orders numbered before a key rotation)', () =>
 				return (params as number[])[0] === block ? blockWith(block, [tx]) : null;
 			return null;
 		};
-		for (const u of await pool()) nodes[u] = chain;
+		instance = chain;
 		vi.resetModules();
 		const store = await import('$stores/release');
 		store.resetReleaseStore();
@@ -453,7 +417,7 @@ describe('past treasury BTC keys (orders numbered before a key rotation)', () =>
 		expect(calls.length).toBe(before);
 	});
 
-	it('a key only a node claims (unsigned release) is never remembered or accepted', async () => {
+	it('a key only the source claims (unsigned release) is never remembered or accepted', async () => {
 		browserStorage();
 		await bootWith(
 			releaseTx(pinJson(RUNNING_VERSION, XPUB_ATTACKER), null, 11),

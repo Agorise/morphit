@@ -1,41 +1,38 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — IP-disclosure single-source smoke (v1.7.5).
+ * Morphit — IP-disclosure single-source smoke.
  *
- * The maintainer's rule, verbatim: "if a user leaks their ip one time to one of the rpc
- * nodes because we made the conscious decision to do so, then i only want that
- * bad news mentioned in one faq article, and nowhere else on the site."
- *
- * Morphit makes exactly ONE kind of direct browser→Blurt-node request: the
- * release check (`initRelease()` → `fetchVerifiedRelease()` → one node, a
- * second operator's node only when needed), at most once a day per browser. It
- * is deliberate — it is what makes `staleBuild` meaningful, so an operator
- * cannot pin a user to an old, genuinely-signed, backdoored build. The privacy
- * cost is one node (two at most) learning that an IP loaded a page.
- *
- * This guard pins the three things that make that honest:
- *   1. The disclosure lives in exactly ONE user-facing string, in all 10 locales.
- *   2. No string anywhere makes the absolute claims that this call falsifies.
- *   3. A worried user actually FINDS the article — the words they type rank it
- *      first, not some other entry that happens to mention an IP.
- *
- * (3) is not decoration. Before this, "ip leak" ranked the VIDEO TUTORIAL entry
- * first, because it says "expose your IP" — a user asking the scariest question
- * got the wrong answer. The FAQ scorer weights QUESTION tokens 2x answer tokens
- * and matches answers by set membership, so repeating a word in the body buys
- * nothing: the user's words have to be in the question. That is why the question
- * says "see or leak".
+ * Who sees a visitor's IP address is answered in ONE place: the FAQ article
+ * `ip_address_and_rpc_nodes`, in all 10 locales. Since the v1.21.14 final
+ * review the browser contacts nothing but its own instance — the release check
+ * reads through the instance's agreed-read relay (`POST /v1/chain/agreed`) and
+ * every page's Content-Security-Policy allows `connect-src 'self'` only
+ * (scripts/csp-header-consistency-smoke.ts). This guard pins that the words
+ * match the code:
+ *   1. The article exists in every locale, carries the explanation, names
+ *      the Tor / VPN recommendation, and points to the push-notifications
+ *      entry (with push on, the browser also uses its vendor's push service).
+ *   2. It states the release check's budget as the code has it (imported
+ *      values, not text): two small requests to this site, at most once a day,
+ *      100 history entries first, ~115 KB at most, that two RPC operators
+ *      must agree, and that a check with no answer is retried after 12 hours.
+ *   3. No string anywhere still says the browser asks a public Blurt node
+ *      (the old disclosure), and the article no longer lists per-origin node
+ *      pools.
+ *   4. A worried user FINDS the article — the words they type rank it first.
+ *      (Before, "ip leak" ranked the video tutorial entry first, because it
+ *      says "expose your IP". The FAQ scorer weights QUESTION tokens 2x answer
+ *      tokens, so the user's words have to be in the question.)
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { searchEntries, type FaqEntry } from '../src/lib/utils/faqIndex';
-import { RELEASE_CACHE_TTL_MS } from '../src/lib/net/releaseCache';
+import { RELEASE_CACHE_TTL_MS, RELEASE_FAILED_TTL_MS } from '../src/lib/net/releaseCache';
 import {
 	RELEASE_CHECK_STEADY_STATE_REQUESTS,
 	RELEASE_HISTORY_WINDOWS
 } from '../src/lib/net/releaseFetch';
-import { MAX_NODES_PER_CHECK } from '../src/lib/net/releaseVerifyCore';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOCALES = resolve(__dirname, '..', 'src', 'lib', 'i18n', 'locales');
@@ -46,10 +43,10 @@ let fail = 0;
 const check = (name: string, ok: boolean, detail = ''): void => {
 	if (ok) {
 		pass++;
-		console.log(`  \u2713 ${name}`);
+		console.log(`  ✓ ${name}`);
 	} else {
 		fail++;
-		console.log(`  \u2717 ${name}${detail ? `: ${detail}` : ''}`);
+		console.log(`  ✗ ${name}${detail ? `: ${detail}` : ''}`);
 	}
 };
 
@@ -61,161 +58,109 @@ const leaves = (o: unknown, p: string[] = []): Array<[string, string]> => {
 		for (const [k, v] of Object.entries(o as Json)) out.push(...leaves(v, [...p, k]));
 	return out;
 };
+const read = (f: string): Json => JSON.parse(readFileSync(join(LOCALES, f), 'utf8')) as Json;
+const articleOf = (d: Json): { q?: string; a?: string } | undefined =>
+	((d.faq as Json)?.entries as Json)?.[KEY] as { q?: string; a?: string } | undefined;
 
 const files = readdirSync(LOCALES).filter((f) => f.endsWith('.json'));
-check('1 all 10 locales present', files.length === 10, `found ${files.length}`);
+check('0 all 10 locales present', files.length === 10, `found ${files.length}`);
 
-// ── 1. exactly ONE disclosure site ─────────────────────────────────
-//
-// Checked precisely in ENGLISH and structurally across all ten. A multilingual
-// keyword heuristic was tried first and is the wrong tool: matching "node" +
-// "IP" + "sees" across ten languages flags `privacy.guides.sol.caveats` ("your
-// WALLET talks to a Solana RPC endpoint"), `why_multi_accounts_fail` ("we
-// rate-limit signups to 2 per IP per day"), and the video-embed entry ("a
-// PeerTube iframe would expose your IP") — three legitimate discussions of IPs
-// on three unrelated subjects. A guard that cries wolf on those gets muted, and
-// a muted guard protects nothing.
-//
-// What actually identifies THIS disclosure is its subject: Morphit's own browser
-// asking a Blurt node for the release record. That is what is pinned.
-// Pins the SUBJECT, not the phrasing: this browser, a network node, the release
-// record. That triple is what makes it THIS disclosure and not the signup
-// rate-limit note ("2 per IP per day"), the Solana wallet guide ("your wallet
-// talks to an RPC endpoint"), or the video-embed entry ("a PeerTube iframe would
-// expose your IP") — three legitimate discussions of IPs on unrelated subjects
-// that a looser keyword heuristic flagged. A guard that cries wolf gets muted,
-// and a muted guard protects nothing.
-const DISCLOSURE_EN = /browser[\s\S]{0,140}?network node[\s\S]{0,260}?release record/i;
-
-const enAll = leaves(JSON.parse(readFileSync(join(LOCALES, 'en.json'), 'utf8')));
-const enSites = enAll.filter(([, v]) => DISCLOSURE_EN.test(v));
-check(
-	'2 EN: the browser→Blurt-node disclosure appears in exactly ONE string',
-	enSites.length === 1 && enSites[0]![0] === `faq.entries.${KEY}.a`,
-	`found in: ${enSites.map(([k]) => k).join(', ') || '(nowhere — did the article lose it?)'}`
-);
-
-// Structural, all ten: the article must exist and actually carry the explanation.
-// If a future edit stubs it out, the disclosure silently vanishes from the site
-// while the direct call keeps happening — the exact failure this guard exists for.
+// ── 1. the article exists everywhere and says what to do ───────────
 for (const f of files) {
 	const loc = f.replace('.json', '');
-	const d = JSON.parse(readFileSync(join(LOCALES, f), 'utf8')) as Json;
-	const entry = ((d.faq as Json)?.entries as Json)?.[KEY] as { q?: string; a?: string } | undefined;
+	const entry = articleOf(read(f));
 	check(
-		`3.${loc} the disclosure article exists and carries the explanation`,
+		`1.${loc} the article exists and carries the explanation`,
 		!!entry?.q && !!entry?.a && entry.a.length > 400,
 		entry ? `answer is ${entry.a?.length ?? 0} chars` : 'missing entirely'
 	);
-	// Every locale must name the recommendation, because that is the part that
-	// actually helps a Monero user: Tor or a VPN closes this and everything else.
 	check(
-		`3.${loc} …and names the Tor / VPN recommendation`,
+		`1.${loc} …and names the Tor / VPN recommendation`,
 		/tor/i.test(entry?.a ?? '') && /vpn/i.test(entry?.a ?? '')
+	);
+	// With push on (clearnet and mixed instances), the browser also uses its
+	// vendor's push service (notifications/push.ts; METADATA-LEAK-CATALOG). The
+	// article must say so by pointing at the push entry: it quotes that entry's
+	// question, the way FAQ answers cross-reference each other.
+	const push = ((read(f).faq as Json)?.entries as Json)?.push_notifications_privacy as
+		| { q?: string }
+		| undefined;
+	const pushQ = push?.q;
+	check(
+		`1.${loc} …and points to the push-notifications entry (the browser's push service)`,
+		!!pushQ && (entry?.a ?? '').includes(pushQ),
+		pushQ ? 'the push caveat is missing' : 'push_notifications_privacy.q missing'
 	);
 }
 
-// ── 1b. the article says how OFTEN and HOW MANY requests, as the code does ──
-// The numbers come from the code itself (imported values, not its text): the
-// outcome is remembered for RELEASE_CACHE_TTL_MS; a check costs
-// RELEASE_CHECK_STEADY_STATE_REQUESTS requests to one node (each may be preceded
-// by the browser's CORS preflight), a second node only when needed
-// (MAX_NODES_PER_CHECK; the article does not promise that node is run by another
-// operator, since the default hidden nodes are not independent); the history windows are 100 then
-// 10,000. src/lib/net/releaseBudget.test.ts proves the code makes exactly that
-// many requests; this proves the article says the same. If a number changes,
-// update the article in all 10 locales.
+// ── 2. the budget in the article is the budget in the code ─────────
 {
 	const WORDS: Record<number, string> = { 1: 'one', 2: 'two', 3: 'three', 4: 'four' };
-	const enA = (
-		JSON.parse(readFileSync(join(LOCALES, 'en.json'), 'utf8')) as {
-			faq: { entries: Record<string, { a: string }> };
-		}
-	).faq.entries[KEY]!.a;
-	const budget = `${WORDS[RELEASE_CHECK_STEADY_STATE_REQUESTS]} small requests to one node`;
+	const enA = articleOf(read('en.json'))?.a ?? '';
+	const budget = `${WORDS[RELEASE_CHECK_STEADY_STATE_REQUESTS]} small requests`;
 	check(
-		`1b EN: the article says "at most once a day", "after each site update" and "${budget}", the preflight and "another node" (no operator-independence claim) — as the code does`,
+		`2 EN: "at most once a day", "after each site update", "${budget}", this site only, two RPC operators agree — as the code does`,
 		RELEASE_CACHE_TTL_MS === 24 * 60 * 60 * 1000 &&
-			MAX_NODES_PER_CHECK === 2 &&
 			RELEASE_HISTORY_WINDOWS[0] === 100 &&
 			RELEASE_HISTORY_WINDOWS[1] === 10_000 &&
 			/at most once a day/i.test(enA) &&
 			/after each site update/i.test(enA) &&
 			enA.includes(budget) &&
-			/is another node asked/i.test(enA) &&
-			/preflight/i.test(enA) &&
-			!/another operator/i.test(enA) &&
-			!/four small requests/i.test(enA),
-		RELEASE_CACHE_TTL_MS !== 24 * 60 * 60 * 1000
-			? 'RELEASE_CACHE_TTL_MS is no longer 24 h — update the article in all 10 locales'
-			: 'the budget in the code and the article differ — update the article in all 10 locales'
+			/connect to this site only/i.test(enA) &&
+			/two Blurt RPC operators agree/i.test(enA),
+		'the code and the article differ — update the article in all 10 locales'
+	);
+	// A check that got no answer is asked again after 12 hours, not a day (at
+	// most twice a day, a standing decision).
+	check(
+		'2 EN: "if this site could not get an answer, after 12 hours" — as the code does',
+		RELEASE_FAILED_TTL_MS === 12 * 60 * 60 * 1000 &&
+			/could not get an answer, after 12 hours/i.test(enA),
+		'the code and the article differ — update the article in all 10 locales'
 	);
 	for (const f of files) {
 		const loc = f.replace('.json', '');
-		const d = JSON.parse(readFileSync(join(LOCALES, f), 'utf8')) as Json;
-		const a = ((((d.faq as Json)?.entries as Json)?.[KEY] as { a?: string }) ?? {}).a ?? '';
+		const a = articleOf(read(f))?.a ?? '';
 		check(
-			`1b.${loc} the article states the budget (24 h, 100 entries, ~115 KB) and the per-origin pools (.onion, .i2p)`,
-			/24/.test(a) && /100/.test(a) && /115/.test(a) && /\.onion/.test(a) && /\.b32\.i2p/.test(a)
-		);
-	}
-	const ONCE_PER_SESSION: Record<string, RegExp> = {
-		en: /once per session/i,
-		es: /una vez por sesi[oó]n/i,
-		de: /einmal pro sitzung/i,
-		fr: /une fois par session/i,
-		it: /una volta per sessione/i,
-		pl: /raz na sesj[eę]/i,
-		ru: /раз за сессию/i,
-		fa: /یک بار در هر نشست/,
-		'zh-CN': /每次会话一次/,
-		'zh-HK': /每次工作階段一次/
-	};
-	for (const f of files) {
-		const loc = f.replace('.json', '');
-		const d = JSON.parse(readFileSync(join(LOCALES, f), 'utf8')) as Json;
-		const a = ((((d.faq as Json)?.entries as Json)?.[KEY] as { a?: string }) ?? {}).a ?? '';
-		const re = ONCE_PER_SESSION[loc];
-		check(
-			`1b.${loc} the article no longer says "once per session"`,
-			re !== undefined && !re.test(a),
-			re ? '' : 'no pattern for this locale'
+			`2.${loc} the article states the budget (24 h, 100 entries, ~115 KB) and no node pools`,
+			/24/.test(a) && /100/.test(a) && /115/.test(a) && !/\.b32\.i2p/.test(a) && /RPC/.test(a)
 		);
 	}
 }
 
-// ── 2. no surviving absolute claim that the direct call falsifies ───
-for (const f of files) {
-	const loc = f.replace('.json', '');
-	const all = leaves(JSON.parse(readFileSync(join(LOCALES, f), 'utf8')));
-	// Pin the CLASS, not the phrasings. The first version of this guard listed the
-	// two sentences already found — and missed a third, `settings.endpoints
-	// .pool_note`, which told users "your browser never talks to these nodes
-	// directly" on the very panel that LISTS the node the release check calls.
-	// Hardcoding known-bad literals is how a guard ends up certifying the bug it
-	// was written to catch.
-	//
-	// The article itself is exempt: it says "your browser never touches third-party
-	// endpoints" and then immediately says "The one exception." — scoped, not false.
-	// "nowhere else" is only false UNSCOPED. `security.tracking_body` says "your
-	// orders, your chat, and your balances all go to Morphit and nowhere else",
-	// which is true and is a brag worth keeping — so the pattern requires the
-	// universal quantifier ("every request", "all traffic"), not the phrase alone.
-	const ABSOLUTE_CLAIM =
-		/(browser|you)\s+never\s+(talks?|touch\w*|reach\w*|contact\w*|connect\w*)[\s\S]{0,40}(node|endpoint|third[- ]party)|(every|all)\s+(request|traffic)[\s\S]{0,40}nowhere else|no third[- ]party services|we don'?t know you'?re here|handles all blurt network traffic/i;
-	const bad = all.filter(([k, v]) => ABSOLUTE_CLAIM.test(v) && !k.startsWith(`faq.entries.${KEY}`));
+// ── 3. nothing still says the browser asks a node ──────────────────
+{
+	// English: any string in which the browser reads, asks or contacts a public
+	// or network node is the old disclosure, wherever it survives.
+	const OLD = /browser[\s\S]{0,160}?(public|network) (Blurt )?(RPC )?node/i;
+	const bad = leaves(read('en.json')).filter(([, v]) => OLD.test(v));
 	check(
-		`4.${loc} no string outside the article claims the browser never reaches a node`,
+		'3 EN: no string says the browser asks a public Blurt node',
 		bad.length === 0,
 		bad.map(([k]) => k).join(', ')
 	);
+	// Every locale: the three strings that told it now say "through this site,
+	// two RPC operators".
+	for (const f of files) {
+		const loc = f.replace('.json', '');
+		const d = read(f);
+		const glossary = ((d.glossary as Json)?.release_op as Json)?.body;
+		const security = (d.security as Json)?.reproducible_body;
+		check(
+			`3.${loc} the glossary and the security page name the RPC operators, not a public node`,
+			typeof glossary === 'string' &&
+				typeof security === 'string' &&
+				/RPC/.test(glossary) &&
+				/RPC/.test(security)
+		);
+	}
 }
 
-// ── 3. a worried user actually finds it ─────────────────────────────
+// ── 4. a worried user actually finds it ─────────────────────────────
 interface EnShape {
 	faq: { entries: Record<string, { q: string; a: string }> };
 }
-const en = JSON.parse(readFileSync(join(LOCALES, 'en.json'), 'utf8')) as unknown as EnShape;
+const en = read('en.json') as unknown as EnShape;
 const entries: FaqEntry[] = Object.entries(en.faq.entries).map(([key, v]) => ({
 	key: key as FaqEntry['key'],
 	question: v.q,
@@ -223,7 +168,7 @@ const entries: FaqEntry[] = Object.entries(en.faq.entries).map(([key, v]) => ({
 	related: []
 }));
 // The words someone types when they are worried, or when they opened the Network
-// tab and saw one request that was not to Morphit.
+// tab to see where the page connects.
 const MUST_RANK_FIRST = [
 	'ip leak',
 	'ip address',
@@ -237,12 +182,12 @@ const MUST_RANK_FIRST = [
 for (const q of MUST_RANK_FIRST) {
 	const hits = searchEntries(entries, q, 3);
 	const top = hits[0]?.entry.key ?? '(nothing)';
-	check(`5 "${q}" ranks the disclosure article FIRST`, top === KEY, `got ${top}`);
+	check(`4 "${q}" ranks the article FIRST`, top === KEY, `got ${top}`);
 }
 
 console.log('');
-if (fail === 0) console.log(`\u2713 all ${pass} ip-disclosure-single-source checks passed`);
+if (fail === 0) console.log(`✓ all ${pass} ip-disclosure-single-source checks passed`);
 else {
-	console.error(`\u2717 ${fail} of ${pass + fail} ip-disclosure-single-source checks FAILED`);
+	console.error(`✗ ${fail} of ${pass + fail} ip-disclosure-single-source checks FAILED`);
 	process.exit(1);
 }

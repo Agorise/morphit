@@ -30,11 +30,7 @@
 	import { initChainFee } from '$stores/chainFee';
 	import { initRelease } from '$stores/release';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
-	import {
-		startTradeEventListener,
-		stopTradeEventListener,
-		refreshTradeEventListener
-	} from '$lib/trades/tradeEventListener';
+	import { startTradeEventListener, stopTradeEventListener } from '$lib/trades/tradeEventListener';
 	import { crossPageTradeEventsEnabled } from '$lib/notifications/crossPageTradeEvents';
 	import { offlinePresenceWhileUnlocked } from '$lib/notifications/offlinePresence';
 	import { localePath } from '$i18n/path';
@@ -208,8 +204,9 @@
 		return offlinePresenceWhileUnlocked();
 	});
 
-	// Phase F.5 — Global trade-event listener.  Opens chat SSE
-	// streams for all recent peers when the user is unlocked, so
+	// Phase F.5 — Global trade-event listener.  Driven by the ONE
+	// account-wide chat-activity stream (v1.21.14 full chat audit, W-H2:
+	// it used to hold a chat stream open per recent peer), so
 	// trade-status updates flow into the tradeStatus store
 	// regardless of which page the user is on.  Cross-page toasts
 	// fire from this listener; /my/orders badges read from the
@@ -234,20 +231,9 @@
 		const account = getUserBlurtAccount();
 		if (account === null) return;
 		startTradeEventListener(account);
-
-		// Phase F.5 audit fix (F-29) — pick up new peers as the
-		// user starts new conversations.  Without this hook, the
-		// listener's stream set is frozen at startup and only
-		// updated by the next lock/unlock cycle.
-		const onRecentPeersChanged = (): void => refreshTradeEventListener();
-		if (typeof window !== 'undefined') {
-			window.addEventListener('morphit:recent-peers-changed', onRecentPeersChanged);
-		}
-
+		// (No recent-peers hook any more: every peer's activity reaches the
+		// listener through the account-wide stream.)
 		return () => {
-			if (typeof window !== 'undefined') {
-				window.removeEventListener('morphit:recent-peers-changed', onRecentPeersChanged);
-			}
 			stopTradeEventListener();
 		};
 	});

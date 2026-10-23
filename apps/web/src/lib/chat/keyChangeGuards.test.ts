@@ -246,6 +246,58 @@ describe('sealed pins belong to one account', () => {
 	});
 });
 
+describe("an explicit Sign Out keeps the account's own seal (v1.21.14 review C, M1)", () => {
+	// CHAT-CRYPTO: "Sign Out removes the readable pins but keeps the sealed copy;
+	// signing back in to the same account restores it." It did not: a Sign Out
+	// from an UNLOCKED session wiped every pin and sealed nothing, so after signing
+	// back in every peer was a first contact again and a substituted key was
+	// trusted without a word.
+	async function signOutNow(): Promise<void> {
+		const { broadcastSignOut } = await import('$stores/identity');
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		broadcastSignOut();
+		await vi.dynamicImportSettled();
+		await vi.advanceTimersByTimeAsync(2_000);
+		vi.useRealTimers();
+	}
+	it('chat key: sign out while unlocked, sign back in — a substituted key is still refused', async () => {
+		const pp = await import('$lib/chat/pubPin');
+		await unlockAs(7);
+		await pp.resolveChatPubFromIndexer('bob', { blockNum: 10, trxId: T1, pubB64: 'BOBKEY' }, relay);
+		await signOutNow();
+		await vi.waitFor(() => expect(sealCount()).toBeGreaterThan(0)).catch(() => undefined);
+		// Nothing readable names the peer after the sign-out.
+		expect(everythingStored()).not.toContain('BOBKEY');
+		await unlockAndSettle(7);
+		expect(await substitute(pp)).toBe('refused: pub_pin_key_changed');
+	});
+	it('posting keys: sign out while unlocked, sign back in — an added key is still a change', async () => {
+		const pp = await import('$lib/chat/pubPin');
+		await unlockAs(7);
+		expect(await pp.resolvePostingKeyPin('bob', ['BOBPOSTING'])).toEqual(['BOBPOSTING']);
+		await signOutNow();
+		await vi.waitFor(() => expect(sealCount()).toBeGreaterThan(0)).catch(() => undefined);
+		await unlockAs(7);
+		await vi
+			.waitFor(() => expect(pp.pinnedPostingFor('bob')).not.toEqual([]), { timeout: 500 })
+			.catch(() => undefined);
+		const got = await pp.resolvePostingKeyPin('bob', ['BOBPOSTING', 'OPERATORKEY']).then(
+			(v) => `used ${v.join(',')}`,
+			(e: { code?: string }) => `refused: ${e.code}`
+		);
+		expect(got).toBe('refused: pub_pin_posting_key_changed');
+	});
+	it('Lock, unlock, then Sign Out: the pins are sealed again, not lost', async () => {
+		const pp = await import('$lib/chat/pubPin');
+		await meetBobAndLock(7);
+		await unlockAndSettle(7);
+		await signOutNow();
+		await vi.waitFor(() => expect(sealCount()).toBeGreaterThan(0)).catch(() => undefined);
+		await unlockAndSettle(7);
+		expect(await substitute(pp)).toBe('refused: pub_pin_key_changed');
+	});
+});
+
 describe('the unlock restores the seal before anything relies on it', () => {
 	it('a key looked up right after unlock, before the unseal lands, is still compared', async () => {
 		const pp = await import('$lib/chat/pubPin');
@@ -294,7 +346,7 @@ describe('a replaced chat key reads history, never authenticates', () => {
 				relay
 			)
 			.catch(() => {});
-		expect(pp.acceptKeyChange('alice', 'chat')).toBe(true);
+		expect(pp.acceptKeyChange('alice', 'chat', b64(newAlice.pub))).toBe(true);
 
 		const FUNDS = JSON.stringify({
 			v: 1,
@@ -343,9 +395,6 @@ describe('a replaced chat key reads history, never authenticates', () => {
 			replacedPeerPubs: (p: string) =>
 				decode((pp as { replacedPubsFor?: (p: string) => string[] }).replacedPubsFor?.(p) ?? []),
 			deriveMyChatIdentity: async () => ({ priv: me.priv, pub: me.pub }),
-			encrypt: async () => {
-				throw new Error('not sending');
-			},
 			decrypt: async (
 				env: unknown,
 				priv: Uint8Array,
@@ -374,12 +423,11 @@ describe('a replaced chat key reads history, never authenticates', () => {
 });
 
 describe('Lock through the identity store (v1.21.13)', () => {
-	it('seals the posting pins and the own-key record, and forgets a failed send', async () => {
+	it('seals the posting pins, and forgets a failed send', async () => {
 		const pp = await import('$lib/chat/pubPin');
 		const cs = await import('$lib/chat/chatService');
 		await unlockAs(7);
 		await pp.resolvePostingKeyPin('bob', ['QktFWQ==']);
-		pp.recordOwnPublished('anna', 'TUlORQ==');
 		const live = liveFor(7);
 		const mk = () =>
 			cs.createConversationController({
@@ -397,7 +445,8 @@ describe('Lock through the identity store (v1.21.13)', () => {
 				},
 				fetchPeerChatPub: async () => new Uint8Array(32).fill(4),
 				deriveMyChatIdentity: async () => ({ priv: new Uint8Array(32), pub: new Uint8Array(32) }),
-				encrypt: async () => ({ v: 2, ciphertext: 'Yw==', ephemeralPub: 'ZQ==', nonce: 'bg==' }),
+				fetchPostingPubs: async () => [new Uint8Array(33).fill(2)],
+				encryptPosting: async () => ({ ciphertext: 'Yw==', ephemeralPub: 'ZQ==', nonce: 'bg==' }),
 				decrypt: async () => null,
 				onChange: () => undefined
 			});
@@ -424,12 +473,9 @@ describe('Lock through the identity store (v1.21.13)', () => {
 			expect(n).toBe(0);
 		});
 		expect(everythingStored()).not.toContain('QktFWQ');
-		expect(everythingStored()).not.toContain('TUlORQ');
 		expect(pp.pinnedPostingFor('bob')).toEqual([]);
-		expect(pp.ownPublishedRecord('anna')).toBeNull();
 
 		await unlockAs(7);
 		await vi.waitFor(() => expect(pp.pinnedPostingFor('bob')).toEqual(['QktFWQ==']));
-		expect(pp.ownPublishedRecord('anna')).toBe('TUlORQ==');
 	});
 });

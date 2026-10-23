@@ -14,6 +14,9 @@ import {
 	recordAddressSharedPure,
 	recordFundsSentPure,
 	recordVerificationPure,
+	tradeKey,
+	tradeStateOf,
+	tradeStateWith,
 	type TradeState,
 	type TradePhase,
 	type MismatchField
@@ -21,17 +24,19 @@ import {
 
 // Re-export types for back-compat with existing consumers.
 export type { TradeState, TradePhase, MismatchField };
+export { tradeKey, tradeStateOf, tradeStateWith };
 
 const _states = writable<ReadonlyMap<string, TradeState>>(new Map());
 
-/** Public read-only view of the entire trade-state map. */
+/** Public read-only view of the entire trade-state map, keyed by
+ *  tradeKey(order owner, order permlink). */
 export const tradeStates: Readable<ReadonlyMap<string, TradeState>> = {
 	subscribe: _states.subscribe
 };
 
 /** Imperative one-shot read — for non-reactive callers. */
-export function getTradeState(orderPermlink: string): TradeState | null {
-	return get(_states).get(orderPermlink) ?? null;
+export function getTradeState(orderOwner: string, orderPermlink: string): TradeState | null {
+	return tradeStateOf(get(_states), orderOwner, orderPermlink);
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -39,6 +44,7 @@ export function getTradeState(orderPermlink: string): TradeState | null {
 // ────────────────────────────────────────────────────────────────
 
 export function recordAddressShared(args: {
+	orderOwner: string;
 	orderPermlink: string;
 	peer: string;
 	method: ChatAssetTicker;
@@ -51,6 +57,7 @@ export function recordAddressShared(args: {
 }
 
 export function recordFundsSent(args: {
+	orderOwner: string;
 	orderPermlink: string;
 	peer: string;
 	method: ChatAssetTicker;
@@ -63,6 +70,7 @@ export function recordFundsSent(args: {
 }
 
 export function recordVerification(args: {
+	orderOwner: string;
 	orderPermlink: string;
 	verifyResult: VerifyResult;
 	counterparty: string;

@@ -6,6 +6,8 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
+	import { keyField } from '$lib/ui/keyField';
 	import {
 		importIdentityFromSeed,
 		importPostingOnlyIdentity,
@@ -62,12 +64,6 @@
 	// field is wrong and why. Grandma needs the field pointed at, not just
 	// a paragraph at the top of the form.
 	let wifKeyInvalid = $state(false);
-	// Firefox ignores autocomplete="off" on password fields and dumps a saved
-	// site password into the FIRST password field on load — here that was the WIF
-	// key box. Start the field readonly so the browser skips it during autofill,
-	// then unlock it the instant the user focuses it (they still paste/type
-	// normally). No "generate password" popup, unlike autocomplete="new-password".
-	let wifFieldLocked = $state(true);
 	let seedInvalid = $state(false);
 	let keyfilePwInvalid = $state(false);
 	/** A keyfile with 2FA enrolled: the password opened it, now the
@@ -174,6 +170,11 @@
 	let accountFieldNeeded = $state(false);
 	let manualAccount = $state('');
 	let manualAccountStatus = $state<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+	/** The account the pasted posting key belongs to, once known: the user name
+	 *  of the new-password form (PasswordScope). */
+	const keyAccountName = $derived(
+		detectedAccount ?? (manualAccountStatus === 'valid' ? manualAccount.trim().toLowerCase() : null)
+	);
 	let derivedPubCache = $state<string | null>(null);
 	// Monotonic guards so a slow reply for an OLD wif/name can't clobber the
 	// current one.
@@ -1077,19 +1078,23 @@
 						{$_('onboarding.import.keyfile_hint')}
 					</span>
 				</label>
-				<label class="mt-4 block">
-					<span class="mb-2 block font-semibold">{$_('onboarding.import.password_label')}</span>
-					<input
-						type="password"
-						maxlength="64"
-						bind:value={password}
-						autocomplete="current-password"
-						oninput={() => (keyfilePwInvalid = false)}
-						class="w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {keyfilePwInvalid
-							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-							: 'border-ink-200 dark:border-ink-700'}"
-					/>
-				</label>
+				<!-- Its own form (PasswordScope): the account is inside the keyfile, not
+				     known yet. -->
+				<PasswordScope account={null}>
+					<label class="mt-4 block">
+						<span class="mb-2 block font-semibold">{$_('onboarding.import.password_label')}</span>
+						<input
+							type="password"
+							maxlength="64"
+							bind:value={password}
+							autocomplete="current-password"
+							oninput={() => (keyfilePwInvalid = false)}
+							class="w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {keyfilePwInvalid
+								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+								: 'border-ink-200 dark:border-ink-700'}"
+						/>
+					</label>
+				</PasswordScope>
 				{#if keyfileNeedsTotp}
 					<label class="mt-4 block">
 						<span class="mb-2 block font-semibold">
@@ -1124,6 +1129,10 @@
 						>{$_('onboarding.import.posting_only.wif_label')}</span
 					>
 					<div class="relative">
+						<!-- `readonly` + keyField: Firefox fills a saved site password into the
+						     first password field it sees, even with autocomplete="off", but not
+						     into a read-only one. Every new copy of the field (switching tabs
+						     re-creates it) starts locked and unlocks on touch or focus. -->
 						<input
 							type="password"
 							name="morphit-posting-wif-import"
@@ -1131,7 +1140,8 @@
 							maxlength="64"
 							bind:value={postingWif}
 							autocomplete="off"
-							readonly={wifFieldLocked}
+							readonly
+							use:keyField
 							spellcheck="false"
 							oninput={() => {
 								wifKeyInvalid = false;
@@ -1149,9 +1159,6 @@
 								}
 							}}
 							onfocus={() => {
-								// Unlock on first focus so the user can paste/type — the readonly
-								// start-state is only there to dodge Firefox's on-load autofill.
-								wifFieldLocked = false;
 								wifKeyInvalid = false;
 								wifStatus = 'idle';
 							}}
@@ -1330,43 +1337,48 @@
 
 				<div class="my-4 border-t border-ink-200 dark:border-ink-800"></div>
 
-				<label class="block">
-					<span class="mb-2 block font-semibold"
-						>{$_('onboarding.import.posting_only.new_password_label')}</span
-					>
-					<input
-						type="password"
-						maxlength="64"
-						bind:value={postingNewPassword}
-						autocomplete="new-password"
-						class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-					/>
-					<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
-						{$_('onboarding.import.posting_only.new_password_hint')}
-					</span>
-				</label>
-
-				<label class="mt-3 block">
-					<span class="mb-2 block font-semibold"
-						>{$_('onboarding.import.posting_only.new_password_confirm_label')}</span
-					>
-					<input
-						type="password"
-						maxlength="64"
-						bind:value={postingNewPasswordConfirm}
-						onblur={() => (postingConfirmBlurred = true)}
-						autocomplete="new-password"
-						aria-invalid={postingConfirmMismatch}
-						class="w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {postingConfirmMismatch
-							? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-							: 'border-ink-200 dark:border-ink-700'}"
-					/>
-					{#if postingConfirmMismatch}
-						<span class="mt-1 block text-xs text-red-600 dark:text-red-400">
-							{$_('onboarding.import.posting_only.password_mismatch')}
+				<!-- The new password pair is its own form (PasswordScope), named for the
+				     account the key belongs to once it is known. Outside a form, Firefox
+				     counted the key field above as the "old password". -->
+				<PasswordScope account={keyAccountName}>
+					<label class="block">
+						<span class="mb-2 block font-semibold"
+							>{$_('onboarding.import.posting_only.new_password_label')}</span
+						>
+						<input
+							type="password"
+							maxlength="64"
+							bind:value={postingNewPassword}
+							autocomplete="new-password"
+							class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+						/>
+						<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
+							{$_('onboarding.import.posting_only.new_password_hint')}
 						</span>
-					{/if}
-				</label>
+					</label>
+
+					<label class="mt-3 block">
+						<span class="mb-2 block font-semibold"
+							>{$_('onboarding.import.posting_only.new_password_confirm_label')}</span
+						>
+						<input
+							type="password"
+							maxlength="64"
+							bind:value={postingNewPasswordConfirm}
+							onblur={() => (postingConfirmBlurred = true)}
+							autocomplete="new-password"
+							aria-invalid={postingConfirmMismatch}
+							class="w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {postingConfirmMismatch
+								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+								: 'border-ink-200 dark:border-ink-700'}"
+						/>
+						{#if postingConfirmMismatch}
+							<span class="mt-1 block text-xs text-red-600 dark:text-red-400">
+								{$_('onboarding.import.posting_only.password_mismatch')}
+							</span>
+						{/if}
+					</label>
+				</PasswordScope>
 			{/if}
 
 			<div class="mt-6">
@@ -1418,48 +1430,56 @@
 					<p class="text-sm text-ink-700 dark:text-ink-200">
 						{$_('onboarding.import.remember_me.password_intro')}
 					</p>
-					<label class="block">
-						<span class="block text-sm font-semibold">
-							{$_('onboarding.import.remember_me.password_label')}
-						</span>
-						<input
-							type="password"
-							maxlength="64"
-							bind:value={rememberPassword}
-							autocomplete="new-password"
-							minlength="8"
-							class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-						/>
-						<span class="mt-1 block text-xs text-ink-500">
-							{$_('onboarding.import.remember_me.password_hint')}
-						</span>
-					</label>
-					{#if rememberPassword.length >= 10}
-						{@const strength = scorePassword(rememberPassword)}
-						{#if strength === 'too_simple'}
-							<p class="text-xs text-red-600 dark:text-red-400">
-								⚠ {$_('onboarding.import.remember_me.password_strength_too_simple')}
-							</p>
-						{:else if strength === 'common'}
-							<p class="text-xs text-red-600 dark:text-red-400">
-								⚠ {$_('onboarding.import.remember_me.password_strength_common')}
-							</p>
+					<!-- Its own form (PasswordScope); the account name only once this
+					     import has found it. `space-y-4` repeats the parent's spacing for
+					     the fields inside. -->
+					<PasswordScope
+						account={pendingNeedsAccountName ? null : undefined}
+						class="block space-y-4"
+					>
+						<label class="block">
+							<span class="block text-sm font-semibold">
+								{$_('onboarding.import.remember_me.password_label')}
+							</span>
+							<input
+								type="password"
+								maxlength="64"
+								bind:value={rememberPassword}
+								autocomplete="new-password"
+								minlength="8"
+								class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+							/>
+							<span class="mt-1 block text-xs text-ink-500">
+								{$_('onboarding.import.remember_me.password_hint')}
+							</span>
+						</label>
+						{#if rememberPassword.length >= 10}
+							{@const strength = scorePassword(rememberPassword)}
+							{#if strength === 'too_simple'}
+								<p class="text-xs text-red-600 dark:text-red-400">
+									⚠ {$_('onboarding.import.remember_me.password_strength_too_simple')}
+								</p>
+							{:else if strength === 'common'}
+								<p class="text-xs text-red-600 dark:text-red-400">
+									⚠ {$_('onboarding.import.remember_me.password_strength_common')}
+								</p>
+							{/if}
 						{/if}
-					{/if}
-					<label class="block">
-						<span class="block text-sm font-semibold">
-							{$_('onboarding.import.remember_me.password_confirm_label')}
-						</span>
-						<input
-							type="password"
-							maxlength="64"
-							bind:value={rememberPasswordConfirm}
-							autocomplete="new-password"
-							class="mt-1 w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {rememberConfirmMismatch
-								? 'border-red-400 focus:ring-red-400 dark:border-red-500'
-								: 'border-ink-200 dark:border-ink-700'}"
-						/>
-					</label>
+						<label class="block">
+							<span class="block text-sm font-semibold">
+								{$_('onboarding.import.remember_me.password_confirm_label')}
+							</span>
+							<input
+								type="password"
+								maxlength="64"
+								bind:value={rememberPasswordConfirm}
+								autocomplete="new-password"
+								class="mt-1 w-full rounded-xl border bg-white px-3 py-2 focus:outline-none dark:bg-ink-900 {rememberConfirmMismatch
+									? 'border-red-400 focus:ring-red-400 dark:border-red-500'
+									: 'border-ink-200 dark:border-ink-700'}"
+							/>
+						</label>
+					</PasswordScope>
 					{#if rememberConfirmMismatch}
 						<p class="text-xs text-red-600 dark:text-red-400">
 							{$_('onboarding.import.remember_me.error.passwords_mismatch')}

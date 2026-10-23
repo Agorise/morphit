@@ -4,7 +4,8 @@
  *   GET /v1/account/:account/keys
  *     → { account: { name, owner, active, posting, memo_key } }
  *     404 if the account does not exist on chain.
- *     502 (code "internal") if the chain RPC could not be reached.
+ *     502 (code "internal") if the chain RPC could not be reached, or two
+ *     RPC operators did not (yet) agree on the account (S-M9).
  *
  * WHY THIS ENDPOINT EXISTS — PRIVACY (priority #1). Login / key import
  * (onboarding/import) and the settings account-name verifier used to
@@ -31,7 +32,8 @@
 
 import { Hono } from 'hono';
 
-import type { BlurtClient } from '$blurt/client';
+import type { BlurtClient, ChainAccount } from '$blurt/client';
+import { primaryPostingKey } from '$indexer/postingKeyBackfill';
 import { errorBody, isAccountName } from '$api/shared';
 
 
@@ -51,7 +53,28 @@ function isAuthority(v: unknown): boolean {
 	return typeof v === 'object' && v !== null && Array.isArray((v as { key_auths?: unknown }).key_auths);
 }
 
-export function accountKeysRoute(blurt: BlurtClient): Hono {
+/** What two operators must agree on: every authority (threshold, keys and
+ *  account authorities, order-independent) and the memo key. An account the
+ *  chain does not have is agreed on too, as "none". */
+function authoritiesKey(acc: ChainAccount | undefined): string {
+	if (acc === undefined) return '∅ no such account';
+	const auth = (a: unknown): unknown => {
+		const x = (a ?? {}) as { weight_threshold?: unknown; key_auths?: unknown; account_auths?: unknown };
+		const pairs = (v: unknown): string[] =>
+			Array.isArray(v) ? v.map((p) => JSON.stringify(p)).sort() : [];
+		return [x.weight_threshold ?? null, pairs(x.key_auths), pairs(x.account_auths)];
+	};
+	return JSON.stringify([auth(acc.owner), auth(acc.active), auth(acc.posting), acc.memo_key ?? null]);
+}
+
+export function accountKeysRoute(
+	blurt: BlurtClient,
+	opts: {
+		/** Told the account's signing posting key once operators agreed on it
+		 *  (main.ts: the fast path's key cache, notePostingKeyFromQuorum). */
+		onAgreedPostingKey?: (account: string, key: string) => void;
+	} = {}
+): Hono {
 	const app = new Hono();
 
 	app.get('/:account/keys', async (c) => {
@@ -60,14 +83,23 @@ export function accountKeysRoute(blurt: BlurtClient): Hono {
 			return c.json(errorBody('bad_request', 'invalid account name'), 400);
 		}
 
-		let acct;
+		// TWO OPERATORS MUST AGREE (v1.21.14 full chat audit, S-M9). This answer
+		// is what a browser ENCRYPTS TO: a first message to someone whose chat
+		// key is not pinned yet goes to the posting key named here. It used to be
+		// one hedged answer — the fastest node's — so a single hostile pool node
+		// could name its own key and read that message. Now it is the quorum
+		// read the fast path already uses for keys: two operators agreeing on
+		// every authority and the memo key, a majority of those that answered.
+		let agreed: ReadonlyMap<string, ChainAccount> | null;
 		try {
-			// userFacing: true → hedged for a snappy interactive verdict
-			// (the import field checks existence as the user types).
-			acct = await blurt.getAccount(account, { userFacing: true });
+			agreed = await blurt.getAccountsAgreed([account], authoritiesKey);
 		} catch {
 			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
 		}
+		if (agreed === null) {
+			return c.json(errorBody('internal', 'Blurt RPC operators did not agree on this account yet'), 502);
+		}
+		const acct = agreed.get(account) ?? null;
 
 		if (acct === null) {
 			return c.json(errorBody('not_found', 'no such account on chain'), 404);
@@ -79,6 +111,9 @@ export function accountKeysRoute(blurt: BlurtClient): Hono {
 		if (!isAuthority(acct.owner) || !isAuthority(acct.active) || !isAuthority(acct.posting) || typeof acct.memo_key !== 'string') {
 			return c.json(errorBody('internal', 'incomplete account data from the Blurt network'), 502);
 		}
+
+		const posting = primaryPostingKey(acct as never);
+		if (posting !== null) opts.onAgreedPostingKey?.(acct.name, posting);
 
 		const body: AccountKeysBody = {
 			account: {

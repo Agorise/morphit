@@ -93,10 +93,10 @@ them to agree on the history and on the block that holds the release
 op, recomputes the transaction id from that block, and checks that the
 transaction's signature recovers to `@morphit`'s posting key, which is
 pinned in the script (`BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9`).
-Only then does it compare the anchor with your file. (This is stricter
-than the browser's daily release check, which asks one node and relies on
-the same signature check, asking a second node only when the
-first fails or serves something that does not verify.)
+Only then does it compare the anchor with your file. (The browser's daily
+release check makes the same signature check on an answer its own instance
+gives only when two RPC operators agree; this script asks the operators
+itself.)
 
 ```sh
 node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz

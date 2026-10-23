@@ -19,22 +19,19 @@
  *   now route through the same-origin indexer (privacy #1); the browser's old
  *   multi-node quorum is gone. To keep the money-critical payment check
  *   trustless for the cautious, the chat UI offers an independent block-explorer
- *   "Verify" link instead. RELEASE verification is the SOLE exception: it
- *   reads the real chain DIRECTLY (the rotator, getRotator; the record is
- *   proved by its signature), because its anti-tamper trust anchor is meaningless if it
- *   trusts the operator's own indexer. This smoke fails if payment/identity/op
- *   verification regress to a direct-node read, if release verification is
- *   rerouted through the indexer, or if any flow OTHER than release
- *   verification reaches the rotator.
+ *   "Verify" link instead. RELEASE verification was the one exception until
+ *   v1.21.14; it now reads through the instance too (`POST /v1/chain/agreed`,
+ *   two RPC operators must agree; the browser still proves the signature), and
+ *   the browser's node rotator is gone. This smoke fails if any of these
+ *   regress to a direct-node read.
  *
- * Static source scan (the rotator module pulls $app/environment, which the
- * smoke runner can't resolve, so we assert on source rather than importing).
+ * Static source scan. The behaviour is pinned elsewhere: every page's CSP is
+ * connect-src 'self' (scripts/csp-header-consistency-smoke.ts) and the release
+ * check's requests are all same-origin (src/lib/net/releaseBudget.test.ts).
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { selectRpcPool } from '../src/lib/net/endpoints';
-import { DEFAULT_HIDDEN_RPC_ENDPOINTS, DEFAULT_I2P_RPC_ENDPOINTS } from '../src/lib/net/config';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
@@ -144,29 +141,24 @@ check(
 		!/\.callMany\b/.test(chainVerify)
 );
 
-// ─── TRUST EXCEPTION: release verification stays DIRECT-to-chain ──────────────
-// The sole sanctioned browser→node reader. Its anti-tamper anchor is worthless
-// if it trusts the operator's own indexer, so it reads the chain through the
-// rotator (one node, a second only when needed; signature recovered —
-// releaseVerifyCore).
-// The behaviour itself is pinned by src/lib/net/releaseVerify.test.ts.
+// ─── RELEASE verification: through the instance's agreed-read relay ──────────
 const releaseFetch = read('src/lib/net/releaseFetch.ts');
 check(
-	'releaseFetch does NOT route through the indexer (no getBlurtClient, no /v1 relay)',
-	!/getBlurtClient\b/.test(releaseFetch) && !/\/v1\/(chain|account)/.test(releaseFetch)
+	'releaseFetch reads through the instance (chainAgreed → POST /v1/chain/agreed)',
+	/chainAgreed/.test(releaseFetch) && /\/v1\/chain\/agreed/.test(read('src/lib/net/chainRelay.ts'))
 );
-
-// The rotator is the ONE browser→node path. Sweep every web source: only
-// releaseFetch may call getRotator() (endpoints.ts defines it). A NEW caller
-// would be a fresh direct-to-chain leak — fail loudly.
-const directClientOffenders = srcFiles.filter((f) => {
-	if (f.endsWith('lib/net/endpoints.ts') || f.endsWith('lib/net/releaseFetch.ts')) return false;
+check(
+	'the indexer exposes the agreed-read relay (POST /agreed, quorum of two operators)',
+	/['"]\/agreed['"]/.test(indexerChainExplorer) && /condenserAgreed/.test(indexerChainExplorer)
+);
+// No browser→node reader is left anywhere in the web sources.
+const directReaderOffenders = srcFiles.filter((f) => {
 	if (/\.test\.ts$/.test(f)) return false;
-	return /getRotator\(\)/.test(readFileSync(f, 'utf8'));
+	return /getRotator\(|EndpointRotator|getDirectChainClient/.test(readFileSync(f, 'utf8'));
 });
-check('only releaseFetch reaches the node rotator (sweep)', directClientOffenders.length === 0);
-if (directClientOffenders.length > 0) {
-	for (const f of directClientOffenders) console.log(`      ↳ node rotator used in ${f}`);
+check('no web source has a browser→node reader (sweep)', directReaderOffenders.length === 0);
+if (directReaderOffenders.length > 0) {
+	for (const f of directReaderOffenders) console.log(`      ↳ browser→node reader in ${f}`);
 }
 
 // ─── BROADCAST: same-origin indexer ONLY — no direct-to-node fallback ────────
@@ -193,42 +185,6 @@ check(
 );
 
 console.log('');
-// A page served from a .onion/.i2p origin must use a HIDDEN-ONLY RPC pool — the
-// visitor is on Tor/I2P and their browser must never open a clearnet connection,
-// not even as a fallback.
-//
-// This used to be three regexes over endpoints.ts, matching the local variable
-// `servedFromHidden`, the exact shape of its `.endsWith()` test, and the exact
-// text of the ternary that consumed it. None of that is the property. Renaming
-// the variable broke it while the guarantee got STRONGER, and — far worse —
-// keeping the names while gutting the behaviour would have kept it green. It is
-// the definition-matching anti-pattern this repo has been bitten by three times.
-//
-// So call the function and look at what comes back.
-{
-	const hiddenOnly = (hostname: string): boolean => {
-		const pool = selectRpcPool({ protocol: 'http:', hostname });
-		return (
-			pool.length > 0 &&
-			pool.every(
-				(u) => DEFAULT_HIDDEN_RPC_ENDPOINTS.includes(u) || DEFAULT_I2P_RPC_ENDPOINTS.includes(u)
-			)
-		);
-	};
-	check(
-		'served-from-hidden origin → hidden-only RPC pool (no clearnet fall-through)',
-		hiddenOnly('abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrstuvwxyz23.onion') &&
-			hiddenOnly('of65zlzj7b4sjlg47weanpi3uwyer6abprh2xwwztgq3qqzxvspq.b32.i2p') &&
-			hiddenOnly('morphit.i2p')
-	);
-	check(
-		'clearnet https origin → no http:// endpoint the browser would block as mixed content',
-		selectRpcPool({ protocol: 'https:', hostname: 'morphit.io' }).every(
-			(u) => !u.toLowerCase().startsWith('http://')
-		)
-	);
-}
-
 if (failed === 0) {
 	console.log(`\u2713 all ${passed} rpc-privacy-routing scenarios passed`);
 } else {

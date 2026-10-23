@@ -1060,21 +1060,25 @@ export interface ChatIdentityResponse {
 
 // ─── Conversations list ────────────────────────────────────────────
 
-/** The order a conversation is most recently about, if any.
+/** The order a conversation thread is about, if any.
  *
- *  Derived (server-side) from the latest `morphit_chat_v1` message in
- *  the conversation that carried a plaintext `order_permlink` — so it
- *  tracks whatever order the two parties last referenced.  `account`
- *  is the order's OWNER (the recipient of that message; the op
- *  validator guarantees the permlink names an order that account
- *  owns).  The fiat band fields feed the shared `orderTitleParts`
+ *  Derived (server-side, `apps/indexer/src/api/conversations.ts`): the
+ *  inbox has one item per (peer, `order_permlink`) thread, and this is
+ *  the order that thread's permlink names.  `account` is the order's
+ *  OWNER, which is EITHER party — the caller or the peer, whoever owns
+ *  an order with that permlink (the op validator only accepts a
+ *  permlink naming an order one of the two owns; the peer's order is
+ *  preferred if both do).  It is not always the recipient: a reply in
+ *  a thread about your own order is sent BY the owner.  The fiat band
+ *  fields feed the shared `orderTitleParts`
  *  helper so the client renders the same "I'm buying 500 MXN or more
  *  worth of BLURT" sentence used everywhere else.  `null` on the
  *  parent when the conversation references no order. */
 export interface ConversationOrderRef {
 	/** Order permlink (link target: /@{account}/{permlink}). */
 	readonly permlink: string;
-	/** Order owner account (the message recipient). */
+	/** Order owner account — either party to the thread, not always the
+	 *  message recipient. */
 	readonly account: string;
 	/** 'buy' | 'sell'. */
 	readonly side: string;

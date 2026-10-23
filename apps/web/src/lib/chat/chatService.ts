@@ -69,8 +69,8 @@
  *      (hex-encoded, 32 chars).
  *   2. Push {state: 'pending', text, client_tag, ...} to the local
  *      message list.
- *   3. Encrypt via crypto.ts's `encryptToRecipient` (X25519 ECDH
- *      + ChaCha20-Poly1305-IETF AEAD per ADR-0015), set
+ *   3. Encrypt via crypto.ts's `encryptToPostingKey` (the posting-key
+ *      envelope, v3 — the only one sent since v1.21.14; see seal), set
  *      header.client_tag to our generated value.
  *   4. Broadcast via broadcastCustomJson with OP_IDS.chatMessage.
  *   5. On success: flip state to 'broadcast'.
@@ -86,7 +86,8 @@
  *           confirmed own message from a different client — just
  *           add to the list as 'confirmed'.
  *   3. Decrypt each confirmed message's ciphertext via
- *      crypto.ts's `decryptFromSender`. On any decrypt error
+ *      crypto.ts's `decryptPostingEnvelope` (v3), or `decryptFromSender`
+ *      for the older formats (v2, v1). On any decrypt error
  *      (malformed ciphertext, wrong recipient, AAD mismatch from
  *      tampering, etc.) the placeholder text "(encrypted)" is
  *      shown and `decryptFailed` is set on the LocalMessage.
@@ -115,21 +116,19 @@ import { fetchChainTx } from '$blurt/chainExplorer';
 import { createChatStream } from '$lib/chat/stream';
 import type { LiveIdentity } from '$crypto/keygen';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
-import { decodePayload } from '$lib/chat/payload';
+import { decodePayload, MAX_CHAT_CIPHERTEXT_CHARS } from '$lib/chat/payload';
 import { recordAddressShared, recordFundsSent } from '$lib/trades/tradeStatus';
 import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
+import { orderOwnerOf } from '$lib/trades/orderParties';
 import {
-	resolveChatPubFromIndexer,
 	PubPinError,
 	pinnedPubsFor,
 	replacedPubsFor,
+	replacedPostingFor,
 	pendingKeyChange,
 	resolvePostingKeyPin,
 	pinnedPostingFor,
-	ownPublishedRecord,
-	recordOwnPublished,
-	PUB_PIN_ERROR,
-	type ChatPubPin
+	PUB_PIN_ERROR
 } from '$lib/chat/pubPin';
 import { ChainRelayError } from '$net/chainRelay';
 import { unsealSettled } from '$lib/chat/unsealGate';
@@ -146,7 +145,6 @@ import {
 } from '$stores/chatSecurity';
 import {
 	deriveChatIdentity,
-	encryptToRecipient,
 	decryptFromSender,
 	decryptSelfCopy,
 	decodeChatPub,
@@ -155,15 +153,19 @@ import {
 	decryptPostingEnvelope,
 	decryptPostingSelfCopy,
 	decodePostingPubBLT,
-	encodeChatPub,
 	postingReader,
 	wipePostingReader,
 	NotForThisKeyError,
 	MAX_RECIPIENT_KEYS,
+	WRITE_ENVELOPE_V4,
+	validEnvelopeTime,
 	type ChatEnvelopeWire,
+	type EnvelopeBinding,
 	type PostingEnvelopeWire,
 	type PostingReader
 } from '$lib/chat/crypto';
+import { fetchDynamicGlobalProperties } from '$blurt/broadcastTransport';
+import { sendBinding } from '$lib/chat/envelopeBinding';
 import { classifyBroadcastError } from '$blurt/broadcastErrorClass';
 import { fetchAccountKeys } from '$blurt/accountKeys';
 
@@ -200,20 +202,69 @@ export const PEER_NO_POSTING_KEY_SENTINEL = 'peer_no_posting_key';
  *  this long, so a history full of messages costs one lookup, not one each.
  *  Retry asks at once. */
 export const KEY_LOOKUP_RETRY_MS = 30_000;
-/** What this account's published chat key is, against the one it derives:
- *  the same ('current'), another one ('stale' — the posting key changed and
- *  the new one is not published yet), or none at all. */
-export type OwnChatKeyStatus = 'current' | 'stale' | 'none';
 /** LocalMessage.error prefix for a broadcast the network or the instance
  *  refused: the rest is a `common.broadcast_err.*` key (the wording every
  *  chain-write screen uses — "Broadcast rejected due to insufficient
  *  funds…"), its values in LocalMessage.errorValues. */
 export const BROADCAST_ERR_PREFIX = 'broadcast_err:';
+/** LocalMessage.error for a message whose encrypted form is longer than the
+ *  indexer accepts (MAX_CHAT_CIPHERTEXT_CHARS): it is NOT broadcast (v1.21.14
+ *  full chat audit, W-M5 — it used to be, the fee was charged, and the indexer
+ *  then refused it: "on chain, not accepted"). Mapped by ChatMessage.svelte. */
+export const MESSAGE_TOO_LONG_SENTINEL = 'message_too_long';
 
-/** What one send attempt is encrypted into: v2 (both chat keys published) or
- *  v3 (the posting-key envelope, crypto.ts). */
+/** A v4 message's chain time may be this much later than its bound send
+ *  time — the head read, signing (a transaction expires 60 s after the head
+ *  it was made at), a block — and the indexer's created_at is shown … */
+export const ENVELOPE_TIME_LATE_S = 300;
+/** … or this much earlier (the head read and the block's clock). */
+export const ENVELOPE_TIME_EARLY_S = 120;
+
+/** The send time a v4 header carries, or undefined. AUTHENTICATED only once
+ *  the message has opened (the time is part of what it was sealed with). */
+export function boundTimeOf(header: unknown): number | undefined {
+	if (header === null || typeof header !== 'object') return undefined;
+	const h = header as Record<string, unknown>;
+	return h.v === 4 && validEnvelopeTime(h.t) ? h.t : undefined;
+}
+
+/** The order owner a v4 header carries ('' for none), or undefined.
+ *  AUTHENTICATED only once the message has opened. */
+export function boundOwnerOf(header: unknown): string | undefined {
+	if (header === null || typeof header !== 'object') return undefined;
+	const h = header as Record<string, unknown>;
+	return h.v === 4 && typeof h.o === 'string' ? h.o : undefined;
+}
+
+/**
+ * The time a message is shown at. The indexer's `created_at` (the chain's
+ * block time) while it agrees with the authenticated send time `boundT`;
+ * `boundT` itself when it does not — an indexer can say when a message was
+ * recorded, not move a v4 message to another time. Without `boundT` (v3 and
+ * older, or unopened): `created_at` as before.
+ */
+export function shownTime(createdAt: string | Date, boundT: number | undefined): Date {
+	const at = createdAt instanceof Date ? createdAt : new Date(createdAt);
+	if (boundT === undefined) return at;
+	const s = at.getTime() / 1000;
+	if (
+		Number.isFinite(s) &&
+		s >= boundT - ENVELOPE_TIME_EARLY_S &&
+		s <= boundT + ENVELOPE_TIME_LATE_S
+	)
+		return at;
+	return new Date(boundT * 1000);
+}
+
+/** What one send attempt is encrypted into: v2 (both chat keys published),
+ *  v3 (the posting-key envelope, crypto.ts) or v4 (v3 bound to its order and
+ *  send time `t`). */
 export interface SealedEnvelope {
-	v?: 2 | 3;
+	v?: 2 | 3 | 4;
+	/** v4: the bound send time (crypto.ts EnvelopeBinding.t). */
+	t?: number;
+	/** v4: the bound order owner ('' for none). */
+	o?: string;
 	ciphertext: string;
 	ephemeralPub: string;
 	nonce: string;
@@ -310,11 +361,27 @@ export interface LocalMessage {
 	 *  posting-key message made for ANOTHER posting key of this account (one
 	 *  this session does not hold; an account can list several). */
 	decryptFailedReason?: 'other_key';
-	/** True for a message from the PEER that arrived in the older v1 envelope:
-	 *  it decrypted, but anyone who knows our public chat key could have
-	 *  written it, so its sender is not proved. The UI says so, and a payment
-	 *  request in it is shown as unverified. */
+	/** True for a message from the PEER whose sender is not proved: it
+	 *  decrypted, but it cannot be shown that this person wrote it. The UI says
+	 *  so, a payment request in it is shown as unverified, and it moves no
+	 *  trade. */
 	senderUnverified?: boolean;
+	/** Set with senderUnverified when the message came in an OLDER format (v1,
+	 *  or v2 — chat keys) whose sender key is not one pinned here. Chat relies
+	 *  on the posting key only (v1.21.14): an older Morphit, including one on
+	 *  another instance, may still write v2 for a while. Ordinary, so the UI
+	 *  says it calmly; absent, the unproved message is one in the posting-key
+	 *  format made with a key that is not the peer's pinned set (their keys
+	 *  changed and the new safety number is not accepted yet). */
+	olderFormat?: true;
+	/** v4 (review C-M2): the send time the message was sealed with —
+	 *  authenticated, since it opened under it (or we sealed it). Bounds the
+	 *  time shown (shownTime). */
+	boundT?: number;
+	/** v4: the order owner it was sealed with ('' for none), authenticated
+	 *  like boundT. A trade effect runs only when the order's owner as looked
+	 *  up is this one. */
+	boundOwner?: string;
 	/** Monotonically-increasing local sequence number used for
 	 *  stable `{#each}` keying in the template. Always unique
 	 *  within a controller's lifetime. Does NOT correspond to
@@ -330,7 +397,20 @@ export interface LocalMessage {
 	/** v1.21.6 — added by a history page with its trade side effects not run
 	 *  yet; they run if the live path delivers it (see mergeNow). */
 	effectsDue?: true;
+	/** v1.21.14 full chat audit, W-M8 / W-L1 — shown as a placeholder (or as
+	 *  "sender not verified") for a reason that passes: the session was locked
+	 *  when it arrived, or the sender's key could not be looked up (a slow
+	 *  Tor/I2P circuit). Opened again the next time any copy of it arrives
+	 *  (the stream, the fallback poll), instead of staying unreadable — or
+	 *  marked as a decryption FAILURE — for as long as the view is open. */
+	reopen?: true;
 }
+
+/** What one send came to (`sendMessage`): the node took it, or it failed
+ *  before or at the node (its bubble then says why, with Retry). v1.21.14 full
+ *  chat audit, W-L5: callers that close a form on success — the address,
+ *  payment, mailing and shipment modals, the Pay-now receipt — need to know. */
+export type SendOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
 /** Where scrolling back through a thread stands (`loadOlder`). */
 export interface HistoryState {
@@ -486,90 +566,82 @@ export interface ChatControllerDeps {
 		payload: Record<string, unknown>,
 		blurtAccount: string
 	): Promise<{ block_num: number | null; trx_id: string }>;
-	/** Fetch the peer's published X25519 chat pubkey (ADR-0015).
-	 *  Returns null if the peer has never published — in that case
-	 *  the sender can't encrypt and sendMessage surfaces a
-	 *  `peer_not_ready` error. Injected for testability. */
+	/** The peer's published X25519 chat key (ADR-0015), as the chain confirms
+	 *  it, or null when they never published one. ONLY to open their older
+	 *  (v2) messages — nothing is sent to a chat key any more — and never
+	 *  pinned: a message opened with it is shown as not proved (v1.21.14,
+	 *  posting-key-only chat). Injected for testability. */
 	fetchPeerChatPub(peer: string): Promise<Uint8Array | null>;
 	/** Derive the current user's chat identity from their
 	 *  posting private key. Returns a Uint8Array priv + pub.
 	 *  The returned priv is live key material — the controller
-	 *  uses it, then forgets it (no persistent storage). */
+	 *  uses it, then forgets it (no persistent storage). Only to READ older
+	 *  (v2) messages, to us and our own. */
 	deriveMyChatIdentity(
 		live: LiveIdentity,
 		account: string
 	): Promise<{ priv: Uint8Array; pub: Uint8Array }>;
-	/** Encrypt plaintext to a recipient in the v2 (sender-authenticated)
-	 *  envelope; `sender` is our own chat identity. Injected (rather than
-	 *  called from crypto.ts directly) so tests can assert "encrypt was
-	 *  called with these args" without exercising libsodium. */
-	encrypt(
-		plaintext: string,
-		recipientPub: Uint8Array,
-		senderAccount: string,
-		recipientAccount: string,
-		sender: { priv: Uint8Array; pub: Uint8Array },
-		includeSelfCopy: boolean
-	): Promise<SealedEnvelope>;
 	/**
-	 * v1.21.13 — the posting-key envelope (v3, crypto.ts), for a pair where
-	 * either side has no published chat key: a message then still goes on chain
-	 * for an offline recipient who never opened chat (or cannot pay to publish a
-	 * key), and their replies open on our side. All optional: absent, the old
-	 * behaviour (`peer_not_ready`) applies — tests that predate it.
+	 * The posting-key envelope (v3, crypto.ts) — since v1.21.14 the ONLY one a
+	 * message is sent in (chat relies on the posting key only; the chat-key v2
+	 * envelope is read, never written). It needs nothing from the recipient
+	 * but their account, so a message to someone offline who never opened chat
+	 * goes on chain and waits for them. Required: there is no other way to send.
 	 *
 	 * `fetchPostingPubs`: the account's posting keys that can sign on their
 	 * own (at most MAX_RECIPIENT_KEYS), as the chain lists them; [] when it has
 	 * none; null when the chain has no such account. Throws when the chain
 	 * could not be asked.
 	 */
-	fetchPostingPubs?(account: string): Promise<Uint8Array[] | null>;
-	/** The posting keys of `peer` to encrypt to and to authenticate them with,
-	 *  pinned like a chat key (pubPin.resolvePostingKeyPin): the set first
-	 *  seen; an added key is refused (PubPinError
-	 *  'pub_pin_posting_key_changed') until the user accepts the new safety
-	 *  number. Optional: absent, the chain's keys are used (tests). */
-	pinPostingKey?(
-		peer: string,
-		chainKeys: readonly Uint8Array[],
-		opts?: { needsConsent?: boolean }
-	): Promise<Uint8Array[]>;
+	fetchPostingPubs(account: string): Promise<Uint8Array[] | null>;
+	/** The posting keys of `peer` to encrypt to and to authenticate them with
+	 *  (pubPin.resolvePostingKeyPin): the set first seen is pinned (trust on
+	 *  first use, whatever chat key is pinned); an added key is refused
+	 *  (PubPinError 'pub_pin_posting_key_changed') until the user accepts the
+	 *  new safety number. Optional: absent, the chain's keys are used (tests). */
+	pinPostingKey?(peer: string, chainKeys: readonly Uint8Array[]): Promise<Uint8Array[]>;
 	/** The posting keys pinned for `peer`, without asking anyone: what a v3
 	 *  message from them is authenticated by. */
 	pinnedPostingKeys?(peer: string): readonly Uint8Array[];
 	/** Let the page paint between batches of DECRYPT_YIELD_EVERY messages
 	 *  while a history is opened. Absent: no pause (tests). */
 	yieldToMain?(): Promise<void>;
-	/** Our own chat key on chain against the one we derive (OwnChatKeyStatus).
-	 *  Throws when it could not be determined — then nothing is sent (retry):
-	 *  guessing could move a conversation off keys the user checked. A v2
-	 *  message is opened by the peer with our PUBLISHED key, so only 'current'
-	 *  sends v2. */
-	myChatKeyStatus?(): Promise<OwnChatKeyStatus>;
-	encryptPosting?(
+	encryptPosting(
 		plaintext: string,
 		recipientPostingPubs: readonly Uint8Array[],
 		live: LiveIdentity,
 		senderAccount: string,
 		recipientAccount: string,
-		includeSelfCopy: boolean
+		includeSelfCopy: boolean,
+		/** v4: the order and send time to bind (review C-M2); absent: v3. */
+		binding?: EnvelopeBinding
 	): Promise<SealedEnvelope>;
-	/** Open a v3 message to us; `authenticated` when its sender key is one of
-	 *  `senderPostingPubs` (their pinned keys). Null when it does not open;
-	 *  'other_key' when it was made for other posting keys of our account. */
+	/** Write v4 (WRITE_ENVELOPE_V4 when absent; tests turn it on). */
+	writeEnvelopeV4?: boolean;
+	/** The chain's head time, whole seconds: a v4 message's bound send time.
+	 *  Absent: this device's clock (tests). */
+	chainNowSeconds?(): Promise<number>;
+	/** Open a v3 or v4 message to us; `authenticated` when its sender key is
+	 *  one of `senderPostingPubs` (their pinned keys). `order`: the order
+	 *  permlink of the record it came in (a v4 message is bound to it). Null
+	 *  when it does not open; 'other_key' when it was made for other posting
+	 *  keys of our account. */
 	decryptPosting?(
 		envelope: SealedEnvelope,
 		live: LiveIdentity,
 		senderAccount: string,
 		recipientAccount: string,
-		senderPostingPubs: readonly Uint8Array[]
+		senderPostingPubs: readonly Uint8Array[],
+		order: string | null
 	): Promise<{ text: string; authenticated: boolean } | null | 'other_key'>;
-	/** Open our own self-copy of a v3 message we sent. Null when it does not. */
+	/** Open our own self-copy of a v3 or v4 message we sent (`order` as for
+	 *  decryptPosting). Null when it does not. */
 	decryptPostingSelfCopy?(
 		envelope: SealedEnvelope,
 		live: LiveIdentity,
 		senderAccount: string,
-		recipientAccount: string
+		recipientAccount: string,
+		order: string | null
 	): Promise<string | null>;
 	/** Decrypt an envelope. `senderPubs` are the sender's pinned chat keys
 	 *  (current first), which a v2 envelope must open with. Returns the
@@ -614,6 +686,10 @@ export interface ChatControllerDeps {
 	replacedPeerPubs?(peer: string): readonly Uint8Array[];
 	/** A changed key for `peer` the user has not accepted yet, if any. */
 	pendingPeerPub?(peer: string): Uint8Array | null;
+	/** Posting keys of `peer` an accepted change replaced
+	 *  (pubPin.replacedPostingFor): a v3 message made with one is readable and
+	 *  shown with the calm "older" note — never proof (review C, L4). */
+	replacedPostingKeys?(peer: string): readonly Uint8Array[];
 	/** the account's chat-security mode ('keep' | 'destroy'), read
 	 *  fresh at send time. Optional: absent → treated as 'keep' (the default,
 	 *  self-copy on), so existing tests keep their prior behavior. */
@@ -625,6 +701,15 @@ export interface ChatControllerDeps {
 	 * absent, the sweep does not ask (tests that predate it).
 	 */
 	transactionOnChain?(trxId: string): Promise<'found' | 'not_found' | 'unknown'>;
+	/**
+	 * v1.21.14 full chat audit, W-H1 — whose order `orderPermlink` is: `sender`'s
+	 * or ours (orderParties.orderOwnerOf). A structured trade payload moves the
+	 * trade store only when it is one of those, under that owner (C-L3). false:
+	 * neither; null: could not be told now (the payload's effects wait for its
+	 * next delivery). Optional: absent, every order is taken as the sender's
+	 * (tests that predate it).
+	 */
+	orderOwnerOf?(orderPermlink: string, sender: string): Promise<string | false | null>;
 	/** Called on EVERY state change. The component subscribes via
 	 *  its own $effect so Svelte re-renders automatically. */
 	onChange(messages: readonly LocalMessage[]): void;
@@ -667,8 +752,10 @@ export interface ChatController {
 	 *  event listeners. Idempotent. */
 	destroy(): void;
 	/** Compose + broadcast a new outgoing message. Returns once
-	 *  the op was signed + sent (not when it's confirmed). */
-	sendMessage(text: string): Promise<void>;
+	 *  the op was signed + sent (not when it's confirmed): ok when the node
+	 *  took it, else why not (the bubble says so too, with Retry). The bubble
+	 *  is in the list before the first await, so a composer need not wait. */
+	sendMessage(text: string): Promise<SendOutcome>;
 	/** Retry a message that's in the `failed` state. The localSeq
 	 *  is the key to identify which one. */
 	retryMessage(localSeq: number): Promise<void>;
@@ -825,18 +912,39 @@ const ENCRYPTED_PLACEHOLDER = '(encrypted)';
 //   • bounded to OWN_SENT_CACHE_MAX entries (oldest evicted) so a very
 //     long, reload-free session can't grow it without bound.
 const OWN_SENT_CACHE_MAX = 1000;
+/** Bumped by every lock and sign-out (clearOwnSentPlaintextCache, the lock
+ *  hook): work started before one — an outgoing trade record waiting for its
+ *  order's owner, in a view that may since have closed — records nothing
+ *  after it. */
+let sessionGeneration = 0;
+/** An outgoing trade record whose order owner could not be told is asked
+ *  again after these pauses (C-L3 review). */
+export const OUTGOING_OWNER_RETRY_MS: readonly number[] = [2_000, 4_000, 8_000, 16_000];
 const ownSentPlaintext = new Map<string, string>();
 
-/** Key: account + client_tag. Client tags are 16 random bytes so they
- *  never collide across conversations; scoping by account too is
- *  defense-in-depth against the astronomically-unlikely collision and
- *  keeps entries unambiguously owned. */
-function ownSentKey(me: string, clientTag: string): string {
-	return `${me}\t${clientTag}`;
+/** Key: account, recipient, order thread and client_tag. Client tags are 16
+ *  random bytes so they never collide; the thread is in the key so a record
+ *  an indexer re-files under another order (or another conversation) is not
+ *  shown from here as what we wrote in this one (v1.21.14 final review: the
+ *  cache otherwise bypassed v4's order binding). */
+function ownSentKey(me: string, peer: string, order: string | null, clientTag: string): string {
+	return `${me}\t${peer}\t${order ?? ''}\t${clientTag}`;
 }
 
-function rememberOwnSent(me: string, clientTag: string, plaintext: string): void {
-	ownSentPlaintext.set(ownSentKey(me, clientTag), plaintext);
+/** The cached plaintext of OUR record `rec` — what we wrote in the thread
+ *  the record is filed under — or undefined. */
+function ownSentFor(me: string, rec: ChatMessageRecord, clientTag: string): string | undefined {
+	return ownSentPlaintext.get(ownSentKey(me, rec.recipient, rec.order_permlink ?? null, clientTag));
+}
+
+function rememberOwnSent(
+	me: string,
+	peer: string,
+	order: string | null,
+	clientTag: string,
+	plaintext: string
+): void {
+	ownSentPlaintext.set(ownSentKey(me, peer, order, clientTag), plaintext);
 	// Evict oldest (Map preserves insertion order) if over the cap.
 	if (ownSentPlaintext.size > OWN_SENT_CACHE_MAX) {
 		const oldest = ownSentPlaintext.keys().next().value;
@@ -850,6 +958,7 @@ function rememberOwnSent(me: string, clientTag: string, plaintext: string): void
  *  cache is module-scoped and must be clearable without a live
  *  controller instance. */
 export function clearOwnSentPlaintextCache(): void {
+	sessionGeneration++;
 	ownSentPlaintext.clear();
 	unconfirmedOwnSends.clear();
 	unsentOwnSends.clear();
@@ -945,6 +1054,15 @@ function errorToSentinel(err: unknown): string {
 	return String(err);
 }
 
+/** A sender's key could not be looked up (the chain or the indexer did not
+ *  answer): a reason that passes, unlike a pin verdict. W-M8. */
+class KeyLookupUnavailable extends Error {
+	constructor() {
+		super('key lookup unavailable');
+		this.name = 'KeyLookupUnavailable';
+	}
+}
+
 /**
  * Build a chat conversation controller. Takes all its
  * dependencies as args to make the state machine unit-testable.
@@ -992,10 +1110,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 *  re-unlock mid-session produces a fresh controller. */
 	let myChatIdentity: { priv: Uint8Array; pub: Uint8Array } | null = null;
 
-	/** Cached fetch of the peer's published chat pubkey. Null means
-	 *  "not yet looked up"; a fetched-and-absent peer is remembered via
-	 *  peerPubUnknown for the rest of the conversation (Retry asks again), so
-	 *  each send to someone without a chat key costs no lookup. */
+	/** Cached fetch of the peer's published chat pubkey, to open their older
+	 *  (v2) messages that no pinned key opens. Null means "not yet looked up";
+	 *  a fetched-and-absent peer is remembered via peerPubUnknown for the rest
+	 *  of the conversation (Retry asks again), so a history costs one lookup. */
 	let peerChatPub: Uint8Array | null = null;
 	let peerPubUnknown = false;
 
@@ -1026,19 +1144,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 		peerPubInFlight = (async () => {
 			const fetched = await deps.fetchPeerChatPub(deps.peer);
-			// The pins a Lock sealed are read only once the unlock's unseal landed.
-			await unsealSettled();
 			if (fetched === null) {
-				// A chat key pinned here was published on chain, and an op on
-				// chain is never withdrawn: "none" is a wrong (or hostile) answer.
-				// Moving on to their posting keys would route around the pin.
-				if ((deps.pinnedPeerPubs?.(deps.peer) ?? []).length > 0) {
-					throw new PubPinError(
-						PUB_PIN_ERROR.withdrawn,
-						deps.peer,
-						`the indexer says @${deps.peer} has no chat key, but one is pinned`
-					);
-				}
 				peerPubUnknown = true;
 				return null;
 			}
@@ -1060,15 +1166,6 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			peerPubInFlight = null;
 		}
 	}
-
-	/** The format of the latest message from the peer whose sender was PROVED:
-	 *  2, 3, or null when none yet. A peer who writes v3 although we hold their
-	 *  chat key does so because, from their side, ours cannot be used (their
-	 *  own key is stale or unpublished, or they see none for us) — so we answer
-	 *  in v3 too, to the posting keys that proved them. Otherwise a member whose
-	 *  published chat key went stale would never read our v2 replies to it
-	 *  (v1.21.13 review 2, M-3). */
-	let peerLastProvedV: 2 | 3 | null = null;
 
 	/** Posting keys per account (v3). Only an answer with keys is kept for the
 	 *  conversation; "no such account" / "no usable key" is asked again on the
@@ -1103,44 +1200,11 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 	}
 
-	/** Our own chat key's status, decided once per conversation. A failure is
-	 *  not kept as an answer: the send fails (retry), and the next one asks
-	 *  again after KEY_LOOKUP_RETRY_MS (Retry: at once). */
-	let myStatus: OwnChatKeyStatus | null = null;
-	let myStatusInFlight: Promise<OwnChatKeyStatus> | null = null;
-	let myStatusFailed: { at: number; err: unknown } | null = null;
-	async function ensureMyStatus(): Promise<OwnChatKeyStatus> {
-		if (myStatus !== null) return myStatus;
-		if (deps.myChatKeyStatus === undefined) return 'current';
-		if (myStatusInFlight !== null) return myStatusInFlight;
-		if (myStatusFailed !== null && nowMs() - myStatusFailed.at < KEY_LOOKUP_RETRY_MS) {
-			throw myStatusFailed.err;
-		}
-		const p = deps.myChatKeyStatus().then(
-			(v) => {
-				myStatusFailed = null;
-				myStatus = v;
-				return v;
-			},
-			(err: unknown) => {
-				myStatusFailed = { at: nowMs(), err };
-				throw err;
-			}
-		);
-		myStatusInFlight = p;
-		try {
-			return await p;
-		} finally {
-			myStatusInFlight = null;
-		}
-	}
-
 	/** Retry: every negative or failed key answer is asked again, and the
 	 *  peer's posting keys are read afresh. */
 	function forgetKeyMisses(): void {
 		peerPubUnknown = false;
 		peerPubFailed = null;
-		myStatusFailed = null;
 		postingPubsFailed.clear();
 		// The peer's posting keys are read again too: a send refused over them
 		// (a changed set) is retried against what the chain says now — the keys
@@ -1149,20 +1213,20 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	}
 
 	/**
-	 * Look up, as the conversation opens, everything the first send may need:
-	 * our own status, the peer's chat key and the peer's posting keys — all at
-	 * once, not one after the other. On a Tor/I2P instance each is a hidden
-	 * round trip of a second or more; done side by side while the user types,
-	 * the first message leaves as fast as any other (the 6-second delivery
-	 * budget). One of them may go unused (seal decides); none is asked twice.
-	 * Best-effort: a send asks again for whatever this could not get.
+	 * Look up, as the conversation opens, what the first send needs: the
+	 * peer's posting keys. On a Tor/I2P instance it is a hidden round trip of a
+	 * second or more; done while the user types, the first message leaves as
+	 * fast as any other (the 6-second delivery budget). Best-effort: a send
+	 * asks again if this could not get it.
+	 *
+	 * (Until v1.21.14 this also read our own chat key's status and the peer's
+	 * chat key — and the latter PINNED that chat key, which then held the
+	 * peer's posting keys back as a "change" for Verify peer: on a first
+	 * conversation with someone an older Morphit had published a chat key for,
+	 * every message from them showed "Sender not verified" and every reply was
+	 * refused. Nothing is sent to a chat key any more, so neither is asked.)
 	 */
 	function warmUpKeys(): void {
-		// The peer's keys need no session; our own status does (it derives our
-		// key). A session handed over from another tab a moment after the view
-		// opened still finds the peer's lookups done.
-		if (deps.getLiveIdentity() !== null) void ensureMyStatus().catch(() => undefined);
-		void ensurePeerChatPub().catch(() => undefined);
 		void postingPubsOf(deps.peer).catch(() => undefined);
 	}
 
@@ -1176,62 +1240,46 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 * Encrypt one send attempt. ONE place for the first send, every retry and
 	 * nothing else, so the two can never pick differently.
 	 *
-	 * v2 (chat keys) when our published chat key is current and the peer has
-	 * one — every pair that chats today, unchanged. Otherwise v3 (posting keys,
-	 * crypto.ts): it needs nothing from the recipient but their account, so a
-	 * message to someone offline who never opened chat goes on chain and waits
-	 * for them (v1.21.13 — it used to fail with "this recipient hasn't opened
-	 * Morphit chat yet" and was never stored).
+	 * Always the posting-key envelope (v3, crypto.ts), to the peer's PINNED
+	 * posting keys — chat relies on the posting key only (v1.21.14). It needs
+	 * nothing from the recipient but their account, so a message to someone
+	 * offline who never opened chat goes on chain and waits for them. Their
+	 * posting keys are trusted on first use, whatever chat key of theirs is
+	 * pinned here; a CHANGED set stops the send until the user compares the new
+	 * safety number (pub_pin_posting_key_changed — never silently).
 	 *
-	 * Never a silent move off checked keys: a chat-key fetch that FAILS (a pin
-	 * mismatch, the chain unreachable), our own status unknown, or a pinned
-	 * chat key the indexer now calls absent (`pub_pin_withdrawn`) each stop the
-	 * send.
+	 * (Until v1.21.14 it chose: the chat-key envelope (v2) when our published
+	 * chat key was current and the peer had one, else v3. Two formats meant two
+	 * sets of keys to pin per person, and a first set of posting keys was held
+	 * back for a peer whose chat key was pinned — which a normal first
+	 * conversation hit; see warmUpKeys.)
 	 */
 	async function seal(
 		text: string,
 		live: LiveIdentity,
 		includeSelfCopy: boolean
 	): Promise<{ ok: true; envelope: SealedEnvelope } | { ok: false; error: string }> {
-		const postingCapable = deps.fetchPostingPubs !== undefined && deps.encryptPosting !== undefined;
-		let status: OwnChatKeyStatus = 'current';
-		if (postingCapable) {
-			try {
-				status = await ensureMyStatus();
-			} catch (err) {
-				return { ok: false, error: lookupSentinel(err) };
-			}
+		const sealed = await sealAnyFormat(text, live, includeSelfCopy);
+		// v1.21.14 full chat audit, W-M5 — the last check before anything is
+		// signed: the indexer refuses a ciphertext (or self-copy) longer than
+		// MAX_CHAT_CIPHERTEXT_CHARS, AFTER the chain has taken the fee. Both
+		// formats, every caller (composer, modals, retry). The modals check
+		// the same budget before this, with a message about their own fields.
+		if (
+			sealed.ok &&
+			(sealed.envelope.ciphertext.length > MAX_CHAT_CIPHERTEXT_CHARS ||
+				(sealed.envelope.selfCiphertext?.length ?? 0) > MAX_CHAT_CIPHERTEXT_CHARS)
+		) {
+			return { ok: false, error: MESSAGE_TOO_LONG_SENTINEL };
 		}
-		if (status === 'current' && !(postingCapable && peerLastProvedV === 3)) {
-			let peerPub: Uint8Array | null;
-			try {
-				peerPub = await ensurePeerChatPub();
-			} catch (err) {
-				return { ok: false, error: errorToSentinel(err) };
-			}
-			if (peerPub !== null) {
-				let myId: { priv: Uint8Array; pub: Uint8Array };
-				try {
-					myId = await ensureMyChatIdentity(live);
-				} catch (err) {
-					return { ok: false, error: err instanceof Error ? err.message : String(err) };
-				}
-				try {
-					return {
-						ok: true,
-						envelope: await deps.encrypt(text, peerPub, deps.me, deps.peer, myId, includeSelfCopy)
-					};
-				} catch (err) {
-					return { ok: false, error: err instanceof Error ? err.message : String(err) };
-				}
-			}
-			if (!postingCapable) {
-				// Peer hasn't published their chat identity, and this build cannot
-				// send without it (tests that predate v3). Ask again next time.
-				peerPubUnknown = false;
-				return { ok: false, error: 'peer_not_ready' };
-			}
-		}
+		return sealed;
+	}
+
+	async function sealAnyFormat(
+		text: string,
+		live: LiveIdentity,
+		includeSelfCopy: boolean
+	): Promise<{ ok: true; envelope: SealedEnvelope } | { ok: false; error: string }> {
 		let pubs: Uint8Array[] | null;
 		try {
 			pubs = await postingPubsOf(deps.peer);
@@ -1243,25 +1291,33 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// The pinned keys, never silently a changed set (see pinPostingKey).
 		let targets: Uint8Array[];
 		try {
-			// A peer whose chat key is pinned here gets no posting keys on first
-			// use: the user compares them in Verify peer first (review 2, M-1).
-			targets =
-				deps.pinPostingKey !== undefined
-					? await deps.pinPostingKey(deps.peer, pubs, { needsConsent: await peerChatPinned() })
-					: pubs;
+			targets = deps.pinPostingKey !== undefined ? await deps.pinPostingKey(deps.peer, pubs) : pubs;
 		} catch (err) {
 			return { ok: false, error: lookupSentinel(err) };
 		}
 		try {
+			// v4 (review C-M2): bound to this thread's order, its owner and the
+			// chain's time — or v3 when any of them cannot be (sendBinding).
+			const binding: EnvelopeBinding | undefined = await sendBinding({
+				write: deps.writeEnvelopeV4 ?? WRITE_ENVELOPE_V4,
+				order: deps.orderPermlink,
+				ownerOf: (order) =>
+					deps.orderOwnerOf !== undefined
+						? deps.orderOwnerOf(order, deps.peer)
+						: Promise.resolve(deps.peer),
+				chainNowSeconds:
+					deps.chainNowSeconds ?? (() => Promise.resolve(Math.floor(Date.now() / 1000)))
+			});
 			return {
 				ok: true,
-				envelope: await deps.encryptPosting!(
+				envelope: await deps.encryptPosting(
 					text,
 					targets,
 					live,
 					deps.me,
 					deps.peer,
-					includeSelfCopy
+					includeSelfCopy,
+					...(binding !== undefined ? [binding] : [])
 				)
 			};
 		} catch (err) {
@@ -1271,10 +1327,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 
 	/** The posting keys a v3 message from `sender` is authenticated by: the
 	 *  pinned set, without a lookup. Only when none is pinned, and only for the
-	 *  peer, is the chain asked and its answer pinned (trust on first use) —
-	 *  and not even then for a peer whose chat key is pinned while ours is
-	 *  current: such a peer writes v2, so a v3 "from" them is not taken on the
-	 *  indexer's word. */
+	 *  peer, is the chain asked and its answer pinned (trust on first use),
+	 *  whatever chat key of theirs is pinned here (v1.21.14: that used to hold
+	 *  the keys back, and a first conversation showed every message from the
+	 *  peer as "Sender not verified"). */
 	async function senderPostingCandidates(sender: string): Promise<readonly Uint8Array[]> {
 		await unsealSettled();
 		if (deps.pinnedPostingKeys !== undefined) {
@@ -1282,22 +1338,18 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			if (pinned.length > 0) return pinned;
 		}
 		if (sender !== deps.peer) return [];
-		const chainKeys = await postingPubsOf(sender).catch(() => null);
+		let chainKeys: Uint8Array[] | null;
+		try {
+			chainKeys = await postingPubsOf(sender);
+		} catch {
+			// The chain could not be asked: a reason that passes (W-M8).
+			throw new KeyLookupUnavailable();
+		}
 		if (chainKeys === null || chainKeys.length === 0) return [];
 		if (deps.pinPostingKey === undefined) return chainKeys;
-		// Trust on first use only for a peer with no chat key pinned here. For
-		// one who has, the keys are held as a pending change (Verify peer shows
-		// them to compare) and the message stays unproved until the user
-		// accepts them (review 2, M-1).
-		return deps
-			.pinPostingKey(sender, chainKeys, { needsConsent: await peerChatPinned() })
-			.catch(() => []);
-	}
-
-	/** Is a chat key pinned here for the peer (after the unlock's unseal)? */
-	async function peerChatPinned(): Promise<boolean> {
-		await unsealSettled();
-		return (deps.pinnedPeerPubs?.(deps.peer) ?? []).length > 0;
+		// A CHANGED set is held for Verify peer (pinPostingKey throws): the
+		// message stays unproved until the user accepts the new safety number.
+		return deps.pinPostingKey(sender, chainKeys).catch(() => []);
 	}
 
 	function emit(): void {
@@ -1321,16 +1373,23 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 * Try to reconcile a server-returned message with a local
 	 * pending/broadcast one by client_tag. On match, update the
 	 * existing entry in-place (preserving local ordering) and
-	 * return true. On miss, return false — the caller appends a
-	 * new confirmed entry.
+	 * return 'changed' (something the view shows changed) or 'same' (a copy
+	 * already reconciled: nothing to redraw). On miss, 'no' — the caller
+	 * appends a new confirmed entry.
+	 *
+	 * v1.21.14 full chat audit, W-L3: this used to answer a bare "matched",
+	 * which the merge counted as a change, so every fallback poll (4–6 s)
+	 * re-rendered the whole view and wrote a read-ack to storage although
+	 * nothing had changed.
 	 */
-	function reconcileByClientTag(rec: ChatMessageRecord): boolean {
+	function reconcileByClientTag(rec: ChatMessageRecord): 'no' | 'same' | 'changed' {
 		const tag = clientTagFromHeader(rec.header);
-		if (tag === null) return false;
+		if (tag === null) return 'no';
 		// id 0 marks a PROVISIONAL head-block (fast-path)
 		// copy that isn't irreversible yet (ADR-0048). It must never
 		// overwrite a real, durable id.
 		const isDurable = rec.id !== 0;
+		let changed = false;
 		for (const m of messages) {
 			// Our own messages only. A tag is chosen by whoever signs the message,
 			// and the PEER's messages carry tags too — including, since retries
@@ -1366,20 +1425,34 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				delete m.errorValues;
 				// It reached the network after all: nothing left to restore.
 				forgetUnsent(m);
-				m.createdAt = new Date(rec.created_at);
+				m.createdAt = shownTime(rec.created_at, m.boundT);
+				changed = true;
 			}
+			// The encrypted bytes this message went out as: a copy of them
+			// re-served under ANOTHER tag is this message, not a new one (W-H3).
+			m.wire ??= wireOf(rec);
 			// Adopt the durable id the first time it lands; a provisional
 			// (id 0) never overwrites a real id we already hold.
-			if (isDurable && (m.id === null || m.id === 0)) adoptDurable(m, rec);
-			return true;
+			if (isDurable && (m.id === null || m.id === 0)) {
+				adoptDurable(m, rec);
+				changed = true;
+			}
+			return changed ? 'changed' : 'same';
 		}
-		return false;
+		return 'no';
 	}
 
 	/** A durable copy has landed for `m`: take its id, time and on-chain anchor,
 	 *  and drop every "still waiting for the chain" marker — arriving is the
 	 *  proof. */
-	function adoptDurable(m: LocalMessage, rec: ChatMessageRecord): void {
+	/** `boundT`: the authenticated bound time of `rec` itself — the same as
+	 *  m's for a copy of the same attempt (the default), its own for another
+	 *  attempt folded in (absorbRetryCopy). */
+	function adoptDurable(
+		m: LocalMessage,
+		rec: ChatMessageRecord,
+		boundT: number | undefined = m.boundT
+	): void {
 		// Our own send is on the chain for good: nothing left to remember (W2).
 		if (m.sender === deps.me) {
 			forgetUnconfirmed(m.clientTag);
@@ -1387,7 +1460,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			delete m.onChainAtMs;
 		}
 		m.id = rec.id;
-		m.createdAt = new Date(rec.created_at);
+		if (boundT !== undefined) m.boundT = boundT;
+		else delete m.boundT;
+		m.createdAt = shownTime(rec.created_at, boundT);
 		m.trxId = rec.source_trx_id || null;
 		delete m.provisionalSinceMs;
 		delete m.sentAtMs;
@@ -1430,26 +1505,71 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 * Fold a retry copy into the message it resends. The message keeps its place
 	 * in the transcript and its tag; the copy's tag and whatever it declared join
 	 * `priorTags`, so every later copy of either attempt lands here too.
+	 * Returns whether anything the view shows changed (W-L3).
 	 */
 	function absorbRetryCopy(
 		m: LocalMessage,
 		rec: ChatMessageRecord,
 		incomingTag: string,
-		declared: readonly string[]
-	): void {
+		declared: readonly string[],
+		/** The copy's own authenticated bound time (v4), if it has one. */
+		copyBoundT: number | undefined
+	): boolean {
 		const tags = new Set([...(m.priorTags ?? []), incomingTag, ...declared]);
 		if (m.clientTag !== null) tags.delete(m.clientTag);
 		// Bounded like everything a peer can grow: one attempt's own declared
 		// list plus the attempts folded in since, newest kept.
 		m.priorTags = [...tags].slice(-MAX_PRIOR_TAGS * 2);
+		// Its bytes are this message from now on: a later copy of them is a
+		// twin, not a new record to open and fold again on every poll (W-L3).
+		rememberWireAlias(rec, m);
 		if (rec.id !== 0) {
-			if (m.id === null || m.id === 0) adoptDurable(m, rec);
+			if (m.id === null || m.id === 0) {
+				// The durable copy is THIS attempt: its own time (C-M2).
+				adoptDurable(m, rec, copyBoundT);
+				return true;
+			}
 		} else if (m.id === null) {
 			// A fresh provisional attempt: it may yet land, so the verdict on the
 			// old one no longer describes this message. Start its window again.
 			m.provisionalSinceMs = Date.now();
 			m.unrecorded = false;
+			return true;
 		}
+		return false;
+	}
+
+	/** Encrypted bytes (sender + wireOf) that are a copy of a message already
+	 *  here under other bytes: a retry folded into the attempt it resends. */
+	let wireAliases = new Map<string, LocalMessage>();
+	function rememberWireAlias(rec: ChatMessageRecord, m: LocalMessage): void {
+		wireAliases.set(`${rec.sender}\u0000${wireOf(rec)}`, m);
+		while (wireAliases.size > 500) {
+			const oldest = wireAliases.keys().next().value;
+			if (oldest === undefined) break;
+			wireAliases.delete(oldest);
+		}
+	}
+
+	/**
+	 * The message `rec` is a copy of, by its encrypted bytes alone: the same
+	 * sender and the same ciphertext, ephemeral key and nonce.
+	 *
+	 * v1.21.14 full chat audit, W-H3: a twin used to need the same client tag
+	 * TOO, and the tag is the one part of a record the encryption does not
+	 * cover. A hostile operator's stream could re-serve an old, genuine
+	 * message under a fresh tag: it showed again as a new message from the
+	 * real sender, and its trade effects ran again — an old payment address
+	 * put back over a newer one. The bytes are what the sender wrote; the tag
+	 * only says how the sender's own client reconciles its echo.
+	 */
+	function twinByWire(rec: ChatMessageRecord): LocalMessage | undefined {
+		const wire = wireOf(rec);
+		return (
+			messages.find((m) => m.sender === rec.sender && m.wire === wire) ??
+			// (A lock empties the list, and these with it: onSessionLocked.)
+			wireAliases.get(`${rec.sender}\u0000${wire}`)
+		);
 	}
 
 	/**
@@ -1465,14 +1585,29 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		decryptFailed: boolean;
 		senderUnverified: boolean;
 		otherKey?: true;
+		/** The result may change on a later try (W-M8 / W-L1): see
+		 *  LocalMessage.reopen. */
+		transient?: true;
+		/** See LocalMessage.olderFormat. */
+		olderFormat?: true;
+		/** See LocalMessage.boundT / boundOwner: set only when a v4 message
+		 *  opened. */
+		boundT?: number;
+		boundOwner?: string;
 	}> {
 		// If the session is locked, we can't derive our chat
-		// identity. Show placeholder; once the user unlocks and
-		// re-enters the conversation, a fresh controller will
-		// decrypt the history.
+		// identity. Show placeholder, and open it again when a later copy
+		// arrives after the unlock (v1.21.14 full chat audit, W-L1: an idle
+		// auto-lock undone by another tab's session handoff left the view
+		// mounted and these placeholders in it for good).
 		const live = deps.getLiveIdentity();
 		if (!live) {
-			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: false, senderUnverified: false };
+			return {
+				text: ENCRYPTED_PLACEHOLDER,
+				decryptFailed: false,
+				senderUnverified: false,
+				transient: true
+			};
 		}
 
 		// Extract envelope fields from the header. The on-chain
@@ -1493,39 +1628,55 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 		const v = typeof h.v === 'number' ? h.v : undefined;
 
-		if (v === 3) {
+		if (v === 3 || v === 4) {
 			// The posting-key envelope (crypto.ts): opened with our posting key;
 			// its sender is proved when the key it was made with is one of the
 			// sender's posting keys on chain.
 			const sk = h.sk;
 			const rk = h.rk;
 			const wk = h.wk;
+			// v4: bound to its send time and its order's owner (in the header)
+			// and to the order of the record it came in (review C-M2) — another
+			// order, owner or time: no open.
+			const boundT = v === 4 ? boundTimeOf(h) : undefined;
+			const boundOwner = v === 4 ? boundOwnerOf(h) : undefined;
 			if (
 				deps.decryptPosting === undefined ||
 				typeof sk !== 'string' ||
 				!isStringArray(rk) ||
-				!isStringArray(wk)
+				!isStringArray(wk) ||
+				(v === 4 && (boundT === undefined || boundOwner === undefined))
 			) {
 				return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
 			}
+			const sealedAs: SealedEnvelope = {
+				v,
+				...(boundT !== undefined ? { t: boundT, o: boundOwner } : {}),
+				ciphertext: rec.ciphertext,
+				ephemeralPub,
+				nonce,
+				senderKey: sk,
+				recipientKeys: rk,
+				wraps: wk
+			};
+			const order = rec.order_permlink ?? null;
+			const bound = boundT !== undefined && boundOwner !== undefined ? { boundT, boundOwner } : {};
 			try {
 				// Proved only by a PINNED key (a changed set waits for the user,
-				// as with chat keys): readable either way.
-				const senderPubs = await senderPostingCandidates(rec.sender).catch(() => []);
+				// as with chat keys): readable either way. A lookup that could not
+				// be made leaves it unproved FOR NOW (W-M8): opened again later.
+				let lookupFailed = false;
+				const senderPubs = await senderPostingCandidates(rec.sender).catch((err: unknown) => {
+					if (err instanceof KeyLookupUnavailable) lookupFailed = true;
+					return [];
+				});
 				const opened = await deps.decryptPosting(
-					{
-						v: 3,
-						ciphertext: rec.ciphertext,
-						ephemeralPub,
-						nonce,
-						senderKey: sk,
-						recipientKeys: rk,
-						wraps: wk
-					},
+					sealedAs,
 					live,
 					rec.sender,
 					rec.recipient,
-					senderPubs
+					senderPubs,
+					order
 				);
 				if (opened === null) {
 					return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
@@ -1538,13 +1689,47 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 						otherKey: true
 					};
 				}
-				if (opened.authenticated && rec.sender === deps.peer) peerLastProvedV = 3;
-				return { text: opened.text, decryptFailed: false, senderUnverified: !opened.authenticated };
+				// Made with a posting key the user accepted a replacement for
+				// (review C, L4): history, shown calmly, never proof.
+				if (!opened.authenticated && !lookupFailed) {
+					const past = deps.replacedPostingKeys?.(rec.sender) ?? [];
+					if (past.length > 0) {
+						const viaPast = await deps.decryptPosting(
+							sealedAs,
+							live,
+							rec.sender,
+							rec.recipient,
+							past,
+							order
+						);
+						if (viaPast !== null && viaPast !== 'other_key' && viaPast.authenticated)
+							return {
+								text: opened.text,
+								decryptFailed: false,
+								senderUnverified: true,
+								olderFormat: true,
+								...bound
+							};
+					}
+				}
+				return {
+					text: opened.text,
+					decryptFailed: false,
+					senderUnverified: !opened.authenticated,
+					...(lookupFailed && !opened.authenticated ? { transient: true as const } : {}),
+					...bound
+				};
 			} catch {
 				return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
 			}
 		}
 
+		// An OLDER format: v2 (chat keys; still written by an older Morphit,
+		// also on other instances, for a while) or v1. Read with the chat key we
+		// derive from our posting key. Its sender is PROVED only by a chat key
+		// pinned here — from a conversation before v1.21.14; none is pinned any
+		// more. Opened with any other key, it is readable and shown with a calm
+		// "older format" note (LocalMessage.olderFormat), and moves no trade.
 		try {
 			const id = await ensureMyChatIdentity(live);
 			const open = (pubs: readonly Uint8Array[]) =>
@@ -1556,35 +1741,63 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					rec.recipient,
 					pubs
 				);
-			let opened = await open(await senderPubCandidates(rec.sender));
-			let viaPendingKey = false;
+			// v1.21.14 full chat audit, W-M8: a key lookup that could not be MADE
+			// (a Tor timeout) is not a decryption failure. The message is shown as
+			// not opened yet and opened again when it next arrives, instead of
+			// "couldn't be decrypted" for good.
+			let lookupFailed = false;
+			const unanswered = (err: unknown): [] => {
+				if (!(err instanceof KeyLookupUnavailable)) throw err;
+				lookupFailed = true;
+				return [];
+			};
+			let opened = await open(await provingChatKeys(rec.sender).catch(unanswered));
+			// Readable, never proof of who sent it: a changed key the user never
+			// accepted (they can no longer: the safety number is made from posting
+			// keys only), a key the peer REPLACED (it may be in someone else's
+			// hands now), or the chat key the chain says they publish now.
+			let viaUnpinnedKey = false;
 			if (opened === null && v === 2) {
-				// The peer may have changed keys and the user has not accepted
-				// the new one yet: the message can be read, but its sender is
-				// not proved until they do.
 				const pending = deps.pendingPeerPub?.(rec.sender) ?? null;
 				if (pending !== null) {
 					opened = await open([pending]);
-					viaPendingKey = opened !== null;
+					viaUnpinnedKey = opened !== null;
 				}
 			}
 			if (opened === null && v === 2) {
-				// A key the peer REPLACED: readable history, never proof of who
-				// sent it (the old key may be in someone else's hands now).
 				const replaced = deps.replacedPeerPubs?.(rec.sender) ?? [];
 				if (replaced.length > 0) {
 					opened = await open(replaced);
-					viaPendingKey = opened !== null;
+					viaUnpinnedKey = opened !== null;
+				}
+			}
+			if (opened === null && v === 2 && rec.sender === deps.peer && deps.pinnedPeerPubs) {
+				const current = await currentChatKeyOfPeer().catch(unanswered);
+				if (current.length > 0) {
+					opened = await open(current);
+					viaUnpinnedKey = opened !== null;
 				}
 			}
 			if (opened === null) {
-				return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
+				return lookupFailed
+					? {
+							text: ENCRYPTED_PLACEHOLDER,
+							decryptFailed: false,
+							senderUnverified: false,
+							transient: true
+						}
+					: { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
 			}
 			const text = typeof opened === 'string' ? opened : opened.text;
 			const authenticated = typeof opened === 'string' ? false : opened.authenticated;
-			if (authenticated && !viaPendingKey && v === 2 && rec.sender === deps.peer)
-				peerLastProvedV = 2;
-			return { text, decryptFailed: false, senderUnverified: !authenticated || viaPendingKey };
+			const unproved = !authenticated || viaUnpinnedKey;
+			return {
+				text,
+				decryptFailed: false,
+				senderUnverified: unproved,
+				...(unproved ? { olderFormat: true as const } : {}),
+				...(unproved && lookupFailed ? { transient: true as const } : {})
+			};
 		} catch {
 			// Any unexpected error during decrypt (including
 			// crypto init failures, libsodium issues, etc.) falls
@@ -1593,15 +1806,27 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 	}
 
-	/** The chat keys a message from `sender` (always the peer here) may be
-	 *  opened with: the pinned key, then keys it replaced. When the peer is not
-	 *  pinned yet, their key is fetched and pinned once (trust on first use). */
-	async function senderPubCandidates(sender: string): Promise<Uint8Array[]> {
-		const pinned = deps.pinnedPeerPubs?.(sender) ?? [];
-		if (pinned.length > 0) return [...pinned];
-		if (sender !== deps.peer) return [];
-		const fetched = await ensurePeerChatPub().catch(() => null);
-		return fetched !== null ? [fetched] : [];
+	/** The chat keys that PROVE an older-format message from `sender`: those
+	 *  pinned here (before v1.21.14; nothing pins a chat key any more). Tests
+	 *  without a pin store (no `pinnedPeerPubs`): the conversation's fetched
+	 *  key. Throws KeyLookupUnavailable when that lookup could not be made. */
+	async function provingChatKeys(sender: string): Promise<Uint8Array[]> {
+		await unsealSettled();
+		if (deps.pinnedPeerPubs !== undefined) return [...deps.pinnedPeerPubs(sender)];
+		return sender === deps.peer ? currentChatKeyOfPeer() : [];
+	}
+
+	/** The peer's chat key as the chain says they publish it now (never
+	 *  pinned), or none. Throws KeyLookupUnavailable when it could not be
+	 *  asked (W-M8); a verdict about the key (PubPinError) is an answer. */
+	async function currentChatKeyOfPeer(): Promise<Uint8Array[]> {
+		try {
+			const k = await ensurePeerChatPub();
+			return k !== null ? [k] : [];
+		} catch (err) {
+			if (err instanceof PubPinError) return [];
+			throw new KeyLookupUnavailable();
+		}
 	}
 
 	/** decrypt OUR OWN sent message from chain via its self-copy
@@ -1630,22 +1855,26 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return null;
 		}
 		const v = typeof h.v === 'number' ? h.v : undefined;
-		if (v === 3) {
+		if (v === 3 || v === 4) {
 			const sk = h.sk;
 			const rk = h.rk;
 			const wk = h.wk;
+			const boundT = v === 4 ? boundTimeOf(h) : undefined;
+			const boundOwner = v === 4 ? boundOwnerOf(h) : undefined;
 			if (
 				deps.decryptPostingSelfCopy === undefined ||
 				typeof sk !== 'string' ||
 				!isStringArray(rk) ||
-				!isStringArray(wk)
+				!isStringArray(wk) ||
+				(v === 4 && (boundT === undefined || boundOwner === undefined))
 			) {
 				return null;
 			}
 			try {
 				return await deps.decryptPostingSelfCopy(
 					{
-						v: 3,
+						v,
+						...(boundT !== undefined ? { t: boundT, o: boundOwner } : {}),
 						ciphertext: rec.ciphertext,
 						ephemeralPub,
 						nonce,
@@ -1657,7 +1886,8 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					},
 					live,
 					rec.sender,
-					rec.recipient
+					rec.recipient,
+					rec.order_permlink ?? null
 				);
 			} catch {
 				return null;
@@ -1679,11 +1909,15 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				id.pub,
 				rec.sender,
 				rec.recipient,
-				// Our self-copy was made with the key the peer had then: the
-				// replaced ones too (reading our own message proves nothing).
+				// Our self-copy was made with the key the peer had then: pinned,
+				// replaced or the one on chain now (reading our own message
+				// proves nothing).
 				[
-					...(await senderPubCandidates(rec.recipient)),
-					...(deps.replacedPeerPubs?.(rec.recipient) ?? [])
+					...(await provingChatKeys(rec.recipient).catch(() => [])),
+					...(deps.replacedPeerPubs?.(rec.recipient) ?? []),
+					...(rec.recipient === deps.peer && deps.pinnedPeerPubs
+						? await currentChatKeyOfPeer().catch(() => [])
+						: [])
 				]
 			);
 		} catch {
@@ -1696,12 +1930,53 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 * payload. If the decrypted plaintext is a recognized address/funds-sent
 	 * payload with an orderPermlink, route it. Plain chat messages decode to
 	 * 'plaintext' and are no-ops. The caller checks that the sender is proved.
+	 *
+	 * v1.21.14 full chat audit, W-H1 — and only for the order of the thread the
+	 * message arrived in (`threadOrder`, the record's order_permlink, which the
+	 * merge has already matched to this view's thread), when that order belongs
+	 * to the sender or to us. Before, the order NAMED INSIDE the message was
+	 * taken at its word: a peer in an unrelated direct message could mark our
+	 * trade with someone else as paid, or replace the amount and memo it asked.
+	 *
+	 * 'retry': whose order it is could not be told now; the caller marks the
+	 * message `effectsDue` and they run when it is next delivered.
 	 */
-	function applyIncomingTradePayload(text: string, sender: string): void {
+	async function applyIncomingTradePayload(
+		text: string,
+		sender: string,
+		threadOrder: string | null,
+		epoch: number,
+		/** v4: the order owner the sender sealed it with (C-M2). */
+		boundOwner?: string
+	): Promise<'done' | 'retry'> {
+		const decoded = decodePayload(text);
+		if (decoded.kind !== 'address' && decoded.kind !== 'funds_sent') return 'done';
+		const order = decoded.payload.orderPermlink;
+		if (!order || order !== threadOrder) return 'done';
+		const owner =
+			deps.orderOwnerOf === undefined
+				? sender
+				: await deps.orderOwnerOf(order, sender).catch(() => null);
+		// A lock (or the view closing) while that was asked: record nothing.
+		if (destroyed || epoch !== lockEpoch) return 'done';
+		if (owner === null) return 'retry';
+		if (owner === false) return 'done';
+		// v4: sealed about ANOTHER owner's order by the same permlink — not
+		// this one's trade (C-M2).
+		if (boundOwner !== undefined && boundOwner !== owner) return 'done';
+		recordIncomingTradePayload(decoded, sender, owner);
+		return 'done';
+	}
+
+	function recordIncomingTradePayload(
+		decoded: ReturnType<typeof decodePayload>,
+		sender: string,
+		orderOwner: string
+	): void {
 		try {
-			const decoded = decodePayload(text);
 			if (decoded.kind === 'address' && decoded.payload.orderPermlink) {
 				recordAddressShared({
+					orderOwner,
 					orderPermlink: decoded.payload.orderPermlink,
 					peer: sender,
 					method: decoded.payload.method,
@@ -1712,6 +1987,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				});
 			} else if (decoded.kind === 'funds_sent' && decoded.payload.orderPermlink) {
 				recordFundsSent({
+					orderOwner,
 					orderPermlink: decoded.payload.orderPermlink,
 					peer: sender,
 					method: decoded.payload.method,
@@ -1735,6 +2011,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 								sender,
 								amountBlurt: amountNum,
 								echoedMemo: decoded.payload.memo ?? '',
+								orderOwner,
 								orderPermlink: decoded.payload.orderPermlink,
 								txid: decoded.payload.txid,
 								direction: 'incoming'
@@ -1748,12 +2025,100 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 	}
 
-	/** A message a history page added before the live path delivered it: the
-	 *  live path has now delivered it, so its trade side effects run (once). */
+	/**
+	 * Trade side effects run here, one at a time and in the order the messages
+	 * were merged, but OUTSIDE the merge: the order-owner lookup they may wait
+	 * for (W-H1, a hidden-network round trip the first time) must not hold back
+	 * the messages after it from appearing.
+	 */
+	let effectsChain: Promise<unknown> = Promise.resolve();
+	function queueTradeEffects(m: LocalMessage): void {
+		const epoch = lockEpoch;
+		const text = m.text;
+		effectsChain = effectsChain
+			.then(async () => {
+				const r = await applyIncomingTradePayload(
+					text,
+					m.sender,
+					deps.orderPermlink ?? null,
+					epoch,
+					m.boundOwner
+				);
+				// Not decided now: run them when the message is next delivered.
+				if (r === 'retry') m.effectsDue = true;
+			})
+			.catch(() => undefined);
+	}
+
+	/** A message whose trade side effects have not run yet (a history page
+	 *  added it, or whose order could not be checked): the live path has now
+	 *  delivered it, so they run (once). */
 	function runDueEffects(m: LocalMessage | undefined): void {
 		if (m?.effectsDue !== true) return;
 		delete m.effectsDue;
-		applyIncomingTradePayload(m.text, m.sender);
+		queueTradeEffects(m);
+	}
+
+	/**
+	 * A message of the peer's shown unopened or unproved for a reason that
+	 * passes (LocalMessage.reopen), opened again: take what this try says.
+	 * Its trade side effects become due when its sender is now proved (they
+	 * never ran: an unopened or unproved message moves no trade). Returns
+	 * whether anything the view shows changed.
+	 */
+	function applyReopened(
+		m: LocalMessage,
+		d: Awaited<ReturnType<typeof decryptOrPlaceholder>>
+	): boolean {
+		const before = `${m.text}\u0000${m.decryptFailed}\u0000${m.senderUnverified === true}`;
+		m.text = d.text;
+		m.decryptFailed = d.decryptFailed;
+		if (d.otherKey === true) m.decryptFailedReason = 'other_key';
+		else delete m.decryptFailedReason;
+		if (d.senderUnverified) m.senderUnverified = true;
+		else delete m.senderUnverified;
+		if (d.olderFormat === true) m.olderFormat = true;
+		else delete m.olderFormat;
+		// Opened now: its bound send time bounds the time shown (C-M2).
+		if (d.boundT !== undefined && m.boundT === undefined) {
+			m.boundT = d.boundT;
+			if (m.createdAt !== null) m.createdAt = shownTime(m.createdAt, d.boundT);
+		}
+		if (d.boundOwner !== undefined) m.boundOwner = d.boundOwner;
+		if (d.transient !== true) {
+			delete m.reopen;
+			if (!d.decryptFailed && !d.senderUnverified) m.effectsDue = true;
+		}
+		return before !== `${m.text}\u0000${m.decryptFailed}\u0000${m.senderUnverified === true}`;
+	}
+
+	/**
+	 * One of OUR messages shown as the placeholder because the session was
+	 * locked when it arrived (W-L1): `rec` is a copy of it arriving while
+	 * unlocked — open it from its self-copy (or this session's own-sent cache).
+	 * Returns whether its text changed.
+	 */
+	async function reopenOwn(rec: ChatMessageRecord): Promise<boolean> {
+		if (deps.getLiveIdentity() === null) return false;
+		const wire = wireOf(rec);
+		const m = messages.find((x) => x.sender === deps.me && x.reopen === true && x.wire === wire);
+		if (m === undefined) return false;
+		const tag = clientTagFromHeader(rec.header);
+		const fromChain = await decryptOwnFromChain(rec);
+		if (deps.getLiveIdentity() === null) return false;
+		const text = fromChain ?? (tag !== null ? ownSentFor(deps.me, rec, tag) : undefined);
+		// Unlocked and still nothing to open it with (no self-copy: "destroy"
+		// mode, or a message from before self-copies): final.
+		delete m.reopen;
+		if (text === undefined) return false;
+		m.text = text;
+		// Opened from its self-copy: the bound send time is authenticated (C-M2).
+		const boundT = fromChain !== null ? boundTimeOf(rec.header) : undefined;
+		if (boundT !== undefined && m.boundT === undefined) {
+			m.boundT = boundT;
+			if (m.createdAt !== null) m.createdAt = shownTime(m.createdAt, boundT);
+		}
+		return true;
 	}
 
 	/** Process one poll response: merge new messages into the
@@ -1859,8 +2224,23 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			const isDurable = rec.id !== 0;
 			// Is this a confirmation of a local outgoing message?
 			if (rec.sender === deps.me) {
-				if (reconcileByClientTag(rec)) {
-					added = true;
+				// W-L1: one of ours shown as a placeholder while the session was
+				// locked — this copy arrives after the unlock: open it now.
+				if (await reopenOwn(rec)) added = true;
+				if (lockedSince()) return 0;
+				const reconciled = reconcileByClientTag(rec);
+				if (reconciled !== 'no') {
+					if (reconciled === 'changed') added = true;
+					continue;
+				}
+				// W-H3: the same bytes under another tag (or none) are a copy of
+				// a message already here, never a second one.
+				const ownTwin = twinByWire(rec);
+				if (ownTwin) {
+					if (isDurable && (ownTwin.id === null || ownTwin.id === 0)) {
+						adoptDurable(ownTwin, rec);
+						added = true;
+					}
 					continue;
 				}
 				// No local tag matched AND we've seen this id before
@@ -1881,13 +2261,17 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				if (++opened % DECRYPT_YIELD_EVERY === 0 && deps.yieldToMain !== undefined) {
 					await deps.yieldToMain();
 				}
+				// Locked: shown as the placeholder now, opened after the unlock.
+				const lockedNow = deps.getLiveIdentity() === null;
 				const ownFromChain = await decryptOwnFromChain(rec);
 				if (lockedSince()) return 0;
 				const ownCached =
 					ownFromChain === null && deps.getLiveIdentity() !== null && ownTag !== null
-						? ownSentPlaintext.get(ownSentKey(deps.me, ownTag))
+						? ownSentFor(deps.me, rec, ownTag)
 						: undefined;
 				const ownText = ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER;
+				// Opened from its self-copy: its bound send time is authenticated.
+				const ownBoundT = ownFromChain !== null ? boundTimeOf(rec.header) : undefined;
 				const ownDeclared = priorTagsFromHeader(rec.header, ownTag);
 				// A retry made from our OTHER session: fold it into the attempt it
 				// resends, exactly as the recipient does (see the incoming branch).
@@ -1900,8 +2284,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 						ownDeclared
 					);
 					if (linked) {
-						absorbRetryCopy(linked, rec, ownTag, ownDeclared);
-						added = true;
+						if (absorbRetryCopy(linked, rec, ownTag, ownDeclared, ownBoundT)) added = true;
 						continue;
 					}
 				}
@@ -1915,11 +2298,14 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					text: ownText,
 					sender: rec.sender,
 					state: 'confirmed',
-					createdAt: new Date(rec.created_at),
+					createdAt: shownTime(rec.created_at, ownBoundT),
+					...(ownBoundT !== undefined ? { boundT: ownBoundT } : {}),
 					trxId: isDurable ? rec.source_trx_id || null : null,
 					error: null,
 					decryptFailed: false,
 					localSeq: ++localSeqCounter,
+					wire: wireOf(rec),
+					...(lockedNow && ownText === ENCRYPTED_PLACEHOLDER ? { reopen: true as const } : {}),
 					...(ownDeclared.length > 0 ? { priorTags: ownDeclared } : {}),
 					...(isDurable ? {} : { provisionalSinceMs: Date.now() }),
 					...(isBackfill(rec) ? { backfilled: true as const } : {})
@@ -1932,27 +2318,31 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				const incomingTag = clientTagFromHeader(rec.header);
 
 				// Collapse a fast-path provisional against its durable
-				// twin — either may arrive first, and both carry the same
-				// on-chain client_tag. On a hit, adopt the durable id the
-				// first time it lands, but NEVER re-decode or re-record:
+				// twin — either may arrive first. On a hit, adopt the durable id
+				// the first time it lands, but NEVER re-decode or re-record:
 				// the trade-status side effects below ran when the message
 				// first arrived, and re-running them would double-record
 				// an address/funds-sent payload.
-				if (incomingTag !== null) {
-					// Same sender, same tag AND the same encrypted bytes — the tag
-					// alone is the sender's to choose. See wireOf.
-					const wire = wireOf(rec);
-					const twin = messages.find(
-						(m) => m.sender === rec.sender && m.clientTag === incomingTag && m.wire === wire
-					);
-					if (twin) {
-						if (isDurable && (twin.id === null || twin.id === 0)) {
-							adoptDurable(twin, rec);
-						}
-						if (mode === 'live') runDueEffects(twin);
-						added = true;
-						continue;
+				//
+				// A twin is the same sender and the same encrypted bytes, WHATEVER
+				// its tag (v1.21.14 full chat audit, W-H3; see twinByWire).
+				const twin = twinByWire(rec);
+				if (twin) {
+					let changed = false;
+					if (isDurable && (twin.id === null || twin.id === 0)) {
+						adoptDurable(twin, rec);
+						changed = true;
 					}
+					// W-M8 / W-L1: shown unopened (or unproved) for a reason that
+					// passes — try again now.
+					if (twin.reopen === true && deps.getLiveIdentity() !== null) {
+						const d = await decryptOrPlaceholder(rec);
+						if (lockedSince()) return 0;
+						if (applyReopened(twin, d)) changed = true;
+					}
+					if (mode === 'live') runDueEffects(twin);
+					if (changed) added = true;
+					continue;
 				}
 
 				// No twin yet. Durable copies dedup by id; a provisional
@@ -1983,8 +2373,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 						declared
 					);
 					if (linked) {
-						absorbRetryCopy(linked, rec, incomingTag, declared);
-						added = true;
+						if (absorbRetryCopy(linked, rec, incomingTag, declared, d.boundT)) added = true;
 						continue;
 					}
 				}
@@ -1996,14 +2385,18 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					text: d.text,
 					sender: rec.sender,
 					state: 'confirmed',
-					createdAt: new Date(rec.created_at),
+					createdAt: shownTime(rec.created_at, d.boundT),
+					...(d.boundT !== undefined ? { boundT: d.boundT } : {}),
+					...(d.boundOwner !== undefined ? { boundOwner: d.boundOwner } : {}),
 					trxId: isDurable ? rec.source_trx_id || null : null,
 					error: null,
 					decryptFailed: d.decryptFailed,
 					...(d.otherKey === true ? { decryptFailedReason: 'other_key' as const } : {}),
 					...(d.senderUnverified ? { senderUnverified: true } : {}),
+					...(d.olderFormat === true ? { olderFormat: true as const } : {}),
 					localSeq: ++localSeqCounter,
 					wire: wireOf(rec),
+					...(d.transient === true ? { reopen: true as const } : {}),
 					// Kept so a copy of the attempt this one replaces, arriving
 					// AFTER it, is recognised too. Unverified until then: the
 					// link still has to pass the identical-text test.
@@ -2021,7 +2414,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// live path (see mergeNow).
 				if (!d.decryptFailed && !d.senderUnverified) {
 					if (mode === 'history') entry.effectsDue = true;
-					else applyIncomingTradePayload(d.text, rec.sender);
+					else queueTradeEffects(entry);
 				}
 			}
 		}
@@ -2186,39 +2579,66 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}, FALLBACK_POLL_INTERVAL_MS + jitter);
 	}
 
-	async function sendMessage(text: string): Promise<void> {
+	async function sendMessage(text: string): Promise<SendOutcome> {
 		const trimmed = text.trim();
-		if (trimmed.length === 0) return;
+		if (trimmed.length === 0) return { ok: false, error: 'empty' };
 
 		// Phase F.5 — populate the trade-status store from outgoing
-		// structured payloads.  Done before the broadcast attempt
-		// so the /my/orders badge updates immediately even if the
-		// network is slow.  If the broadcast eventually fails, the
-		// trade entry still reflects the user's intent — they'll
-		// see the failed message in their chat and can retry.
+		// structured payloads.  Started before the broadcast attempt
+		// so the /my/orders badge updates even if the network is
+		// slow.  If the broadcast eventually fails, the trade entry
+		// still reflects the user's intent — they'll see the failed
+		// message in their chat and can retry.
+		// C-L3: under the order's owner (the peer's or ours), once known —
+		// asked again while it cannot be told (OUTGOING_OWNER_RETRY_MS); neither
+		// party's order, or a lock or sign-out meanwhile (even after this view
+		// closed): nothing is recorded.
 		try {
 			const decoded = decodePayload(trimmed);
-			if (decoded.kind === 'address' && decoded.payload.orderPermlink) {
-				recordAddressShared({
-					orderPermlink: decoded.payload.orderPermlink,
-					peer: deps.peer,
-					method: decoded.payload.method,
-					address: decoded.payload.address,
-					expectedAmount: decoded.payload.amount ? Number(decoded.payload.amount) : undefined,
-					expectedMemo: decoded.payload.memo,
-					direction: 'outgoing'
+			const order =
+				decoded.kind === 'address' || decoded.kind === 'funds_sent'
+					? decoded.payload.orderPermlink
+					: undefined;
+			const generation = sessionGeneration;
+			const ownerOf = (o: string): Promise<string | false | null> =>
+				deps.orderOwnerOf === undefined
+					? Promise.resolve(deps.peer)
+					: deps.orderOwnerOf(o, deps.peer).catch(() => null);
+			const record = (orderOwner: string): void => {
+				if (decoded.kind === 'address' && decoded.payload.orderPermlink) {
+					recordAddressShared({
+						orderOwner,
+						orderPermlink: decoded.payload.orderPermlink,
+						peer: deps.peer,
+						method: decoded.payload.method,
+						address: decoded.payload.address,
+						expectedAmount: decoded.payload.amount ? Number(decoded.payload.amount) : undefined,
+						expectedMemo: decoded.payload.memo,
+						direction: 'outgoing'
+					});
+				} else if (decoded.kind === 'funds_sent' && decoded.payload.orderPermlink) {
+					recordFundsSent({
+						orderOwner,
+						orderPermlink: decoded.payload.orderPermlink,
+						peer: deps.peer,
+						method: decoded.payload.method,
+						txid: decoded.payload.txid,
+						claimedMemo: decoded.payload.memo,
+						amount: decoded.payload.amount ? Number(decoded.payload.amount) : undefined,
+						direction: 'outgoing'
+					});
+				}
+			};
+			const attempt = (n: number): void => {
+				if (!order) return;
+				void ownerOf(order).then((orderOwner) => {
+					if (generation !== sessionGeneration) return;
+					if (typeof orderOwner === 'string') record(orderOwner);
+					else if (orderOwner === null && n < OUTGOING_OWNER_RETRY_MS.length)
+						setTimeout(() => attempt(n + 1), OUTGOING_OWNER_RETRY_MS[n]);
 				});
-			} else if (decoded.kind === 'funds_sent' && decoded.payload.orderPermlink) {
-				recordFundsSent({
-					orderPermlink: decoded.payload.orderPermlink,
-					peer: deps.peer,
-					method: decoded.payload.method,
-					txid: decoded.payload.txid,
-					claimedMemo: decoded.payload.memo,
-					amount: decoded.payload.amount ? Number(decoded.payload.amount) : undefined,
-					direction: 'outgoing'
-				});
-			}
+			};
+			attempt(0);
 		} catch {
 			// Decoding never throws — but if it did, sending the
 			// message is more important than the store update.
@@ -2244,7 +2664,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				localSeq: ++localSeqCounter
 			});
 			emit();
-			return;
+			return { ok: false, error: SESSION_LOCKED_SENTINEL };
 		}
 
 		const clientTag = deps.generateClientTag();
@@ -2257,7 +2677,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// The cache is in-memory only and also cleared on lock/sign-out.
 		const keepHistory = shouldAttachSelfCopy(deps.chatSecurityMode?.());
 		if (keepHistory) {
-			rememberOwnSent(deps.me, clientTag, trimmed);
+			rememberOwnSent(deps.me, deps.peer, deps.orderPermlink, clientTag, trimmed);
 		}
 		const local: LocalMessage = {
 			id: null,
@@ -2286,17 +2706,25 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			local.error = sealed.error;
 			rememberUnsent(local);
 			emit();
-			return;
+			return { ok: false, error: sealed.error };
 		}
 		const envelope = sealed.envelope;
+		// v4: the send time we bound it to (C-M2) bounds the time it shows.
+		if (envelope.v === 4 && envelope.t !== undefined) local.boundT = envelope.t;
 
 		// Step 4: build the on-wire payload and hand it to the node.
 		const payload = wirePayload(clientTag, envelope, []);
 		try {
 			const res = await deps.broadcast(live, payload, deps.me);
 			markAccepted(local, res?.trx_id);
+			return { ok: true };
 		} catch (err) {
 			markSendFailed(local, err);
+			// Our own copy may already have come back and confirmed it (see
+			// markSendFailed): then it was delivered, whatever the reply said.
+			return local.state === 'failed'
+				? { ok: false, error: local.error ?? 'failed' }
+				: { ok: true };
 		}
 	}
 
@@ -2332,8 +2760,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			ciphertext: envelope.ciphertext,
 			header: {
 				// The envelope version: 2 = sender-authenticated (chat keys),
-				// 3 = posting keys (crypto.ts).
+				// 3 = posting keys (crypto.ts), 4 = posting keys bound to the
+				// order and the send time `t` (review C-M2).
 				...(envelope.v === 2 || envelope.v === 3 ? { v: envelope.v } : {}),
+				...(envelope.v === 4 ? { v: 4, t: envelope.t, o: envelope.o } : {}),
 				client_tag: clientTag,
 				ephemeral_pub: envelope.ephemeralPub,
 				nonce: envelope.nonce,
@@ -2593,7 +3023,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// Only for a live session: a locked one fails just below, and must not
 		// leave the words in memory.
 		if (deps.getLiveIdentity() !== null && shouldAttachSelfCopy(deps.chatSecurityMode?.())) {
-			rememberOwnSent(deps.me, newTag, text);
+			rememberOwnSent(deps.me, deps.peer, deps.orderPermlink, newTag, text);
 		}
 		target.state = 'pending';
 		target.clientTag = newTag;
@@ -2625,6 +3055,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 		const envelope = sealed.envelope;
+		// A retry is sealed afresh: its own bound send time (C-M2).
+		if (envelope.v === 4 && envelope.t !== undefined) target.boundT = envelope.t;
+		else delete target.boundT;
 
 		const payload = wirePayload(newTag, envelope, target.priorTags ?? []);
 		try {
@@ -2799,7 +3232,12 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			};
 			const known = shown.get(rec.id);
 			if (known) {
-				out.push({ ...base, text: known.text, decryptFailed: known.decryptFailed });
+				out.push({
+					...base,
+					createdAt: shownTime(rec.created_at, known.boundT),
+					text: known.text,
+					decryptFailed: known.decryptFailed
+				});
 				continue;
 			}
 			if (rec.sender === deps.me) {
@@ -2808,17 +3246,27 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				if (stale()) throw new ConversationIncompleteError('locked or closed');
 				const cached =
 					fromChain === null && deps.getLiveIdentity() !== null && tag !== null
-						? ownSentPlaintext.get(ownSentKey(deps.me, tag))
+						? ownSentFor(deps.me, rec, tag)
 						: undefined;
 				out.push({
 					...base,
+					// Opened from its self-copy: its bound send time is authenticated.
+					createdAt: shownTime(
+						rec.created_at,
+						fromChain !== null ? boundTimeOf(rec.header) : undefined
+					),
 					text: fromChain ?? cached ?? ENCRYPTED_PLACEHOLDER,
 					decryptFailed: false
 				});
 			} else {
 				const d = await decryptOrPlaceholder(rec);
 				if (stale()) throw new ConversationIncompleteError('locked or closed');
-				out.push({ ...base, text: d.text, decryptFailed: d.decryptFailed });
+				out.push({
+					...base,
+					createdAt: shownTime(rec.created_at, d.boundT),
+					text: d.text,
+					decryptFailed: d.decryptFailed
+				});
 			}
 		}
 		// What this view shows that the pages did not hold: messages with no
@@ -2876,6 +3324,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		myChatIdentity = null;
 		if (id) id.priv.fill(0);
 		messages = [];
+		wireAliases = new Map();
 		// Scrolling back starts again from the newest message: what it had
 		// loaded was just dropped.
 		olderCursor = undefined;
@@ -3036,10 +3485,9 @@ const b64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), (c) => c.
  *  pin store in pubPin.ts. */
 export async function pinPostingKeyInStore(
 	peerAccount: string,
-	chainKeys: readonly Uint8Array[],
-	opts: { needsConsent?: boolean } = {}
+	chainKeys: readonly Uint8Array[]
 ): Promise<Uint8Array[]> {
-	return (await resolvePostingKeyPin(peerAccount, chainKeys.map(bytesToB64), opts)).map(b64ToBytes);
+	return (await resolvePostingKeyPin(peerAccount, chainKeys.map(bytesToB64))).map(b64ToBytes);
 }
 
 /** The posting keys pinned for `peer` (ChatControllerDeps.pinnedPostingKeys). */
@@ -3113,8 +3561,9 @@ function postingWire(envelope: SealedEnvelope): PostingEnvelopeWire | null {
 	) {
 		return null;
 	}
+	if (envelope.v === 4 && (envelope.t === undefined || envelope.o === undefined)) return null;
 	return {
-		v: 3,
+		...(envelope.v === 4 ? { v: 4 as const, t: envelope.t, o: envelope.o } : { v: 3 as const }),
 		ciphertext: envelope.ciphertext,
 		ephemeralPub: envelope.ephemeralPub,
 		nonce: envelope.nonce,
@@ -3140,7 +3589,8 @@ export const postingEnvelopeCrypto: Pick<
 		live,
 		senderAccount,
 		recipientAccount,
-		includeSelfCopy
+		includeSelfCopy,
+		binding
 	) => {
 		const env = await encryptToPostingKey(
 			plaintext,
@@ -3148,10 +3598,11 @@ export const postingEnvelopeCrypto: Pick<
 			live.posting.privateKey,
 			senderAccount,
 			recipientAccount,
-			includeSelfCopy
+			includeSelfCopy,
+			binding
 		);
 		return {
-			v: 3 as const,
+			...(env.v === 4 ? { v: 4 as const, t: env.t, o: env.o } : { v: 3 as const }),
 			ciphertext: env.ciphertext,
 			ephemeralPub: env.ephemeralPub,
 			nonce: env.nonce,
@@ -3163,7 +3614,14 @@ export const postingEnvelopeCrypto: Pick<
 				: {})
 		};
 	},
-	decryptPosting: async (envelope, live, senderAccount, recipientAccount, senderPostingPubs) => {
+	decryptPosting: async (
+		envelope,
+		live,
+		senderAccount,
+		recipientAccount,
+		senderPostingPubs,
+		order
+	) => {
 		const wire = postingWire(envelope);
 		if (wire === null) return null;
 		try {
@@ -3172,7 +3630,8 @@ export const postingEnvelopeCrypto: Pick<
 				readerFor(live.posting.privateKey),
 				senderAccount,
 				recipientAccount,
-				senderPostingPubs
+				senderPostingPubs,
+				order
 			);
 		} catch (err) {
 			if (err instanceof NotForThisKeyError) return 'other_key';
@@ -3180,7 +3639,7 @@ export const postingEnvelopeCrypto: Pick<
 			throw err;
 		}
 	},
-	decryptPostingSelfCopy: async (envelope, live, senderAccount, recipientAccount) => {
+	decryptPostingSelfCopy: async (envelope, live, senderAccount, recipientAccount, order) => {
 		const wire = postingWire(envelope);
 		if (wire === null) return null;
 		try {
@@ -3188,7 +3647,8 @@ export const postingEnvelopeCrypto: Pick<
 				wire,
 				readerFor(live.posting.privateKey),
 				senderAccount,
-				recipientAccount
+				recipientAccount,
+				order
 			);
 		} catch (err) {
 			if (err instanceof DecryptError) return null;
@@ -3196,35 +3656,6 @@ export const postingEnvelopeCrypto: Pick<
 		}
 	}
 };
-
-/**
- * This account's chat key on chain against the one it derives
- * (ChatControllerDeps.myChatKeyStatus; the Verify-peer panel asks the same).
- * Once the key has been seen current here (pubPin recordOwnPublished), it
- * stays current without asking: an op on chain is never withdrawn, so a later
- * "none" from an indexer cannot move this account's conversations off chat
- * keys. Throws when the indexer could not say.
- */
-export async function ownChatKeyStatus(me: string, live: LiveIdentity): Promise<OwnChatKeyStatus> {
-	const mine = await deriveChatIdentity(live.posting.privateKey, me);
-	let derived: string;
-	try {
-		derived = encodeChatPub(mine.pub);
-	} finally {
-		mine.priv.fill(0);
-	}
-	// The record a Lock sealed is readable only once the unlock's unseal landed.
-	await unsealSettled();
-	if (ownPublishedRecord(me) === derived) return 'current';
-	const r = await getChatIdentity(me);
-	if (!r.ok) {
-		if (r.code === 'not_found') return 'none';
-		throw new Error(r.message);
-	}
-	if (r.data.chat_pub !== derived) return 'stale';
-	recordOwnPublished(me, derived);
-	return 'current';
-}
 
 export function runtimeDeps(
 	me: string,
@@ -3273,6 +3704,10 @@ export function runtimeDeps(
 			return { ok: false, message: r.message };
 		},
 		broadcast: (live, payload, blurtAccount) => broadcastChatMessage(live, payload, blurtAccount),
+		// W-H1: a structured payload moves a trade only for an order of the
+		// sender's or ours, under its owner (C-L3).
+		orderOwnerOf: (orderPermlink: string, sender: string) =>
+			orderOwnerOf(orderPermlink, sender, me),
 		transactionOnChain: async (trxId: string) => {
 			const r = await fetchChainTx(resolveOrigin(MORPHIT_INDEXER_ORIGIN), trxId);
 			return r.kind === 'ok' ? 'found' : r.kind === 'not_found' ? 'not_found' : 'unknown';
@@ -3288,60 +3723,22 @@ export function runtimeDeps(
 				throw new Error(r.message);
 			}
 
-			// Option-5 chain-anchored TOFU pin (security S2).
-			// resolveChatPubFromIndexer is the state machine; we
-			// just adapt the indexer response and inject the chain
-			// verifier.  On any tamper detection it throws a
-			// PubPinError with a stable code; the caller surfaces
-			// to the user via the standard "failed message" UX.
-			const indexerPin: ChatPubPin = {
+			// Only to READ the peer's older (v2) messages, and NEVER pinned
+			// (v1.21.14, posting-key-only chat: pinning it here, as the conversation
+			// opened, is what held a first conversation's posting keys back). The
+			// chain must confirm the op the indexer names — the same check as
+			// before (chainVerify, with the S14 signature check) — or the key is
+			// not used at all. A message it opens is shown as not proved anyway.
+			const onChain = await verifyPeerChatIdentityOnChain(peerAccount, {
 				blockNum: r.data.source_block_num,
-				trxId: r.data.source_trx_id,
-				pubB64: r.data.chat_pub
-			};
-			const trustedPubB64 = await resolveChatPubFromIndexer(
-				peerAccount,
-				indexerPin,
-				// Verify the indexer's CLAIMED op directly (O(1)
-				// get_transaction) so witnesses / other high-activity
-				// accounts don't false-trip `chain_reports_none` when
-				// their identity op is buried beyond the history window;
-				// falls back to the history walk otherwise.  Includes
-				// the S14 local secp256k1 signature verify.  Only fires
-				// on the pin-mismatch / first-contact path.
-				(peer, claimed) => verifyPeerChatIdentityOnChain(peer, claimed)
-			);
-			return decodeChatPub(trustedPubB64);
+				trxId: r.data.source_trx_id
+			});
+			if (onChain === null || onChain.chatPubB64 !== r.data.chat_pub) return null;
+			return decodeChatPub(onChain.chatPubB64);
 		},
 		deriveMyChatIdentity: async (live: LiveIdentity, account: string) => {
 			const id = await deriveChatIdentity(live.posting.privateKey, account);
 			return { priv: id.priv, pub: id.pub };
-		},
-		encrypt: async (
-			plaintext: string,
-			recipientPub: Uint8Array,
-			senderAccount: string,
-			recipientAccount: string,
-			sender: { priv: Uint8Array; pub: Uint8Array },
-			includeSelfCopy: boolean
-		) => {
-			const env = await encryptToRecipient(
-				plaintext,
-				recipientPub,
-				sender,
-				senderAccount,
-				recipientAccount,
-				includeSelfCopy
-			);
-			return {
-				...(env.v === 2 ? { v: 2 as const } : {}),
-				ciphertext: env.ciphertext,
-				ephemeralPub: env.ephemeralPub,
-				nonce: env.nonce,
-				...(env.selfCiphertext !== undefined && env.selfNonce !== undefined
-					? { selfCiphertext: env.selfCiphertext, selfNonce: env.selfNonce }
-					: {})
-			};
 		},
 		decrypt: async (
 			envelope: { v?: number; ciphertext: string; ephemeralPub: string; nonce: string },
@@ -3397,20 +3794,30 @@ export function runtimeDeps(
 			// The account's posting authority, read through this instance's
 			// indexer (the same chain read every other key check here uses).
 			orderPostingPubs(await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account)),
-		myChatKeyStatus: async () => {
-			const live = getLiveIdentity();
-			if (live === null) throw new Error('session locked');
-			return ownChatKeyStatus(me, live);
-		},
 		pinPostingKey: pinPostingKeyInStore,
 		pinnedPostingKeys: pinnedPostingKeysInStore,
 		yieldToMain: yieldToMainThread,
 		...postingEnvelopeCrypto,
+		// v4's bound send time: the chain's head time, read through this
+		// instance (used only once WRITE_ENVELOPE_V4 is on).
+		chainNowSeconds: async () =>
+			Math.floor(new Date((await fetchDynamicGlobalProperties()).time + 'Z').getTime() / 1000),
 		pinnedPeerPubs: (p: string) => {
 			const out: Uint8Array[] = [];
 			for (const b64 of pinnedPubsFor(p)) {
 				try {
 					out.push(decodeChatPub(b64));
+				} catch {
+					/* a malformed stored key opens nothing */
+				}
+			}
+			return out;
+		},
+		replacedPostingKeys: (p: string) => {
+			const out: Uint8Array[] = [];
+			for (const b64 of replacedPostingFor(p)) {
+				try {
+					out.push(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
 				} catch {
 					/* a malformed stored key opens nothing */
 				}

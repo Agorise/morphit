@@ -27,12 +27,11 @@ vi.mock('$net/chainRelay', () => ({
 }));
 vi.mock('$lib/balance/bus', () => ({ triggerBalanceRefresh: () => undefined }));
 
-import { get } from 'svelte/store';
 import { triggerBlurtVerification } from './tradeVerify';
 import {
 	recordAddressShared,
 	recordFundsSent,
-	tradeStates,
+	getTradeState,
 	clearAllTradeStates
 } from './tradeStatus';
 
@@ -41,7 +40,7 @@ const transfer = (from: string, amount: string, memo: string) => ({
 	operations: [['transfer', { from, to: 'sally', amount, memo }]]
 });
 const settle = () =>
-	vi.waitFor(() => expect(get(tradeStates).get(P)?.verifyResult).not.toBe('pending'));
+	vi.waitFor(() => expect(getTradeState('sally', P)?.verifyResult).not.toBe('pending'));
 
 beforeEach(() => {
 	clearAllTradeStates();
@@ -49,6 +48,7 @@ beforeEach(() => {
 	relayAsked.length = 0;
 	// Sally (seller, this browser) shares her BLURT address with Bob, asking 500.
 	recordAddressShared({
+		orderOwner: 'sally',
 		orderPermlink: P,
 		peer: 'bob',
 		method: 'blurt',
@@ -61,6 +61,7 @@ beforeEach(() => {
 
 function claim(sender: string, txid: string, amount: string, memo: string) {
 	recordFundsSent({
+		orderOwner: 'sally',
 		orderPermlink: P,
 		peer: sender,
 		method: 'blurt',
@@ -74,6 +75,7 @@ function claim(sender: string, txid: string, amount: string, memo: string) {
 		sender,
 		amountBlurt: Number(amount),
 		echoedMemo: memo,
+		orderOwner: 'sally',
 		orderPermlink: P,
 		txid,
 		direction: 'incoming'
@@ -88,7 +90,7 @@ describe('who and how much a verification counts for', () => {
 		// one event-loop turn lets it finish if it ran at all.
 		await new Promise((r) => setTimeout(r, 0));
 		expect(relayAsked, "the stranger's transfer was looked up").toEqual([]);
-		const st = get(tradeStates).get(P)!;
+		const st = getTradeState('sally', P)!;
 		expect(st.phase).toBe('address_shared');
 		expect(st.peer).toBe('bob');
 	});
@@ -97,7 +99,7 @@ describe('who and how much a verification counts for', () => {
 		chainTxs.set('b'.repeat(40), transfer('bob', '1.000 BLURT', 'k7m2q9xa'));
 		claim('bob', 'b'.repeat(40), '1', 'k7m2q9xa');
 		await settle();
-		const st = get(tradeStates).get(P)!;
+		const st = getTradeState('sally', P)!;
 		expect(st.phase).toBe('paid_mismatch');
 		expect(st.mismatchField).toBe('amount');
 	});
@@ -106,7 +108,7 @@ describe('who and how much a verification counts for', () => {
 		chainTxs.set('c'.repeat(40), transfer('bob', '500.000 BLURT', 'k7m2q9xa'));
 		claim('bob', 'c'.repeat(40), '500', 'k7m2q9xa');
 		await settle();
-		const st = get(tradeStates).get(P)! as { phase: string; amountConfirmed?: boolean };
+		const st = getTradeState('sally', P)! as { phase: string; amountConfirmed?: boolean };
 		expect(st.phase).toBe('paid_verified');
 		expect(st.amountConfirmed).toBe(true);
 	});
@@ -115,10 +117,10 @@ describe('who and how much a verification counts for', () => {
 		chainTxs.set('b'.repeat(40), transfer('bob', '1.000 BLURT', 'k7m2q9xa'));
 		claim('bob', 'b'.repeat(40), '500', 'k7m2q9xa');
 		await settle();
-		expect(get(tradeStates).get(P)!.phase).toBe('paid_mismatch');
+		expect(getTradeState('sally', P)!.phase).toBe('paid_mismatch');
 		chainTxs.set('d'.repeat(40), transfer('bob', '500.000 BLURT', 'k7m2q9xa'));
 		claim('bob', 'd'.repeat(40), '500', 'k7m2q9xa');
-		await vi.waitFor(() => expect(get(tradeStates).get(P)!.phase).toBe('paid_verified'));
-		expect((get(tradeStates).get(P) as { amountConfirmed?: boolean }).amountConfirmed).toBe(true);
+		await vi.waitFor(() => expect(getTradeState('sally', P)!.phase).toBe('paid_verified'));
+		expect((getTradeState('sally', P) as { amountConfirmed?: boolean }).amountConfirmed).toBe(true);
 	});
 });

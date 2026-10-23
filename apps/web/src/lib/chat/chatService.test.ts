@@ -32,7 +32,9 @@ function mockRecord(overrides: Partial<ChatMessageRecord> = {}): ChatMessageReco
 		id: 1,
 		sender: 'alice',
 		recipient: 'bob',
-		ciphertext: 'c3R1Yg==',
+		// Distinct messages have distinct bytes: a copy with the SAME bytes is
+		// the same message, whatever its id or tag (v1.21.14, W-H3).
+		ciphertext: btoa(`stub-${overrides.id ?? 1}`),
 		header: {},
 		created_at: '2026-04-23T12:00:00.000Z',
 		...overrides
@@ -48,6 +50,7 @@ function mockDeps(overrides: Partial<ChatControllerDeps> = {}): ChatControllerDe
 	encryptMock: ReturnType<typeof vi.fn>;
 	decryptMock: ReturnType<typeof vi.fn>;
 	fetchPeerChatPubMock: ReturnType<typeof vi.fn>;
+	fetchPostingPubsMock: ReturnType<typeof vi.fn>;
 	visibilityListeners: (() => void)[];
 	setVisibility: (v: 'visible' | 'hidden') => void;
 } {
@@ -59,6 +62,7 @@ function mockDeps(overrides: Partial<ChatControllerDeps> = {}): ChatControllerDe
 	const encryptMock = vi.fn();
 	const decryptMock = vi.fn();
 	const fetchPeerChatPubMock = vi.fn();
+	const fetchPostingPubsMock = vi.fn();
 	let tagCounter = 0;
 
 	// A non-zero 32-byte value used as both the peer pub and
@@ -68,6 +72,9 @@ function mockDeps(overrides: Partial<ChatControllerDeps> = {}): ChatControllerDe
 	const fakePub = new Uint8Array(32).fill(7);
 	const fakePriv = new Uint8Array(32).fill(9);
 	fetchPeerChatPubMock.mockResolvedValue(fakePub);
+	// The peer's posting key (33 bytes, compressed): every message is sent to
+	// posting keys (v1.21.14).
+	fetchPostingPubsMock.mockResolvedValue([new Uint8Array(33).fill(2)]);
 	// encrypt stub: packs plaintext into ciphertext field so test
 	// assertions can see what was "encrypted" (base64-encoded so
 	// the on-chain validators in test fixtures are happy).
@@ -114,7 +121,8 @@ function mockDeps(overrides: Partial<ChatControllerDeps> = {}): ChatControllerDe
 		broadcast: broadcastMock as unknown as ChatControllerDeps['broadcast'],
 		fetchPeerChatPub: fetchPeerChatPubMock as unknown as ChatControllerDeps['fetchPeerChatPub'],
 		deriveMyChatIdentity: async () => ({ priv: fakePriv, pub: fakePub }),
-		encrypt: encryptMock as unknown as ChatControllerDeps['encrypt'],
+		fetchPostingPubs: fetchPostingPubsMock as unknown as ChatControllerDeps['fetchPostingPubs'],
+		encryptPosting: encryptMock as unknown as ChatControllerDeps['encryptPosting'],
 		decrypt: decryptMock as unknown as ChatControllerDeps['decrypt'],
 		onChange: (m) => {
 			emitted.push([...m]);
@@ -130,6 +138,7 @@ function mockDeps(overrides: Partial<ChatControllerDeps> = {}): ChatControllerDe
 		encryptMock,
 		decryptMock,
 		fetchPeerChatPubMock,
+		fetchPostingPubsMock,
 		visibilityListeners,
 		setVisibility: (v) => {
 			vis = v;
@@ -682,11 +691,10 @@ describe('chatService — crypto integration', () => {
 		clearOwnSentPlaintextCache(); // see the controller block above (W2)
 	});
 
-	it('send fails with peer_not_ready when peer has no published chat pubkey', async () => {
+	it('send fails with peer_not_found when the chain has no such account', async () => {
 		const deps = mockDeps();
 		deps.fetchMock.mockResolvedValue({ ok: true, items: [], nextCursor: null });
-		// Override fetchPeerChatPub to simulate "peer hasn't published"
-		deps.fetchPeerChatPubMock.mockResolvedValue(null);
+		deps.fetchPostingPubsMock.mockResolvedValue(null);
 
 		const ctrl = createConversationController(deps);
 		await ctrl.sendMessage('hello');
@@ -694,14 +702,14 @@ describe('chatService — crypto integration', () => {
 		const snap = ctrl.snapshot();
 		expect(snap.length).toBe(1);
 		expect(snap[0]!.state).toBe('failed');
-		expect(snap[0]!.error).toBe('peer_not_ready');
+		expect(snap[0]!.error).toBe('peer_not_found');
 		// Broadcast should NOT have been called — we bailed before.
 		expect(deps.broadcastMock).not.toHaveBeenCalled();
 
 		ctrl.destroy();
 	});
 
-	it('encrypt is called with trimmed plaintext + peer pub + accounts', async () => {
+	it('encrypt is called with trimmed plaintext + the peer’s posting keys + accounts', async () => {
 		const deps = mockDeps();
 		deps.fetchMock.mockResolvedValue({ ok: true, items: [], nextCursor: null });
 		deps.broadcastMock.mockResolvedValue({ block_num: 1, trx_id: 'trx1' });
@@ -710,10 +718,9 @@ describe('chatService — crypto integration', () => {
 		await ctrl.sendMessage('  hi there  '); // whitespace trimmed
 
 		expect(deps.encryptMock).toHaveBeenCalledTimes(1);
-		const [plaintext, pub, sender, recipient] = deps.encryptMock.mock.calls[0]!;
+		const [plaintext, pubs, , sender, recipient] = deps.encryptMock.mock.calls[0]!;
 		expect(plaintext).toBe('hi there');
-		expect(pub).toBeInstanceOf(Uint8Array);
-		expect((pub as Uint8Array).length).toBe(32);
+		expect(pubs).toEqual([new Uint8Array(33).fill(2)]);
 		expect(sender).toBe('alice');
 		expect(recipient).toBe('bob');
 

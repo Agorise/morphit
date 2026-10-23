@@ -160,7 +160,7 @@ tmux new -s morphit
 
 ```sh
 # on the server
-V=1.21.13
+V=1.21.14
 mkdir -p ~/morphit && cd ~/morphit
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz"
 curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/v$V/morphit-v$V-offline.tar.gz.sha256"
@@ -287,7 +287,7 @@ It asks which kind of setup you have, offers to make you a signing key, and then
 
 **How a new node knows the snapshot is genuine (v1.18.0).** Two blockchain servers must agree on which snapshot is the newest, and it must carry `@morphit`'s signature, so one dishonest server cannot pick it for you. On a Tor-only node the default servers are all run by the project, so there the signature is the real check. The file can only contain data: the restore refuses anything that tries to run commands. If anything goes wrong, your database stays exactly as it was. Nothing personal travels in a snapshot: no push-notification subscriptions, no payout queue, no local moderation. Fast-sync needs a PostgreSQL client from August 2025 or newer. If yours is older, it says so, changes nothing, and asks you to update `postgresql-client`.
 
-**Checking chat speed to another instance.** Chat between instances is meant to arrive in under six seconds, even over Tor or I2P. To see what your own connection to another instance really gives you, run this on your box, pointed at the other instance's `.onion` or `.b32.i2p` address:
+**Checking chat speed to another instance.** Chat between instances is meant to arrive in under six seconds. Your instance hands each message to the others straight away over Tor (to their `.onion`, or to their web address through Tor); an instance reachable only over I2P gets no such hand-off and picks the message up from the blockchain's newest blocks a few seconds later (since v1.21.14, `OPERATIONS.md` §24). To see what your own connection to another instance really gives you, run this on your box, pointed at the other instance's `.onion` address (or its `.b32.i2p` address, for an I2P-only instance's reads):
 
 ```sh
 bash /opt/morphit/ops/fastchat-latency-probe.sh http://<their-address>.onion

@@ -735,7 +735,7 @@ export async function applyBlock(
 	rejected: number;
 	skipped: number;
 	orderbookChanges: readonly string[];
-	chatChanges: readonly { lo: string; hi: string; messageId: number }[];
+	chatChanges: readonly { lo: string; hi: string; messageId: number; sender?: string }[];
 }> {
 	const blockTime = blockTimeOf(block.timestamp);
 
@@ -804,7 +804,7 @@ export async function applyBlock(
 	// inserted message id, so SSE subscribers can filter without
 	// a DB lookup.  Same post-commit emission discipline as
 	// orderbook changes.
-	const chatChanges: { lo: string; hi: string; messageId: number }[] = [];
+	const chatChanges: { lo: string; hi: string; messageId: number; sender?: string }[] = [];
 
 	const located = collectMorphitOps(block, block.transaction_ids);
 
@@ -971,7 +971,8 @@ export async function applyBlock(
 		const opPendingChanges: string[] = [];
 		// Same pattern for chat changes — buffer per op, flush on
 		// ok:true, discard on reject/throw.
-		const opPendingChatChanges: { lo: string; hi: string; messageId: number }[] = [];
+		const opPendingChatChanges: { lo: string; hi: string; messageId: number; sender?: string }[] =
+			[];
 
 		const ctx: OpContext = {
 			blockNum,
@@ -995,7 +996,10 @@ export async function applyBlock(
 				opPendingChatChanges.push({
 					lo: ev.lo,
 					hi: ev.hi,
-					messageId: ev.messageId
+					messageId: ev.messageId,
+					// The op's signer is the message's sender (S-L5: the durable
+					// activity ping can then say which way the message went).
+					sender: signer
 				});
 			}
 		};

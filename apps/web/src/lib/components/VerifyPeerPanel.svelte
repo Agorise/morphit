@@ -28,29 +28,26 @@
 	 *
 	 * ─── Computation flow ────────────────────────────────────
 	 *
-	 * 1. On mount, derive my chat keypair from the live
-	 *    posting key (same path the chat send uses).
-	 * 2. Fetch the peer's chat pub via the chain-anchored
-	 *    fetcher in $lib/chat/peerPubFetch — same path the
-	 *    chat-send flow uses, so the fingerprint reflects the
-	 *    key actually being used to encrypt messages.
-	 * 3. computeSafetyNumber(me, peer) — each party's 30 digits
-	 *    come from that party's own account + chat key, so a
+	 * POSTING KEYS ONLY (v1.21.14): every message is sent to the peer's
+	 * posting keys and proved by them, so the number is made from them —
+	 * ours as the chain lists them (what the peer pins for us), theirs as
+	 * pinned here (opening the panel pins nothing). Chat keys are not
+	 * compared any more: nothing is sent to one.
+	 *
+	 * 1. Read both accounts' posting keys (this instance's indexer).
+	 * 2. computeSafetyNumber(me, peer) — each party's 30 digits
+	 *    come from that party's own account + keys, so a
 	 *    substituted key changes its half (see fingerprint.ts).
-	 * 4. Display the 12 groups of 5 digits in a stable layout.
+	 * 3. Display the 12 groups of 5 digits in a stable layout.
 	 *
 	 * Failure modes surfaced to the UI:
-	 *   - either side has no published chat key → the number is made
-	 *     from both posting keys (v1.21.13), as their messages are;
-	 *     no such account on chain → "no such account".
+	 *   - no such account on chain → "no such account"; an account
+	 *     with no posting key of its own → said so.
 	 *   - locked / no live identity → "unlock first" prompt.
-	 *   - chain-verified fetcher detects tampering → strong
-	 *     red "DO NOT continue chatting" banner with stable
-	 *     error code.  The fingerprint is INTENTIONALLY not
-	 *     computed in this state — comparing fingerprints of
-	 *     a key the chain has rejected would mislead the user.
-	 *   - any other error → generic "couldn't compute" with
-	 *     a retry button.
+	 *   - the peer's posting keys CHANGED against the pin → the NEW
+	 *     number, to compare before accepting (nothing is sent to the
+	 *     new keys until then).
+	 *   - the chain could not be asked → retry, never a security alarm.
 	 *
 	 * Closing the modal does NOT persist any state.  Re-opening
 	 * recomputes from scratch.  This is by design — the
@@ -61,23 +58,22 @@
 	import { _ } from 'svelte-i18n';
 	import { onDestroy, onMount } from 'svelte';
 	import { computeSafetyNumber } from '$lib/chat/fingerprint';
-	import { deriveChatIdentity, decodeChatPub } from '$lib/chat/crypto';
-	import { orderPostingPubs, ownChatKeyStatus } from '$lib/chat/chatService';
+	import { orderPostingPubs } from '$lib/chat/chatService';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
-	import { fetchPeerChatPubChainVerified } from '$lib/chat/peerPubFetch';
-	import {
-		PUB_PIN_ERROR,
-		acceptKeyChange,
-		acceptPostingKeysShown,
-		pendingKeyChange,
-		pendingPostingKeyChange,
-		peekPostingKeyPin,
-		pinnedPubsFor
-	} from '$lib/chat/pubPin';
+	import { acceptPostingKeysShown, peekPostingKeyPin } from '$lib/chat/pubPin';
 	import { identity, isUnlocked } from '$stores/identity';
 	import { get } from 'svelte/store';
 	import { safeLocal } from '$lib/utils/safeStorage';
+	import { formatPublicKeyBLT } from '$lib/crypto/keygen';
+
+	/** The posting public key this session signed in with, or null (locked,
+	 *  a paired read-only desktop). */
+	function ownPostingPublicKey(): Uint8Array | null {
+		const s = get(identity) as { state?: string; live?: { posting?: { publicKey?: unknown } } };
+		const pk = s.state === 'unlocked' ? s.live?.posting?.publicKey : undefined;
+		return pk instanceof Uint8Array && pk.length === 33 ? pk : null;
+	}
 
 	/** Device flag: the one-time "compare once more" note was dismissed. */
 	const REVERIFY_SEEN_KEY = 'morphit.chat.safetyNumberV2Seen';
@@ -90,10 +86,12 @@
 	interface Props {
 		readonly me: string;
 		readonly peer: string;
+		/** Called after the user accepted the keys whose number was shown. */
+		readonly onAccepted?: () => void;
 		readonly onClose: () => void;
 	}
 
-	let { me, peer, onClose }: Props = $props();
+	let { me, peer, onAccepted, onClose }: Props = $props();
 
 	// ─── State ────────────────────────────────────────────────
 	type State =
@@ -104,23 +102,29 @@
 		/** The account has no posting key of its own (other accounts manage
 		 *  it): nothing is encrypted to it, so there is nothing to compare. */
 		| { kind: 'no_posting_key' }
-		| { kind: 'tamper_detected'; code: string }
-		/** The peer's key changed: the NEW safety number, to compare before
-		 *  accepting (nothing is sent to the new key until then). `posting`:
-		 *  the posting keys shown, which Accept pins exactly; absent for a
-		 *  chat key (its pending change is accepted). */
-		| { kind: 'key_changed'; words: readonly string[]; posting?: readonly string[] }
+		/** The peer's posting keys changed: the NEW safety number, to compare
+		 *  before accepting (nothing is sent to the new keys until then).
+		 *  `posting`: the keys shown, which Accept pins exactly (W-M2). */
+		| {
+				kind: 'key_changed';
+				words: readonly string[];
+				posting: readonly string[];
+				ownExtra?: readonly string[];
+		  }
 		| { kind: 'error'; message: string }
-		/** `ownStale`: our key on chain is an old one (our posting key
-		 *  changed and the new one is not on chain yet) — the peer may see
-		 *  another number until it is. `firstUse`: posting keys not pinned yet —
-		 *  the number is made from these, and "use these keys" pins exactly
-		 *  them (so what the user compared is what messages go to). */
+		/** This instance does not list the posting key this session signed in
+		 *  with among the account's keys (review C, H1): no number to show. */
+		| { kind: 'own_key_missing' }
+		/** `firstUse`: posting keys not pinned yet — the number is made from
+		 *  these, and "use these keys" pins exactly them (so what the user
+		 *  compared is what messages go to). */
 		| {
 				kind: 'ready';
 				words: readonly string[];
-				ownStale?: boolean;
 				firstUse?: readonly string[];
+				/** Posting keys this instance lists for OUR account besides the
+				 *  one this session holds (review C, H1), as BLT strings. */
+				ownExtra?: readonly string[];
 		  };
 
 	let panelState = $state<State>({ kind: 'computing' });
@@ -166,63 +170,68 @@
 
 		const unreachable = (): void => {
 			// NOT a security event: the chain could not be asked at all, which
-			// on a Tor/I2P instance is ordinary and transient. The red tamper
-			// banner would teach the user to dismiss it, and it has to mean
-			// something.
+			// on a Tor/I2P instance is ordinary and transient. A red banner
+			// would teach the user to dismiss it, and it has to mean something.
 			panelState = {
 				kind: 'error',
 				message: $_('chat.verify_peer.error_chain_unreachable') as string
 			};
 		};
-
-		// The same rule as sending (chatService.seal), so both sides compare
-		// numbers made from the keys messages actually use: chat keys when our
-		// own published chat key is current and the peer has one; otherwise
-		// posting keys. Asked fresh here, never a cached answer.
-		let status: 'current' | 'stale' | 'none';
+		const b64 = (k: Uint8Array): string => btoa(String.fromCharCode(...k));
+		const bytes = (s: string): Uint8Array => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+		// Posting keys: ours as the chain lists them (what the peer pins for
+		// us), theirs as PINNED here — read, never changed: opening this panel
+		// pins nothing. The keys every message is sent to and proved by
+		// (chatService.seal), so both sides compare the number of the keys in
+		// use (v1.21.14 full chat audit, W-L8; posting-key-only chat).
+		let mineKeys: Uint8Array[] | null;
+		let theirKeys: Uint8Array[] | null;
 		try {
-			status = await ownChatKeyStatus(me, id.live);
+			const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
+			[mineKeys, theirKeys] = await Promise.all([
+				fetchAccountKeys(origin, me).then(orderPostingPubs),
+				fetchAccountKeys(origin, peer).then(orderPostingPubs)
+			]);
 		} catch {
 			if (!aborted) unreachable();
 			return;
 		}
 		if (aborted) return;
-
-		const b64 = (k: Uint8Array): string => btoa(String.fromCharCode(...k));
-		const bytes = (s: string): Uint8Array => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-
-		// Posting keys: ours as the chain lists them (what the peer pins for
-		// us), theirs as PINNED here — read, never changed: opening this panel
-		// pins nothing.
-		const byPostingKeys = async (): Promise<void> => {
-			let mineKeys: Uint8Array[] | null;
-			let theirKeys: Uint8Array[] | null;
-			try {
-				const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
-				[mineKeys, theirKeys] = await Promise.all([
-					fetchAccountKeys(origin, me).then(orderPostingPubs),
-					fetchAccountKeys(origin, peer).then(orderPostingPubs)
-				]);
-			} catch {
-				if (!aborted) unreachable();
+		if (theirKeys === null) {
+			panelState = { kind: 'no_account' };
+			return;
+		}
+		if (theirKeys.length === 0) {
+			panelState = { kind: 'no_posting_key' };
+			return;
+		}
+		if (mineKeys === null || mineKeys.length === 0) {
+			panelState = { kind: 'error', message: $_('chat.verify_peer.error_unknown') as string };
+			return;
+		}
+		// Our half comes from what this instance says our keys are; check that
+		// against the key this session actually holds (v1.21.14 review C, H1).
+		// An instance serving both people could add a key of its own to our
+		// list: the peer pins it at first contact and encrypts to it too, and a
+		// half built from the same list matched theirs. So: our own key must be
+		// listed, and any OTHER key listed for us is named, as a warning.
+		let ownExtra: string[] = [];
+		const ownPub = ownPostingPublicKey();
+		if (ownPub !== null) {
+			const same = (a: Uint8Array) =>
+				a.length === ownPub.length && a.every((v, i) => v === ownPub[i]);
+			if (!mineKeys.some(same)) {
+				panelState = { kind: 'own_key_missing' };
 				return;
+			}
+			try {
+				ownExtra = await Promise.all(mineKeys.filter((k) => !same(k)).map(formatPublicKeyBLT));
+			} catch {
+				ownExtra = mineKeys.filter((k) => !same(k)).map(b64);
 			}
 			if (aborted) return;
-			if (theirKeys === null) {
-				panelState = { kind: 'no_account' };
-				return;
-			}
-			if (theirKeys.length === 0) {
-				panelState = { kind: 'no_posting_key' };
-				return;
-			}
-			if (mineKeys === null || mineKeys.length === 0) {
-				panelState = {
-					kind: 'error',
-					message: $_('chat.verify_peer.error_unknown') as string
-				};
-				return;
-			}
+		}
+		try {
 			const view = peekPostingKeyPin(peer, theirKeys.map(b64));
 			const shown = view.kind === 'changed' ? view.chain : view.keys;
 			const words = await computeSafetyNumber(
@@ -230,124 +239,23 @@
 				{ account: peer, postingKeys: shown.map(bytes) }
 			);
 			if (aborted) return;
-			// A peer whose chat key is pinned here gets no posting keys on first
-			// use without this comparison (chatService: they are held as a
-			// pending change), so a first set is shown as a change to accept.
-			const chatPinned = pinnedPubsFor(peer).length > 0;
+			// Only a CHANGE of a pinned set is one to accept. A first set is
+			// trusted on first use like the conversation does (since v1.21.14
+			// whatever chat key of theirs is pinned here: that used to make a
+			// normal first conversation a "change").
+			const extra = ownExtra.length > 0 ? { ownExtra } : {};
 			panelState =
-				view.kind === 'changed' || (view.kind === 'first_use' && chatPinned)
-					? { kind: 'key_changed', words, posting: shown }
+				view.kind === 'changed'
+					? { kind: 'key_changed', words, posting: shown, ...extra }
 					: {
 							kind: 'ready',
 							words,
-							ownStale: status === 'stale',
-							...(view.kind === 'first_use' ? { firstUse: shown } : {})
+							...(view.kind === 'first_use' ? { firstUse: shown } : {}),
+							...extra
 						};
-		};
-
-		// Posting keys of this peer waiting for the user (the conversation
-		// stopped a send or left a message unproved over them): compare those,
-		// whatever format the two of you use otherwise.
-		if (status !== 'current' || pendingPostingKeyChange(peer) !== null) {
-			try {
-				await byPostingKeys();
-			} catch {
-				if (!aborted) {
-					panelState = {
-						kind: 'error',
-						message: $_('chat.verify_peer.error_unknown') as string
-					};
-				}
-			}
-			return;
-		}
-
-		let myPriv: Uint8Array | null = null;
-		try {
-			// Derive my chat identity.  This is the same derivation
-			// the chat send path uses; deterministic from posting
-			// key + account name.  Note: deriveChatIdentity returns
-			// LIVE priv-key material — wipe it after we're done in
-			// the finally.
-			const mine = await deriveChatIdentity(id.live.posting.privateKey, me);
-			myPriv = mine.priv;
-			if (aborted) return;
-
-			// Fetch peer's chat pub via the SAME chain-anchored
-			// path the chat-send flow uses.  This guarantees the
-			// fingerprint reflects the key actually being used to
-			// encrypt messages.  See peerPubFetch.ts for the
-			// threat-model rationale.
-			const peerResult = await fetchPeerChatPubChainVerified(peer);
-			if (aborted) return;
-			switch (peerResult.kind) {
-				case 'not_published':
-					// A key pinned here was on chain; an op on chain is never
-					// withdrawn (chatService: pub_pin_withdrawn — nothing is sent).
-					if (pinnedPubsFor(peer).length > 0) {
-						panelState = { kind: 'tamper_detected', code: PUB_PIN_ERROR.withdrawn };
-						return;
-					}
-					await byPostingKeys();
-					return;
-				case 'tamper_detected': {
-					const pending =
-						peerResult.code === PUB_PIN_ERROR.key_changed ? pendingKeyChange(peer) : null;
-					if (pending !== null) {
-						const words = await computeSafetyNumber(
-							{ account: me, pub: mine.pub },
-							{ account: peer, pub: decodeChatPub(pending.pubB64) }
-						);
-						if (aborted) return;
-						panelState = { kind: 'key_changed', words };
-						return;
-					}
-					// Pub-pin or chain check FIRED.  We surface a
-					// specific state because this is a real
-					// security event the user should know about
-					// regardless of whether they were going to
-					// compare fingerprints.
-					panelState = { kind: 'tamper_detected', code: peerResult.code };
-					return;
-				}
-				case 'malformed_key':
-					panelState = {
-						kind: 'error',
-						message: $_('chat.verify_peer.error_bad_key') as string
-					};
-					return;
-				case 'chain_unreachable':
-					unreachable();
-					return;
-				case 'indexer_error':
-					panelState = {
-						kind: 'error',
-						message: $_('chat.verify_peer.error_indexer') as string
-					};
-					return;
-				case 'ok':
-					break;
-			}
-
-			// libsodium's SHA-512, so this works on plain-HTTP I2P addresses too.
-			const words = await computeSafetyNumber(
-				{ account: me, pub: mine.pub },
-				{ account: peer, pub: peerResult.pub }
-			);
-			if (aborted) return;
-			panelState = { kind: 'ready', words };
-		} catch (_err) {
-			if (aborted) return;
-			panelState = {
-				kind: 'error',
-				message: $_('chat.verify_peer.error_unknown') as string
-			};
-		} finally {
-			// Wipe the priv-key material as soon as we're done with
-			// it.  The pub is not secret; no need.  This runs even
-			// when aborted — cleanup must never be skipped.
-			if (myPriv) {
-				myPriv.fill(0);
+		} catch {
+			if (!aborted) {
+				panelState = { kind: 'error', message: $_('chat.verify_peer.error_unknown') as string };
 			}
 		}
 	}
@@ -358,22 +266,40 @@
 	/** First use: the numbers matched — pin exactly the keys they were made from. */
 	function useTheseKeys(): void {
 		if (panelState.kind !== 'ready' || panelState.firstUse === undefined) return;
-		if (acceptPostingKeysShown(peer, panelState.firstUse)) void compute();
+		if (acceptPostingKeysShown(peer, panelState.firstUse)) {
+			void compute();
+			onAccepted?.();
+		}
 	}
 
 	function acceptNewKey(): void {
 		if (panelState.kind !== 'key_changed') return;
-		const ok =
-			panelState.posting !== undefined
-				? acceptPostingKeysShown(peer, panelState.posting)
-				: acceptKeyChange(peer, 'chat');
-		if (ok) void compute();
+		// Exactly the keys the number was made from (W-M2); a key_changed state
+		// always holds some, so this always pins.
+		acceptPostingKeysShown(peer, panelState.posting);
+		void compute();
+		onAccepted?.();
 	}
 
 	function handleBackdropClick(e: MouseEvent): void {
 		if (e.target === e.currentTarget) onClose();
 	}
 </script>
+
+{#snippet ownExtraNote(extra: readonly string[])}
+	<!-- Keys this instance lists for OUR account besides the one this session
+	     holds (review C, H1): messages to us are encrypted to them too. -->
+	<div
+		class="mt-4 rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-100"
+		role="alert"
+	>
+		<p class="font-bold">{$_('chat.verify_peer.own_extra_heading')}</p>
+		<p class="mt-1">{$_('chat.verify_peer.own_extra_body')}</p>
+		<ul class="mt-2 space-y-1 break-all font-mono text-xs" dir="ltr">
+			{#each extra as k (k)}<li>{k}</li>{/each}
+		</ul>
+	</div>
+{/snippet}
 
 <!-- Modal scaffold matches the codebase's other modal components
      (FundsSentModal, AddressShareModal, etc.) -->
@@ -421,28 +347,15 @@
 					? $_('chat.verify_peer.no_account')
 					: $_('chat.verify_peer.no_posting_key')}
 			</div>
-		{:else if panelState.kind === 'tamper_detected'}
-			<!-- This is a real security event.  Pub-pin or chain
-			     verification refused this fetch — either someone
-			     tampered with the indexer's chat-pub response, or
-			     the chain itself disagrees with the indexer's
-			     reference.  We render a strong red banner because
-			     the user is already in a vulnerable position; we
-			     don't want them dismissing this as a routine
-			     warning.  The fingerprint is INTENTIONALLY not
-			     computed in this state — comparing fingerprints
-			     of a key the chain has rejected would mislead the
-			     user into thinking everything's fine. -->
+		{:else if panelState.kind === 'own_key_missing'}
 			<div
-				class="mt-5 rounded-lg border-2 border-red-500 bg-red-50 p-4 text-sm text-red-900 dark:border-red-500 dark:bg-red-950 dark:text-red-100"
+				class="mt-5 rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-100"
+				role="alert"
 			>
-				<p class="font-bold">{$_('chat.verify_peer.tamper_heading')}</p>
-				<p class="mt-1">{$_('chat.verify_peer.tamper_body')}</p>
-				<p class="mt-2 text-xs text-red-700 dark:text-red-300">
-					<span class="font-mono">code: {panelState.code}</span>
-				</p>
+				{$_('chat.verify_peer.own_key_missing')}
 			</div>
 		{:else if panelState.kind === 'key_changed'}
+			{#if panelState.ownExtra !== undefined}{@render ownExtraNote(panelState.ownExtra)}{/if}
 			<div
 				class="mt-5 rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-100"
 			>
@@ -487,13 +400,7 @@
 				</button>
 			</div>
 		{:else if panelState.kind === 'ready'}
-			{#if panelState.ownStale}
-				<div
-					class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
-				>
-					{$_('chat.verify_peer.own_key_stale', { values: { peer } })}
-				</div>
-			{/if}
+			{#if panelState.ownExtra !== undefined}{@render ownExtraNote(panelState.ownExtra)}{/if}
 			{#if showReverify}
 				<div
 					class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"

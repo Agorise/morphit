@@ -10,12 +10,11 @@
  *    in so a future edit can't silently re-introduce a browser→node ping that
  *    would leak the user's IP to third-party node operators.
  *
- * 2. The rotator still classifies WHY a REAL RPC call failed (HTTP / timeout /
- *    network) for its own diagnostics — that machinery (used by call()/
- *    callMany()) is unchanged.
+ * 2. (Retired in the v1.21.14 final review with the browser's RPC rotator
+ *    itself: the release check reads through the instance too, and every page
+ *    CSP allows connect-src 'self' only — csp-header-consistency-smoke.)
  *
- * Static source scan (endpoints.ts pulls $app/environment, unresolvable in the
- * smoke runner, so we assert on source rather than importing).
+ * Static source scan of the card.
  */
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -39,14 +38,9 @@ function check(label: string, cond: boolean): void {
 
 console.log('\nendpoint-error-classify smoke:\n');
 
-const endpoints = read('src/lib/net/endpoints.ts');
 const list = read('src/lib/components/EndpointList.svelte');
 
 // ─── 1. PRIVACY: the browser never probes RPC nodes ─────────────────────────
-check(
-	'the browser-side probe warmup() has been REMOVED from the rotator',
-	!/\basync\s+warmup\s*\(/.test(endpoints) && !/\.warmup\s*\(/.test(endpoints)
-);
 check(
 	'EndpointList does NOT call the rotator to probe nodes (no getRotator / warmup)',
 	!/getRotator/.test(list) && !/warmup/.test(list)
@@ -84,26 +78,6 @@ check(
 check(
 	'the refresh button re-fetches the indexer via an active probe (not a browser probe)',
 	/onclick=\{onRefreshClick\}/.test(list) && /\bfetchHealth\(true\)/.test(list)
-);
-
-// ─── 2. The rotator still classifies REAL-call failures ─────────────────────
-check(
-	'EndpointStat carries lastErrorKind',
-	/lastErrorKind:\s*'http'\s*\|\s*'timeout'\s*\|\s*'network'\s*\|\s*null/.test(endpoints)
-);
-check('classifyEndpointError is exported', /export function classifyEndpointError\(/.test(endpoints));
-check(
-	"classify maps AbortError / timeout to kind 'timeout'",
-	/AbortError'|timed out|timeout|aborted/.test(endpoints) &&
-		/kind:\s*'timeout',\s*code:\s*null/.test(endpoints)
-);
-check(
-	"classify falls back to kind 'network' (DNS/offline/TLS/CORS — indistinguishable)",
-	/return\s*\{\s*kind:\s*'network',\s*code:\s*null\s*\}/.test(endpoints)
-);
-check(
-	'the REAL-call path (call/callMany) classifies failures via classifyEndpointError',
-	/const cls = classifyEndpointError\(/.test(endpoints)
 );
 
 // ─── i18n keys the card still uses exist in en ──────────────────────────────

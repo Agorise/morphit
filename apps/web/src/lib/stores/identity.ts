@@ -69,6 +69,7 @@ import {
 } from '$lib/storage/signOutSweep';
 import { setPersonStorageTier } from '$lib/storage/personStorage';
 import { setUnsealPending } from '$lib/chat/unsealGate';
+import { sealPinsForLock } from '$lib/chat/pubPin';
 import { safeSession } from '../utils/safeStorage';
 import {
 	PAIRED_SESSION_STORAGE_KEY,
@@ -1333,6 +1334,19 @@ export function broadcastSignOut(): void {
 		pushAccount = getUserBlurtAccount();
 	} catch {
 		// Best-effort; the browser-side unsubscribe still runs without these.
+	}
+	// Seal this account's chat pins BEFORE anything wipes them (v1.21.14 review
+	// C, M1). The sign-out sweep removes the readable pins; without a seal, the
+	// account signed back in with every peer a first contact again, so a key
+	// substituted meanwhile was trusted without a word. sealPinsForLock takes
+	// the readable copies off disk synchronously and writes the seal under this
+	// account's own posting key (CHAT-CRYPTO §7: Sign Out keeps the sealed copy).
+	if (pushKey !== null) {
+		try {
+			void sealPinsForLock(pushKey).catch(() => {});
+		} catch {
+			// Best-effort: the sign-out itself must complete.
+		}
 	}
 	const pushKeyCopy = pushKey;
 	const pushAccountName = pushAccount;

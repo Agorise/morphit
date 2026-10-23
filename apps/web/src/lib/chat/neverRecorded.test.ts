@@ -84,7 +84,10 @@ function rec(
 		header: {
 			client_tag: t ?? T1,
 			ephemeral_pub: b64('e'),
-			nonce: b64('n'),
+			// One send attempt's bytes: its copies (provisional, durable) are
+			// identical, while a retry is encrypted afresh — a new nonce. Two
+			// records with the same bytes ARE one message (v1.21.14, W-H3).
+			nonce: b64(`n${t ?? T1}`),
 			...(prior !== undefined ? { prior_tags: prior } : {})
 		},
 		created_at: '2026-04-23T12:00:00.000Z',
@@ -139,11 +142,13 @@ function rig(
 		broadcast: broadcast as unknown as ChatControllerDeps['broadcast'],
 		fetchPeerChatPub: (async () => fakePub) as unknown as ChatControllerDeps['fetchPeerChatPub'],
 		deriveMyChatIdentity: async () => ({ priv: fakePriv, pub: fakePub }),
-		encrypt: (async (p: string) => ({
+		// Every message goes to the peer's posting keys (v1.21.14).
+		fetchPostingPubs: async () => [new Uint8Array(33).fill(2)],
+		encryptPosting: (async (p: string) => ({
 			ciphertext: b64(p),
 			ephemeralPub: b64('e'),
 			nonce: b64('n')
-		})) as unknown as ChatControllerDeps['encrypt'],
+		})) as unknown as ChatControllerDeps['encryptPosting'],
 		// A proved sender (v2): only those drive trade state.
 		decrypt: (async (env: { ciphertext: string }) => ({
 			text: unb64(env.ciphertext),
@@ -482,10 +487,13 @@ describe('the recipient folds a retry into the attempt it resends', () => {
 			amount: '10.000',
 			order_permlink: 'order-1'
 		});
-		const r = rig();
-		await r.deliver([provisional({ tag: T1, text: fundsSent })]);
+		// In the thread of the order the claim names (v1.21.14, W-H1).
+		const r = rig({ orderPermlink: 'order-1' });
+		await r.deliver([provisional({ tag: T1, text: fundsSent, order_permlink: 'order-1' })]);
 		await elapse(PAST_WINDOW);
-		await r.deliver([rec({ id: 42, tag: T2, prior: [T1], text: fundsSent })]);
+		await r.deliver([
+			rec({ id: 42, tag: T2, prior: [T1], text: fundsSent, order_permlink: 'order-1' })
+		]);
 		expect(recordFundsSent.mock.calls.length).toBe(1);
 		expect(triggerBlurtVerification.mock.calls.length).toBe(1);
 	});

@@ -113,7 +113,8 @@
 		isDaiNetwork,
 		type DaiNetwork
 	} from '$lib/assets/networks';
-	import { recordFundsSent, tradeStates } from '$lib/trades/tradeStatus';
+	import { recordFundsSent, tradeStates, tradeStateWith } from '$lib/trades/tradeStatus';
+	import { orderOwnerOf } from '$lib/trades/orderParties';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import VerifyPeerPanel from '$components/VerifyPeerPanel.svelte';
@@ -373,7 +374,8 @@
 	 *  has progressed past address-sharing, so it's reviewable. */
 	const tradeSettled = $derived(
 		orderPermlink !== undefined &&
-			(($tradeStates.get(orderPermlink)?.phase ?? 'address_shared') !== 'address_shared')
+			(tradeStateWith($tradeStates, orderOwner, orderPermlink, peer)?.phase ?? 'address_shared') !==
+				'address_shared'
 	);
 	const canLeaveFeedback = $derived(
 		orderPermlink !== undefined &&
@@ -587,7 +589,24 @@
 
 	function openVerifyPeer(): void {
 		closeOverflowMenu();
+		verifyRetrySeq = null;
 		verifyPeerOpen = true;
+	}
+
+	/** v1.21.14 full chat audit, W-M2: a message refused over a changed key
+	 *  opens Verify peer (the number to compare is shown there, and Accept
+	 *  pins exactly the key it was made from); once accepted, that message is
+	 *  sent again. It used to accept whatever key was pending at the click,
+	 *  with no number shown at all. */
+	let verifyRetrySeq: number | null = null;
+	function openVerifyPeerFor(localSeq: number): void {
+		verifyRetrySeq = localSeq;
+		verifyPeerOpen = true;
+	}
+	function onVerifyAccepted(): void {
+		const seq = verifyRetrySeq;
+		verifyRetrySeq = null;
+		if (seq !== null) handleRetry(seq);
 	}
 
 	/** export this conversation as a PDF record. Chat is E2EE, so
@@ -947,20 +966,27 @@
 	 *  optimistic-state machine handles pending → broadcast →
 	 *  confirmed, and the SSE stream delivers it to the peer in
 	 *  real time.  Modal closes on success; on failure the modal
-	 *  stays open and surfaces its own error state. */
-	async function handleAddressShare(payload: string): Promise<void> {
+	 *  stays open and surfaces its own error state.
+	 *
+	 *  v1.21.14 full chat audit, W-L5: that last sentence was not true —
+	 *  sendMessage never throws, so every modal closed whatever happened.
+	 *  `sendFromModal` throws when the node did not take the message, which
+	 *  is what keeps the modal open with its error. */
+	async function sendFromModal(payload: string): Promise<void> {
 		if (!controller) throw new Error('controller_not_ready');
-		await controller.sendMessage(payload);
+		const outcome = await controller.sendMessage(payload);
 		await tick();
 		scrollToBottom(true);
+		if (!outcome.ok) throw new Error(outcome.error);
+	}
+
+	async function handleAddressShare(payload: string): Promise<void> {
+		await sendFromModal(payload);
 		showAddressShareModal = false;
 	}
 
 	async function handleFundsSent(payload: string): Promise<void> {
-		if (!controller) throw new Error('controller_not_ready');
-		await controller.sendMessage(payload);
-		await tick();
-		scrollToBottom(true);
+		await sendFromModal(payload);
 		showFundsSentModal = false;
 		markSentArgs = null;
 	}
@@ -970,18 +996,12 @@
 	// the existing chat-send path (E2E encrypted by the conv
 	// controller before it reaches the relay).
 	async function handleMailingAddressShare(payload: string): Promise<void> {
-		if (!controller) throw new Error('controller_not_ready');
-		await controller.sendMessage(payload);
-		await tick();
-		scrollToBottom(true);
+		await sendFromModal(payload);
 		showMailingAddressModal = false;
 	}
 
 	async function handleShipmentShare(payload: string): Promise<void> {
-		if (!controller) throw new Error('controller_not_ready');
-		await controller.sendMessage(payload);
-		await tick();
-		scrollToBottom(true);
+		await sendFromModal(payload);
 		showShipmentModal = false;
 	}
 
@@ -1083,8 +1103,16 @@
 		// actually broadcast), NOT stagedArgs: in the composer flow the
 		// staged amount is a 0 placeholder and the real value was entered
 		// in-modal. For the pill flow the two are identical.
-		if (stagedArgs.orderPermlink !== undefined) {
+		// C-L3: under the order's owner — this thread's, else looked up.
+		const owner =
+			stagedArgs.orderPermlink === undefined
+				? null
+				: stagedArgs.orderPermlink === orderPermlink && orderOwner !== null
+					? orderOwner
+					: await orderOwnerOf(stagedArgs.orderPermlink, peer, me).catch(() => null);
+		if (stagedArgs.orderPermlink !== undefined && typeof owner === 'string') {
 			recordFundsSent({
+				orderOwner: owner,
 				orderPermlink: stagedArgs.orderPermlink,
 				peer,
 				method: 'blurt',
@@ -1124,9 +1152,9 @@
 
 		try {
 			const wire = encodeFundsSentPayload(fundsSent);
-			await controller.sendMessage(wire);
-			await tick();
-			scrollToBottom(true);
+			// W-L5: the success toast only when the receipt really went out;
+			// otherwise the txid, for posting it by hand (the bubble has Retry).
+			await sendFromModal(wire);
 			showToast($_('chat.pay_blurt.success_toast') as string, 'success');
 		} catch {
 			// Chat broadcast failed but the on-chain transfer
@@ -1309,33 +1337,56 @@
 		}
 	}
 
+	/** C-L3 follow-up: the order lookup is retried, with backoff, until whose
+	 *  order this is is known. Until then the thread's money actions stay
+	 *  closed (the trade state is keyed by the owner, so a payment already made
+	 *  could not be seen). */
+	const ORDER_LOOKUP_RETRY_MIN_MS = 2_000;
+	const ORDER_LOOKUP_RETRY_MAX_MS = 60_000;
+	let orderLookupDelayMs = ORDER_LOOKUP_RETRY_MIN_MS;
+	let orderLookupTimer: ReturnType<typeof setTimeout> | null = null;
+	let viewDestroyed = false;
+
 	/** when opened about an order, resolve it for the header
 	 *  "RE:" line with the single-order read (GET /v1/orders/:account/
-	 *  :permlink). Best-effort: on failure the RE: line is just omitted. */
+	 *  :permlink). Until it resolves the RE: line is omitted and the read is
+	 *  tried again. */
 	async function loadOrderContext(): Promise<void> {
-		if (!orderPermlink) return;
+		if (!orderPermlink || viewDestroyed) return;
+		const found = await readOrderOf(orderPermlink);
+		if (viewDestroyed) return;
+		if (found !== null) {
+			orderRecord = found.item;
+			orderOwner = found.owner;
+			return;
+		}
+		orderLookupTimer = setTimeout(() => {
+			orderLookupTimer = null;
+			void loadOrderContext();
+		}, orderLookupDelayMs);
+		orderLookupDelayMs = Math.min(orderLookupDelayMs * 2, ORDER_LOOKUP_RETRY_MAX_MS);
+	}
+
+	/** The order and whose it is, or null when not found or not told. */
+	async function readOrderOf(
+		permlink: string
+	): Promise<{ owner: string; item: OrderRecord } | null> {
 		// The order may belong to EITHER party: usually the peer (we opened the
 		// chat from their order), but also us (they opened the chat about OUR
-		// order). Try the peer's book first, then our own, and remember whose it
-		// is so the RE: link, the PDF subject, and the trade-role gating point at
-		// the right author. Best-effort: on failure / no-longer-live order the
-		// RE: line is just omitted.
+		// order). The peer's book first, then our own (as orderParties and the
+		// inbox): when the peer's read fails, whose it is cannot be told.
 		for (const owner of [peer, me]) {
 			try {
 				// The order itself (a search of the owner's newest page missed
 				// older live orders).
-				const r = await getOrder(owner, orderPermlink);
-				if (r.ok) {
-					orderRecord = r.data.item;
-					orderOwner = owner;
-					return;
-				}
+				const r = await getOrder(owner, permlink);
+				if (r.ok) return { owner, item: r.data.item };
+				if (r.code !== 'not_found') return null;
 			} catch {
-				/* try the next book */
+				return null;
 			}
 		}
-		orderRecord = null;
-		orderOwner = null;
+		return null;
 	}
 
 	// ─── Controller lifecycle ────────────────────────────────────
@@ -1426,10 +1477,18 @@
 	 *  comes from the chain. Any clock skew in the wrong direction pinned the
 	 *  conversation to "unread" permanently, no matter how many times he opened it.
 	 *
-	 *  So: acknowledge with the newest CONFIRMED message we've actually rendered
-	 *  (clock-independent), and keep acknowledging as the conversation proceeds —
-	 *  not just when it opens, but every time a message lands while the tab is
-	 *  visible, and once more on the way out. */
+	 *  So: acknowledge with the newest CONFIRMED message we've actually rendered,
+	 *  and keep acknowledging as the conversation proceeds — not just when it
+	 *  opens, but every time a message lands while the tab is visible, and once
+	 *  more on the way out.
+	 *
+	 *  (v1.21.14 full chat audit, W-M3: this said "clock-independent", but the
+	 *  ack was then raised to the device clock — readAckTimestamp took
+	 *  max(newest message, now) — so on a clock running fast it silenced what
+	 *  arrived after the reader left, and the route acked with the bare device
+	 *  clock at load, before anything was shown. Now it IS the newest message's
+	 *  chain time and nothing else, and nothing is acked before a message is
+	 *  shown.) */
 	function latestConfirmedAt(): Date | null {
 		let newest: Date | null = null;
 		for (const m of messages) {
@@ -1440,12 +1499,52 @@
 		return newest;
 	}
 
+	/** Is the newest message shown still a fast copy (no chain copy yet)? */
+	function newestIsFastCopy(): boolean {
+		let newest: { at: number; fast: boolean } | null = null;
+		for (const m of messages) {
+			if (m.createdAt === null) continue;
+			const at = m.createdAt.getTime();
+			if (newest === null || at > newest.at)
+				newest = { at, fast: m.provisionalSinceMs !== undefined };
+		}
+		return newest?.fast === true;
+	}
+
 	function ackRead(): void {
 		if (!peer) return;
+		// v1.21.14 full chat audit, W-M3: the newest message SHOWN, and nothing
+		// later — the old max(it, device clock) silenced, on a fast clock, what
+		// arrived after the reader left. Nothing shown yet: nothing to ack.
+		const at = readAckTimestamp(latestConfirmedAt());
+		if (at === null) return;
 		// ack THIS discussion. `orderPermlink` is the thread's identity;
 		// `''` is the thread that cites no order, which is a real thread of its own.
-		markConversationRead(peer, orderPermlink ?? '', readAckTimestamp(latestConfirmedAt()));
+		// A fast copy's chain twin lands a few seconds later than the copy's time:
+		// say so, or the thread lights up again once the reader has left
+		// (review C, M3; readState fastCopyAcks).
+		markConversationRead(peer, orderPermlink ?? '', at, { newestIsFast: newestIsFastCopy() });
 	}
+
+	/** The on-chain read-ack (cross-device read state), once per visit, when
+	 *  the first live answer is in — with the newest message's time. It used
+	 *  to be broadcast by the route as the view loaded, with the device clock
+	 *  (W-M3). Needs a session that can sign (not a paired read-only one). */
+	let chainAckSent = false;
+	$effect(() => {
+		if (chainAckSent || !history.ready) return;
+		const at = untrack(() => readAckTimestamp(latestConfirmedAt()));
+		const live = untrack(() => get(liveIdentity));
+		if (at === null || live === null || untrack(() => $isPairedReadOnly)) return;
+		chainAckSent = true;
+		const order = orderPermlink ?? '';
+		void import('$blurt/ops/chatRead')
+			.then((m) => m.broadcastChatRead(live, peer, order, at))
+			.catch(() => {
+				// Network / node error — silent. The local read state is right;
+				// cross-device sync catches up on the next visit.
+			});
+	});
 
 	$effect(() => {
 		// Re-runs whenever the message list changes. Acking while the tab is
@@ -1462,6 +1561,8 @@
 		ackRead();
 		controller?.destroy();
 		controller = null;
+		viewDestroyed = true;
+		if (orderLookupTimer !== null) clearTimeout(orderLookupTimer);
 		if (blockErrorTimeoutId !== null) {
 			clearTimeout(blockErrorTimeoutId);
 			blockErrorTimeoutId = null;
@@ -1495,7 +1596,8 @@
 	 *     (the indexer lags ~1min), so the label never lies about a dead order. */
 	const orderStatusLabel = $derived.by(() => {
 		if (!orderRecord) return '';
-		const phase = orderPermlink ? $tradeStates.get(orderPermlink)?.phase : undefined;
+		// The trade with THIS peer (v1.21.14 full chat audit, W-H1).
+		const phase = tradeStateWith($tradeStates, orderOwner, orderPermlink, peer)?.phase;
 		const paid =
 			phase === 'paid_verified' ||
 			phase === 'released' ||
@@ -1568,9 +1670,11 @@
 	 *  shipment" buttons that derive from them also drop (by then crypto is
 	 *  settled and they're done too). */
 	const paymentAlreadySent = $derived.by(() => {
-		if (!orderPermlink) return false;
-		const st = $tradeStates.get(orderPermlink);
-		return st !== undefined && st.phase !== 'address_shared';
+		// v1.21.14 full chat audit, W-H1: the order's trade WITH THIS PEER.
+		// Another inquirer's claim about the same order (or anyone's, before)
+		// hid this thread's Pay now / Share address.
+		const st = tradeStateWith($tradeStates, orderOwner, orderPermlink, peer);
+		return st !== null && st.phase !== 'address_shared';
 	});
 
 	/** I send the crypto ⇒ show "Pay now". Only when a live order is connected
@@ -2184,6 +2288,8 @@
 						onRetry={handleRetry}
 						onPayNow={handlePayNowClick}
 						onMarkSent={handleMarkSentClick}
+						onVerifyPeer={openVerifyPeerFor}
+						{orderOwner}
 						showWhoami={visibleMessages[i - 1]?.sender !== m.sender}
 						senderAvatarSvg={m.sender === me ? myAvatarSvg : peerLabelProps.avatarSvg}
 						senderAvatarDataUri={m.sender === me
@@ -2388,7 +2494,7 @@
 					</p>
 				</div>
 			{/if}
-			<ChatComposer {peer} onSend={handleSend} isLocked={locked} />
+			<ChatComposer {peer} {orderPermlink} onSend={handleSend} isLocked={locked} />
 		{/if}
 	{:else}
 		<!-- needs_fee (and no order context): show pay-to-message
@@ -2577,7 +2683,12 @@
      overflow menu.  Closing does NOT persist any verified-state
      anywhere — re-opening recomputes from scratch. -->
 {#if verifyPeerOpen}
-	<VerifyPeerPanel {me} {peer} onClose={closeVerifyPeer} />
+	<VerifyPeerPanel
+		{me}
+		{peer}
+		onAccepted={onVerifyAccepted}
+		onClose={closeVerifyPeer}
+	/>
 {/if}
 
 <style>

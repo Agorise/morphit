@@ -109,8 +109,9 @@ const config = {
 		// which FAILS the build if anything inline is left. 'wasm-unsafe-eval'
 		// stays: libsodium (keystore KDF, chat crypto) runs as WebAssembly.
 		// `frame-ancestors` only works as a header, which is another reason the
-		// policy lives there. If you change the client's Blurt RPC lists
-		// (src/lib/net/config.ts) update that header's connect-src to match.
+		// policy lives there. Its connect-src is 'self' alone: the browser
+		// contacts no Blurt RPC node (chain reads, broadcasts and the release
+		// check all go to this instance's indexer), so no node list belongs in it.
 
 		// No server-side state; prerender everything possible.
 		//

@@ -10,8 +10,9 @@
  * its encrypted bundle to A's indexer (`POST /v1/login-pairing/:pid/deliver`),
  * where A's desktop is waiting. The phone's page used to POST it there
  * directly, cross-origin, and that never worked:
- *   - B's Content-Security-Policy `connect-src` names only 'self' and the RPC
- *     nodes, so the browser refused the request before it left the phone;
+ *   - B's Content-Security-Policy `connect-src` named only 'self' and the RPC
+ *     nodes (since v1.21.14, 'self' alone), so the browser refused the request
+ *     before it left the phone;
  *   - A's indexer answers a cross-origin preflight with GET/OPTIONS only
  *     (middleware/cors.ts), so even a widened CSP would have been refused;
  *   - a phone on B's .onion (Tor Browser) cannot reach a clearnet A without

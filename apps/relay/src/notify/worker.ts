@@ -50,6 +50,18 @@ export function retryAt(now: number): Date {
 	return new Date(Math.ceil((now + RETRY_MS) / SLOT_MS) * SLOT_MS);
 }
 export const MAX_ATTEMPTS = 3;
+/**
+ * A notice is sent only for a message the chain has (v1.21.14 full chat audit,
+ * S-L8). It is queued from the FAST path, before the chain has the message —
+ * and a message can be shown and announced that then never lands (the node
+ * refused it after a peer had it, say). A notice 10-60 minutes later then
+ * opened an empty thread. Its message must be stored by then: the durable lag
+ * is about a minute. Not stored yet — an indexer catching up — and it waits,
+ * up to NOT_STORED_GIVE_UP_MS after the message; after that it was never sent.
+ * Any stored message in the thread she has not read or answered counts, not
+ * only the one that queued the notice (store.unreadStoredFrom).
+ */
+export const NOT_STORED_GIVE_UP_MS = 3 * 3600_000;
 /** One channel's send for one notice: past this it counts as failed, and the
  *  next notice goes on (one stuck server must not hold up everyone's notes). */
 export const SEND_BUDGET_MS = 120_000;
@@ -90,6 +102,11 @@ export type Verdict =
 	| 'daily_cap'
 	| 'no_channels'
 	| 'blocked'
+	/** The message never reached the chain (S-L8). */
+	| 'not_on_chain'
+	/** The message is not stored yet: asked again later, NOT as a retry of a
+	 *  send (it keeps its daily-cap and stranger checks). */
+	| 'wait'
 	| 'failed'
 	| 'retry'
 	/** No app answered within its budget, none refused: the outcome is
@@ -141,9 +158,9 @@ export class OfflineNotifyWorker {
 					return 'failed' as Verdict;
 				});
 				// One notice's bookkeeping failing must not cost the rest of the batch.
-				if (v === 'retry')
+				if (v === 'retry' || v === 'wait')
 					await this.store
-						.requeue(n, retryAt(now.getTime()))
+						.requeue(n, retryAt(now.getTime()), v === 'retry')
 						.catch((err) => log.warn('notice_requeue_failed', { err: errorClass(err) }));
 			}
 			if (this.cfg.telegram && !this.tgPolling && (await this.store.telegramCodeWaiting(now))) {
@@ -162,6 +179,8 @@ export class OfflineNotifyWorker {
 		if (await this.store.repliedSince(n.account, n.sender, n.eventAt)) return 'replied';
 		// Blocked after the message was queued: no notice, no link to it.
 		if (await this.store.blocked(n.account, n.sender)) return 'blocked';
+		if (!(await this.store.unreadStoredFrom(n.account, n.sender, n.orderPermlink)))
+			return now.getTime() - n.eventAt.getTime() < NOT_STORED_GIVE_UP_MS ? 'wait' : 'not_on_chain';
 		if (await this.store.readSince(n.account, n.sender, n.orderPermlink, n.eventAt)) return 'read';
 		if (n.attempts === 0 && (await this.store.alreadyNoticed(n.account, n.sender, n.orderPermlink)))
 			return 'already_noticed';

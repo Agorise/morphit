@@ -53,6 +53,8 @@ function assertNotNull<T>(value: T | null, label: string): asserts value is T {
 const baseCtx = {
 	sender: 'bob',
 	me: 'alice',
+	// Whose order the payload is about (orderParties.orderOwnerOf): ours.
+	orderOwner: 'alice',
 	currentPathname: '/my/orders',
 	lang: 'en'
 };
@@ -132,6 +134,13 @@ scenario('address payload → recordAddressShared store effect', () => {
 	assertEqual(plan.store.kind, 'recordAddressShared', 'kind');
 	if (plan.store.kind === 'recordAddressShared') {
 		assertEqual(plan.store.args.peer, 'bob', 'peer');
+		// The store entry is keyed by the order's owner and permlink (C-L3).
+		assertEqual(plan.store.args.orderOwner, 'alice', 'orderOwner');
+		assertEqual(
+			planListenerDispatch(baseAddress, { ...baseCtx, orderOwner: 'bob' }).store?.args.orderOwner,
+			'bob',
+			'orderOwner follows the context'
+		);
 		assertEqual(plan.store.args.direction, 'incoming', 'direction');
 		assertEqual(plan.store.args.method, 'btc', 'method');
 		assertEqual(plan.store.args.expectedAmount, 0.005, 'amount');
@@ -159,6 +168,7 @@ scenario('BLURT funds_sent → verify effect populated', () => {
 	assertEqual(plan.verify.sender, 'bob', 'sender');
 	assertEqual(plan.verify.amountBlurt, 1700, 'amount');
 	assertEqual(plan.verify.echoedMemo, 'abc12345', 'echoedMemo');
+	assertEqual(plan.verify.orderOwner, 'alice', 'verify carries the order owner');
 });
 
 scenario('BTC funds_sent → no verify effect (BLURT-only)', () => {

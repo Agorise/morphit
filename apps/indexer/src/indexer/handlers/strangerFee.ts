@@ -59,7 +59,7 @@
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { getStrangerFeeQuote } from '$indexer/strangerFeePricing';
+import { getStrangerFeeQuote, type Queryable } from '$indexer/strangerFeePricing';
 import { canonicalShareOk, meetsMinimumMilli, sumFeeTransfers } from '$indexer/fee';
 import { ownerRecipientsFor } from '$indexer/feeRecipients';
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
@@ -76,41 +76,53 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  *  federation split (90% owner / 10% canonical, memo
  *  `morphit-stranger:<recipient>`). */
 
-const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
-	if (!isPlainObject(ctx.payload)) {
+/** What {@link evaluateStrangerFee} needs: the op as a handler sees it. */
+export interface StrangerFeeInput {
+	readonly signer: string;
+	readonly payload: unknown;
+	readonly siblingOps: OpContext['siblingOps'];
+	readonly blockNum: number;
+	readonly blockTime: Date;
+	readonly feeRecipient: string;
+	readonly feeTolerance: number;
+	readonly extraOwnerRecipients?: readonly string[];
+	/** Fees from this signer not recorded yet (the head path, S-H3). */
+	readonly extraRecentFees?: number;
+}
+
+export type StrangerFeeVerdict =
+	| { readonly ok: true; readonly recipient: string; readonly totalBlurt: number }
+	| { readonly ok: false; readonly reason: string };
+
+/**
+ * Is this a valid stranger-fee payment? Everything the handler checks except
+ * "already recorded", and nothing written. Shared by the durable handler and
+ * the head tailer, which recognises a fee seen at the chain head so the first
+ * message right after it reaches the recipient's inbox fast (v1.21.14 full chat
+ * audit, S-H3). One implementation, so the fast path can never admit a fee the
+ * durable handler would refuse.
+ */
+export async function evaluateStrangerFee(
+	client: Queryable,
+	input: StrangerFeeInput
+): Promise<StrangerFeeVerdict> {
+	if (!isPlainObject(input.payload)) {
 		return { ok: false, reason: 'payload_not_object' };
 	}
 
 	// ─── Payload validation ─────────────────────────────────────
 
-	const recipient = ctx.payload.recipient;
+	const recipient = input.payload.recipient;
 	if (typeof recipient !== 'string' || !ACCOUNT_NAME_RE.test(recipient)) {
 		return { ok: false, reason: 'recipient_invalid' };
 	}
-	if (recipient === ctx.signer) {
+	if (recipient === input.signer) {
 		return { ok: false, reason: 'self_fee' };
 	}
 
-	const quotedBlurt = ctx.payload.amount_blurt;
+	const quotedBlurt = input.payload.amount_blurt;
 	if (typeof quotedBlurt !== 'number' || !Number.isFinite(quotedBlurt) || quotedBlurt <= 0) {
 		return { ok: false, reason: 'amount_blurt_invalid' };
-	}
-
-	// ─── Idempotency check ──────────────────────────────────────
-	// If we already have a row for this pair, accept silently.
-	// This handles (a) legitimate client retry after a network
-	// hiccup, (b) double-broadcast due to UI bug, (c) chain
-	// re-replay during indexer recovery. In all cases the
-	// user's original admission stands.
-	const existing = await client.query<{ exists: boolean }>(
-		`SELECT EXISTS (
-		   SELECT 1 FROM stranger_fees
-		    WHERE sender = $1 AND recipient = $2
-		 ) AS exists`,
-		[ctx.signer, recipient]
-	);
-	if (existing.rows[0]?.exists) {
-		return { ok: true };
 	}
 
 	// ─── Dynamic pricing — escalation ───────────────────────────
@@ -119,12 +131,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// 128× base (= 640 BLURT). See strangerFeePricing.ts for the
 	// rationale.
 	//
-	// Pass ctx.blockTime so replay (e.g. indexer bootstrapping a
+	// Pass the block time so replay (e.g. indexer bootstrapping a
 	// fresh DB from chain history) produces the same quote that
 	// the original real-time pass would have computed.  Without
 	// this, NOW() at replay time makes historical fees fall
 	// outside the window — same op gets a different verdict.
-	const quote = await getStrangerFeeQuote(client, ctx.signer, ctx.blockTime);
+	const quote = await getStrangerFeeQuote(
+		client,
+		input.signer,
+		input.blockTime,
+		input.extraRecentFees ?? 0
+	);
 
 	// Sanity window on the user's quote. Accept if it's at
 	// least the current price (modulo client rounding) and not
@@ -137,7 +154,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (quotedBlurt > quote.priceBlurt * 1.5) {
 		return { ok: false, reason: 'amount_blurt_out_of_range' };
 	}
-	if (quotedBlurt < quote.priceBlurt * (1 - ctx.config.feeTolerance)) {
+	if (quotedBlurt < quote.priceBlurt * (1 - input.feeTolerance)) {
 		// User quoted (and paid) less than the current escalating
 		// price. They need to re-quote. The frontend will refresh
 		// the modal showing the new price.
@@ -151,13 +168,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// the canonical treasury received its cut.
 
 	const fee = sumFeeTransfers(
-		ctx.siblingOps,
-		ctx.signer,
+		input.siblingOps,
+		input.signer,
 		// G1 — own recipient ∪ the tagged operator's registered fee account
 		// (∪ the legacy-grace account when the re-verifier re-runs this op).
 		[
-			...(await ownerRecipientsFor(client, ctx.config.feeRecipient, ctx.payload, ctx.blockNum)),
-			...(ctx.extraOwnerRecipients ?? [])
+			...(await ownerRecipientsFor(client, input.feeRecipient, input.payload, input.blockNum)),
+			...(input.extraOwnerRecipients ?? [])
 		],
 		CANONICAL_TREASURY.blurt,
 		`morphit-stranger:${recipient}`
@@ -169,7 +186,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// BLURT-native: the user paid `quote.priceBlurt` directly,
 	// no USD conversion needed.  Tolerance band absorbs floating-
 	// point rounding in the client's BLURT amount formatting.
-	const minAcceptable = quote.priceBlurt * (1 - ctx.config.feeTolerance);
+	const minAcceptable = quote.priceBlurt * (1 - input.feeTolerance);
 	// G8 — exact milliBLURT comparison (no float-sum boundary error).
 	if (!meetsMinimumMilli(fee.totalMilli, minAcceptable)) {
 		return { ok: false, reason: 'fee_underpaid' };
@@ -178,6 +195,48 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// Total paid, but the canonical treasury's 10% leg was missing/short.
 		return { ok: false, reason: 'fee_underpaid' };
 	}
+	return { ok: true, recipient, totalBlurt: fee.totalBlurt };
+}
+
+const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
+	if (!isPlainObject(ctx.payload)) {
+		return { ok: false, reason: 'payload_not_object' };
+	}
+	const recipient = ctx.payload.recipient;
+	if (
+		typeof recipient === 'string' &&
+		ACCOUNT_NAME_RE.test(recipient) &&
+		recipient !== ctx.signer
+	) {
+		// ─── Idempotency check ──────────────────────────────────────
+		// If we already have a row for this pair, accept silently.
+		// This handles (a) legitimate client retry after a network
+		// hiccup, (b) double-broadcast due to UI bug, (c) chain
+		// re-replay during indexer recovery. In all cases the
+		// user's original admission stands.
+		const existing = await client.query<{ exists: boolean }>(
+			`SELECT EXISTS (
+			   SELECT 1 FROM stranger_fees
+			    WHERE sender = $1 AND recipient = $2
+			 ) AS exists`,
+			[ctx.signer, recipient]
+		);
+		if (existing.rows[0]?.exists) {
+			return { ok: true };
+		}
+	}
+
+	const verdict = await evaluateStrangerFee(client, {
+		signer: ctx.signer,
+		payload: ctx.payload,
+		siblingOps: ctx.siblingOps,
+		blockNum: ctx.blockNum,
+		blockTime: ctx.blockTime,
+		feeRecipient: ctx.config.feeRecipient,
+		feeTolerance: ctx.config.feeTolerance,
+		extraOwnerRecipients: ctx.extraOwnerRecipients
+	});
+	if (!verdict.ok) return { ok: false, reason: verdict.reason };
 
 	// ─── Record payment ─────────────────────────────────────────
 
@@ -190,7 +249,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				   (sender, recipient, paid_block_num, paid_trx_id,
 				    paid_at, amount_blurt)
 				 VALUES ($1, $2, $3, $4, $5, $6)`,
-				[ctx.signer, recipient, ctx.blockNum, ctx.trxId, ctx.blockTime, fee.totalBlurt]
+				[ctx.signer, verdict.recipient, ctx.blockNum, ctx.trxId, ctx.blockTime, verdict.totalBlurt]
 			)
 		);
 	} catch (err) {

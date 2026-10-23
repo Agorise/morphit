@@ -52,6 +52,7 @@ function harness(address: string) {
 	};
 	const store = {
 		repliedSince: async () => false,
+		unreadStoredFrom: async () => true,
 		blocked: async () => false,
 		readSince: async () => false,
 		alreadyNoticed: async () => false,

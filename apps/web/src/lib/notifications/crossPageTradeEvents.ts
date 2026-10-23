@@ -2,9 +2,11 @@
  * crossPageTradeEvents — opt-in toggle for the global trade-
  * event listener.
  *
- * Phase F.5 audit fix (F-23).  The listener decrypts every
- * incoming chat message across the user's recent-peers list
- * just to check for structured Morphit payloads.  This is an
+ * Phase F.5 audit fix (F-23).  The listener decrypts the new
+ * incoming chat messages of every conversation the account-wide
+ * activity stream reports (since v1.21.14, W-H2 — it used to watch
+ * the recent-peers list, one stream each) just to check for
+ * structured Morphit payloads.  This is an
  * implicit privacy-vs-UX tradeoff: ambient decryption gives
  * cross-page trade-status updates, but means plaintext briefly
  * resides in memory for messages the user never reads.

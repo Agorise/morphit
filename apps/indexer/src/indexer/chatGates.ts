@@ -108,6 +108,30 @@ export async function recipientHasReplied(
 }
 
 /**
+ * Is this sender already ADMITTED to write to this recipient without a reply?
+ * The durable stranger-fee gate admits a first-contact message when the sender
+ * paid the stranger fee for this recipient, or already has an admitted message
+ * to them (handlers/chat.ts, layer 2). The fast-notify gate needs the same
+ * answer (v1.21.14 full chat audit, S-H3): a paid first contact — the "new
+ * chatroom request" the fee exists to let through — reached the inbox only at
+ * durable time, 45-63 s late.
+ */
+export async function senderAdmittedWithoutReply(
+	db: ChatGateDb,
+	args: { recipient: string; sender: string }
+): Promise<boolean> {
+	const res = await db.query<{ admitted: boolean }>(
+		`SELECT EXISTS (
+		   SELECT 1 FROM chat_messages WHERE sender = $2 AND recipient = $1
+		 ) OR EXISTS (
+		   SELECT 1 FROM stranger_fees WHERE sender = $2 AND recipient = $1
+		 ) AS admitted`,
+		[args.recipient, args.sender]
+	);
+	return res.rows[0]?.admitted === true;
+}
+
+/**
  * the PROVABLE-COUNTERPARTY bar, i.e. the `has_verified_chat` badge:
  * a substantiated two-way on-chain conversation between two accounts —
  * ≥2 morphit_chat_v1 EACH WAY, ≥15-minute span, and the pair has never shown
@@ -174,4 +198,98 @@ export async function hasVerifiedChat(
 		spanSec >= 15 * 60;
 	if (!conversation) return false;
 	return !(await reciprocityEverHeld(db, { a: args.a, b: args.b, asOf: args.asOf }));
+}
+
+/** Max unique new senders (i.e. senders the recipient has not
+ *  replied to) allowed in a rolling 24h window per recipient. */
+export const FAN_IN_UNIQUE_SENDERS_24H = 20;
+
+/** Max messages a single sender can send to a single recipient
+ *  who has not replied, over ALL time. Once the recipient
+ *  replies once, this cap lifts. */
+export const PER_PAIR_NO_REPLY_CAP = 50;
+
+/** What the no-reply caps count, as of `at`. */
+export interface NoReplyLimits {
+	/** Distinct senders (this one included) in the last 24 h the recipient has
+	 *  never replied to and has not blocked. */
+	readonly fanIn: number;
+	/** Messages from this sender to the recipient, or null when the recipient
+	 *  has replied (both caps lift for the pair). */
+	readonly perPair: number | null;
+}
+
+/**
+ * Finding H layer 3: fan-in and per-sender rate limits, counted in one round
+ * trip. ONE implementation for the durable handler (handlers/chat.ts) and the
+ * fast-notify gate (fastNotifyGate.ts), so the fast path can never announce a
+ * message the durable path refuses for these caps.
+ *
+ * Every chat_messages predicate is a `sender = … AND recipient = …` or
+ * `recipient = … AND created_at > …` lookup, served by chat_messages_sender_idx
+ * (sender, recipient, created_at) and chat_messages_recipient_idx (recipient,
+ * created_at) — migration v66.
+ *
+ * The fan-in count EXCLUDES senders the recipient has blocked (security finding
+ * S5): a Sybil burst that lands then gets blocked must not keep consuming the
+ * recipient's fan-in budget for 24h, locking out new legitimate senders.
+ */
+export async function noReplyLimits(
+	db: ChatGateDb,
+	args: { recipient: string; sender: string; at: Date }
+): Promise<NoReplyLimits> {
+	const res = await db.query<{
+		unique_fan_in: string; // BIGINT
+		per_pair_count: string | null; // BIGINT, NULL when recipient has replied
+	}>(
+		`SELECT
+		   (
+		     SELECT COUNT(DISTINCT s)::bigint FROM (
+		       SELECT sender AS s FROM chat_messages
+		        WHERE recipient = $1
+		          AND created_at > $3::timestamptz - INTERVAL '24 hours'
+		       UNION
+		       SELECT $2::text AS s
+		     ) candidates
+		     WHERE NOT EXISTS (
+		       SELECT 1 FROM chat_messages r
+		        WHERE r.sender = $1 AND r.recipient = candidates.s
+		     )
+		     AND NOT EXISTS (
+		       SELECT 1 FROM blocks b
+		        WHERE b.blocker = $1 AND b.blocked = candidates.s
+		          AND b.state = 'blocked'
+		     )
+		   ) AS unique_fan_in,
+		   CASE
+		     WHEN EXISTS (
+		       SELECT 1 FROM chat_messages
+		        WHERE sender = $1 AND recipient = $2
+		     ) THEN NULL
+		     ELSE (
+		       SELECT COUNT(*)::bigint FROM chat_messages
+		        WHERE sender = $2 AND recipient = $1
+		     )
+		   END AS per_pair_count`,
+		[args.recipient, args.sender, args.at]
+	);
+	const row = res.rows[0];
+	const fanIn = Number(row?.unique_fan_in ?? 0);
+	const perPair =
+		row?.per_pair_count === null || row === undefined ? null : Number(row.per_pair_count);
+	return {
+		fanIn: Number.isFinite(fanIn) ? fanIn : 0,
+		perPair: perPair === null || !Number.isFinite(perPair) ? null : perPair
+	};
+}
+
+/** The refusal the caps give, or null. `perPair` is the count BEFORE this
+ *  message: refused when accepting it would go past the cap. */
+export function noReplyLimitRefusal(
+	l: NoReplyLimits
+): 'recipient_fan_in_exceeded' | 'sender_no_reply_cap_exceeded' | null {
+	if (l.fanIn > FAN_IN_UNIQUE_SENDERS_24H) return 'recipient_fan_in_exceeded';
+	if (l.perPair !== null && l.perPair >= PER_PAIR_NO_REPLY_CAP)
+		return 'sender_no_reply_cap_exceeded';
+	return null;
 }

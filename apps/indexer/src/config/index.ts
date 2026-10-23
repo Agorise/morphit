@@ -140,20 +140,23 @@ export interface Config {
 	/** v1.7.0 (ADR-0051) — head-block fast path. A scanner tails the chain
 	 *  HEAD (not just irreversible blocks) and emits provisional events over
 	 *  SSE within a few seconds, instead of waiting ~45-60s for Blurt's
-	 *  last-irreversible block to catch up. It NEVER writes to the database —
-	 *  the durable, irreversible poller remains the sole source of truth.
+	 *  last-irreversible block to catch up. It writes no message, order or fee
+	 *  state — the durable, irreversible poller remains the sole source of
+	 *  truth; its only writes are notification queue rows (push_pending,
+	 *  offline_notify_pending), deduplicated with the durable path's.
 	 *  Clients dedupe a fast-path event against its later durable twin.
 	 *
-	 *  This field is how often (ms) that scanner polls the head. Default 2000.
-	 *  Latency budget for the "≤6s" target: a broadcast lands in the next
+	 *  This field is how often (ms) that scanner polls the head, at a fixed
+	 *  rate. Default 1000 (v1.21.14; 2000 before). Latency budget for a
+	 *  message the federation could not push: a broadcast lands in the next
 	 *  block within ~0-3s (inherent Blurt block time), the tailer catches that
-	 *  head block within ≤one interval, and SSE + client render is ~0.5s — so
-	 *  ~3 + 2 + 0.5 ≈ 5.5s worst case. Lower it for tighter latency at the
-	 *  cost of more head polls; raise it to reduce RPC load on a straining
+	 *  head block within ≤one interval plus its RPC calls, and SSE + client
+	 *  render is ~0.5s — ~3 + 1 + RPC + 0.5. Lower it for tighter latency at
+	 *  the cost of more head polls; raise it to reduce RPC load on a straining
 	 *  node.
 	 *
 	 *  There is deliberately NO enable/disable companion (ADR-0051 supersedes
-	 *  ADR-0048's opt-out). Because the tailer never writes to the DB, the
+	 *  ADR-0048's opt-out). Because the tailer writes no state, the
 	 *  worst a broken fast path can do is fail to make things fast — there is
 	 *  nothing to protect an operator from, and nobody prefers slow. A flag
 	 *  that is always true is just a branch that can be wrong, config that can
@@ -917,18 +920,21 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_BACKFILL_HEDGE_FACTOR: z.coerce.number().min(0).max(50).default(3),
 	MORPHIT_INDEXER_ERROR_BACKOFF_MS: z.coerce.number().int().positive().default(5000),
 	// v1.7.0 — the head-block fast path has NO on/off switch (ADR-0051,
-	// superseding ADR-0048's opt-out). It never writes to the DB, so the
-	// worst a broken fast path can do is fail to make things fast: there is
+	// superseding ADR-0048's opt-out). It writes no state (only notification
+	// queue rows), so the worst a broken fast path can do is fail to make things fast: there is
 	// nothing to protect an operator from, and nobody prefers slow.
 	// MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED was REMOVED, not renamed — a flag
 	// that is always true is a branch that can be wrong, config that can
 	// drift, and a second path every smoke has to cover.
 	//
-	// Poll interval for the head scanner. 2000ms keeps worst-case end-to-end
-	// delivery under ~6s (see the Config field doc for the latency budget).
-	// Lower = tighter latency + more head polls. This one IS a real lever for
-	// an operator whose node is straining, so it stays.
-	MORPHIT_INDEXER_FASTPATH_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
+	// Poll interval for the head scanner, kept at a FIXED RATE (a slow tick
+	// does not push the next one back). 1000ms since v1.21.14: a message the
+	// federation could not push arrives by this scanner, and 2000ms plus the
+	// tick itself measured up to ~5.1 s from broadcast to emit with 100 ms RPC
+	// calls (audit S-H4) — before either browser hop. Lower = tighter latency
+	// + more head polls. This one IS a real lever for an operator whose node is
+	// straining, so it stays.
+	MORPHIT_INDEXER_FASTPATH_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
 	MORPHIT_INDEXER_STALE_LAG_THRESHOLD: z.coerce.number().int().positive().default(30),
 
 	MORPHIT_INDEXER_LISTEN_HOST: z.string().default('127.0.0.1'),

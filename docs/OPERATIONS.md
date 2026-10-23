@@ -2256,7 +2256,7 @@ http {
 # tuning — normal REST under `/v1/` keeps default buffering and
 # is unaffected by the cap.
 server {
-    location ~ ^/v1/.*/stream$ {
+    location ~ ^/v1/(?:.*/stream|login-pairing/[^/]+/wait)$ {
         proxy_pass http://127.0.0.1:8081;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -2929,13 +2929,11 @@ This addresses Finding N in the project backlog §F.
 **On the hidden services (v1.20.0).** Tor and I2P visitors reach the
 BunkerWeb frontend container directly, without BunkerWeb in between, so
 that container (`ops/bunkerweb/frontend/nginx.conf`) sends the security
-headers itself. On a `.onion` / `.i2p` name it sends the same CSP with
-`connect-src` narrowed to `'self'` plus the hidden Blurt RPC nodes the app
-uses there (`DEFAULT_HIDDEN_RPC_ENDPOINTS` in
-`apps/web/src/lib/net/config.ts`), chosen per request by `map $host
-$morphit_csp` in that file. The hidden services send no HSTS (they are
-plain `http://`). The canonical clearnet policy below is unchanged, and
-the `csp-header-consistency` smoke still requires every copy of it to be
+headers itself, with the same CSP on every name (`map $host $morphit_csp`
+in that file has one value since v1.21.14: the browser contacts nothing
+but its own site, so a `.onion` / `.i2p` name needs no node list of its
+own). The hidden services send no HSTS (they are plain `http://`). The
+`csp-header-consistency` smoke requires every copy of the policy to be
 byte-identical. Every SVG outside `/_app/` is served with its own strict
 policy (`default-src 'none'; …; sandbox`) so an image opened directly can
 run nothing.
@@ -2962,16 +2960,16 @@ add_header X-Frame-Options "DENY" always;
 # so the same-origin QR-login scanner (getUserMedia) keeps working
 add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()" always;
 
+# No DNS lookups for links on the page before a click (the CSP does
+# not cover these; they matter most on a plain-http .onion/.i2p page)
+add_header X-DNS-Prefetch-Control "off" always;
+
 # Content Security Policy — the single source of truth for the
-# frontend (the build emits no meta CSP). connect-src lists the
-# five Blurt RPC nodes the browser reaches over HTTPS
-# (DEFAULT_RPC_ENDPOINTS in apps/web/src/lib/net/config.ts; the
-# pool's sixth clearnet node is server-only). If you run a
-# different RPC set, edit it to match or the browser blocks your
-# nodes (including failover). It lists NO price API on purpose:
-# price fetching is server-side (the indexer), the browser never
-# calls a price host, so listing one would only leak visitor IPs.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+# frontend (the build emits no meta CSP). connect-src is this
+# site only: every chain read, broadcast and the daily release
+# check go through your own indexer, so the browser contacts no
+# Blurt RPC node and no price host.
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'" always;
 ```
 
 For reference, `ops/nginx/indexer.conf` and
@@ -3010,28 +3008,21 @@ frontend's web server config, not the API nginx configs.
   and `blob:` URLs (decoded avatar bitmaps)
 - `font-src 'self'` — fonts only from same origin (the
   self-hosted Nunito subset)
-- `connect-src 'self' <five Blurt RPC hosts>` — the
-  browser may fetch only from your own origin and the five
-  HTTPS Blurt RPC nodes it uses
-  (`apps/web/src/lib/net/config.ts`). It reads the chain
-  from them directly for one thing only: the daily release
-  check (and, on a BTC listing-fee page, the past fee key
-  proof). Signed transactions are broadcast through your
-  own indexer (`/v1/broadcast`), not from the browser to an
-  RPC node. Notes:
-    - There is deliberately **no price API** here. Price
-      data is fetched server-side by the indexer; the
-      browser never calls CoinGecko or any other price
-      host. Adding one would leak every visitor's IP to a
-      third party for no functional gain — a privacy
+- `connect-src 'self'` — the browser may fetch only from
+  your own origin (since v1.21.14). Chain reads go through your
+  indexer (`/v1/chain/condenser`), signed transactions through
+  `/v1/broadcast`, and the daily release check through
+  `/v1/chain/agreed`, which answers only with what two RPC
+  operators of your pool agree on (the browser still checks
+  @morphit's signature itself). Notes:
+    - There is deliberately **no price API** and **no RPC
+      node** here. Adding one would leak every visitor's IP
+      to a third party for no functional gain — a privacy
       regression, not a feature.
-    - If you run a different RPC set, edit connect-src to
-      match the hosts in `config.ts`, or the browser will
-      block them (including failover to a backup node).
-      Prefer listing your specific hosts over the loose
-      `'self' https:` wildcard, which permits any HTTPS
-      host as a fetch target and defeats CSP's
-      exfiltration-defense value.
+    - Split-subdomain topology only: add your indexer and
+      relay hostnames (see above). Never the loose `https:`
+      wildcard, which permits any HTTPS host as a fetch
+      target and defeats CSP's exfiltration defense.
 - `worker-src 'self' blob:` — Web Workers from same origin
   (the service worker) plus `blob:` (the altcha
   proof-of-work worker is built from an in-memory blob);
@@ -4979,7 +4970,8 @@ unchanged and stays the sole source of truth for chat
 history and everything else.
 
 **Always on — there is no off switch** (v1.7.0, ADR-0051). The
-scanner never writes the database, so the worst a broken fast
+scanner writes no message state (only notification queue rows,
+below), so the worst a broken fast
 path can do is fail to make things fast; there is nothing to
 protect you from, and nobody prefers slow. The old
 `MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED` was **removed, not
@@ -4989,37 +4981,55 @@ can be deleted.
 One knob remains, in `/etc/morphit/indexer.env`:
 
 ```
-MORPHIT_INDEXER_FASTPATH_INTERVAL_MS=2000 # default 2000
+MORPHIT_INDEXER_FASTPATH_INTERVAL_MS=1000 # default 1000 (2000 before v1.21.14)
 ```
 
 Raise it to reduce head-poll traffic on a straining node; lower
-it for tighter latency.
+it for tighter latency. The scanner runs at a fixed rate: the
+next poll is due one interval after the last one started, however
+long that one took.
 
-- It **never writes the database** — read-only (block feed +
-  a block-list lookup) plus in-process SSE. A crash in it
-  cannot affect the durable poller or your data.
-- It is **chat-only** and enforces the **block list** (a
-  blocked sender's message is never streamed, failing closed
-  on any DB error). It does not re-run the stranger-fee /
-  rate-limit gates — the durable pass still enforces those
+- It **never writes your data** — it reads the block feed and
+  a few tables and emits in-process SSE. Its only writes are
+  notification queue rows: a `push_pending` row for a message or
+  review that passes its notification gate (deduped with the
+  durable path's on the transaction id), and an
+  `offline_notify_pending` row per conversation thread for a user
+  with a confirmed offline-notice address. A crash in it cannot
+  affect the durable poller or your data.
+- It shows chat messages, order status changes and new reviews
+  live, and enforces the **block list** for chat (a blocked
+  sender's message is never streamed, failing closed on any DB
+  error), including a block op it has just seen in a head block
+  and the durable list does not have yet. It checks each op's
+  signature against the signer's posting key; when that key
+  needs a chain read (an account with no row here, or a key not
+  yet confirmed), the message is looked at again after 0.75 s,
+  then 2 s and 4 s later. It does not re-run the stranger-fee /
+  rate-limit gates for display — the durable pass still enforces those
   for stored history, so a stranger's message can flash up
-  live for a few seconds before it fails to persist. That is
-  bounded and intentional; the block list, the one gate whose
-  bypass would matter, is always enforced.
+  live in an open conversation for a few seconds before it fails
+  to persist. That is bounded and intentional; the block list,
+  the one gate whose bypass would matter, is always enforced. A
+  push, an inbox badge or a replay into a conversation opened
+  later needs the notification gate: an earlier reply, a response
+  to the recipient's own live order, or (since v1.21.14) a sender
+  the recipient has already admitted — a stored message, or a
+  stranger fee recorded or just seen at the head.
 - If a head block is later orphaned by a fork, a message
   shown live simply never lands in durable history. Fine for
   chat; this is exactly why orders and fees are **not** on
   this path.
-- Extra RPC: roughly one head-poll per interval (~30/min at
-  2s) plus a block fetch per new block (~20/min) — about a 2×
-  increase in block-feed calls. Raise the interval to reduce
-  load, lower it for tighter latency.
+- Extra RPC: one read of the next block per interval (~60/min
+  at 1s, most answered "not yet"), plus a head-number read after
+  each new block (~20/min) and on one idle poll in ten. Raise the
+  interval to reduce load, lower it for tighter latency.
 
 **No off switch.** Fast chat can't be disabled — the old
 `..._ENABLED` flag was removed in v1.7.0 (ADR-0051). The one
 knob is `MORPHIT_INDEXER_FASTPATH_INTERVAL_MS` above: raise it
 to shed head-poll RPC load, lower it for tighter latency. (The
-scanner never writes the DB, so there's nothing to protect
+scanner writes no message state, so there's nothing to protect
 against by turning it off — a broken fast path can only fail
 to make things fast.)
 
@@ -5371,14 +5381,18 @@ don't need it.
 
 ## 22. Choosing Blurt RPC endpoints
 
-Morphit components call Blurt RPC endpoints in three
-places:
+Morphit's servers call Blurt RPC endpoints in two places.
+Visitors' browsers call none: every page's CSP is
+`connect-src 'self'`, and every chain read, every broadcast
+and the daily release check (`POST /v1/chain/agreed`) go to
+this instance, whose indexer and relay talk to the RPC
+operators for them. The nodes see your instance, never a visitor, and
+there is no browser-side list to maintain.
 
 | Component | Purpose | Config |
 |---|---|---|
-| Frontend | User signs + queries from their browser | `DEFAULT_RPC_ENDPOINTS` in `apps/web/src/lib/net/config.ts`, overridable in Settings per-user |
 | Relay | Broadcasts user-signed ops, pays per-op BLURT fees | `MORPHIT_RELAY_BLURT_RPC` env var (comma-separated) |
-| Indexer | Follows the block stream | (indexer's own env, see ADR-0010 deployment notes) |
+| Indexer | Follows the block stream; answers visitors' chain reads, broadcasts and release check | (indexer's own env, see ADR-0010 deployment notes) |
 
 Each component has its own rotation logic (latency-based
 pick with cooldown on failure). The default lists are
@@ -5469,8 +5483,8 @@ you which endpoint refused — fix that one and restart.
 
 ### How to evaluate candidate nodes
 
-Morphit's built-in rotator handles runtime health-based
-selection. What it DOESN'T do is help you pick which
+Morphit's built-in rotators (indexer and relay) handle
+runtime health-based selection. What it DOESN'T do is help you pick which
 endpoints to seed the list with in the first place. For
 that, a community-run tool is the fastest path:
 
@@ -5488,9 +5502,9 @@ node list BeBlurt uses in its frontend.
 - Published as `@beblurt/blurt-nodes-checker` on npm
 
 Morphit **does not** ship this library as a dependency
-— our frontend bundle is deliberately lean, and our
-rotator handles runtime failover without needing an
-RxJS-based monitor inline. But as an operator picking
+— visitors' browsers never contact a node, and the
+indexer's and relay's rotators handle runtime failover
+without needing an RxJS-based monitor inline. But as an operator picking
 which endpoints to put in your config, the checker's
 live scoring output is a better signal than guessing.
 
@@ -5501,11 +5515,9 @@ publish periodic roundups.
 
 ### Updating your endpoint list
 
-**Frontend default list:** edit
-`apps/web/src/lib/net/config.ts` → `DEFAULT_RPC_ENDPOINTS`
-and rebuild. This is the list new users get on first
-visit; existing users who customized their list in
-Settings keep their own list.
+**Frontend:** nothing to update. Browsers reach only
+this instance (`connect-src 'self'`); the indexer's list
+below is what serves them.
 
 **Relay:** update `MORPHIT_RELAY_BLURT_RPC` in the
 relay's systemd/docker-compose env file and restart the
@@ -5888,26 +5900,37 @@ The indexer reads these at startup and includes them in its instance announce; t
 
 ## 24. HTTP/2 deployment requirement (Phase F.5 cross-page trade events)
 
-**Bottom line:** terminate TLS with HTTP/2 (or HTTP/3) enabled. The
-cross-page trade-event listener won't work reliably under HTTP/1.1.
+**Bottom line:** terminate TLS with HTTP/2 (or HTTP/3) enabled on your
+clearnet origin. Since v1.21.14 a tab also works under HTTP/1.1, but
+HTTP/2 leaves the most room.
 
 ### Why
 
-Phase F.5 introduced a global SSE listener that opens one chat
-stream per recent peer.  Under HTTP/1.1, browsers limit
-concurrent connections to **6 per origin**.  Each open SSE stream
-holds one of those slots for its lifetime.  Beyond the limit,
-new streams queue indefinitely — the user's badge stays at
-"Payment pending" forever even after the buyer's funds-sent
-message reaches the indexer.
+Under HTTP/1.1, browsers limit concurrent connections to **6 per
+origin**, and each open SSE stream holds one of those slots for its
+lifetime. The cross-page trade-event listener (Phase F.5) used to hold
+one chat stream open per recent peer — up to five — beside the inbox
+stream (`/v1/chat-activity/:account/stream`) and the conversation on
+screen (`/v1/chat/:a/:b/stream`): seven long-lived connections, so
+sends and reads queued behind streams.
 
-The Phase F.5 audit fix (F-21) caps the listener to **5**
-concurrent streams.  This leaves 1 connection slot free under
-HTTP/1.1 for ad-hoc requests (profile fetches, stream
-reconnects, image loads).  But if you're running HTTP/2, the
-practical limit is 100+ streams over a single TCP connection,
-and the cap is a soft optimization rather than a hard
-requirement.
+Since v1.21.14 (full chat audit, W-H2) the listener holds no stream of
+its own. The inbox stream names the peer of every new message; on such
+a ping the listener reads that conversation once (a chat stream opened
+for its first answer and closed at once), one peer at a time — the app
+caps the listener to **1** such read at a time. A tab therefore holds
+at most three long-lived connections to its site: the inbox stream,
+the open conversation, and this read. Under HTTP/2 the practical limit
+is 100+ streams over a single TCP connection.
+
+**Tor, I2P and Lokinet visitors are on HTTP/1.1 whatever you
+configure.** A hidden-service origin is plain `http://` (a
+registration refuses `https://` for one), and browsers speak HTTP/2
+only over TLS. So for those visitors the 6-connections-per-host
+limit always applies, and the HTTP/2 advice below helps only your
+clearnet origin. What the server guarantees on its side is in
+"Chat streams need a ticket" below: how many streams it lets one
+client or one account hold, not how many a browser opens.
 
 ### How to verify
 
@@ -5964,16 +5987,84 @@ configure.  Verify with `curl -I --http2`.
 If the user complains "I never see paid trades update on
 /my/orders," check HTTP/2 first.
 
-### Why not raise the cap to 20?
+### The listener's stream count
 
-HTTP/2 multiplexing makes the cap mostly cosmetic — under
-HTTP/2 you could safely run 20 streams.  But the listener
-also has a CPU and memory cost (one EventSource per peer
-+ decryption work on every message).  5 is a comfortable
-default that covers active conversations and keeps the
-listener's cost bounded.  Operators who want to raise it
-can patch `MAX_LISTENER_STREAMS` in
-`apps/web/src/lib/trades/tradeEventListener.ts`.
+The listener's own limit is `MAX_LISTENER_STREAMS` in
+`apps/web/src/lib/trades/tradeEventListener.ts` (1, above).
+Raising it costs every visitor connection slots (on Tor and I2P,
+out of 6) as well as CPU and memory in the browser.
+
+### Chat streams need a ticket (v1.21.14)
+
+Both chat streams — `/v1/chat-activity/:account/stream` and
+`/v1/chat/:a/:b/stream` — answer **403** with
+`{"code":"stream_ticket_required","reason":…}` unless the URL
+carries `?ticket=`. A ticket is
+`<base64url JSON {"v":1,"a":account,"h":host,"e":expiry}>.<signature hex>`,
+signed by the account's posting key over
+`sha256("morphit-stream-ticket-v1\n" + <the base64url part>)`. The
+browser signs it with the posting key. The indexer checks:
+
+- `a` is the account the stream is for (the activity stream's
+  account, or one of the two in a conversation);
+- `h` is one of the names this instance answers to: the configured
+  `MORPHIT_INDEXER_PUBLIC_ORIGIN`, `MORPHIT_INSTANCE_ORIGIN` and the
+  configured Tor, I2P and Lokinet addresses — plus the `Host` the
+  request arrived under, but only when it is a hidden address of a
+  network you configured no address for — so a ticket made for one
+  instance does not open streams on another;
+- `e` is in the future and at most 372 days ahead. A browser signs its
+  own ticket for 7 days and signs a new one daily, so a device clock
+  up to six days slow still works; a paired desktop's ticket, signed by
+  its phone, lasts the pairing's year (plus a week for a phone running
+  fast). A ticket stops opening streams once the posting key changes;
+- the signature recovers to the account's posting key, from the same
+  lookup the fast path uses (this database, or two agreeing RPC
+  operators when the key is not confirmed or the account has no row;
+  such reads have their own ceiling of 30 a minute, separate from the
+  ones message delivery uses, and a key on file that does not match
+  is read again once). Tickets not seen before are checked at most
+  100 a second for accounts whose key this instance holds and 40 a
+  second for others; past that the stream answers 503 and the browser
+  retries.
+
+A ticket that checks out is remembered in memory for up to 10
+minutes (never past its expiry), so a reconnect costs nothing and a
+key rotated away stops opening streams soon after. `reason` is one of
+`missing`, `malformed`, `expired`, `too_long`, `wrong_account`,
+`wrong_host`, `bad_signature`, `key_unavailable`. A browser from
+before v1.21.14 sends no ticket and gets 403 on both streams until
+it reloads the new build. (403, not 401: BunkerWeb's bad-behavior ban
+counts 401, and many visitors behind one address would otherwise get it
+banned for an hour.)
+
+**If chat messages show up about a minute late on your clearnet site**
+(and at once over Tor), something between the frontend and the visitor is
+buffering the live streams. BunkerWeb buffers what it relays unless the
+response says `X-Accel-Buffering: no`, and nginx never passes that header
+on by itself: the frontend's stream location must carry
+`proxy_pass_header X-Accel-Buffering;` (shipped since v1.21.14;
+`morphit-ops upgrade` rebuilds a frontend without it). Any other proxy you
+put in front must not buffer `text/event-stream` either.
+
+**If every chat stream answers 403 `wrong_host`**, the name your
+visitors use is not one the indexer knows. Check
+`MORPHIT_INSTANCE_ORIGIN` and the hidden-address settings, and that
+your proxy forwards the `Host` header.
+
+**Stream caps** (`apps/indexer/src/api/streamCaps.ts`, all answered
+`503 stream_capacity` with `retry-after: 30`): 24 streams per client;
+2,000 in total; 1,500 for every Tor/I2P visitor together (they reach
+the indexer through your own proxy, so they share one client key).
+Since v1.21.14 a ticketed chat stream that arrives through that
+shared key counts against **its account** (12 per account) instead
+of the per-client allowance, and streams WITHOUT a ticket through the
+shared key are held to 1,000 of the 1,500 — so one anonymous client
+can no longer hold every hidden-service user's live chat. Ticketed
+streams still count toward the 1,500, so the other 500 of the 2,000
+stay for clearnet. The
+indexer reads the account from the ticket only after the signature
+has checked out.
 
 
 ## 25. Going live — staging procedure + chain-switch
@@ -6855,7 +6946,7 @@ The Ansible playbook's `bunkerweb` role deploys this directory verbatim.  Operat
 
 **What the upgrade does to the web containers (v1.20.0).** It finds BunkerWeb by image (`bunkerity/bunkerweb`, publishing 443), never by name; a plain-nginx edge, several candidates or a non-Compose container are left alone with a calm note. It recreates only the edge, a scheduler reading the same env file, and the frontend (`up -d --no-deps` with every `-f` file and the recorded `--env-file`), finishes within 120 s, and restores the files byte for byte if stopped mid-change. BunkerWeb keeps no Docker log and its `LOG_FORMAT` names no visitor address — unless CrowdSec reads its log (or that cannot be checked), when it keeps a `local` 5 MB × 1 log and the address, so CrowdSec keeps working. To watch BunkerWeb live with nothing stored: `sudo docker attach --no-stdin --sig-proxy=false bunkerweb` (Ctrl-C detaches).
 
-> **Concurrent-connection caps for the chat SSE paths (`/v1/chat/:a/:b/stream`, `/v1/chat-activity`).** The indexer rate-limits opening these streams (the `list` tier) and caps open streams itself (24 per client, 2,000 in total, `apps/indexer/src/api/streamCaps.ts`). The relevant DoS surface here is not request *rate* but concurrent-connection *count*: one client (or a botnet) holding thousands of open streams. So the proxy in front of the indexer must enforce a **per-IP concurrent-connection cap** on those paths — BunkerWeb's connection-rate + slow-loris guards cover the common case; if you want an explicit ceiling, the `frontend` nginx (`ops/bunkerweb/frontend/nginx.conf`) is the natural place for an nginx `limit_conn` zone keyed on the real client IP scoped to the `.../stream` and `/v1/chat-activity` locations (a generous cap — e.g. a few dozen per IP — so legitimate multi-tab / multi-device users are unaffected while a single source can't exhaust connection slots). This does not touch fast-path latency: the stream itself is server-push, and the cap only bounds how many streams one source may hold open at once. If you run WITHOUT BunkerWeb, this cap is your responsibility to add at whatever proxy fronts the indexer.
+> **Concurrent-connection caps for the chat SSE paths (`/v1/chat/:a/:b/stream`, `/v1/chat-activity`).** The indexer rate-limits opening these streams (the `list` tier) and caps open streams itself (24 per client, 2,000 in total, 1,500 for all Tor/I2P visitors together — of which at most 1,000 without a ticket — and since v1.21.14 12 per account for a ticketed chat stream through that shared path, `apps/indexer/src/api/streamCaps.ts`; both chat streams also need a ticket signed by the account, §24). The relevant DoS surface here is not request *rate* but concurrent-connection *count*: one client (or a botnet) holding thousands of open streams. So the proxy in front of the indexer must enforce a **per-IP concurrent-connection cap** on those paths — BunkerWeb's connection-rate + slow-loris guards cover the common case; if you want an explicit ceiling, the `frontend` nginx (`ops/bunkerweb/frontend/nginx.conf`) is the natural place for an nginx `limit_conn` zone keyed on the real client IP scoped to the `.../stream` and `/v1/chat-activity` locations (a generous cap — e.g. a few dozen per IP — so legitimate multi-tab / multi-device users are unaffected while a single source can't exhaust connection slots). This does not touch fast-path latency: the stream itself is server-push, and the cap only bounds how many streams one source may hold open at once. If you run WITHOUT BunkerWeb, this cap is your responsibility to add at whatever proxy fronts the indexer.
 
  (menu: "Secure the server" → "Web firewall (BunkerWeb): install / status") inspects whether the `bunkerweb` and `bunkerweb-scheduler` containers are running and healthy. If they already are — or if you pass `--json`, or run it non-interactively (no TTY) — it is **read-only**: it reports status and prints the bring-up commands, nothing more. If BunkerWeb **isn't up yet and you're at an interactive terminal**, it offers a **guided, ELI5 installer** that confirms before each step: it copies the shipped `ops/bunkerweb/` config into `/etc/bunkerweb` (never clobbering an existing config), prompts for your domain (`SERVER_NAME`) and validates it, guards against the missing-TLS-certificate crash-loop (it stops and points you at `morphit-ops ssl` first if the cert isn't there yet), then runs `docker compose pull` and `docker compose up -d` and re-verifies. BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
 
@@ -7103,10 +7194,11 @@ LIMIT_REQ_URL_2=/v1
 LIMIT_REQ_RATE_2=30r/s
 
 # SSE: don't buffer the indexer's streaming responses. BunkerWeb
-# matches *_URL_* values as a regex, so this covers all three
-# stream endpoints (orderbook / chat / instances).
+# matches *_URL_* values as a regex, so this covers every stream
+# endpoint (orderbook / chat / chat activity / instances) and the
+# sign-in pairing wait.
 USE_PROXY_BUFFERING_3=no
-PROXY_BUFFERING_URL_3=^/v1/.*/stream$
+PROXY_BUFFERING_URL_3=^/v1/(?:.*/stream|login-pairing/[^/]+/wait)$
 ```
 
 ### www.(your domain)
@@ -12478,10 +12570,16 @@ unexpectedly off after you set the keys, grep the relay log for
 ### 42.4 What the push-sender worker actually does
 
 Every `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` (default 2 s),
-the worker runs one tick:
+the worker starts one pass. Since v1.21.14 a pass does not wait
+for the previous one: up to 32 rows are being sent at once across
+passes (`PUSH_ROWS_IN_FLIGHT`), a later pass skips the rows an
+earlier one still holds, and a row's devices are pushed side by
+side. A push service that stalls (up to 15 s each) no longer
+delays anyone else's notifications.
 
-1. `SELECT … FROM push_pending ORDER BY enqueued_at ASC LIMIT
-   <batch_size>` — drain the oldest rows.
+1. `SELECT … FROM push_pending WHERE sent_at IS NULL ORDER BY
+   enqueued_at ASC LIMIT <batch_size>` — drain the oldest unsent
+   rows.
 2. For each row, drop if `event_at` is older than
    `MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS` ago.
 3. Join against `push_subscriptions` to find every subscribed
@@ -12501,8 +12599,15 @@ the worker runs one tick:
    `consecutive_failures`.  When it crosses
    `MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES`, delete the
    subscription.
-8. Always delete the `push_pending` row after fan-out —
-   re-trying after a delivery attempt invites duplicates.
+8. Always retire the `push_pending` row after fan-out by
+   stamping `sent_at` — re-trying after a delivery attempt
+   invites duplicates. The retired row stays as a tombstone, so a
+   second enqueue of the same message (the durable path after the
+   fast one) lands on a conflict instead of a second push.
+   Tombstones are pruned after an hour (or
+   `MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS`, if longer); chat and order
+   tombstones are kept at least 24 hours (v1.21.14), because the
+   indexer's one-push-a-day-until-reply rule reads them.
 
 Logs are emitted on every non-empty tick under
 `relay-push-sender`.  Per-device push failures log status
@@ -13514,7 +13619,7 @@ A hidden-only relay sends no Web Push: a browser's push service is a public clea
 
 What happens to users who subscribed before:
 - **Subscriptions are kept,** so push resumes if the relay stops being hidden-only.
-- **Their queued pushes don't pile up.** The indexer keeps queueing them, and a janitor retires and prunes the queue by the sender's own rules (`pushMaxAgeSeconds`, then the one-hour tombstone retention), logged as `push_queue_janitor`.
+- **Their queued pushes don't pile up.** The indexer keeps queueing them, and a janitor retires and prunes the queue by the sender's own rules (`pushMaxAgeSeconds`, then the tombstone retention: an hour, and 24 hours for chat and order rows since v1.21.14), logged as `push_queue_janitor`.
 - **Their browsers are told the truth.** The push endpoints answer `503 {"status":"push_disabled","reason":"hidden_only"}`, and the settings page shows why push is off here instead of "subscribed".
 
 The relay reports `hidden_only` on its `/v1/health`, and the indexer's `clearnet_eliminated` requires it (`relayHidden` in `clearnet_eliminated_missing`). Before this release the relay had no router and no hidden endpoints, and on a tor-only node it reached the chain over clearnet from your server's address. The instance claimed zero clearnet regardless, because the claim was computed from the indexer alone.
@@ -13535,12 +13640,36 @@ rules (source: the header of `apps/indexer/src/indexer/chatFastFederation.ts`):
   There is no direct clearnet connection, no pooled or kept-warm connection,
   and no I2P or Lokinet route (their proxies cannot isolate one request from
   the next). One push carries one sender's messages only.
-- **No Tor, no fan-out.** A node with no Tor configured does not push at all;
-  its users' messages reach other instances at chain speed (a few seconds).
+- **No Tor, no fan-out.** A node with no Tor configured (blank
+  `MORPHIT_INDEXER_TOR_SOCKS`) does not push at all, and one whose Tor is
+  down still tries but delivers nothing. Its users' messages reach other instances through each
+  receiving instance's head tailer: once the message is in a block (up to
+  3 s), at that instance's next poll (1 s by default), plus one block read.
+  Two people on the node itself are not affected: local delivery needs no
+  Tor. Every guided install sets up Tor, so this is a node whose Tor was
+  turned off or has stopped.
+- **No push to I2P-only or Lokinet-only peers**, nor to a clearnet-only peer
+  from a hidden-only node: there is no Tor address to push to, and those
+  peers' users get the head-tailer route above.
+- **Two addresses, hedged (v1.21.14).** The peer's onion is tried first. If
+  it has not answered within 2 s — a fresh onion rendezvous can be slow —
+  the peer's `https://` origin, through a Tor exit, is tried beside it; at
+  once if the onion attempt failed without an answer. Each attempt has 4 s.
+  The first to deliver wins and the other is cancelled. A peer that answered
+  with an HTTP error is not tried again elsewhere.
+- **Several senders at once (v1.21.14).** One push per sender per peer is in
+  flight at a time, up to 8 per peer, each on its own circuit, so people
+  writing to users of the same instance at the same moment no longer queue
+  behind each other.
+- **Which peers, and how often.** At most 40 peers, ranked by probe status
+  and then by origin; the list is re-read every 5 minutes, so a newly
+  verified peer can wait that long for its first push.
 - **What a verified peer still learns:** the signed message (sender,
   recipient, order tag, ciphertext — all public on chain seconds later) a few
-  seconds early, and when it arrived. It can no longer tell which instance
-  sent it.
+  seconds early, and when it arrived. Nothing in the push or the circuit it
+  arrives on names the instance that sent it. A message your instance could
+  verify itself is pushed before the Blurt node has accepted it, so a peer
+  can receive a message that never reaches the chain.
 
 ### Blanking a proxy setting is a real switch, not a no-op
 
@@ -13593,6 +13722,8 @@ Your indexer now recognises a refused `CONNECT` as possibly its own fault and re
 Why the caution: a status alone cannot tell "I refuse all tunnels" (yours) from "I cannot reach that destination" (theirs), and which status means which differs between routers. Rather than guess, the indexer waits for a second address to agree. If you want to check the setting directly rather than read it off the health block, that is faster: look for `i2ptunnel.httpclient.allowInternalSSL` on the HTTP client tunnel.
 
 > **Trust reminder:** reaching a node over Tor/I2P hides *where* you read, not *whether* the data is true. The indexer reads each block from one RPC endpoint and trusts its content; a periodic quorum check (one sampled block every five minutes, logged as `chain_consistency_disagreement`) is an alarm, not a filter. Since v1.20.0 two things no single endpoint can fake are enforced: the head tailer shows a chat message, review notification or order cancel live only if its signature recovers to the signer's posting key, and a posting-key rotation read from a block is stored UNCONFIRMED until RPC operators agree on it. A key or snapshot is confirmed only when at least two operator names agree, they are a strict majority of those that answered, and no other answer could be newer (a stale answer never wins); any other disagreement delays the confirmation and asks again (up to 5 operators per read), and a lone dissent is overruled only after it has stood alone on 3 reads over at least 10 minutes. Reads of a block by height outvote a lone dissenter at once. Operators are counted by the names in the node list; the default hidden-network nodes are run by the project, so on a hidden-only node this agreement is not between independent parties. Keep your RPC list to operators you trust; `chain_consistency_disagreement` in the log means one of them served a different chain.
+>
+> **Chat blocks are confirmed by two operators (v1.21.14).** The durable chat handlers store an op as written by the account it names; they do not check signatures. So a block that carries any chat or inbox op — `morphit_chat_v1`, `morphit_chat_read_v1`, `morphit_chat_folders_v1`, `morphit_chat_identity_v1`, `morphit_stranger_fee_v1`, `morphit_block_v1` — is applied only when two RPC operators (by node name) serve the same transaction, signatures included, at each such position (`apps/indexer/src/indexer/fee/btcFeeBlockConfirm.ts`, the check that already covered BTC-fee orders and the official ops). Until two agree the block is retried, not applied, and the stall is logged as an error every 5 failed attempts (`BlockNotConfirmedError`) — except a block whose only such ops are chat and inbox ops: when no two operators have agreed for 10 minutes (`CHAT_QUORUM_WAIT_MS`, one wait per outage, not per block), such blocks are applied on the serving operator's word, each logged as `chat_block_single_source_after_wait`, and the pool is asked again once a minute until two agree. The second operator's copy of each chat block is fetched ahead, eight at a time, so a node catching up is not held to one block per round trip. **A pool with only one operator configured has nothing to compare with and applies such blocks on that operator's word**, logged. A hidden-only node whose pool is only the default hidden nodes is, as above, comparing nodes run by one project.
 
 ---
 
@@ -13634,7 +13765,7 @@ Federated chat is supposed to land in under six seconds between any two instance
 
 `/v1/health` separates them, under `fastpath.federation` (counters) and `fastpath.federationDiagnostics` (reasons). Both are **operator-only**: the whole `fastpath` block appears only on the operator-local path, which `morphit-ops` uses and the public edge strips, so read it with the ops CLI or by hitting the indexer directly rather than through your own front door.
 
-**Verifying the safety rule yourself.** The fast path must never write to the database — that is what makes displaying an unconfirmed message safe. On a box with a database you can check it rather than take it on trust:
+**Verifying the safety rule yourself.** The fast path must never write message state to the database — that is what makes displaying an unconfirmed message safe. Its only writes are the notification queues `push_pending` and `offline_notify_pending`. On a box with a database you can check it rather than take it on trust:
 
 ```bash
 # Run on: the machine with the indexer's database (a dev box or a node you can point at a SCRATCH database).
@@ -13642,7 +13773,7 @@ cd /opt/morphit/apps/indexer
 TEST_DATABASE_URL="postgres://USER:PASS@localhost:5432/SCRATCH_DB" npm run test:integration
 ```
 
-Use a scratch database, not your live one — the suite creates and drops its own schemas. `fastpath-writes-nothing` photographs every table, pushes a real signed message through the real intake, and fails if any row anywhere changed. Without `TEST_DATABASE_URL` the suite skips, which is why it does not run as part of the ordinary battery.
+Use a scratch database, not your live one — the suite creates and drops its own schemas. `fastpath-writes-nothing` photographs every table, pushes a real signed message through the real intake, and fails if any row changed outside those two queues (and checks that a notifiable message adds exactly one `push_pending` row, plus one `offline_notify_pending` row when the recipient has a confirmed offline-notice address). Without `TEST_DATABASE_URL` the suite skips, which is why it does not run as part of the ordinary battery.
 
 **`morphit-ops health` is the short way, and it does the interpreting for you.** Under the indexer block it prints a `Fed. chat:` line and, when there is anything to say, the reason underneath it:
 
@@ -13756,9 +13887,7 @@ it is what this looks like in `/v1/health`.
 
 `localFault: true` on a recent failure says the same thing per push: the peer was never asked. A peer that genuinely refused carries an HTTP `status` instead.
 
-Chat keeps working while a network is down — a peer that also published a clearnet origin is dialled there instead, automatically and within the same message. **That is a degraded state even though nothing is failing**: those messages are no longer taking the privacy route their addresses were published for. It is exactly the situation this field exists to make visible, because a delivery count alone looks perfectly healthy.
-
-A peer with *no* address on a network you can reach — a zero-clearnet instance, when your Tor is down and neither of you speaks I2P — is the one case that has nowhere to fall back to. Those messages still arrive, over the chain, at chain speed.
+Chat fan-out uses Tor only (see "How fast chat reaches other instances" in §51), so with your Tor down no push lands anywhere: a peer's `https://` origin is reached through a Tor exit too. Those messages still arrive, through each receiving instance's head tailer, at chain speed (a few seconds), and through the durable poller in any case. I2P and Lokinet being down does not affect fan-out; it affects probes and price sampling. (Before the 2026-10 transport change a peer that also published a clearnet origin was dialled there directly when a hidden network was down. That fallback no longer exists.)
 
 **Lokinet is named more slowly than the other two, on purpose.** Your instance
 decides a network is its own fault from the shape of the failure. Tor and I2P
@@ -13821,7 +13950,7 @@ It prints the cold samples, then the warm ones on a single reused connection, th
 
 The estimate assumes three hidden legs. A user who reaches their own instance over the clearnet does not pay one of them, so for that user the real figure is lower.
 
-**Peers' idle connections now last five minutes.** The frontend nginx that every Tor and I2P visitor reaches sets `keepalive_timeout 300s 300s`. Before the final v1.18.0 review it used nginx's default of 75 seconds. Other instances renew their warmed connection to you every three minutes, so it was always closed by then, and each renewal paid for a new tunnel. `morphit-ops upgrade` refreshes the frontend config and restarts the container.
+**Peers' idle connections now last five minutes.** The frontend nginx that every Tor and I2P visitor reaches sets `keepalive_timeout 300s 300s`. Before the final v1.18.0 review it used nginx's default of 75 seconds. Other instances renew their warmed connection to you every three minutes, so it was always closed by then, and each renewal paid for a new tunnel. `morphit-ops upgrade` refreshes the frontend config and restarts the container. (Chat pushes no longer ride these connections: since the 2026-10 transport change each push builds its own Tor circuit. The three-minute visits to peers' onions still run; they let Tor keep each peer's onion descriptor and show a dead local Tor early.)
 
 ## 52. Fast-sync and the federation snapshot mirror
 

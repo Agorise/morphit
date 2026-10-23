@@ -747,14 +747,66 @@ export function decodeChatPub(b64: string): Uint8Array {
 // from it — ADR-0015 already accepted that a posting-key compromise opens
 // every message. Which version a sender uses is chatService's choice.
 
-/** The posting-key envelope's version. */
-export const POSTING_ENVELOPE_VERSION = 3;
+// ─── v4: v3 bound to its order and its send time (v1.21.14, review C-M2) ──
+//
+// v3 authenticates the TEXT, not where or when it was said. The order a
+// message is about travels beside the ciphertext (the record's
+// order_permlink) and its time is the indexer's created_at: an indexer, or
+// anyone who rebroadcasts the same bytes, could show an authenticated
+// "funds sent" under ANOTHER order of the same two people, or at another time.
+//
+// v4 is v3 with three more things the sender binds:
+//   owner — the account that posted the order ('' for none): one of the two
+//           parties. A permlink is unique per owner only, and either party may
+//           have an order by the same permlink (header `o`);
+//   order — the order permlink of the thread it was sent in ('' for none; the
+//           record's own order_permlink);
+//   t     — the chain's head time when it was sealed, in whole seconds
+//           (header `t`).
+// All three go into the content AAD and the commit, and every label says v4,
+// so a v4 message opens only under the order and the time it was sealed with.
+// The time a reader shows is chatService's shownTime.
+//
+// ROLLOUT. A reader that does not know v4 shows it as unreadable, so v1.21.14
+// READS v4 and still writes v3; the next release writes v4
+// (WRITE_ENVELOPE_V4).
+
+/**
+ * Whether a send is sealed as v4 rather than v3 (every sender: a
+ * conversation, chatService, and the settled-elsewhere notice).
+ *
+ * READ FIRST. A Morphit that does not know v4 shows a v4 message as
+ * unreadable, so this release reads v4 and keeps writing v3; the next release
+ * turns this on, once every instance runs a reader.
+ */
+export const WRITE_ENVELOPE_V4 = false;
+/** What a v4 envelope is bound to besides its accounts. */
+export interface EnvelopeBinding {
+	/** The order permlink of the thread; null or '' for none. */
+	readonly order: string | null;
+	/** Who posted that order: the sender or the recipient; null or '' with no
+	 *  order. */
+	readonly owner: string | null;
+	/** Chain head time at sealing, whole seconds since the epoch. */
+	readonly t: number;
+}
+/** A plausible v4 time: a whole number of seconds, after 2020 and before
+ *  2100 (anything else is refused, never shown). */
+export function validEnvelopeTime(t: unknown): t is number {
+	return (
+		typeof t === 'number' && Number.isSafeInteger(t) && t >= 1_577_836_800 && t < 4_102_444_800
+	);
+}
 /** At most this many recipient posting keys get a wrap. */
 export const MAX_RECIPIENT_KEYS = 3;
 
 /** The posting-key envelope on the wire (crypto side). */
 export interface PostingEnvelopeWire {
-	readonly v: 3;
+	readonly v: 3 | 4;
+	/** v4 only: the bound send time (EnvelopeBinding.t). */
+	readonly t?: number;
+	/** v4 only: the bound order owner (EnvelopeBinding.owner; '' for none). */
+	readonly o?: string;
 	readonly ciphertext: string; // base64 — the message under K (with tag)
 	readonly ephemeralPub: string; // base64 — 33 bytes
 	readonly nonce: string; // base64 — 12 bytes
@@ -799,6 +851,27 @@ export function postingPubOf(postingPriv: Uint8Array): Uint8Array {
 	return secp.getPublicKey(postingPriv, true);
 }
 
+/** The binding as the constructions use it: null for v3. */
+type Bind = { readonly owner: string; readonly order: string; readonly t: number } | null;
+const tagOf = (b: Bind): string => (b === null ? 'v3' : 'v4');
+/** v4's extra bytes for the AAD and the commit: \0 owner \0 order \0 t. */
+const bindSuffix = (b: Bind): string =>
+	b === null ? '' : `\u0000${b.owner}\u0000${b.order}\u0000${b.t}`;
+
+/** A v4 binding that can be: a plausible time, no NUL anywhere, and an order
+ *  owned by one of the two parties ('' and '' for a direct message). */
+function bindingOk(
+	owner: string,
+	order: string,
+	t: unknown,
+	senderAccount: string,
+	recipientAccount: string
+): boolean {
+	if (!validEnvelopeTime(t) || owner.includes('\u0000') || order.includes('\u0000')) return false;
+	if (order === '') return owner === '';
+	return owner === senderAccount || owner === recipientAccount;
+}
+
 function kekV3(
 	dh1: Uint8Array,
 	dh2: Uint8Array,
@@ -807,7 +880,8 @@ function kekV3(
 	senderKey: Uint8Array,
 	recipientKey: Uint8Array,
 	ephKey: Uint8Array,
-	self: boolean
+	self: boolean,
+	b: Bind
 ): Uint8Array {
 	if (dh1.length !== 32 || dh2.length !== 32) {
 		throw new Error('chat crypto: shared secrets must be 32 bytes');
@@ -816,7 +890,7 @@ function kekV3(
 	try {
 		const info = concatBytes(
 			enc.encode(
-				`${self ? 'morphit-chat-self-wrap-v3' : 'morphit-chat-wrap-v3'}/${senderAccount}\u0000${recipientAccount}\u0000`
+				`${self ? 'morphit-chat-self-wrap-' : 'morphit-chat-wrap-'}${tagOf(b)}/${senderAccount}\u0000${recipientAccount}\u0000`
 			),
 			senderKey,
 			recipientKey,
@@ -828,11 +902,18 @@ function kekV3(
 	}
 }
 
-const aadV3 = (senderAccount: string, recipientAccount: string): Uint8Array =>
-	enc.encode(`morphit-chat-aad-v3/${senderAccount}\u0000${recipientAccount}`);
-const aadWrapV3 = (senderAccount: string, recipientAccount: string, self: boolean): Uint8Array =>
+const aadV3 = (senderAccount: string, recipientAccount: string, b: Bind): Uint8Array =>
 	enc.encode(
-		`${self ? 'morphit-chat-self-wrap-aad-v3' : 'morphit-chat-wrap-aad-v3'}/${senderAccount}\u0000${recipientAccount}`
+		`morphit-chat-aad-${tagOf(b)}/${senderAccount}\u0000${recipientAccount}${bindSuffix(b)}`
+	);
+const aadWrapV3 = (
+	senderAccount: string,
+	recipientAccount: string,
+	self: boolean,
+	b: Bind
+): Uint8Array =>
+	enc.encode(
+		`${self ? 'morphit-chat-self-wrap-aad-' : 'morphit-chat-wrap-aad-'}${tagOf(b)}/${senderAccount}\u0000${recipientAccount}`
 	);
 const ZERO_NONCE = new Uint8Array(12);
 
@@ -847,27 +928,52 @@ function commitV3(
 	ct: Uint8Array,
 	eph: Uint8Array,
 	sk: Uint8Array,
-	rks: readonly Uint8Array[]
+	rks: readonly Uint8Array[],
+	b: Bind
 ): Uint8Array {
 	return sodium.crypto_generichash(
 		32,
-		concatBytes(enc.encode('morphit-chat-commit-v3\u0000'), nonce, ct, eph, sk, ...rks)
+		concatBytes(
+			enc.encode(`morphit-chat-commit-${tagOf(b)}${bindSuffix(b)}\u0000`),
+			nonce,
+			ct,
+			eph,
+			sk,
+			...rks
+		)
 	);
 }
 const wrapAad = (
 	senderAccount: string,
 	recipientAccount: string,
 	self: boolean,
-	commit: Uint8Array
-): Uint8Array => concatBytes(aadWrapV3(senderAccount, recipientAccount, self), commit);
+	commit: Uint8Array,
+	b: Bind
+): Uint8Array => concatBytes(aadWrapV3(senderAccount, recipientAccount, self, b), commit);
+
+/** The binding a caller asks for, checked: null (v3) when none. */
+function bindOf(
+	binding: EnvelopeBinding | undefined,
+	senderAccount: string,
+	recipientAccount: string
+): Bind {
+	if (binding === undefined) return null;
+	if (!validEnvelopeTime(binding.t)) throw new Error('chat crypto: envelope time out of range');
+	const order = binding.order ?? '';
+	const owner = binding.owner ?? '';
+	if (!bindingOk(owner, order, binding.t, senderAccount, recipientAccount))
+		throw new Error('chat crypto: bad order binding');
+	return { owner, order, t: binding.t };
+}
 
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
 	a.length === b.length && a.every((x, i) => x === b[i]);
 
 /**
- * Encrypt to a recipient's POSTING keys (v3). `recipientPostingPubs`: the keys
- * of their account that can sign alone (the first MAX_RECIPIENT_KEYS are
- * used). `senderPostingPriv`: our own posting private key.
+ * Encrypt to a recipient's POSTING keys (v3; v4 with `binding`).
+ * `recipientPostingPubs`: the keys of their account that can sign alone (the
+ * first MAX_RECIPIENT_KEYS are used). `senderPostingPriv`: our own posting
+ * private key.
  */
 export async function encryptToPostingKey(
 	plaintext: string,
@@ -875,9 +981,11 @@ export async function encryptToPostingKey(
 	senderPostingPriv: Uint8Array,
 	senderAccount: string,
 	recipientAccount: string,
-	includeSelfCopy = true
+	includeSelfCopy = true,
+	binding?: EnvelopeBinding
 ): Promise<PostingEnvelopeWire> {
 	await ensureSodium();
+	const b = bindOf(binding, senderAccount, recipientAccount);
 	const recipients = recipientPostingPubs.slice(0, MAX_RECIPIENT_KEYS);
 	if (recipients.length === 0 || !recipients.every(validPostingPub)) {
 		throw new Error('chat crypto: recipient posting key is not a usable secp256k1 key');
@@ -898,12 +1006,12 @@ export async function encryptToPostingKey(
 		const nonce = sodium.randombytes_buf(12);
 		const ct = sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
 			enc.encode(plaintext),
-			aadV3(senderAccount, recipientAccount),
+			aadV3(senderAccount, recipientAccount, b),
 			null,
 			nonce,
 			contentKey
 		);
-		const commit = commitV3(nonce, ct, ephKey, senderKey, recipients);
+		const commit = commitV3(nonce, ct, ephKey, senderKey, recipients, b);
 		const wraps: string[] = [];
 		let dh2First: Uint8Array | null = null;
 		for (const r of recipients) {
@@ -911,13 +1019,13 @@ export async function encryptToPostingKey(
 			const dh2 = ecdhX(senderPostingPriv, r, bad);
 			wipe.push(dh1, dh2);
 			if (dh2First === null) dh2First = dh2;
-			const kek = kekV3(dh1, dh2, senderAccount, recipientAccount, senderKey, r, ephKey, false);
+			const kek = kekV3(dh1, dh2, senderAccount, recipientAccount, senderKey, r, ephKey, false, b);
 			wipe.push(kek);
 			wraps.push(
 				toBase64(
 					sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
 						contentKey,
-						wrapAad(senderAccount, recipientAccount, false, commit),
+						wrapAad(senderAccount, recipientAccount, false, commit, b),
 						null,
 						ZERO_NONCE,
 						kek
@@ -937,13 +1045,14 @@ export async function encryptToPostingKey(
 				senderKey,
 				recipients[0]!,
 				ephKey,
-				true
+				true,
+				b
 			);
 			wipe.push(kekSelf);
 			selfCiphertext = toBase64(
 				sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
 					contentKey,
-					wrapAad(senderAccount, recipientAccount, true, commit),
+					wrapAad(senderAccount, recipientAccount, true, commit, b),
 					null,
 					ZERO_NONCE,
 					kekSelf
@@ -951,7 +1060,7 @@ export async function encryptToPostingKey(
 			);
 		}
 		return {
-			v: 3,
+			...(b === null ? { v: 3 as const } : { v: 4 as const, t: b.t, o: b.owner }),
 			ciphertext: toBase64(ct),
 			ephemeralPub: toBase64(ephKey),
 			nonce: toBase64(nonce),
@@ -966,6 +1075,8 @@ export async function encryptToPostingKey(
 }
 
 interface ParsedV3 {
+	/** null: v3. */
+	b: Bind;
 	eph: Uint8Array;
 	ct: Uint8Array;
 	nonce: Uint8Array;
@@ -974,9 +1085,19 @@ interface ParsedV3 {
 	wks: Uint8Array[];
 }
 
-function parseV3(envelope: PostingEnvelopeWire): ParsedV3 {
+/** `order`: the order permlink of the record it came in (v4 binds it, with
+ *  its owner from the header, one of the two accounts). */
+function parseV3(
+	envelope: PostingEnvelopeWire,
+	order: string | null,
+	senderAccount: string,
+	recipientAccount: string
+): ParsedV3 {
 	if (
-		envelope.v !== 3 ||
+		(envelope.v !== 3 && envelope.v !== 4) ||
+		(envelope.v === 4 &&
+			(typeof envelope.o !== 'string' ||
+				!bindingOk(envelope.o, order ?? '', envelope.t, senderAccount, recipientAccount))) ||
 		typeof envelope.senderKey !== 'string' ||
 		!Array.isArray(envelope.recipientKeys) ||
 		!Array.isArray(envelope.wraps) ||
@@ -988,6 +1109,7 @@ function parseV3(envelope: PostingEnvelopeWire): ParsedV3 {
 	}
 	try {
 		const p: ParsedV3 = {
+			b: envelope.v === 4 ? { owner: envelope.o!, order: order ?? '', t: envelope.t! } : null,
 			eph: fromBase64(envelope.ephemeralPub),
 			ct: fromBase64(envelope.ciphertext),
 			nonce: fromBase64(envelope.nonce),
@@ -1048,21 +1170,23 @@ export class NotForThisKeyError extends DecryptError {
 }
 
 /**
- * Open a v3 message sent TO us. `reader`: our posting key (postingReader).
- * `senderPostingPubs`: the sender's PINNED posting keys — the message is
- * `authenticated` only when it was made with one of them; it opens either way.
- * Throws NotForThisKeyError when no wrap is for our key, DecryptError on any
- * other failure (without detail).
+ * Open a v3 or v4 message sent TO us. `reader`: our posting key
+ * (postingReader). `senderPostingPubs`: the sender's PINNED posting keys — the
+ * message is `authenticated` only when it was made with one of them; it opens
+ * either way. `order`: the order permlink of the record it came in, which a v4
+ * message must have been sealed for. Throws NotForThisKeyError when no wrap is
+ * for our key, DecryptError on any other failure (without detail).
  */
 export async function decryptPostingEnvelope(
 	envelope: PostingEnvelopeWire,
 	reader: PostingReader,
 	senderAccount: string,
 	recipientAccount: string,
-	senderPostingPubs: readonly Uint8Array[] = []
+	senderPostingPubs: readonly Uint8Array[] = [],
+	order: string | null = null
 ): Promise<OpenedMessage> {
 	await ensureSodium();
-	const p = parseV3(envelope);
+	const p = parseV3(envelope, order, senderAccount, recipientAccount);
 	const i = p.rks.findIndex((k) => sameBytes(k, reader.pub));
 	if (i < 0) throw new NotForThisKeyError();
 	const wipe: Uint8Array[] = [];
@@ -1070,17 +1194,33 @@ export async function decryptPostingEnvelope(
 		const dh1 = ecdhX(reader.priv, p.eph, () => new DecryptError());
 		wipe.push(dh1);
 		const dh2 = staticSecret(reader, p.sk);
-		const kek = kekV3(dh1, dh2, senderAccount, recipientAccount, p.sk, p.rks[i]!, p.eph, false);
+		const kek = kekV3(
+			dh1,
+			dh2,
+			senderAccount,
+			recipientAccount,
+			p.sk,
+			p.rks[i]!,
+			p.eph,
+			false,
+			p.b
+		);
 		wipe.push(kek);
 		const k = aeadOpen(
 			p.wks[i]!,
-			wrapAad(senderAccount, recipientAccount, false, commitV3(p.nonce, p.ct, p.eph, p.sk, p.rks)),
+			wrapAad(
+				senderAccount,
+				recipientAccount,
+				false,
+				commitV3(p.nonce, p.ct, p.eph, p.sk, p.rks, p.b),
+				p.b
+			),
 			ZERO_NONCE,
 			kek
 		);
 		if (k === null || k.length !== 32) throw new DecryptError();
 		wipe.push(k);
-		const pt = aeadOpen(p.ct, aadV3(senderAccount, recipientAccount), p.nonce, k);
+		const pt = aeadOpen(p.ct, aadV3(senderAccount, recipientAccount, p.b), p.nonce, k);
 		if (pt === null) throw new DecryptError();
 		return {
 			text: new TextDecoder().decode(pt),
@@ -1092,19 +1232,20 @@ export async function decryptPostingEnvelope(
 }
 
 /**
- * Open OUR OWN self-copy of a v3 message we sent (keep-history mode). Throws
- * DecryptError when there is none, it was not made with our key, or it does
- * not open.
+ * Open OUR OWN self-copy of a v3 or v4 message we sent (keep-history mode;
+ * `order` as for decryptPostingEnvelope). Throws DecryptError when there is
+ * none, it was not made with our key, or it does not open.
  */
 export async function decryptPostingSelfCopy(
 	envelope: PostingEnvelopeWire,
 	reader: PostingReader,
 	senderAccount: string,
-	recipientAccount: string
+	recipientAccount: string,
+	order: string | null = null
 ): Promise<string> {
 	await ensureSodium();
 	if (envelope.selfCiphertext === undefined) throw new DecryptError();
-	const p = parseV3(envelope);
+	const p = parseV3(envelope, order, senderAccount, recipientAccount);
 	let wrap: Uint8Array;
 	try {
 		wrap = fromBase64(envelope.selfCiphertext);
@@ -1117,17 +1258,23 @@ export async function decryptPostingSelfCopy(
 		const dh1 = ecdhX(reader.priv, p.eph, () => new DecryptError());
 		wipe.push(dh1);
 		const dh2 = staticSecret(reader, p.rks[0]!);
-		const kek = kekV3(dh1, dh2, senderAccount, recipientAccount, p.sk, p.rks[0]!, p.eph, true);
+		const kek = kekV3(dh1, dh2, senderAccount, recipientAccount, p.sk, p.rks[0]!, p.eph, true, p.b);
 		wipe.push(kek);
 		const k = aeadOpen(
 			wrap,
-			wrapAad(senderAccount, recipientAccount, true, commitV3(p.nonce, p.ct, p.eph, p.sk, p.rks)),
+			wrapAad(
+				senderAccount,
+				recipientAccount,
+				true,
+				commitV3(p.nonce, p.ct, p.eph, p.sk, p.rks, p.b),
+				p.b
+			),
 			ZERO_NONCE,
 			kek
 		);
 		if (k === null || k.length !== 32) throw new DecryptError();
 		wipe.push(k);
-		const pt = aeadOpen(p.ct, aadV3(senderAccount, recipientAccount), p.nonce, k);
+		const pt = aeadOpen(p.ct, aadV3(senderAccount, recipientAccount, p.b), p.nonce, k);
 		if (pt === null) throw new DecryptError();
 		return new TextDecoder().decode(pt);
 	} finally {

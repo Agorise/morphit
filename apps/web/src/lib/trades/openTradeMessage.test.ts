@@ -83,3 +83,50 @@ describe('openTradeMessage (v3)', () => {
 		).toBeNull();
 	});
 });
+
+describe('openTradeMessage (v4, review C-M2)', () => {
+	async function v4Record(order: string, recordOrder: string | null): Promise<ChatMessageRecord> {
+		const env = await encryptToPostingKey(
+			'addr v4',
+			[buyer.pub],
+			seller.priv,
+			'seller-bo',
+			'buyer-anna',
+			true,
+			{ order, owner: 'seller-bo', t: 1_792_000_000 }
+		);
+		return {
+			id: 2,
+			sender: 'seller-bo',
+			recipient: 'buyer-anna',
+			ciphertext: env.ciphertext,
+			header: {
+				v: 4,
+				t: env.t,
+				o: env.o,
+				ephemeral_pub: env.ephemeralPub,
+				nonce: env.nonce,
+				sk: env.senderKey,
+				rk: env.recipientKeys,
+				wk: env.wraps
+			},
+			created_at: '2026-10-20T12:00:00.000Z',
+			...(recordOrder !== null ? { order_permlink: recordOrder } : {})
+		} as ChatMessageRecord;
+	}
+	it('opens a v4 message in the order thread it was sealed for', async () => {
+		await resolvePostingKeyPin('seller-bo', [b64(seller.pub)]);
+		expect(
+			await openTradeMessage(await v4Record('order-a', 'order-a'), 'buyer-anna', buyer.live)
+		).toBe('addr v4');
+	});
+	it('moved to another order thread (or out of one): nothing opens, nothing moves', async () => {
+		await resolvePostingKeyPin('seller-bo', [b64(seller.pub)]);
+		expect(
+			await openTradeMessage(await v4Record('order-a', 'order-b'), 'buyer-anna', buyer.live)
+		).toBeNull();
+		expect(
+			await openTradeMessage(await v4Record('order-a', null), 'buyer-anna', buyer.live)
+		).toBeNull();
+	});
+});

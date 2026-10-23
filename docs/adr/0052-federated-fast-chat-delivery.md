@@ -21,6 +21,15 @@ same emit point and does not remove the first.
 > connection, revealed which instance a chatting account uses. Source of
 > truth: the header of `apps/indexer/src/indexer/chatFastFederation.ts`.
 
+> **2026-10-21 amendment (v1.21.14, full chat audit).** Several statements
+> below no longer match the code: the transport, the queue bound, the ledger
+> ordering, the peer ranking, the batching, the clock-skew claim, what happens
+> to a slow push, and the first-message requirement. Each is marked in place
+> with **v1.21.14:**, and the section "Amendment — v1.21.14 (full chat
+> audit)" at the end lists every change and the delivery path for each kind
+> of instance pair. The rest of the text is kept as the record of what was
+> decided in September.
+
 ## Context
 
 ADR-0048 and ADR-0051 got the *indexer* out of the irreversibility wait: the head
@@ -50,6 +59,15 @@ The requirement is explicit and it is not a target, it is a definition:
 > **Under six seconds. Sending and receiving. Whatever kind of instance either
 > person is on. Including the first message of a conversation — the one that has
 > to appear in a stranger's inbox as a new chatroom request.**
+
+**v1.21.14:** until this release the first message missed this in three
+ways the audit reproduced: a sender with no `accounts` row (nearly every
+account older than Morphit) got no fast path on any route, a sender whose
+key was not yet confirmed lost the fast path for their first message on
+their own instance, and a first contact that paid the stranger fee was
+never fast-notified. The code paths now exist for all three (see the
+amendment at the end). Whether every instance pair meets six seconds over
+live Tor has not been measured in this tree.
 
 No amount of tuning gets there through the chain. 3,000 (block) + 2,000 (poll)
 alone is 5,000 ms before a single hidden hop, and there are three of those. The
@@ -114,6 +132,15 @@ if (fastDispatch !== undefined) fastDispatch.dispatchIfChat(trx);
 
 so the fan-out and the chain write overlap instead of queueing.
 
+**v1.21.14:** pushes go over **Tor only**. Each push builds a fresh circuit
+(random SOCKS credentials, `IsolateSOCKSAuth`), to the peer's onion or to its
+`https://` origin through a Tor exit; there is no clearnet, I2P or Lokinet
+push, and a node without Tor configured does not fan out. "Before it calls
+the chain" holds only for a message the sender's instance verified itself
+(the pre-send check, at most `PRE_VERIFY_PER_SEC` = 40 a second). A message
+it could not verify — no budget left, or a key that needs a chain read — goes
+to peers only after the node has accepted it (`dispatchedAfterChain`).
+
 **What makes this safe is that nothing is trusted.** The receiving instance
 verifies the pushed transaction's signature against the signer's posting key
 before it emits anything. A push is not an assertion that something happened; it
@@ -139,6 +166,12 @@ sentence above said "never". `fastpath-writes-nothing.test.ts` now drives that
 case against a real database and asserts `push_pending` is the only table
 touched, by one row.
 
+**v1.21.14:** there is a second such write. Since v1.21.9 the same enqueue
+(`enqueueChatPush`) also writes one `offline_notify_pending` row per thread,
+for a recipient with a confirmed offline-notice address
+(`offlineNoticeEnqueue.ts`). The test now asserts that these two tables, and
+no others, are written. No route on the fast path writes `chat_messages`.
+
 **Which posting key, and why it can be trusted.** The key checked is the one this
 instance holds in `accounts.posting_pubkey`. That makes the column
 security-critical, and it was not being kept current: it was written once and
@@ -155,12 +188,32 @@ answer means no fast verdict, and the message goes by chain delivery. A leaked
 key its owner rotated away from, before or after the upgrade, is never the key
 a push is checked against.
 
+**v1.21.14:** an account with **no** `accounts` row was answered "no key",
+never asked about. Rows exist only for accounts created after
+`MORPHIT_GENESIS_BLOCK` or that claimed a waiver or first-trade bonus, so
+nearly every older Blurt account got no fast path on any route.
+`postingKeyLookupFromDb` now asks the chain for such an account through the
+same two-operator quorum read, cooldown and in-memory cache, charged to its
+own budget (`'unknown'`, 30 reads a minute) so that naming accounts without a
+row cannot starve the other two budgets.
+
 Signature verification costs a **measured 4.36 ms** (~229/s/core), which is far
 too much to do on the response path at federation scale. So the route does the
 cheap half inline — `structuralCheckChatOp`, no crypto, no DB — answers **202**,
 and verifies on a worker with a bounded queue (`VERIFY_QUEUE_MAX = 500`) and a
 `setImmediate` yield between verifications so the event loop keeps serving SSE.
 Measured: **2 ms to answer vs 328 ms inline**.
+
+**v1.21.14:** 500 is no longer the bound, only its ceiling. Since v1.18.0 the
+live bound is `admissionDepthFor(cost)` in `federationChatFast.ts`: the
+queue-wait allowance (6,000 ms minus a 1,400 ms transport allowance) divided
+by the measured cost of one verification, never below 64 (`BATCH_MAX`) and
+never above 500. The cost estimate starts at a pessimistic 20 ms, so a
+freshly started instance admits 230 and relaxes as it measures itself.
+`/v1/health` reports it as `admissionDepth` and `verifyCostMs`. The
+`/v1/broadcast` route had no such bound on its own pre-send check until
+v1.21.14; it now runs at most `PRE_VERIFY_PER_SEC` (40) a second and defers
+the rest to after the node's acceptance.
 
 ### 3. Same-instance chat is delivered locally
 
@@ -169,6 +222,17 @@ never going to be reached by (2). `broadcast.ts` takes a `localChatDeliver`
 callback and hands the located chat op straight to the same emit point the
 federation intake uses. One instance, no network, no chain — **527 ms**
 clearnet, **1,334 ms** on a privacy-only instance, first contact.
+
+**v1.21.14:** local delivery runs only after the node has accepted the
+transaction, and only for a message whose signature verified on this
+instance. When the pre-send check could not verify it (no row, an
+unconfirmed key, the per-second budget spent), it used to be skipped for good;
+now, once the node has accepted it, the sender's key is read from the chain
+through the quorum refresher, bounded by `LOCAL_VERIFY_BUDGET_MS` (3 s), and
+the message is delivered locally if that read confirms the signature
+(`FastDispatchHandle.verifiedHere`). A locally delivered message is stamped
+with the sender's time read off the signed expiry (`sentAtFromExpiry`), as
+the peer route stamps it; it used to carry the server's own clock.
 
 ### 4. The notification gate consults the instance's own relay log
 
@@ -198,6 +262,12 @@ started. And because the entry is written only after the node accepted the
 message, a forged or rejected push records nothing — it cannot mint its own
 permission.
 
+**v1.21.14:** the entry is written only for a message whose signature also
+verified on this instance (at once, or after the bounded key read above), not
+on the node's acceptance alone: one lying node could otherwise assert a pair
+for any two accounts. The same log now also counts as "the recipient has
+replied" in the one-push-a-day cap (`chatPushEnqueue.ts`, audit S-M1).
+
 ### 5. A fast-emitted transaction is not emitted twice
 
 The head tailer will see, seconds later, the very transaction the fast path
@@ -205,6 +275,16 @@ already delivered. `fastEmitLedger` records the trx id **only on a real emit** �
 not on a drop, not on a could-not-tell — and the tailer skips what it finds
 there. `markFastEmitted` sits after the emit in `deliverVerifiedPush` for that
 reason; putting it before would silence the tailer for a message nobody received.
+
+**v1.21.14:** that sentence has been out of date since the v1.18.0 review
+(R8). The mark is now made after the block-list check and **before** the
+notify gate's `await`, because a local delivery and a peer's push of the same
+transaction could both pass the "already emitted?" check while the first
+waited on the gate, and both emit. Nothing between the mark and the emit can
+stop the emit (the gate decides only replay and push), so the original
+concern — a mark with no emit — still cannot happen: a dropped or
+could-not-check message (blocked, or a failed block-list read) is never
+marked. A synthetic `tag:` id is never marked.
 
 The **delivery path reads the ledger too**, not just the tailer. The fast route
 can reach the same transaction twice by itself: two peers can both push it, and
@@ -281,12 +361,36 @@ people mid-negotiation are not strangers, and a cap that bites hardest during a
 busy trade would be worse than none. Delivery into an open chatroom is untouched:
 a conversation you are looking at is not a notification.
 
+**v1.21.14:** "a message this instance relayed itself paid resource credits"
+needs a qualifier. Local delivery waits for the node to accept the
+transaction, so a locally delivered message has reached the chain's mempool.
+But a message that passes the sender's instance's pre-send check is pushed to
+peers **before** the node has accepted it, and may never be accepted — so on
+the receiving peer it has cost its sender nothing, which is why the peer
+route is the one metered. The metering itself (`fastNotifyBudget.ts`, 20 a
+minute per sender→recipient pair) is unchanged. A sender the durable gate
+already admits without a reply — one who paid the stranger fee for this
+recipient, or whose earlier message to them was stored — now passes the fast
+gate too, unmetered (`chatGates.senderAdmittedWithoutReply`); a fee seen at
+the chain head counts before its durable row exists (`headStrangerFees.ts`).
+
 The live inbox ping is now gated on the same `replayable` verdict the web push
 and the cold-start replay already used. It was the one unguarded route into
 someone's inbox, which mattered little when a message had to come out of a block
 and matters a great deal now that a peer can push one straight in.
 
 ### 9. Which peers get one of the bounded fan-out slots
+
+> **v1.21.14:** most of this section is now moot. Since the 2026-10 transport
+> change only probe-verified peers receive pushes at all: the directory query
+> keeps rows whose status is `good`, `quiet` or `syncing`, and `isFanOutPeer`
+> then drops a `good` the probe only listed without asking. `clearnet_blocked`,
+> `never`, `stale`, `unreachable` and unknown statuses never get a slot, so
+> their place in the ranking below no longer decides anything. Within a tier,
+> ties break by origin (case-insensitive), not by probe time or registration
+> time: a probe's time is stamped when it finishes, so a peer that stalled its
+> probe used to sort first. The 40-peer bound, the 500-row scan cap and
+> `peersTruncated` are unchanged. The ranking text below is kept as written.
 
 Every message goes to every peer, so the fan-out cost is linear in the peer
 count and is bounded at 40. Past that bound some instances get chain-speed chat,
@@ -357,6 +461,15 @@ sender of its own.
 
 ### Ordering is immune to clock skew, and that is not an accident
 
+> **v1.21.14:** not quite, and never was on every route. Local delivery
+> stamped messages with the server's wall clock until v1.21.14 (the audit
+> measured a 90 s gap for one message with a server clock 90 s fast); it now
+> uses the same expiry-derived time as the peer route. The head tailer stamps
+> the block timestamp, which is chain time. One clock still takes part:
+> `sentAtFromExpiry` never returns a time later than the receiving server's
+> own clock, so a receiving server whose clock runs behind chain time stamps
+> by its own clock instead.
+
 A fast-path message carries no timestamp; the receiver recovers one by
 subtracting a fixed lead from the transaction's signed `expiration`, and the
 transcript sorts strictly by it. That would be fragile if the expiry came from
@@ -375,6 +488,17 @@ while tidying a constant. `chat-expiry-lead-parity-smoke` asserts the round trip
 rather than the number, so drift on either side fails.
 
 ### Transport: the hidden-service pool
+
+> **Obsolete for chat (2026-10 transport change; v1.21.14).** Chat pushes no
+> longer use this pool. Each push goes through `postJsonViaTorIsolated` on a
+> fresh, isolated Tor circuit that is closed afterwards, because one pooled
+> connection carrying many accounts' pushes told the peer which instance those
+> accounts use. The pool still serves the login-pairing forward, and the
+> background visits to peers' onions (`warmAll`) still run every 3 minutes:
+> they no longer keep a connection warm for a message, but they let Tor cache
+> each peer's onion descriptor and they detect a dead local Tor before a user
+> does. The I2P and Lokinet connectors described below are no longer used by
+> fan-out. The section is kept as the record of the earlier design.
 
 A hidden service costs a **circuit build** (30-60 s cold) for every new
 connection, so the pool pins `CONNECTIONS_PER_ORIGIN = 1` and keeps it alive
@@ -426,6 +550,22 @@ would have left the probe writing `unreachable` across every I2P peer in the
 directory, which is worse than the sender losing one message.
 
 ### 8. A peer is an instance, not an address
+
+> **v1.21.14:** for chat fan-out a peer now has at most two addresses, both
+> reached over Tor (`fanOutPeerFromRow`): the onion it published on chain,
+> then its registered origin — itself an onion, or an `https://` origin
+> through a Tor exit (not offered on a hidden-only node). I2P and Lokinet
+> addresses are not used for pushes; the multi-network list below still
+> applies to `fastPeerFromRow`, which the login-pairing forward and the BTC
+> fee cross-check use. The "a peer failure does not fail over" rule was
+> narrowed: the addresses are now **hedged** (`HEDGE_AFTER_MS` = 2 s). The
+> next address starts beside the first when the first has not answered within
+> 2 s, and at once when the first failed locally or gave up without any
+> answer (a rendezvous that timed out never reached the peer). A peer that
+> answered with any HTTP status has spoken, and that is final. The first
+> success wins and the others are aborted; an aborted push closes its SOCKS
+> stream at once, mid-handshake or mid-TLS (audit S-L9). A duplicate that
+> lands anyway is collapsed by the receiver's replay memory.
 
 The first version of this chose ONE address per peer when the directory was
 read: prefer whatever hidden address the peer had published, and drop the rest.
@@ -531,6 +671,17 @@ coalesces into the next one (`BATCH_MAX = 64`). A lone message still leaves in
 (17.9×). A timer would have added latency to the common case to help the rare
 one; this adds latency to neither.
 
+**v1.21.14:** those figures hold for **one sender** only. Since the 2026-10
+transport change a batch carries one signing account's messages, and until
+v1.21.14 one push per peer was in flight at a time, so N people writing to
+users of the same instance at once paid N fresh circuits back to back (the
+audit measured 3 of 6 over six seconds at 1.5 s a push). Now `PeerSender`
+keeps one push in flight per **sender** per peer, up to
+`PEER_PUSHES_IN_FLIGHT` (8) at once, each on its own circuit; one sender's
+messages still go one push at a time, in order, coalescing while one is in
+flight (`BATCH_MAX` 64, `BATCH_MAX_BYTES` 200,000). The "2 round trips"
+figure was measured on a pooled warm connection, not on a fresh circuit.
+
 **Rate limiting had to be re-thought, not just re-tuned.** Over Tor every peer
 arrives as `127.0.0.1`, so a per-IP limit is really a *global* limit: at 240/min
 the 241st push in a minute — from any instance in the federation — was refused.
@@ -554,6 +705,13 @@ First contact / reply, message → recipient's inbox
 Against a 6,000 ms requirement. The worst case — two people on two different
 zero-clearnet instances, the case the requirement was written about — has
 **4.6 seconds of headroom**.
+
+**v1.21.14:** these tables, and the band table below, model each hidden hop
+as an already-established circuit with a fixed round trip (the smoke's
+delaying TCP tunnel). Since the 2026-10 transport change every push builds a
+fresh Tor circuit, and to an onion a fresh rendezvous, which these figures do
+not include. No measurement of that over live Tor exists in this tree yet;
+`ops/fastchat-latency-probe.sh` measures an operator's own circuits.
 
 ### The worst case, across the networks it actually runs on
 
@@ -589,6 +747,17 @@ wrong, and the peer is treated from then on as one that did not take the last
 message. A federation that cannot tell delivered from undelivered is a worse
 place to be than a slow one, so the timeout is a real ceiling even though it
 does not stop the message.
+
+**v1.21.14:** "the message still arrives" was false for the slow case that
+matters most. With a fresh circuit per push, the 4 s budget can run out
+while the onion rendezvous is still being built, before the request has been
+sent at all; the audit reproduced exactly that (aborted at 4,022 ms, nothing
+delivered, the failure recorded against the peer). Now the peer's next
+address — its `https://` origin through a Tor exit, when it has one — starts
+beside the onion after 2 s, and each address has its own 4 s budget. When
+neither delivers (a peer with only an onion, or both paths slow), the message
+reaches that instance through its own head tailer, and otherwise through the
+durable poller.
 
 Both numbers are derived from the source at run time rather than written down
 here, so they cannot drift apart from the code, and `Q8` lowers the timeout
@@ -630,6 +799,8 @@ always meant to allow, without widening what a stranger can do.
 **Cost.** A second delivery route to keep correct, and a real distributed-systems
 surface where there was none: dedupe across two paths, per-origin queues, pooled
 connections to hidden services, a ledger and a relay log that both expire.
+(**v1.21.14:** the pooled connections are gone from chat; the per-peer queue
+now runs one push per sender, up to eight at once, each on its own circuit.)
 Federation peers now talk to each other on a path that did not exist, which is
 new attack surface — bounded by the fact that everything on it is signature-
 verified and display-only.
@@ -667,7 +838,10 @@ record.
 **The risk we are NOT accepting** is unverified data reaching a user. Every
 pushed op is signature-checked before it is emitted, and the fast path still
 never writes the database — now enforced by a test on all three routes to the
-event bus rather than by intention.
+event bus rather than by intention. (**v1.21.14:** "never writes" means no
+message state: the notification queues `push_pending` and
+`offline_notify_pending` are written, as decision 2 states, and the test
+asserts those two tables and no others.)
 
 **What would invalidate this ADR.** If the fast path ever needs to write durable
 state — history, receipts, read markers — the argument collapses in the same way
@@ -774,3 +948,204 @@ already satisfied; and five harness needles were matched against the whole
 output, including the ✓ lines, so any failure at all satisfied them. A harness
 that cannot fail is the same shape of problem as a test that cannot fail, one
 level up.
+
+## Amendment — v1.21.14 (full chat audit, 2026-10-21)
+
+A full audit of the chat and inbox server code found that several parts of
+this design did not behave as written. The fixes below are in v1.21.14; each
+names its audit finding. Source of truth for each is the file named.
+
+### Transport and fan-out
+
+- **Tor only, a fresh circuit per push** (the 2026-10 transport change,
+  restated). `fanOutPeerFromRow` gives a peer at most two addresses: its
+  on-chain onion, then its registered origin (an onion, or an `https://`
+  origin through a Tor exit — not from a hidden-only node). A node with no
+  Tor configured does not fan out. I2P-only and Lokinet-only peers get no
+  push. Pushes go only to probe-verified peers (`good` after a real probe,
+  `quiet`, `syncing`), at most 40, from a peer list re-read every 5 minutes.
+- **One push per sender per peer, eight at once** (S-H1, `PeerSender`,
+  `PEER_PUSHES_IN_FLIGHT`). Different senders' pushes to one peer go out side
+  by side; one sender's go in order. At most 96 pushes are in flight across
+  all peers (`PUSHES_IN_FLIGHT_TOTAL`); past it a push waits for a free slot,
+  which goes to the waiting peer with the fewest pushes in flight. Key reads
+  for pushed messages have their own budget (`push`), so pushes naming
+  made-up senders cannot spend the reads the head tailer needs.
+- **Hedged addresses** (S-M5, `sendBatchToPeer`, `HEDGE_AFTER_MS` = 2 s). The
+  second address starts after 2 s without an answer, or at once after a local
+  fault or a no-answer failure. An HTTP answer of any status is final.
+- **An abandoned push closes its stream** (S-L9,
+  `makeIsolatedTorConnector`): mid-SOCKS or mid-TLS, at once, instead of
+  holding the stream until the handshake timeout.
+
+### Verification on the sender's instance
+
+- **Accounts with no `accounts` row** (S-C1, `postingKeyLookupFromDb`): their
+  key is read from the chain through the two-operator quorum, under its own
+  `'unknown'` budget of 30 reads a minute.
+- **Deferred messages are delivered locally after all** (S-M4,
+  `ChatFastDispatcher.verifiedHere`, `broadcast.ts`). After the node accepts
+  a message the pre-send check could not verify, a quorum key read (at most
+  `LOCAL_VERIFY_BUDGET_MS` = 3 s) decides local delivery and the outbound-pair
+  note.
+- **The pre-send check is budgeted** (S-M6, `PRE_VERIFY_PER_SEC` = 40). Past
+  it, a message is deferred: it goes to peers after the node accepts it, and
+  is checked locally only then.
+- **Local delivery uses the sender's time** (S-L1, `sentAtFromExpiry`).
+
+### The head tailer (ADR-0048)
+
+- **Fixed rate, 1,000 ms by default** (S-H4,
+  `MORPHIT_INDEXER_FASTPATH_INTERVAL_MS`): the next tick is due one interval
+  after the previous one started. A tick asks for the block after the last
+  one scanned first, so a new block costs one RPC round trip; the head number
+  is read after a block is found and on one idle tick in ten
+  (`HEAD_READ_EVERY_TICKS`).
+- **Rechecks** (S-M4, `RECHECK_DELAYS_MS`): a chat op whose signature could
+  not be checked yet (the sender's key needs a chain read) is looked at again
+  after 0.75 s, then 2 s and 4 s later; at most 200 wait at once
+  (`RECHECK_MAX`).
+- **Blocks seen at the head** (S-L2, `headBlocks.ts`): a posting-signed
+  `morphit_block_v1` op is honoured by the tailer, the federation intake and
+  local delivery for 15 minutes, before the durable block list has it. An
+  unblock seen at the head never overrides the durable list. A block whose
+  blocker's key needs a chain read is PENDING: the pair is held back for up
+  to 10 s (`HEAD_BLOCK_PENDING_MS`) while the op is looked at again on the
+  recheck schedule; verified, it is recorded; unverifiable, it is dropped and
+  the messages it held are looked at again. A block op whose blocker's key IS
+  on file and did not sign it holds nothing back (a lone node could otherwise
+  hold any pair); it is only looked at again, in case the key was rotated.
+- **Stranger fees seen at the head** (S-H3, `headStrangerFees.ts`): a fee op
+  signed by the payer's active authority (keys two RPC operators agree on)
+  that passes the durable handler's own `evaluateStrangerFee` is remembered in
+  memory for 15 minutes.
+
+### Notifications and the inbox
+
+- **Paid and admitted first contacts reach the inbox fast** (S-H3,
+  `fastNotifyGate.ts`, `chatGates.senderAdmittedWithoutReply`,
+  `parkedFirstContacts.ts`). The gate admits a sender with a stored message to
+  this recipient, a recorded stranger fee, or a fee seen at the head. A
+  message refused by the gate is parked for up to 2 minutes (5 per pair, 10 per
+  sender, 5,000 in all) and announced if its fee is recognised in that time — after the
+  block list is asked again. The gate applies the durable handler's no-reply
+  caps (50 unanswered messages per pair, 20 new senders per recipient a day,
+  `chatGates.noReplyLimits`) to every sender it admits, order responses
+  included, counting this sender's own messages it announced that are not
+  stored yet (each once). The fan-in is the durable count only: a push need
+  never reach the chain, so announced senders must not crowd out real ones.
+  The head tailer verifies a message before it gates it.
+- **One push a day until the recipient replies, and it lasts a day**
+  (S-M1/M2/M3, `chatPushEnqueue.quietUntilReply`, relay
+  `pushQueueJanitor.CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS` = 24 h): this
+  instance's own relay log counts as a reply, an earlier push is matched by
+  the exact thread path, and chat/order push tombstones are kept 24 hours.
+- **Offline notices only for stored messages** (S-L8, relay
+  `notify/worker.ts`): a queued notice is sent only once its message is in
+  `chat_messages`; it waits up to 3 hours and is then dropped. Any stored
+  message from that peer in that thread the recipient has neither read nor
+  answered counts, not only the newest. The fast Web Push still goes out
+  before the chain has the message, by design.
+- **Push sending no longer waits on one slow push service** (S-L7, relay
+  `pushSender.ts`, `PUSH_ROWS_IN_FLIGHT` = 32, at most 4 passes at once).
+- **The durable activity ping carries the real direction** (S-L5).
+
+### The durable record
+
+- **Two operators confirm every block that carries a chat or inbox op**
+  (S-H2, `fee/btcFeeBlockConfirm.ts`, `CHAT_TRUST_OP_IDS`: chat, chat_read,
+  chat_folders, chat_identity, stranger_fee, block). The block is applied only
+  when two RPC operators serve the same transaction at each such position; a
+  forged op, or one served with its signatures stripped, is never applied. A
+  pool with one operator applies such blocks single-source, as before. A block
+  whose ONLY such ops are chat and inbox ops waits for two operators at most
+  10 minutes (`CHAT_QUORUM_WAIT_MS`), then is applied on the serving
+  operator's word with an error in the log — anyone can put a chat op in any
+  block, and without the bound an outage of all but one operator stopped the
+  indexing of everything at the first one. The wait is ONE budget per outage
+  (v1.21.14 review): once spent, later chat-only blocks are applied at once
+  until a quorum read succeeds again, and the pool is asked again at most every
+  `OUTAGE_REPROBE_MS` (1 minute) — a wait per block cost N × 10 minutes for N
+  chat blocks, with every order behind them waiting too. A restart starts a new
+  outage. The second operator's copy of each chat block in a fetched window is
+  asked for ahead of applying it, `PREFETCH_IN_FLIGHT` (8) at a time. Blocks
+  with release, RPC-directory or numbered BTC order ops still wait for two
+  operators however long it takes.
+- Two `chat_folders` ops in one block: the later wins (S-L4). Chat-identity
+  keys of small order: the byte list stands (S-L3's numeric comparison was a
+  new rejection rule, changing verdicts on history or needing every instance
+  before the consensus-v2 activation; no client sends to a chat key any more,
+  so it protected nothing — v1.21.14 review).
+
+### Privacy
+
+- **Chat streams need a ticket** (S-M8, S-M7; `api/streamTicket.ts`). Both
+  `/v1/chat-activity/:account/stream` and `/v1/chat/:a/:b/stream` answer
+  `403 stream_ticket_required` without `?ticket=` (403: BunkerWeb's
+  bad-behavior ban counts 401): a statement
+  `{"v":1,"a":account,"h":host,"e":expiry}` signed by the account's posting
+  key over `sha256("morphit-stream-ticket-v1\n" + payload)`, bound to one of
+  the names this instance answers to, valid at most 372 days (a browser's
+  own ticket: 7 days, signed again daily; a paired desktop's: the pairing's
+  year). Before this,
+  anyone could hold an account's streams open on every instance and see which
+  one showed its messages first (local delivery). With the account known, a
+  hidden-service visitor's chat streams count against that account
+  (12 at most) rather than the allowance every Tor/I2P visitor shares; all
+  hidden-service streams together, ticketed or not, stay within 1,500 (of
+  which anonymous ones at most 1,000), so clearnet keeps its share. The
+  ticket's host binding accepts the request's own `Host` only for a hidden
+  network the operator configured no address for. Checking a ticket costs a
+  signature recovery (for tickets not seen before at most 100 a second when
+  the instance holds the account's key, 40 when it does not) and,
+  for a key not confirmed here, a chain read charged to its own `ticket`
+  budget, never the budgets message delivery uses; a key on file the account
+  has rotated away from is read again once. **Residual:** a counterparty
+  holds tickets for their own streams, so the person you write with can
+  still see which instance shows your reply first, and so learn your
+  instance.
+- **The posting keys a v3 message is encrypted to come from a quorum**
+  (S-M9, `api/accountKeys.ts`): `/v1/account/:account/keys` answers only when
+  two RPC operators agree on every authority and the memo key (502 until
+  then).
+- **No account names in chat warn logs** (S-L6).
+
+### The edge (found live, 2026-10-21)
+
+- **Live streams reach the visitor unbuffered through BunkerWeb**
+  (`ops/bunkerweb/frontend/nginx.conf`, `proxy_pass_header X-Accel-Buffering`).
+  BunkerWeb buffers relayed responses by default and nginx hides X-Accel-*
+  headers from its upstream, so the indexer's "do not buffer" never reached the
+  edge: on a live instance every chat event waited about a minute there, while
+  the fast path had delivered it to the frontend in under a second. The
+  upgrade's frontend check rebuilds a frontend without the line.
+
+### Delivery paths, by instance pair (v1.21.14)
+
+Every message starts the same way: the browser sends it to its own instance's
+`/v1/broadcast`. "Tailer" is the receiving instance's head tailer: up to one
+block interval (3 s) for the message to reach a block, up to one tick
+(1 s by default) to the next poll, one block read, and the signature check,
+plus the rechecks above when the sender's key needs a chain read. "Durable"
+is the irreversible poller, 45–63 s, and for these ops only once two
+operators serve the block.
+
+| Pair | Fast route | When it does not land |
+|---|---|---|
+| Both on one instance | Local delivery once the node accepts the message (at once if pre-verified, else after a quorum key read of at most 3 s) | Tailer, then durable |
+| Sender's instance runs Tor → peer with an onion | Push over a fresh circuit to the onion; its `https://` origin through a Tor exit beside it after 2 s, if it has one | Tailer, then durable |
+| Sender's instance runs Tor → peer with an `https://` origin only | Push through a Tor exit (not from a hidden-only node) | Tailer, then durable |
+| Sender's instance has no Tor configured → any peer | None | Tailer, then durable |
+| Any → I2P-only or Lokinet-only peer | None | Tailer, then durable |
+| Any → peer not probe-verified, or past the 40-peer bound | None | Tailer, then durable |
+| Read receipts, chat folders, chat identity | None (the tailer does not read them) | Durable |
+
+The notify gate is separate from delivery: a message reaches an open
+chatroom on any of these routes, while the inbox ping, the push and the
+replay follow `fastChatNotifyAllowed`. Measured end to end (2026-10-21) on a
+private Tor network with real circuits and onion rendezvous, three instances
+(two clearnet+onion, one tor-only) and a local chain: established
+conversations 0.04-3.89 s in all 25 view combinations, paid first contacts
+0.6-1.1 s, immediate replies up to 2.65 s, a peer's onion down 0.28-3.49 s.
+Public Tor's hops are slower than a private network's; that is not measured
+here.

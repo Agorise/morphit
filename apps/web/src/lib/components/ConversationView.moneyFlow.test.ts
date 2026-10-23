@@ -77,7 +77,7 @@ vi.mock('$lib/indexer/client', () => ({
 	getOrder: async (owner: string) =>
 		served !== null && owner === served.owner
 			? { ok: true, data: { item: served.item } }
-			: { ok: false, error: { code: 'not_found', message: 'x' } },
+			: { ok: false, code: 'not_found', message: 'x' },
 	getReputationReceipt: async () => ({ ok: false, error: { code: 'x', message: 'x' } }),
 	getFeedbackGiven: async () => ({ ok: false, error: { code: 'x', message: 'x' } })
 }));
@@ -146,6 +146,7 @@ async function renderRow(
 	clearAllTradeStates();
 	if (opts.addressShared) {
 		recordAddressShared({
+			orderOwner: owner,
 			orderPermlink: PERMLINK,
 			peer: PEER,
 			method: 'xmr',
@@ -155,6 +156,7 @@ async function renderRow(
 	}
 	if (opts.paid) {
 		recordFundsSent({
+			orderOwner: owner,
 			orderPermlink: PERMLINK,
 			peer: PEER,
 			method: 'xmr',

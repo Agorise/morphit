@@ -386,8 +386,10 @@
 			"unrecorded_label": "Nie zapisano w blockchainie",
 			"unrecorded_detail": "Ta wiadomość dotarła do Ciebie bezpośrednio z serwera nadawcy, ale blockchain nigdy jej nie zapisał, więc nie ma trwałego dowodu, że została wysłana. Jeśli aplikacja nadawcy zgłosiła ją jako niewysłaną, może wysłać ją ponownie.",
 			"unrecorded_detail_own": "Ta wiadomość została wysłana z innej Twojej sesji, ale blockchain nigdy jej nie zapisał, więc nie ma trwałego dowodu, że została wysłana. Możesz wysłać ją ponownie.",
-			"sender_unverified": "Nadawca niezweryfikowany: ta wiadomość przyszła w starszym formacie (albo po zmianie klucza, której nie zaakceptowałeś), więc nie da się udowodnić, że napisała ją ta osoba. Nie płać na adres z tej wiadomości, zanim nie potwierdzisz go z nią w inny sposób.",
-			"peer_no_posting_key": "To konto nie ma własnego klucza posting (zarządzają nim inne konta), więc nie da się wysyłać do niego szyfrowanych wiadomości."
+			"sender_unverified": "Nadawca niezweryfikowany: klucze konta tej osoby zmieniły się od waszej ostatniej rozmowy, a ty nie porównałeś jeszcze nowego numeru bezpieczeństwa (⋮ → Zweryfikuj rozmówcę), więc nie da się udowodnić, że to ona napisała tę wiadomość. Nie płać na adres z tej wiadomości, zanim nie potwierdzisz go z nią w inny sposób.",
+			"sender_unverified_older_format": "Wysłano ze starszej wersji aplikacji, więc nie da się potwierdzić, że ta wiadomość pochodzi od tej osoby — to normalne, dopóki wszyscy nie zaktualizują. Zanim zapłacisz na adres z tej wiadomości, potwierdź go z nią w inny sposób.",
+			"peer_no_posting_key": "To konto nie ma własnego klucza posting (zarządzają nim inne konta), więc nie da się wysyłać do niego szyfrowanych wiadomości.",
+			"too_long": "Nie wysłano: za długie na jedną wiadomość czatu. Skróć ją i wyślij ponownie."
 		},
 		"composer": {
 			"aria_label": "Wyślij wiadomość",
@@ -502,8 +504,7 @@
 			},
 			"chain_unreachable": "Nie udało się połączyć z blockchainem, aby sprawdzić klucze tego kontaktu, więc wiadomość nie została wysłana. W sieciach Tor i I2P zdarza się to często, bo nawiązanie połączenia trwa dłużej. Nic złego się nie stało — spróbuj ponownie za chwilę.",
 			"pub_pin_key_changed": "Nie wysłano: klucz tej osoby się zmienił. Dzieje się tak, gdy zresetuje swoje klucze — albo gdy ktoś próbuje czytać twoje wiadomości. Otwórz ⋮ → Zweryfikuj rozmówcę i porównaj z tą osobą nowy numer bezpieczeństwa innym kanałem, zanim go zaakceptujesz.",
-			"accept_new_key": "Porównałem — zaakceptuj nowy klucz",
-			"pub_pin_posting_key_changed": "Nie wysłano: to nie są klucze, które sprawdziłeś dla tej osoby. Jej konto ma nowy klucz albo do tej pory pisałeś do niej tylko w starszym formacie. Dzieje się tak, gdy ktoś zresetuje lub doda klucze — albo gdy ktoś próbuje czytać twoje wiadomości. Otwórz ⋮ → Zweryfikuj rozmówcę i porównaj z tą osobą numer bezpieczeństwa innym kanałem, zanim go zaakceptujesz.",
+			"pub_pin_posting_key_changed": "Nie wysłano: klucze konta tej osoby zmieniły się od waszej ostatniej rozmowy. Dzieje się tak, gdy ktoś zresetuje lub doda klucze — albo gdy ktoś próbuje czytać twoje wiadomości. Otwórz ⋮ → Zweryfikuj rozmówcę i porównaj z tą osobą numer bezpieczeństwa innym kanałem, zanim go zaakceptujesz.",
 			"pub_pin_withdrawn": "Nie udało się bezpiecznie wysłać: Twój serwer twierdzi, że ta osoba nie ma już klucza, który wcześniej zgłaszał, ale klucz zapisany w blockchainie nie może zniknąć. Serwer może być niezsynchronizowany lub zmyślać dane. Spróbuj ponownie później albo użyj innej instancji Morphit."
 		},
 		"live": "Na żywo",
@@ -608,7 +609,8 @@
 			"address_invalid_xrp": "Nieprawidłowy adres XRP Ledger.  Oczekiwany adres zaczynający się od r, po którym następuje 24-34 znaków base58 (brak destination tag w tym polu).",
 			"pill_method_xrp": "Ripple (XRP)",
 			"blurt_account_not_found": "Nie istnieje konto Blurt o tej nazwie.",
-			"asset_label": "Moneta"
+			"asset_label": "Moneta",
+			"too_long_to_send": "To jest za długie na jedną wiadomość czatu. Skróć notatkę lub link PayJoin i spróbuj ponownie."
 		},
 		"funds_sent": {
 			"button": "Zapłać teraz",
@@ -722,10 +724,6 @@
 			"subtitle": "Porównaj ten 60-cyfrowy numer bezpieczeństwa z @{peer} przez zaufany kanał poza {brand} (rozmowa głosowa, osobiście, inna platforma). Jeśli obie strony widzą ten sam numer, nikt nie podmienił waszych kluczy.",
 			"computing": "Obliczam numer bezpieczeństwa…",
 			"locked": "Najpierw odblokuj konto, aby obliczyć numer bezpieczeństwa.",
-			"tamper_heading": "Wykryto manipulację — NIE kontynuuj rozmowy",
-			"tamper_body": "Klucz czatu, który indekser podał dla tego rozmówcy, nie zgadza się z łańcuchem. To silny sygnał MITM lub kompromitacji. Przestań ufać tej rozmowie, dopóki nie zrozumiesz dlaczego.",
-			"error_indexer": "Nie udało się pobrać klucza czatu rozmówcy z indeksera.",
-			"error_bad_key": "Klucz czatu rozmówcy jest nieprawidłowy.",
 			"error_unknown": "Nie udało się obliczyć numeru bezpieczeństwa. Spróbuj ponownie.",
 			"retry": "Ponów",
 			"fingerprint_aria": "Numer bezpieczeństwa, 12 grup po 5 cyfr",
@@ -744,9 +742,11 @@
 			"key_changed_accept": "Numery się zgadzają — zaakceptuj nowy klucz",
 			"no_account": "Nie ma konta Blurt o tej nazwie, więc nie ma numeru bezpieczeństwa do porównania.",
 			"no_posting_key": "To konto nie ma własnego klucza posting (zarządzają nim inne konta), więc nie ma numeru bezpieczeństwa do porównania.",
-			"own_key_stale": "Twój klucz w blockchainie jest stary (od tego czasu zmieniłeś klucze). Zostanie automatycznie zastąpiony, gdy następnym razem otworzysz czat, mając dość BLURT na opłatę sieciową. Do tego czasu @{peer} może widzieć inny numer.",
 			"first_use_note": "To klucze @{peer} w postaci, w jakiej blockchain podaje je teraz, i nic nie jest jeszcze przypięte. Jeśli wasze numery się zgadzają, użyj tych kluczy, aby twoje wiadomości trafiały dokładnie do nich.",
-			"first_use_accept": "Numery się zgadzają — użyj tych kluczy"
+			"first_use_accept": "Numery się zgadzają — użyj tych kluczy",
+			"own_key_missing": "Ta strona nie wymienia klucza posting, którym się zalogowałeś, wśród kluczy twojego konta, więc nie ma numeru bezpieczeństwa do porównania. Jeśli przed chwilą nie zmieniałeś kluczy, nie powierzaj tej stronie swoich czatów.",
+			"own_extra_heading": "Twoje konto ma inne klucze posting",
+			"own_extra_body": "Oprócz klucza, którym się zalogowałeś, ta strona wymienia dla twojego konta poniższe klucze posting, a wiadomości do ciebie są szyfrowane także dla nich. Jeśli któryś z nich nie jest twój, jego posiadacz może czytać wiadomości wysyłane do ciebie: zmień klucze i nie powierzaj tej stronie swoich czatów."
 		},
 		"boot_failed": "Nie udało się załadować czatu. Spróbuj odświeżyć stronę.",
 		"mailing_address": {
@@ -1495,7 +1495,7 @@
 			},
 			"chat_identity_key": {
 				"q": "Czy muszę skonfigurować osobny klucz, aby korzystać z czatu?",
-				"a": "Nie. Czat używa twojego klucza posting Blurt — klucza, który już masz. Nie ma nic dodatkowego do tworzenia, publikowania, zapisywania ani gubienia.\n\nJak to działa:\n• Wiadomości do ciebie są szyfrowane twoim publicznym kluczem posting, który jest w łańcuchu Blurt od chwili utworzenia twojego konta. Każdy może do ciebie napisać, nawet jeśli nigdy nie otworzyłeś czatu, a ty czytasz wiadomości, gdy tylko się zalogujesz. Nadawca płaci niewielką opłatę sieciową; do odebrania wiadomości nie potrzebujesz BLURT.\n• Twój klucz prywatny nigdy nie opuszcza twojej przeglądarki.\n• Rozmowy rozpoczęte przed wersją 1.21.13 między dwiema osobami, które obie otworzyły już czat, mogą używać klucza utworzonego z klucza posting i opublikowanego wtedy w łańcuchu. Nadal działają tak jak wcześniej. Jeśli wtedy taki klucz opublikowałeś, a później zmienisz klucz posting, nowy zostanie opublikowany za ciebie przy następnym otwarciu czatu, za niewielką opłatą sieciową.\n\nKompromis: każdy, kto zdobędzie twój klucz posting — na przykład kradnąc twoją frazę z 12 słów — może też czytać wszystkie twoje dawne czaty, a nowe — dopóki nie zmienisz klucza posting. I tak mógłby się już pod ciebie podszywać, więc to, co trzeba chronić, się nie zmienia: trzymaj swoją frazę z 12 słów i hasło w bezpiecznym miejscu."
+				"a": "Nie. Czat używa twojego klucza posting Blurt — klucza, który już masz. Nie ma nic dodatkowego do tworzenia, publikowania, zapisywania ani gubienia.\n\nJak to działa:\n• Wiadomości do ciebie są szyfrowane twoim publicznym kluczem posting, który jest w łańcuchu Blurt od chwili utworzenia twojego konta. Każdy może do ciebie napisać, nawet jeśli nigdy nie otworzyłeś czatu, a ty czytasz wiadomości, gdy tylko się zalogujesz. Nadawca płaci niewielką opłatę sieciową; do odebrania wiadomości nie potrzebujesz BLURT.\n• Twój klucz prywatny nigdy nie opuszcza twojej przeglądarki.\n• Rozmowy sprzed wersji 1.21.14 mogą zawierać wiadomości w starszym formacie, który używał klucza utworzonego z klucza posting i opublikowanego wtedy w łańcuchu. Nadal da się je przeczytać. Od wersji 1.21.14 każda nowa wiadomość używa twojego klucza posting i nic nie jest już za ciebie publikowane.\n\nKompromis: każdy, kto zdobędzie twój klucz posting — na przykład kradnąc twoją frazę z 12 słów — może też czytać wszystkie twoje dawne czaty, a nowe — dopóki nie zmienisz klucza posting. I tak mógłby się już pod ciebie podszywać, więc to, co trzeba chronić, się nie zmienia: trzymaj swoją frazę z 12 słów i hasło w bezpiecznym miejscu."
 			},
 			"syndicate_trade_announcement": {
 				"q": "Co to jest pole „Opublikuj moje zlecenie na blogu Blurt”?",
@@ -1775,7 +1775,7 @@
 			},
 			"ip_address_and_rpc_nodes": {
 				"q": "Czy ktokolwiek widzi lub ujawnia mój adres IP, gdy korzystam z {brand}?",
-				"a": "**Co widzi ta strona.** Jak każda witryna, serwer dostaje twój adres IP przy każdym żądaniu. Kod trzyma go tylko w pamięci, na potrzeby limitów — około minuty dla zwykłych żądań, do 24 godzin dla limitów rejestracji — i nigdy nie zapisuje go na dysku ani w logu, ani nigdzie go nie wysyła. Serwer WWW trzyma adresy tylko w pamięci na potrzeby własnych limitów i krótkich blokad i nie prowadzi z nimi logu dostępu. Bez ciasteczek, analityki, trackerów i telemetrii. Zlecenia, szyfrowany czat, salda i dane eksploratora bloków są w całości zabezpieczone on-chain.\n\n**Jedyny możliwy wyciek IP.** Najwyżej raz dziennie (i raz po każdej aktualizacji strony albo gdy naciśniesz **Spróbuj ponownie** w panelu opłaty) twoja przeglądarka pyta publiczny węzeł sieci — węzeł RPC Blurt prowadzony przez kogoś innego — o podpisany zapis wydania, który mówi, która wersja Morphit jest aktualna. To dwa małe żądania do jednego węzła (każde może poprzedzać zapytanie wstępne CORS): ostatnie 100 wpisów historii @morphit, a potem blok zawierający wydanie. Inny węzeł jest pytany o to samo tylko wtedy, gdy ten węzeł zawiedzie, wyśle zapis, którego nie da się zweryfikować, albo wskaże inne wydanie niż to, na którym działa ta strona. Jeśli wydanie jest starsze niż te 100 wpisów, wykonywane jest jeszcze jedno żądanie historii (do około 115 KB). Wynik jest zapamiętywany na 24 godziny i współdzielony przez wszystkie twoje karty; jeśli węzeł oferuje tylko wydanie starsze niż to na tej stronie, przeglądarka zapyta ponownie w ciągu godziny. Jeśli twoja przeglądarka blokuje pamięć tej strony, nie może zapamiętać wyniku, więc pyta za każdym razem, gdy otwierasz {brand|Morphita}. Wszystko to możesz obserwować w zakładce Sieć w przeglądarce.\n\n**Które węzły.** Pod adresem clearnet https lub zwykłym http: pięć publicznych węzłów clearnet. Pod adresem .onion: tylko siedem węzłów .onion. Pod adresem .i2p: tylko siedem węzłów .b32.i2p.\n\n**Dlaczego.** Zapis podaje aktualne wydanie, adresy opłat Morphit i odciski plików startowych aplikacji i musi mieć podpis @morphit. Zły węzeł może sprawić, że sprawdzenie się nie powiedzie, albo opóźnić powiadomienie o aktualizacji, ale nie podrobi wydania. Sprawdzenie wyłapuje nieaktualną lub uszkodzoną wersję — ale nie operatora, który celowo serwuje zmieniony kod, bo ten operator serwuje też samo sprawdzenie.\n\n**Czego dowiaduje się węzeł.** Twojego adresu IP, adresu tej strony (w .onion lub .i2p — tego ukrytego adresu), User-Agenta i języka twojej przeglądarki oraz tego, że ktoś poprosił o historię wydań @morphit. Nie twojej nazwy użytkownika, zleceń, czatu ani sald.\n\n**Używaj Tora lub VPN-a**, a ta luka jest zamknięta: oba ukrywają twój IP przed węzłami i przed twoim operatorem."
+				"a": "**Co widzi ta strona.** Jak każda witryna, serwer dostaje twój adres IP przy każdym żądaniu. Kod trzyma go tylko w pamięci, na potrzeby limitów — około minuty dla zwykłych żądań, do 24 godzin dla limitów rejestracji — i nigdy nie zapisuje go na dysku ani w logu, ani nigdzie go nie wysyła. Serwer WWW trzyma adresy tylko w pamięci na potrzeby własnych limitów i krótkich blokad i nie prowadzi z nimi logu dostępu. Bez ciasteczek, analityki, trackerów i telemetrii. Zlecenia, szyfrowany czat, salda i dane eksploratora bloków są w całości zabezpieczone on-chain.\n\n**Nikt więcej.** Twoja przeglądarka rozmawia z tą stroną i z niczym innym — z żadnym węzłem Blurt, żadnym serwisem kursów, żadnym trackerem. Jedynym wyjątkiem są powiadomienia push, jeśli je włączysz (strony dostępne tylko przez Tor lub I2P ich nie oferują): wtedy przeglądarka korzysta też z usługi push swojego producenta (Google, Mozilla, Apple lub Microsoft), która dostarcza każde powiadomienie zaszyfrowane i widzi, kiedy przychodzi — zobacz „Jak powiadomienia push działają z moją prywatnością?”. Polityka bezpieczeństwa tej strony (jej Content-Security-Policy) pozwala przeglądarce łączyć się tylko z tą stroną. Każdy odczyt z łańcucha Blurt, każde wysłanie i codzienne sprawdzenie wydania idą przez tę stronę, która pyta sieć za ciebie: węzły sieci widzą tę stronę, nigdy ciebie.\n\n**Sprawdzenie wydania.** Najwyżej raz dziennie (i raz po każdej aktualizacji strony albo gdy naciśniesz **Spróbuj ponownie** w panelu opłat) twoja przeglądarka prosi tę stronę o podpisany wpis wydania, który mówi, która wersja Morphit jest aktualna: dwa małe żądania — ostatnie 100 wpisów historii @morphit, potem blok z wydaniem. Jeśli wydanie jest starsze niż te 100 wpisów, idzie jeszcze jedno żądanie historii (do około 115 KB). Ta strona odpowiada tylko tym, co zgodnie podają dwaj operatorzy RPC Blurt, a twoja przeglądarka sama sprawdza podpis @morphit: nikt nie podrobi wydania, choć ta strona mogłaby przemilczeć nowsze. Wynik jest pamiętany przez 24 godziny i wspólny dla wszystkich twoich kart; jeśli wpis wskazuje wydanie starsze niż to na tej stronie, przeglądarka pyta ponownie w ciągu godziny, a jeśli ta strona nie zdołała uzyskać odpowiedzi — po 12 godzinach. Jeśli twoja przeglądarka blokuje pamięć tej strony, nie może niczego zapamiętać, więc pyta za każdym razem, gdy otwierasz {brand|Morphita}. Wszystko to możesz obserwować w zakładce Sieć w przeglądarce.\n\n**Linki, które otwierasz.** Link płatności dla innej monety otwiera publiczny eksplorator bloków w nowej karcie, a ten eksplorator widzi twój IP jak każda odwiedzana strona.\n\n**Używaj Tora lub VPN-a**, żeby ukryć swój IP także przed tą stroną i przed każdym otwieranym eksploratorem."
 			}
 		},
 		"share_link": "Udostępnij",
@@ -2045,7 +2045,7 @@
 		},
 		"release_op": {
 			"title": "Release op (op wydania)",
-			"body": "Operacja w łańcuchu podpisana przez konto @morphit, która ogłasza nowe wydanie Morphit: jego wersję, SHA-256 archiwum źródłowego i hashe plików, które uruchamiają stronę. Najwyżej raz dziennie przeglądarka odczytuje najnowszą z publicznego węzła Blurt (drugiego węzła tylko wtedy, gdy pierwszy zawiedzie) i sprawdza jej podpis; jeśli strona działa w tej wersji, porównuje wczytane pliki z podpisanymi hashami i ostrzega cię, gdy się różnią. To wykrywa plik zmieniony przypadkiem lub przez częściowo przejęty serwer — nie wrogiego operatora, który serwuje też kod sprawdzający."
+			"body": "Operacja w łańcuchu podpisana przez konto @morphit, która ogłasza nowe wydanie Morphit: jego wersję, SHA-256 archiwum źródłowego i hashe plików, które uruchamiają stronę. Najwyżej raz dziennie przeglądarka odczytuje najnowszą przez tę stronę, która odpowiada tylko tym, co zgodnie podają dwaj operatorzy RPC Blurt, i sama sprawdza jej podpis; jeśli strona działa w tej wersji, porównuje wczytane pliki z podpisanymi hashami i ostrzega cię, gdy się różnią. To wykrywa plik zmieniony przypadkiem lub przez częściowo przejęty serwer — nie wrogiego operatora, który serwuje też kod sprawdzający."
 		},
 		"seed_phrase": {
 			"title": "Fraza seed",
@@ -2395,7 +2395,9 @@
 			"recipient_name_too_long": "Imię i nazwisko odbiorcy są za długie (maksymalnie 100 znaków).",
 			"note_too_long": "Notatka jest za długa (maksymalnie 500 znaków).",
 			"note_forbidden_chars": "Notatka zawiera tabulator, znak nowej linii lub inny niewidoczny znak sterujący. Usuń go i spróbuj ponownie.",
-			"order_permlink_invalid": "Nie można powiązać tego adresu ze zleceniem. Zamknij to okno i otwórz je ponownie z poziomu zlecenia."
+			"order_permlink_invalid": "Nie można powiązać tego adresu ze zleceniem. Zamknij to okno i otwórz je ponownie z poziomu zlecenia.",
+			"too_long_to_send": "Ten adres jest za długi, by wysłać go w jednej wiadomości czatu. Skróć notatkę (lub inne pole) i spróbuj ponownie.",
+			"field_forbidden_chars": "Jedno z pól zawiera tabulator, znak nowej linii lub inny niewidoczny znak sterujący. Usuń go i spróbuj ponownie."
 		},
 		"send_failed": "Nie udało się wysłać adresu. Sprawdź połączenie i spróbuj ponownie."
 	},
@@ -3956,7 +3958,7 @@
 		"chat_title": "Czat jest szyfrowany end-to-end.",
 		"chat_body": "Każda wiadomość jest szyfrowana w twojej przeglądarce, zanim ją opuści (wymiana kluczy na krzywych eliptycznych oparta na waszych kluczach posting Blurt oraz ChaCha20-Poly1305), nowym kluczem jednorazowym połączonym z kluczami was obojga — więc tylko ty i twój partner możecie ją przeczytać, a partner wie, że naprawdę pochodzi od ciebie. Żaden serwer nie ma klucza, który by ją otworzył. Klucz partnera jest przypięty: jeśli kiedykolwiek się zmieni, {brand} zatrzymuje się i najpierw pyta ciebie, a 60-cyfrowy numer bezpieczeństwa pozwala wam sprawdzić się nawzajem poza {brand}. Publiczna pozostaje koperta: wiadomości leżą w łańcuchu Blurt, więc widać, kto pisze do kogo, kiedy, w sprawie którego zlecenia i jak długa jest każda wiadomość, a poufności przyszłej (forward secrecy) nie ma. Pełny projekt opisano w {chat_crypto_doc}.",
 		"reproducible_title": "Podpisane wydania z odciskiem.",
-		"reproducible_body": "Każde wydanie powstaje z podpisanego GPG tagu git na gałęzi main, a @morphit kotwiczy je w łańcuchu Blurt: SHA-256 archiwum źródeł i pakietu offline oraz hashe plików, które uruchamiają stronę (szkielet strony, service worker, kod startowy). Twoja przeglądarka odczytuje ten podpisany wpis bezpośrednio z publicznego węzła Blurt, a nie z tej strony, ponownie sprawdza według niego pliki, które ta strona jej dostarczyła, i wymienia w czerwonym ostrzeżeniu te, które się różnią; węzeł instaluje aktualizację tylko wtedy, gdy się zgadza. To wykrywa plik zmieniony przypadkiem lub przez częściowo przejęty serwer; nie ochroni cię przed wrogim operatorem, który serwuje też kod sprawdzający. Skrypty nie mają Subresource Integrity, a kompilacje nie są jeszcze powtarzalne co do bajtu, więc pobrany plik weryfikujesz po jego hashu i podpisie (docs/VERIFY-YOUR-DOWNLOAD.md), a nie przez ponowne zbudowanie.",
+		"reproducible_body": "Każde wydanie powstaje z podpisanego GPG tagu git na gałęzi main, a @morphit kotwiczy je w łańcuchu Blurt: SHA-256 archiwum źródeł i pakietu offline oraz hashe plików, które uruchamiają stronę (szkielet strony, service worker, kod startowy). Twoja przeglądarka odczytuje ten podpisany wpis przez tę stronę, która odpowiada tylko tym, co zgodnie podają dwaj operatorzy RPC Blurt, sama sprawdza podpis @morphit, ponownie sprawdza według niego pliki, które ta strona jej dostarczyła, i wymienia w czerwonym ostrzeżeniu te, które się różnią; węzeł instaluje aktualizację tylko wtedy, gdy się zgadza. To wykrywa plik zmieniony przypadkiem lub przez częściowo przejęty serwer; nie ochroni cię przed wrogim operatorem, który serwuje też kod sprawdzający. Skrypty nie mają Subresource Integrity, a kompilacje nie są jeszcze powtarzalne co do bajtu, więc pobrany plik weryfikujesz po jego hashu i podpisie (docs/VERIFY-YOUR-DOWNLOAD.md), a nie przez ponowne zbudowanie.",
 		"open_source_title": "Open source, otwarty model zagrożeń.",
 		"open_source_body": "Pełny model zagrożeń jest w {security_doc} repo. Jesteśmy jednoznaczni co do tego przed czym chronimy a przed czym nie — udawanie byłoby gorsze niż szczerość.",
 		"footer_body": "Znalazłeś problem z bezpieczeństwem? Wyślij go wyłącznie jako prywatną wiadomość Matrix do @agorise:matrix.org. Nigdy nie publikuj szczegółów: ani w zgłoszeniu na Forgejo (zgłoszenia są tam publiczne), ani w pokoju czatu, ani w łańcuchu (wiadomość do {morphit_account} pozostaje tam publiczna na zawsze).",
@@ -4769,7 +4771,9 @@
 			"custom_tracking_url_invalid": "Link do śledzenia musi być pełnym adresem https:// (maksymalnie 500 znaków).",
 			"note_too_long": "Notatka jest za długa (maksymalnie 500 znaków).",
 			"note_forbidden_chars": "Notatka zawiera tabulator, znak nowej linii lub inny niewidoczny znak sterujący. Usuń go i spróbuj ponownie.",
-			"order_permlink_invalid": "Nie można powiązać tej przesyłki ze zleceniem. Zamknij to okno i otwórz je ponownie z poziomu zlecenia."
+			"order_permlink_invalid": "Nie można powiązać tej przesyłki ze zleceniem. Zamknij to okno i otwórz je ponownie z poziomu zlecenia.",
+			"too_long_to_send": "Ta przesyłka jest za długa, by wysłać ją w jednej wiadomości czatu. Skróć notatkę i spróbuj ponownie.",
+			"field_forbidden_chars": "Nazwa przewoźnika zawiera tabulator, znak nowej linii lub inny niewidoczny znak sterujący. Usuń go i spróbuj ponownie."
 		},
 		"send_failed": "Nie udało się wysłać informacji o przesyłce. Sprawdź połączenie i spróbuj ponownie."
 	},

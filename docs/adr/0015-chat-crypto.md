@@ -76,8 +76,9 @@ chat_priv_scalar = BLAKE2b(
 ```
 
 The output is reinterpreted as an X25519 scalar, then clamped
-per RFC 7748 (bits 0 and 1 of byte 0 cleared; bit 7 of byte 31
-set). X25519's clamping means every 32-byte value is a valid
+per RFC 7748 (bits 0, 1 and 2 of byte 0 cleared; bit 7 of byte 31
+cleared and bit 6 of byte 31 set — `clampX25519Scalar` in
+`apps/web/src/lib/chat/crypto.ts`). X25519's clamping means every 32-byte value is a valid
 scalar post-clamp — unlike secp256k1 where a small fraction
 must be rejected — so no retry loop is needed. The public half
 is `X25519(chat_priv_scalar_clamped, basepoint)`.
@@ -96,8 +97,15 @@ therefore publishes its chat pubkey once, via a new
 `{"chat_pub": <base64 X25519 pubkey>}`. The indexer records
 the latest `chat_pub` per account in a `chat_identities` table.
 
-Publication is triggered automatically by the client — the
-user never sees or manages this:
+*(v1.21.14: the first-use publish, the existing-user migration and the
+first-contact UX below are HISTORY. v1.21.13 removed them — see the
+amendment: nothing is published to become reachable, and a message to an
+account without a chat key goes to its posting keys. Since v1.21.14 nothing
+publishes or re-publishes a chat identity at all — see "Amendment (v1.21.14):
+posting keys only".)*
+
+Publication was triggered automatically by the client — the
+user never saw or managed this:
 
 - **First-use publish.** The moment the user first opens `/chat`,
   `/chat/[peer]`, or clicks a Message button from anywhere, the
@@ -115,11 +123,12 @@ user never sees or manages this:
 - **Key rotation.** If the user ever rotates their posting key
   (which re-derives the chat key as a side effect, because the
   BLAKE2b input changes), the client detects the mismatch and
-  re-publishes. Historical messages encrypted under the old
-  chat key are still decryptable because the client retains a
-  derivation-history record keyed by posting-key epoch — but
-  for chat sessions where the posting key hasn't rotated, this
-  code path is dormant.
+  re-publishes. *(Corrected v1.21.14: there is NO derivation
+  history. Nothing keeps the old posting key or the chat key derived
+  from it, so messages encrypted to the old chat key — and posting-key
+  messages wrapped only for the old posting key — can no longer be
+  opened after the change. Export a conversation as PDF before rotating
+  if its history matters.)*
 
 **First-contact UX.** If Alice tries to message Bob before Bob
 has ever published a chat pubkey, the send fails with a clear
@@ -130,8 +139,23 @@ including a notification about Alice's pending message (if
 notifications are enabled) or a direct link. Once his publish
 lands, Alice's client retries automatically on its next poll.
 
-**Transport cipher.** Each message is an individual ECIES-like
-envelope:
+**Transport cipher.** *(v1.21.14: what follows is the ORIGINAL design,
+the v1 envelope, kept for the record — the code never shipped it as written
+and no longer sends v1 at all. What is sent is the v2 envelope (or the v3
+posting-key envelope of the amendment), exactly as implemented in
+`apps/web/src/lib/chat/crypto.ts` and described in docs/CHAT-CRYPTO.md:*
+
+- *the message key is **keyed BLAKE2b-256**, not HKDF-SHA256: key = the
+  ephemeral DH result ‖ the static-static DH result (sender chat key ×
+  recipient chat key), message = a domain string naming BOTH account names
+  plus the sender, recipient and ephemeral public keys;*
+- *the AEAD's associated data binds **both** account names
+  (`morphit-chat-aad-v2/<sender>\0<recipient>`), not the sender alone; the
+  sender's self-copy has its own key and AAD domain;*
+- *v1 messages (anonymous ECIES, no sender authentication) are still opened
+  for reading, and always shown as "sender not verified".)*
+
+Each message is an individual ECIES-like envelope:
 
 ```
 ephemeral_priv, ephemeral_pub = X25519 keygen
@@ -206,10 +230,71 @@ key-change code and their own Accept. The first-use publish is removed; a publis
 re-published after a posting-key rotation, so peers using v2 keep reaching
 the right key. The sender pays every fee.
 
+**Several posting keys (v1.21.14 — superseded the same release by the
+amendment below: nothing re-publishes any more).** An account can list more than one
+posting key (a device or wallet holding each), and each derives a different
+chat key. A device re-publishes only when the posting key that signed the
+chat key now on chain is no longer on the account (a rotation) or is its own
+— never over a chat key another CURRENT posting key published, which made
+two devices overwrite each other at every chat opening (a fee each time,
+"safety number changed" for every peer). While another device's chat key is
+on chain, this device writes in the posting-key format, which every posting
+key of the account can read; messages to the published chat key open only
+on the device that published it.
+
 This replaces requirement 4's "no new key" reasoning above for new accounts:
 nothing at all has to be published before someone can be written to. Clients
 older than v1.21.13 can neither open v3 nor send to an account without a
 published chat key.
+
+## Amendment (v1.21.14): posting keys only
+
+Two formats meant two sets of keys to pin per person, and they interfered.
+Opening a conversation fetched — and pinned — the peer's chat key, and a peer
+whose chat key was pinned got no posting keys on first use (they were held as
+a "change" for Verify peer). So on a normal FIRST conversation with someone
+an older version had published a chat key for, every message from them read
+"Sender not verified … older format" and every reply was refused ("Not sent:
+… until now you only wrote to them in the older format") until the user
+pressed "accept the new key". The owner's standing decision is that chat
+relies on the posting key only; a separate chat key is not a thing users
+should meet.
+
+Decision:
+
+1. Every new message — composer, retries, the forms' structured payloads, the
+   "settled with someone else" auto-reply — is sent in the posting-key
+   envelope (v3). Never v2.
+2. Posting keys are trusted on first use whatever chat key is pinned. A
+   CHANGE of a pinned set still holds sends and asks for the new safety number
+   in Verify peer (worded as a key change, never as a format).
+3. v2 is still read, with the chat key each client derives from its posting
+   key: old history, and older versions (also on other instances) that still
+   write it for a while. A v2 message is proved only by a chat key pinned
+   before this release; otherwise it is readable, with a calm "sent from an
+   older version" note, and moves no trade. No chat key is pinned any more;
+   one the indexer reports is used to open such a message only when the chain
+   confirms the op it names.
+4. Nothing publishes or re-publishes a chat identity (`ensureChatIdentity` and
+   the op's broadcaster are removed), which also ends the multi-device
+   re-publication contest of the previous paragraph and its fees.
+5. The safety number is made from posting keys only.
+
+## Amendment (v1.21.14 final review): v4, bound to its order and time
+
+v3 authenticates a message's words, not the order it is about (the
+record's `order_permlink`, beside the ciphertext) or when it was sent (the
+indexer's `created_at`). v4 is v3 with three inputs bound by the sender:
+the thread's order permlink, that order's owner (one of the two parties;
+header `o`) and `t`, the chain's head time at sealing (header `t`), in the
+content AAD and the commit, every label v4. A v4 message opens only under
+that order, owner and time; a trade message moves only the trade on the
+owner it names; the time shown is the indexer's while it lies within
+[t − 2 min, t + 5 min], `t` otherwise. The sender seals v3 instead when the
+head time disagrees with its device clock by more than 2 minutes, or the
+head or the owner is not known. Rolled out read first: v1.21.14 reads v4 and
+sends v3 (`WRITE_ENVELOPE_V4`); the next release sends v4. No indexer
+change: the header is opaque to it. Details: docs/CHAT-CRYPTO.md.
 
 ## Alternatives considered
 
@@ -317,6 +402,13 @@ published chat key.
   not leave the client.
 
 ### Follow-up work
+
+*(v1.21.14: obsolete. Every item below shipped long ago in a different
+shape — `crypto.ts`, `chatService.ts`, `/v1/conversations` — except
+`fetchPeerChatPubkey` "derive their chat pubkey from the posting pubkey",
+which is impossible (see the corrected Positive consequence above) and was
+replaced by the published chat key and, since v1.21.13, the posting-key
+envelope. Kept as the original record.)*
 
 - Implement `derivePostingChatKey(live)` in a new
   `$lib/chat/crypto.ts`, using `@noble/curves` or libsodium

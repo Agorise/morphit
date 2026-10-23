@@ -76,7 +76,7 @@
 	import { addPendingFeatured } from '$stores/pendingFeatured';
 	import { pendingOrders, mergePendingOrders, pendingOrderKeys } from '$lib/stores/pendingOrders';
 	import { orderEchoKey } from '$lib/stores/pendingEcho';
-	import { tradeStates } from '$lib/trades/tradeStatus';
+	import { tradeStates, tradeStateOf } from '$lib/trades/tradeStatus';
 	import {
 		editWindowRemainingSeconds as editWindowRemainingSecondsFor,
 		formatRemainingMmSs
@@ -138,7 +138,7 @@
 	//  pill hidden): released / completed, or a payment verified against the
 	//  amount asked — not one merely received with no amount asked
 	//  (paidPermlinksOf).
-	const paidPermlinks = $derived(paidPermlinksOf($tradeStates));
+	const paidPermlinks = $derived(paidPermlinksOf($tradeStates, blurtAccount ?? ''));
 
 	// v1.5.0 — AUTO-COMPLETE. Once the seller's client has verified that the
 	//  counterparty the seller is trading with paid the amount the seller
@@ -161,7 +161,10 @@
 			// completion (which names them) was rejected as already-completed,
 			// so the buyer never got the trade credit. The indexer still
 			// requires a provable conversation before it records the name.
-			const peer = autoCompleteCounterparty(o, $tradeStates.get(o.permlink));
+			const peer = autoCompleteCounterparty(
+				o,
+				tradeStateOf($tradeStates, o.account, o.permlink) ?? undefined
+			);
 			if (peer !== null) {
 				autoCompletedPermlinks.add(o.permlink); // mark BEFORE await — fire once
 				void (async () => {
@@ -778,7 +781,9 @@
 			// the trade; the indexer records it only with a provable conversation.
 			const peers = reviewableCounterparties[permlink];
 			const counterparty =
-				peers && peers.length === 1 ? peers[0] : get(tradeStates).get(permlink)?.engagedPeer;
+				peers && peers.length === 1
+					? peers[0]
+					: tradeStateOf(get(tradeStates), blurtAccount, permlink)?.engagedPeer;
 			await broadcastOrderComplete(state.live, permlink, counterparty || undefined);
 			// Optimistic (same bridge as cancel): flip to 'completed' so the card
 			// + Live/Paid pill counts update instantly; the indexer lags ~1min.
@@ -1066,6 +1071,7 @@
 									</span>
 								{/if}
 								<PaymentStatusBadge
+									orderOwner={o.account}
 									orderPermlink={o.permlink}
 									completedCounterparty={o.completed_counterparty ?? null}
 								/>
@@ -1374,7 +1380,7 @@
 										</BusyButton>
 									{/if}
 								{/if}
-								{#if !$isPairedReadOnly && $tradeStates.has(o.permlink)}
+								{#if !$isPairedReadOnly && tradeStateOf($tradeStates, o.account, o.permlink) !== null}
 									<!-- v1.5.0 — "Mark as complete": second removal path parallel to
 									     Cancel, shown once a trade is in progress on this live order.
 									     For on-chain Blurt trades the auto-complete effect usually

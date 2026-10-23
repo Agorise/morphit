@@ -360,6 +360,9 @@ export function loginPairingRoute(registry: PairingRegistry): Hono {
 			release();
 			return c.json(errorBody('rate_limited', 'service_busy: pairing registry at capacity'), 503);
 		}
+		// A live stream: proxies in front (BunkerWeb) must not buffer it — the
+		// frontend passes this mark on (v1.21.14 review D, F4).
+		c.header('X-Accel-Buffering', 'no');
 		if (reg.kind === 'immediate') {
 			// Fast path — bundle was already delivered.  Emit
 			// once and close.

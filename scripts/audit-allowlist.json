@@ -22,6 +22,14 @@
       "lastReviewed": "2026-10-02",
       "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Dev server only."
     },
+    "GHSA-rq7h-c2jc-7f22": {
+      "package": "vite",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine",
+      "lastReviewed": "2026-10-21",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). `server.fs.allow` is enforced only by the Vite DEV server (`vite dev`, which CI never starts; vitest and `vite build` do not serve files). Vite 5.4.21 is the newest 5.x; the fix is in Vite 6.4.4 and later, a major upgrade tied to SvelteKit and vitest 2."
+    },
     "GHSA-587h-7wmj-h5pm": {
       "package": "vite",
       "severity": "high",
@@ -173,6 +181,14 @@
       "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
       "lastReviewed": "2026-10-02",
       "rationale": "Reached only through the Matrix alert bot (matrix-bot → matrix-bot-sdk → request/request-promise), which talks only to the operator-configured homeserver: no user-controlled URL, cookie, form field or header reaches it. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out. request calls uuid v4 without a caller buffer; the v3/v5/v6 buffer path is never used."
+    },
+    "GHSA-qxg6-89mg-rqv8": {
+      "package": "@vitest/mocker",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "Vitest: Code injection via unauthenticated manual mock registration",
+      "lastReviewed": "2026-10-21",
+      "rationale": "Dev/test tooling only; never shipped to or run on a node. The mock-registration endpoint belongs to Vitest's own server (browser mode / UI), which Morphit's test runs never start: vitest runs in node and jsdom environments only. The fix is in vitest 4.1.12 and later; the repo is on vitest 2.1.x (SvelteKit and Vite 5), so it needs the same major upgrade as the Vite advisories above."
     }
   }
 }

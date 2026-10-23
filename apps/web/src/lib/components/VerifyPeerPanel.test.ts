@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
- * Verify peer (v1.21.13 review: H1, M3, M4, L3). The panel compares the keys
- * messages actually use, by the same rule as sending; it never pins anything
- * by being opened; Accept pins exactly the keys whose number was shown, and
- * only that kind; each "nothing to compare" case says the right thing.
+ * Verify peer (v1.21.13 review: H1, M3, M4, L3; v1.21.14). The panel compares
+ * the keys messages actually use — POSTING keys only since v1.21.14 (every
+ * message is sent to and proved by them; chat relies on the posting key only);
+ * it never pins anything by being opened; Accept pins exactly the keys whose
+ * number was shown; each "nothing to compare" case says the right thing.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readable } from 'svelte/store';
@@ -29,11 +30,8 @@ vi.mock('$stores/identity', () => ({
 
 const K = (n: number) => new Uint8Array(33).fill(n);
 const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u));
-let status: () => Promise<'current' | 'stale' | 'none'>;
 let keys: Record<string, Uint8Array[] | null | Error>;
-let peerResult: unknown;
 vi.mock('$lib/chat/chatService', () => ({
-	ownChatKeyStatus: () => status(),
 	orderPostingPubs: (k: unknown) => k
 }));
 vi.mock('$blurt/accountKeys', () => ({
@@ -42,13 +40,6 @@ vi.mock('$blurt/accountKeys', () => ({
 		if (v instanceof Error) throw v;
 		return v ?? null;
 	}
-}));
-vi.mock('$lib/chat/peerPubFetch', () => ({
-	fetchPeerChatPubChainVerified: async () => peerResult
-}));
-vi.mock('$lib/chat/crypto', () => ({
-	deriveChatIdentity: async () => ({ priv: new Uint8Array(32), pub: new Uint8Array(32).fill(9) }),
-	decodeChatPub: () => new Uint8Array(32).fill(8)
 }));
 /** The "number" names the keys it was made from, so the test sees which. */
 const computeSafetyNumber = vi.fn(
@@ -67,15 +58,22 @@ vi.mock('$lib/chat/fingerprint', () => ({ computeSafetyNumber }));
 
 const pin = await import('$lib/chat/pubPin');
 
-async function open(): Promise<HTMLElement> {
-	const { mount, flushSync } = await import('svelte');
-	const { default: Panel } = await import('./VerifyPeerPanel.svelte');
-	const target = document.createElement('div');
-	document.body.appendChild(target);
-	mount(Panel, { target, props: { me: 'anna', peer: 'bob', onClose: () => undefined } });
+async function settle(): Promise<void> {
+	const { flushSync } = await import('svelte');
 	for (let i = 0; i < 20; i++) await Promise.resolve();
 	await new Promise((r) => setTimeout(r, 0));
 	flushSync();
+}
+async function open(extra: Record<string, unknown> = {}): Promise<HTMLElement> {
+	const { mount } = await import('svelte');
+	const { default: Panel } = await import('./VerifyPeerPanel.svelte');
+	const target = document.createElement('div');
+	document.body.appendChild(target);
+	mount(Panel, {
+		target,
+		props: { me: 'anna', peer: 'bob', onClose: () => undefined, ...extra } as never
+	});
+	await settle();
 	return target;
 }
 const text = (t: HTMLElement) => t.textContent ?? '';
@@ -83,47 +81,55 @@ const text = (t: HTMLElement) => t.textContent ?? '';
 beforeEach(() => {
 	localStorage.clear();
 	computeSafetyNumber.mockClear();
-	status = async () => 'none';
 	keys = { anna: [K(1)], bob: [K(2)] };
-	peerResult = { kind: 'ok', pub: new Uint8Array(32).fill(7) };
 });
 afterEach(() => {
 	document.body.innerHTML = '';
 });
 
 describe('VerifyPeerPanel', () => {
-	it('our key not published: posting keys — ours from chain, theirs; opening the panel pins nothing', async () => {
+	it('posting keys — ours from chain, theirs; opening the panel pins nothing', async () => {
 		const t = await open();
 		expect(text(t)).toContain('P1');
 		expect(text(t)).toContain('P2');
 		expect(pin.pinnedPostingFor('bob')).toEqual([]);
 	});
 
-	it('both current: chat keys, as before', async () => {
-		status = async () => 'current';
-		const t = await open();
-		expect(text(t)).toContain('C9');
-		expect(text(t)).toContain('C7');
-	});
-
-	it('a chat key pinned here that the indexer now calls absent: the tamper warning, no number', async () => {
-		status = async () => 'current';
-		peerResult = { kind: 'not_published' };
+	it('posting keys even when a chat key of theirs is pinned (chat keys are never compared now)', async () => {
 		pin.setPin('bob', { blockNum: 1, trxId: 'a'.repeat(40), pubB64: 'AAAA' });
 		const t = await open();
-		expect(text(t)).toContain('chat.verify_peer.tamper_heading');
-		expect(text(t)).toContain('pub_pin_withdrawn');
-		expect(computeSafetyNumber).not.toHaveBeenCalled();
+		expect(text(t)).toContain('P2');
+		expect(
+			computeSafetyNumber.mock.calls.every(([a, b]) => a.pub === undefined && b.pub === undefined)
+		).toBe(true);
 	});
 
-	it('a key added to their account: the NEW number; Accept pins exactly those keys, posting kind only', async () => {
-		await pin.resolvePostingKeyPin('bob', [b64(K(2))]);
-		keys.bob = [K(2), K(4)];
+	it('first posting keys of a peer whose chat key is pinned: an ordinary first use, not a "change" (v1.21.14)', async () => {
+		pin.setPin('bob', { blockNum: 1, trxId: 'a'.repeat(40), pubB64: 'AAAA' });
+		const t = await open();
+		expect(text(t)).not.toContain('chat.verify_peer.key_changed_heading');
+		expect(text(t)).toContain('chat.verify_peer.first_use_accept');
+	});
+
+	it('a pending entry the old hold left (nothing pinned): an ordinary first use, and "use these keys" clears it', async () => {
 		localStorage.setItem(
-			'morphit.chat.pub_pin_pending',
-			JSON.stringify({ bob: { blockNum: 2, trxId: 'b'.repeat(40), pubB64: 'NEW' } })
+			'morphit.chat.posting_pin_pending',
+			JSON.stringify({ bob: { blockNum: 0, trxId: '0'.repeat(40), pubB64: b64(K(2)) } })
 		);
 		const t = await open();
+		expect(text(t)).not.toContain('chat.verify_peer.key_changed_heading');
+		[...t.querySelectorAll('button')]
+			.find((b) => (b.textContent ?? '').includes('chat.verify_peer.first_use_accept'))!
+			.click();
+		expect(pin.pinnedPostingFor('bob')).toEqual([b64(K(2))]);
+		expect(pin.pendingPostingKeyChange('bob')).toBeNull();
+	});
+
+	it('a key added to their account: the NEW number; Accept pins exactly those keys', async () => {
+		await pin.resolvePostingKeyPin('bob', [b64(K(2))]);
+		keys.bob = [K(2), K(4)];
+		const accepted = vi.fn();
+		const t = await open({ onAccepted: accepted });
 		expect(text(t)).toContain('chat.verify_peer.key_changed_heading');
 		expect(text(t)).toContain('P2.4');
 		expect(pin.pinnedPostingFor('bob')).toEqual([b64(K(2))]); // not yet
@@ -132,7 +138,21 @@ describe('VerifyPeerPanel', () => {
 		)!;
 		accept.click();
 		expect(pin.pinnedPostingFor('bob')).toEqual([b64(K(2)), b64(K(4))]);
-		expect(pin.pendingKeyChange('bob')?.pubB64).toBe('NEW'); // the chat change is untouched
+		expect(accepted).toHaveBeenCalledTimes(1);
+	});
+
+	// v1.21.14 full chat audit, W-M2: Accept pins the keys the number was made
+	// from — not whatever the account lists by the time of the tap.
+	it('Accept pins the keys shown, never a set that replaced them meanwhile', async () => {
+		await pin.resolvePostingKeyPin('bob', [b64(K(2))]);
+		keys.bob = [K(4)];
+		const t = await open();
+		expect(text(t)).toContain('P4');
+		keys.bob = [K(5)]; // the account changes again before the tap
+		[...t.querySelectorAll('button')]
+			.find((b) => (b.textContent ?? '').includes('chat.verify_peer.key_changed_accept'))!
+			.click();
+		expect(pin.pinnedPostingFor('bob')).toEqual([b64(K(4))]);
 	});
 
 	it('no account / no posting key of its own: said so, no number', async () => {
@@ -144,17 +164,11 @@ describe('VerifyPeerPanel', () => {
 		expect(computeSafetyNumber).not.toHaveBeenCalled();
 	});
 
-	it('the chain cannot be asked (our status, or their keys): the "try again" copy, not a tamper warning', async () => {
+	it('the chain cannot be asked: the "try again" copy, not a tamper warning', async () => {
 		keys.bob = new Error('timed out');
-		let t = await open();
+		const t = await open();
 		expect(text(t)).toContain('chat.verify_peer.error_chain_unreachable');
 		expect(text(t)).not.toContain('tamper');
-		document.body.innerHTML = '';
-		status = async () => {
-			throw new Error('down');
-		};
-		t = await open();
-		expect(text(t)).toContain('chat.verify_peer.error_chain_unreachable');
 	});
 
 	it('first use: the number is shown, nothing pinned until "use these keys", which pins exactly them', async () => {
@@ -167,31 +181,47 @@ describe('VerifyPeerPanel', () => {
 		use.click();
 		expect(pin.pinnedPostingFor('bob')).toEqual([b64(K(2))]);
 	});
+});
 
-	it('first posting keys of a peer whose chat key is pinned: shown as a change to accept, not as ready', async () => {
-		pin.setPin('bob', { blockNum: 1, trxId: 'a'.repeat(40), pubB64: 'AAAA' });
-		const t = await open();
-		expect(text(t)).toContain('chat.verify_peer.key_changed_heading');
-		expect(text(t)).toContain('P2');
-		expect(text(t)).not.toContain('chat.verify_peer.first_use_accept');
+describe('your own half is checked against the key you signed in with (v1.21.14 review C, H1)', () => {
+	// Your half of the number was made from what THIS instance says your posting
+	// keys are. An instance serving both people could add a key of its own to
+	// your account's list: the peer's client pins it at first contact and
+	// encrypts every message to you for it too, and your half — built from the
+	// same list — matched theirs. The number compared equal while the operator
+	// read, and could sign, messages "from" you.
+	afterEach(() => {
+		delete (live.posting as { publicKey?: Uint8Array }).publicKey;
 	});
 
-	it('our key current, but posting keys of theirs wait for the user: those are compared', async () => {
-		status = async () => 'current';
-		pin.setPin('bob', { blockNum: 1, trxId: 'a'.repeat(40), pubB64: 'AAAA' });
-		await pin
-			.resolvePostingKeyPin('bob', [b64(K(2))], { needsConsent: true })
-			.catch(() => undefined);
+	it('the instance lists a key besides yours: the number is shown with that key named, as a warning', async () => {
+		(live.posting as { publicKey?: Uint8Array }).publicKey = K(1);
+		const { PrivateKey } = await import('@beblurt/dblurt');
+		const op = PrivateKey.fromSeed('operator-key').createPublic();
+		const opBytes = new Uint8Array((op as unknown as { key: Uint8Array }).key);
+		keys = { anna: [K(1), opBytes], bob: [K(2)] };
 		const t = await open();
-		expect(text(t)).toContain('chat.verify_peer.key_changed_heading');
-		expect(text(t)).toContain('P2');
-		expect(text(t)).not.toContain('C7');
+		// The key is written out as a BLT string (an async encoder): give it time.
+		await vi.waitFor(() => expect(text(t)).toContain('chat.verify_peer.own_extra_heading'), {
+			timeout: 3000
+		});
+		expect(text(t)).toContain(op.toString());
 	});
 
-	it('our key on chain is an old one: the number, with the note that theirs may differ until it is replaced', async () => {
-		status = async () => 'stale';
+	it('the instance does not list the key you signed in with: no number, said so', async () => {
+		(live.posting as { publicKey?: Uint8Array }).publicKey = K(7);
+		keys = { anna: [K(1)], bob: [K(2)] };
+		const t = await open();
+		expect(text(t)).toContain('chat.verify_peer.own_key_missing');
+		expect(text(t)).not.toContain('P1');
+	});
+
+	it('only your own key listed: the ordinary number, no warning', async () => {
+		(live.posting as { publicKey?: Uint8Array }).publicKey = K(1);
+		keys = { anna: [K(1)], bob: [K(2)] };
 		const t = await open();
 		expect(text(t)).toContain('P1');
-		expect(text(t)).toContain('chat.verify_peer.own_key_stale');
+		expect(text(t)).not.toContain('own_extra_heading');
+		expect(text(t)).not.toContain('own_key_missing');
 	});
 });

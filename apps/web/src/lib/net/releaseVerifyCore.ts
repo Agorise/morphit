@@ -1,51 +1,39 @@
 /**
- * Read an op signed by a pinned key from the Blurt chain without trusting the
- * node that serves it — the browser port of the indexer's
+ * Read an op signed by a pinned key from the Blurt chain without trusting
+ * whoever serves it — the browser port of the indexer's
  * apps/indexer/src/blurt/snapshotOpTrust.ts, at the browser's request budget.
  *
- * What makes a record genuine is its SIGNATURE, which no node can fake:
+ * What makes a record genuine is its SIGNATURE, which no node or instance can
+ * fake:
  *   1. the newest matching op is found in the signer's account history;
- *   2. the block holding it is fetched from the SAME node, and the
- *      transaction id is RECOMPUTED from the block's content, so a node cannot
- *      pair a real id with altered operations;
+ *   2. the block holding it is read through the same source, and the
+ *      transaction id is RECOMPUTED from the block's content, so a source
+ *      cannot pair a real id with altered operations;
  *   3. the transaction's signature must recover to the PINNED public key.
  * The payload returned is the one parsed from that block, never the one in
  * the history answer.
  *
- * Budget. Steady state: two requests to ONE node — one `get_account_history`
- * (the smallest window) and one `get_block`. One other OPERATOR's node is
- * asked (the same two reads) only when the first node fails, serves a record
- * that cannot be verified (unsigned, signed by another key, malformed, or no
- * record at all), or serves a verified record the caller does not take as
- * current (`isCurrent`: e.g. a release older than the running build — a node
- * may be lagging or withholding the newest one). Never more than two nodes.
- * With two nodes, the newer verified record wins — decided by SIGNED data
- * (`newer`), never by a node-reported block number. "Signed by another key"
- * is reported only when both say so of the same transaction, so one node can
- * neither forge a record nor raise a false alarm. One node CAN still serve an
- * older genuine record when the second node is unreachable or agrees, and can
- * withhold a newer one from a build that already matches the record it
- * serves: those are the limits of a two-request budget.
+ * The source. One: the instance's agreed-read relay (`POST /v1/chain/agreed`),
+ * which answers only with what two RPC operators of its pool return alike —
+ * the browser contacts nothing else. Steady state: two requests, one
+ * `get_account_history` (the smallest window) and one `get_block`. A record
+ * signed by another key is therefore something two operators agree on, and is
+ * reported as such. What remains: two operators that agree can serve an older
+ * genuine record or withhold a newer one, and the instance relaying them can do
+ * the same, refuse to answer, or show its own visitors a false alarm — never
+ * a forged record.
  *
  * Pure apart from the injected reader; no SvelteKit imports, so it runs under
  * tsx and can be reused by scripts. dblurt (signature recovery, transaction
  * ids) is loaded on first use to keep it out of the first-paint bundle.
  */
 
-/** What this needs from the node pool (EndpointRotator provides it). */
-export interface ChainNodeReader {
-	/** Endpoints to try, best first. */
-	nodesInOrder(): readonly string[];
-	/** The operator behind an endpoint, counted by node name (one node's
-	 *  .onion and .b32.i2p are one operator); names are not proof that two
-	 *  operators are independent. */
-	operatorOf(url: string): string;
-	/** One request to one endpoint; throws when it fails. */
-	callAt<T>(url: string, method: string, params: unknown): Promise<T>;
+/** The one source: every answer is one that two RPC operators gave alike
+ *  (the instance's agreed-read relay, $net/chainRelay chainAgreed). */
+export interface AgreedChainReader {
+	/** One read; throws when there is no agreed answer. */
+	read<T>(method: string, params: unknown): Promise<T>;
 }
-
-/** Nodes a check may ask: the best one, plus one other operator's node. */
-export const MAX_NODES_PER_CHECK = 2;
 
 interface TxLike {
 	readonly ref_block_num: number;
@@ -180,8 +168,8 @@ export type SignedOpResult =
 			readonly ok: true;
 			/** Parsed from the block, signature verified. */
 			readonly payload: unknown;
-			/** The block number AS THE NODE REPORTED IT: not covered by the
-			 *  signature, so never used to decide anything. */
+			/** The block number AS REPORTED: not covered by the signature, so
+			 *  never used to decide anything. */
 			readonly blockNum: number;
 			readonly trxId: string;
 			/** The transaction's `expiration`, part of what the signer signed. */
@@ -189,11 +177,11 @@ export type SignedOpResult =
 	  }
 	| {
 			readonly ok: false;
-			/** 'no_quorum': nothing could be verified (nodes unreachable, or their
-			 *  answers unverifiable or contradictory) — nothing is known.
-			 *  'none': both nodes asked hold no such op.
-			 *  'bad_signature': both nodes asked name the same newest op, signed by
-			 *  keys other than the pinned one (`keys`). */
+			/** 'no_quorum': nothing could be verified (no agreed answer, or one
+			 *  that does not prove what it names) — nothing is known.
+			 *  'none': the history window holds no such op.
+			 *  'bad_signature': the newest such op is signed by keys other than
+			 *  the pinned one (`keys`). */
 			readonly reason: 'no_quorum' | 'none' | 'bad_signature';
 			readonly keys?: readonly string[];
 	  };
@@ -204,83 +192,6 @@ interface ReadArgs {
 	readonly pinnedPubkey: string;
 	readonly windows: readonly number[];
 	readonly match?: (payload: unknown) => boolean;
-	/** Whether a verified record ends the check at the first node. A record it
-	 *  refuses (e.g. an older release than the one running) sends the check to
-	 *  one other operator's node. Default: every verified record does. */
-	readonly isCurrent?: (payload: unknown) => boolean;
-	/** Which of two verified records is the newer (> 0: `a`). Decided by
-	 *  SIGNED data only — never by the block number a node reports, which a
-	 *  node can inflate. Default: the transactions' signed `expiration`. */
-	readonly newer?: (a: VerifiedRecord, b: VerifiedRecord) => number;
-}
-
-/** A record whose signature was verified. */
-export type VerifiedRecord = SignedOpResult & { ok: true };
-
-function bySignedExpiration(a: VerifiedRecord, b: VerifiedRecord): number {
-	return a.signedExpiration < b.signedExpiration
-		? -1
-		: a.signedExpiration > b.signedExpiration
-			? 1
-			: 0;
-}
-
-/** What one node's answers prove. */
-type NodeVerdict =
-	| { readonly kind: 'ok'; readonly record: VerifiedRecord }
-	| {
-			readonly kind: 'bad_signature';
-			readonly blockNum: number;
-			readonly trxId: string;
-			readonly keys: readonly string[];
-	  }
-	| { readonly kind: 'none' }
-	| { readonly kind: 'unverifiable' };
-
-async function readFromNode(
-	d: Dblurt,
-	chain: ChainNodeReader,
-	url: string,
-	args: ReadArgs,
-	signer: string,
-	match: (payload: unknown) => boolean
-): Promise<NodeVerdict> {
-	let cand: HistoryCandidate | null = null;
-	for (const window of args.windows) {
-		let hist: unknown;
-		try {
-			hist = await chain.callAt<unknown>(url, 'condenser_api.get_account_history', [
-				signer,
-				-1,
-				window
-			]);
-		} catch {
-			return { kind: 'unverifiable' };
-		}
-		const c = newestCandidate(hist, args.opId, signer, match);
-		if (c === undefined) return { kind: 'unverifiable' };
-		cand = c;
-		if (cand !== null) break;
-	}
-	if (cand === null) return { kind: 'none' };
-	const { blockNum, trxId } = cand;
-	let block: unknown;
-	try {
-		block = await chain.callAt<unknown>(url, 'condenser_api.get_block', [blockNum]);
-	} catch {
-		return { kind: 'unverifiable' };
-	}
-	const tx = findTransaction(d, block, trxId);
-	if (tx === null) return { kind: 'unverifiable' };
-	const payload = customJsonPayloads(tx.operations, args.opId, signer).find(match);
-	// The block holds the transaction, but not the op the history named.
-	if (payload === undefined) return { kind: 'unverifiable' };
-	const keys = recoverSigningKeys(d, tx);
-	if (!keys.includes(args.pinnedPubkey)) return { kind: 'bad_signature', blockNum, trxId, keys };
-	return {
-		kind: 'ok',
-		record: { ok: true, payload, blockNum, trxId, signedExpiration: tx.expiration }
-	};
 }
 
 /**
@@ -289,46 +200,42 @@ async function readFromNode(
  * try in order (a larger one only when the smaller holds no such op).
  */
 export async function readSignedOp(
-	chain: ChainNodeReader,
+	chain: AgreedChainReader,
 	args: ReadArgs
 ): Promise<SignedOpResult> {
 	const d = await loadDblurt();
 	const signer = args.signer.toLowerCase();
 	const match = args.match ?? (() => true);
-	const isCurrent = args.isCurrent ?? (() => true);
+	const unverified: SignedOpResult = { ok: false, reason: 'no_quorum' };
 
-	const order = chain.nodesInOrder();
-	const first = order[0];
-	if (first === undefined) return { ok: false, reason: 'no_quorum' };
-	const a = await readFromNode(d, chain, first, args, signer, match);
-	if (a.kind === 'ok' && isCurrent(a.record.payload)) return a.record;
-
-	// One other operator's node, and no more.
-	const firstOperator = chain.operatorOf(first);
-	const second = order.find((u) => chain.operatorOf(u) !== firstOperator);
-	const b: NodeVerdict =
-		second === undefined
-			? { kind: 'unverifiable' }
-			: await readFromNode(d, chain, second, args, signer, match);
-
-	const verified = [a, b]
-		.filter((v): v is NodeVerdict & { kind: 'ok' } => v.kind === 'ok')
-		.map((v) => v.record);
-	if (verified.length > 0) {
-		// The newest genuine record, by what the signer signed: a node that
-		// lags or withholds cannot hold the check on an older release when the
-		// other one has a newer one, and inflating a block number gains nothing.
-		const newer = args.newer ?? bySignedExpiration;
-		return verified.reduce((x, y) => (newer(y, x) > 0 ? y : x));
+	let cand: HistoryCandidate | null = null;
+	for (const window of args.windows) {
+		let hist: unknown;
+		try {
+			hist = await chain.read<unknown>('condenser_api.get_account_history', [signer, -1, window]);
+		} catch {
+			return unverified;
+		}
+		const c = newestCandidate(hist, args.opId, signer, match);
+		if (c === undefined) return unverified;
+		cand = c;
+		if (cand !== null) break;
 	}
-	if (
-		a.kind === 'bad_signature' &&
-		b.kind === 'bad_signature' &&
-		a.trxId === b.trxId &&
-		a.blockNum === b.blockNum
-	) {
-		return { ok: false, reason: 'bad_signature', keys: [...new Set([...a.keys, ...b.keys])] };
+	if (cand === null) return { ok: false, reason: 'none' };
+	const { blockNum, trxId } = cand;
+	let block: unknown;
+	try {
+		block = await chain.read<unknown>('condenser_api.get_block', [blockNum]);
+	} catch {
+		return unverified;
 	}
-	if (a.kind === 'none' && b.kind === 'none') return { ok: false, reason: 'none' };
-	return { ok: false, reason: 'no_quorum' };
+	const tx = findTransaction(d, block, trxId);
+	if (tx === null) return unverified;
+	const payload = customJsonPayloads(tx.operations, args.opId, signer).find(match);
+	// The block holds the transaction, but not the op the history named.
+	if (payload === undefined) return unverified;
+	const keys = recoverSigningKeys(d, tx);
+	if (!keys.includes(args.pinnedPubkey))
+		return { ok: false, reason: 'bad_signature', keys: [...new Set(keys)] };
+	return { ok: true, payload, blockNum, trxId, signedExpiration: tx.expiration };
 }

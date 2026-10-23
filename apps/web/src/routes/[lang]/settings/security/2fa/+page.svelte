@@ -38,6 +38,7 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { isUnlocked, currentEnvelope, commitSessionEnvelope } from '$stores/identity';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
+	import LoginNameField from '$components/LoginNameField.svelte';
 	import { decryptIdentity, KeystoreError } from '$crypto/keystore';
 	import {
 		enrollTotp,
@@ -544,6 +545,7 @@
 					void startEnrollment();
 				}}
 			>
+				<LoginNameField />
 				<label>
 					<span>{$_('settings.totp.confirm_password_to_begin')}</span>
 					<input
@@ -628,6 +630,7 @@
 						void finalizeEnrollment();
 					}}
 				>
+					<LoginNameField />
 					<label>
 						<span>{$_('settings.totp.confirm_password')}</span>
 						<input
@@ -690,6 +693,7 @@
 					void regenerateCodes();
 				}}
 			>
+				<LoginNameField />
 				<label>
 					<span>{$_('settings.totp.confirm_password')}</span>
 					<input
@@ -731,6 +735,7 @@
 					void disableTotp();
 				}}
 			>
+				<LoginNameField />
 				<label>
 					<span>{$_('settings.totp.confirm_password')}</span>
 					<input

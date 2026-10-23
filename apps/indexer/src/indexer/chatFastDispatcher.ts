@@ -144,12 +144,48 @@ export interface FastDispatchHandle {
 	/** The node accepted the transaction. A `deferred` one goes out now; the
 	 *  node's acceptance is what proves its signature real. Idempotent. */
 	chainAccepted(): void;
+	/**
+	 * Did the signature verify HERE against the sender's posting key? At once
+	 * for a `dispatched` message; for a `deferred` one, after the node has
+	 * accepted it (call {@link chainAccepted} first), by a chain read of the
+	 * sender's key through the quorum refresher, bounded by
+	 * {@link LOCAL_VERIFY_BUDGET_MS}.
+	 *
+	 * WHY (v1.21.14 audit, S-C1/S-M4). Local delivery — both people on this
+	 * instance — and the outbound-pair note that lets the reply notify, both
+	 * need "verified here". A sender whose key needed the chain (no `accounts`
+	 * row: nearly every account older than Morphit; or a row not yet confirmed:
+	 * every new account and every rotation, for a minute) was `deferred`, and
+	 * nothing ever looked again: their message reached the person next to them
+	 * only through the durable poller, 45-63 s later.
+	 */
+	verifiedHere(): Promise<boolean>;
 }
 
 const REFUSED_HANDLE: FastDispatchHandle = {
 	decision: Promise.resolve('refused'),
-	chainAccepted: () => undefined
+	chainAccepted: () => undefined,
+	verifiedHere: () => Promise.resolve(false)
 };
+
+/** How long a deferred message waits, after the node accepted it, for the chain
+ *  read of its sender's key before local delivery gives up on it (it then
+ *  arrives by the head tailer or the durable poller, as before). */
+export const LOCAL_VERIFY_BUDGET_MS = 3_000;
+
+/**
+ * Signature checks /v1/broadcast may run BEFORE the node has seen a message,
+ * per second (v1.21.14 audit, S-M6).
+ *
+ * The pre-send check costs ~6 ms of main thread per message, and it ran for
+ * every chat transaction the route was handed — junk included, which the node
+ * then refuses. At the shared Tor/I2P request ceiling that was 1.5 s of CPU per
+ * second: every live stream on a zero-clearnet node starved. Past this budget a
+ * message is not checked before the chain; it is `deferred`, goes to peers once
+ * the node accepts it, and is checked locally only then — which junk never
+ * reaches, because the node refuses it first. ~40 × 6 ms = 240 ms/s at most.
+ */
+export const PRE_VERIFY_PER_SEC = 40;
 
 export class ChatFastDispatcher {
 	private peers: FastPeer[] = [];
@@ -173,6 +209,10 @@ export class ChatFastDispatcher {
 	/** Chat transactions fanned out only after the node accepted them. */
 	private dispatchedAfterChain = 0;
 	private readonly lookupPostingKey: PostingKeyLookup;
+	/** Start times of the pre-send checks in the last second (S-M6). */
+	private readonly preVerifyTimes: number[] = [];
+	/** Chat transactions not checked before the chain: over the budget. */
+	private preVerifySkipped = 0;
 	private peersDropped = 0;
 	private lastWarmOk = 0;
 	private lastWarmTotal = 0;
@@ -262,6 +302,7 @@ export class ChatFastDispatcher {
 			dispatched: this.dispatched,
 			refusedLocally: this.refusedLocally,
 			dispatchedAfterChain: this.dispatchedAfterChain,
+			preVerifySkipped: this.preVerifySkipped,
 			peerDeliveries: s.delivered,
 			peerFailures: s.failed,
 			// Batching is invisible in a delivery count, and an operator wondering
@@ -528,23 +569,24 @@ export class ChatFastDispatcher {
 			return REFUSED_HANDLE;
 		}
 		const canonical = structural.canonical;
-		const decision: Promise<FastDispatchDecision> = verifyPushedChatOp(
-			{ trx: canonical },
-			this.lookupPostingKey,
-			undefined,
-			{ network: false, remember: false }
-		).then(
-			(v): FastDispatchDecision => {
-				if (v.ok) {
-					this.dispatched++;
-					void this.doDispatch(canonical);
-					return 'dispatched';
-				}
-				return 'deferred';
-			},
-			(): FastDispatchDecision => 'deferred'
-		);
+		const decision: Promise<FastDispatchDecision> = this.takePreVerify()
+			? verifyPushedChatOp({ trx: canonical }, this.lookupPostingKey, undefined, {
+					network: false,
+					remember: false
+				}).then(
+					(v): FastDispatchDecision => {
+						if (v.ok) {
+							this.dispatched++;
+							void this.doDispatch(canonical);
+							return 'dispatched';
+						}
+						return 'deferred';
+					},
+					(): FastDispatchDecision => 'deferred'
+				)
+			: Promise.resolve('deferred');
 		let accepted = false;
+		let afterChain: Promise<boolean> | null = null;
 		return {
 			decision,
 			chainAccepted: (): void => {
@@ -556,8 +598,49 @@ export class ChatFastDispatcher {
 					this.dispatchedAfterChain++;
 					void this.doDispatch(canonical);
 				});
-			}
+			},
+			verifiedHere: (): Promise<boolean> =>
+				decision.then((d) => {
+					if (d === 'dispatched') return true;
+					if (d !== 'deferred' || !accepted) return false;
+					afterChain ??= this.verifyAfterChain(canonical);
+					return afterChain;
+				})
 		};
+	}
+
+	/** Spend one pre-send check from the per-second budget, if there is one. */
+	private takePreVerify(now: number = Date.now()): boolean {
+		const t = this.preVerifyTimes;
+		while (t.length > 0 && (t[0] ?? 0) <= now - 1_000) t.shift();
+		if (t.length >= PRE_VERIFY_PER_SEC) {
+			this.preVerifySkipped++;
+			return false;
+		}
+		t.push(now);
+		return true;
+	}
+
+	/** The check a deferred message gets once the node has accepted it: WITH the
+	 *  network (the quorum key read), bounded by LOCAL_VERIFY_BUDGET_MS. */
+	private async verifyAfterChain(trx: CanonicalChatTrx): Promise<boolean> {
+		let timer: NodeJS.Timeout | undefined;
+		const giveUp = new Promise<boolean>((resolve) => {
+			timer = setTimeout(() => resolve(false), LOCAL_VERIFY_BUDGET_MS);
+			timer.unref?.();
+		});
+		try {
+			const v = verifyPushedChatOp({ trx }, this.lookupPostingKey, undefined, {
+				network: true,
+				remember: false
+			}).then(
+				(r) => r.ok,
+				() => false
+			);
+			return await Promise.race([v, giveUp]);
+		} finally {
+			if (timer !== undefined) clearTimeout(timer);
+		}
 	}
 
 	private async doDispatch(trx: CanonicalChatTrx): Promise<void> {

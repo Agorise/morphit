@@ -108,7 +108,11 @@ export interface Queryable {
 export async function getStrangerFeeQuote(
 	client: Queryable,
 	sender: string,
-	now?: Date
+	now?: Date,
+	/** Fees from this sender the table does not hold yet but the caller knows
+	 *  of (head-block fees, headStrangerFees.ts). Counted like recorded ones,
+	 *  so a quote made at the head is never LOWER than the durable one. */
+	extraRecent = 0
 ): Promise<StrangerFeeQuote> {
 	const result = await client.query<{ count: string }>(
 		now === undefined
@@ -125,7 +129,7 @@ export async function getStrangerFeeQuote(
 			? [sender, `${STRANGER_FEE_WINDOW_MINUTES} minutes`]
 			: [sender, `${STRANGER_FEE_WINDOW_MINUTES} minutes`, now]
 	);
-	const recentCount = Number(result.rows[0]?.count ?? '0');
+	const recentCount = Number(result.rows[0]?.count ?? '0') + Math.max(0, extraRecent);
 	// Multiplier sequence: 1, 2, 4, 8, ..., 128, 128, 128, ...
 	// With recentCount = N, the *next* send is the (N+1)th and
 	// pays multiplier 2^min(N, MAX_DOUBLINGS - 1).

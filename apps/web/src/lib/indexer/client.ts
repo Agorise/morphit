@@ -319,8 +319,8 @@ export interface PeerOrderbookResponse {
 
 /** (v1.20.2) Another instance's first orderbook page, fetched BY THIS
  *  INSTANCE (`GET /v1/compare/orderbook?origin=…`, same origin). The page's
- *  CSP `connect-src` allows only 'self' and the RPC nodes, so the browser
- *  cannot ask the peer itself; the indexer asks it over the peer's registered
+ *  CSP `connect-src` allows only 'self', so the browser cannot ask the peer
+ *  itself; the indexer asks it over the peer's registered
  *  (hidden or pinned clearnet) address. Errors carry the indexer's `reason`:
  *  `unknown_instance`, `same_instance`, `target_unreachable`,
  *  `target_bad_answer`, `compare_rate_limited`, `bad_target`. */
@@ -560,14 +560,14 @@ export function getChatHistory(
 /**
  * GET /v1/chat-identity/:account — the account's published X25519
  * chat public key. ADR-0015. Returns `not_found` if the account
- * has never published one; since v1.21.13 nothing is published on
- * first use, and messages to such an account go to its posting keys
- * (chatService). `not_found` is an answer, not an error.
+ * has never published one. Since v1.21.14 it is asked only to OPEN a
+ * peer's older-format (v2) message: every message is sent to posting keys
+ * and nothing publishes a chat key (chatService). `not_found` is an
+ * answer, not an error.
  *
- * Calls without a signal that overlap share one request: opening a
- * conversation asks for our own key twice at once (the re-publish check
- * and the send path's own-status check), and on Tor/I2P every request is
- * a slow round trip competing for few connections.
+ * Calls without a signal that overlap share one request (a history of
+ * several older-format messages from one peer asks once), and on Tor/I2P
+ * every request is a slow round trip competing for few connections.
  */
 const chatIdentityInFlight = new Map<string, Promise<Result<ChatIdentityResponse>>>();
 export function getChatIdentity(

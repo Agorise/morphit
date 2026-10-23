@@ -28,6 +28,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // The module reads the signed-in account, and whether there is a session at
 // all, to decide whether to connect.
+vi.mock('$lib/chat/streamTicket', () => ({
+	withStreamTicket: (p: string, a: string) => `${p}${p.includes('?') ? '&' : '?'}ticket=T-${a}`
+}));
 vi.mock('$blurt/ops/profile', () => ({
 	getUserBlurtAccount: () => 'bob'
 }));
@@ -87,11 +90,15 @@ describe('globalChatActivityStream — an inbound ping becomes an inbox card', (
 		session.live = true;
 		FakeEventSource.last = null;
 		(globalThis as unknown as { EventSource: unknown }).EventSource = FakeEventSource;
+		// One tab's own stream; the stream shared across tabs (C-L5) is tested in
+		// $lib/chat/globalChatActivityShared.test.ts. Node has a BroadcastChannel.
+		vi.stubGlobal('BroadcastChannel', undefined);
 	});
 
 	afterEach(() => {
 		stop?.();
 		stop = null;
+		vi.unstubAllGlobals();
 	});
 
 	async function startAndDeliver(frame: unknown): Promise<{

@@ -14,6 +14,8 @@
  *   - recordVerificationPure transitions phase + clears mismatch on verified
  *   - Future-phase preservation (released/disputed/completed don't regress)
  *   - Unknown phase handling (defensive)
+ *   - Entries are keyed by order owner AND permlink (tradeKey): the same
+ *     permlink on two owners' orders is two trades
  */
 
 import {
@@ -22,6 +24,7 @@ import {
 	recordAddressSharedPure,
 	recordFundsSentPure,
 	recordVerificationPure,
+	tradeKey,
 	type TradePhase,
 	type TradeState
 } from '../../web/src/lib/trades/tradeStatusPure.ts';
@@ -53,6 +56,9 @@ function assertTrue(cond: boolean, label: string): void {
 }
 
 const empty: ReadonlyMap<string, TradeState> = new Map();
+/** The account that posted the order (the seller, whose address is shared).
+ *  The store is keyed by owner AND permlink (tradeKey). */
+const OWNER = 'alice';
 
 // ─── advancePhase ─────────────────────────────────────────────────
 
@@ -144,6 +150,7 @@ scenario('phaseForVerify: unknown future kind → paid_unverifiable', () => {
 
 scenario('recordAddressSharedPure: creates entry', () => {
 	const next = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -152,7 +159,7 @@ scenario('recordAddressSharedPure: creates entry', () => {
 		expectedMemo: 'abc12345',
 		direction: 'outgoing'
 	});
-	const entry = next.get('ord-1');
+	const entry = next.get(tradeKey(OWNER, 'ord-1'));
 	assertTrue(entry !== undefined, 'entry exists');
 	assertEqual(entry?.phase, 'address_shared', 'phase');
 	assertEqual(entry?.expectedMemo, 'abc12345', 'memo');
@@ -164,6 +171,7 @@ scenario('recordAddressSharedPure: preserves addressSharedAt on re-record', () =
 	const t0 = new Date('2026-01-01T00:00:00Z');
 	const t1 = new Date('2026-01-01T01:00:00Z');
 	const a = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -172,6 +180,7 @@ scenario('recordAddressSharedPure: preserves addressSharedAt on re-record', () =
 		direction: 'outgoing'
 	});
 	const b = recordAddressSharedPure(a, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -179,7 +188,7 @@ scenario('recordAddressSharedPure: preserves addressSharedAt on re-record', () =
 		now: t1,
 		direction: 'outgoing'
 	});
-	const entry = b.get('ord-1');
+	const entry = b.get(tradeKey(OWNER, 'ord-1'));
 	assertEqual(entry?.addressSharedAt?.toISOString(), t0.toISOString(), 'preserved');
 	assertEqual(entry?.updatedAt?.toISOString(), t1.toISOString(), 'updatedAt advances');
 });
@@ -188,6 +197,7 @@ scenario('recordAddressSharedPure: preserves addressSharedAt on re-record', () =
 
 scenario('recordFundsSentPure: preserves expectedMemo from prior address', () => {
 	let m = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -197,6 +207,7 @@ scenario('recordFundsSentPure: preserves expectedMemo from prior address', () =>
 		direction: 'outgoing'
 	});
 	m = recordFundsSentPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -205,7 +216,7 @@ scenario('recordFundsSentPure: preserves expectedMemo from prior address', () =>
 		amount: 1700,
 		direction: 'outgoing'
 	});
-	const entry = m.get('ord-1');
+	const entry = m.get(tradeKey(OWNER, 'ord-1'));
 	assertEqual(entry?.expectedMemo, 'abc12345', 'expected preserved');
 	assertEqual(entry?.claimedMemo, 'WRONG999', 'claimed recorded');
 	assertEqual(entry?.phase, 'paid', 'phase advanced');
@@ -213,6 +224,7 @@ scenario('recordFundsSentPure: preserves expectedMemo from prior address', () =>
 
 scenario('recordFundsSentPure: BLURT sets verifyResult to pending', () => {
 	const m = recordFundsSentPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -220,11 +232,12 @@ scenario('recordFundsSentPure: BLURT sets verifyResult to pending', () => {
 		amount: 1700,
 		direction: 'outgoing'
 	});
-	assertEqual(m.get('ord-1')?.verifyResult, 'pending', 'pending');
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.verifyResult, 'pending', 'pending');
 });
 
 scenario('recordFundsSentPure: BTC has no verifyResult', () => {
 	const m = recordFundsSentPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'btc',
@@ -232,12 +245,13 @@ scenario('recordFundsSentPure: BTC has no verifyResult', () => {
 		amount: 0.5,
 		direction: 'outgoing'
 	});
-	const entry = m.get('ord-1');
+	const entry = m.get(tradeKey(OWNER, 'ord-1'));
 	assertEqual(entry?.verifyResult, undefined, 'no verify for BTC');
 });
 
 scenario('recordFundsSentPure: creates entry even without prior address pill', () => {
 	const m = recordFundsSentPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-orphan',
 		peer: 'bob',
 		method: 'blurt',
@@ -245,7 +259,7 @@ scenario('recordFundsSentPure: creates entry even without prior address pill', (
 		amount: 100,
 		direction: 'outgoing'
 	});
-	const entry = m.get('ord-orphan');
+	const entry = m.get(tradeKey(OWNER, 'ord-orphan'));
 	assertTrue(entry !== undefined, 'created');
 	assertEqual(entry?.phase, 'paid', 'phase');
 	assertEqual(entry?.expectedAmount, 100, 'amount captured from funds_sent');
@@ -255,6 +269,7 @@ scenario('recordFundsSentPure: creates entry even without prior address pill', (
 
 scenario('recordVerificationPure: a verified payment corrects an earlier mismatch', () => {
 	let m = recordFundsSentPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -263,12 +278,13 @@ scenario('recordVerificationPure: a verified payment corrects an earlier mismatc
 		direction: 'outgoing'
 	});
 	m = recordVerificationPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		verifyResult: { kind: 'mismatch', field: 'memo' },
 		counterparty: 'bob',
 		amountConfirmed: true
 	});
-	assertEqual(m.get('ord-1')?.mismatchField, 'memo', 'mismatch field set');
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.mismatchField, 'memo', 'mismatch field set');
 
 	// A later VERIFIED result replaces the mismatch: it means the chain
 	// holds a transfer from the counterparty that matches the order (e.g.
@@ -276,18 +292,20 @@ scenario('recordVerificationPure: a verified payment corrects an earlier mismatc
 	// may have come from a claim the counterparty never made. The mismatch
 	// field goes with the phase.
 	m = recordVerificationPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		verifyResult: { kind: 'verified' },
 		counterparty: 'bob',
 		amountConfirmed: true
 	});
-	const entry = m.get('ord-1');
+	const entry = m.get(tradeKey(OWNER, 'ord-1'));
 	assertEqual(entry?.phase, 'paid_verified', 'verified replaces the mismatch');
 	assertEqual(entry?.mismatchField, undefined, 'no stale mismatch field');
 
 	// An unverifiable result never replaces a mismatch (first wins between
 	// the two failures).
 	let u = recordFundsSentPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-2',
 		peer: 'bob',
 		method: 'blurt',
@@ -296,22 +314,29 @@ scenario('recordVerificationPure: a verified payment corrects an earlier mismatc
 		direction: 'outgoing'
 	});
 	u = recordVerificationPure(u, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-2',
 		verifyResult: { kind: 'mismatch', field: 'memo' },
 		counterparty: 'bob',
 		amountConfirmed: true
 	});
 	u = recordVerificationPure(u, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-2',
 		verifyResult: { kind: 'not_found' },
 		counterparty: 'bob',
 		amountConfirmed: true
 	});
-	assertEqual(u.get('ord-2')?.phase, 'paid_mismatch', 'a failed re-check keeps the mismatch');
+	assertEqual(
+		u.get(tradeKey(OWNER, 'ord-2'))?.phase,
+		'paid_mismatch',
+		'a failed re-check keeps the mismatch'
+	);
 });
 
 scenario('recordVerificationPure: verified is sticky against later mismatch', () => {
 	let m = recordFundsSentPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -320,6 +345,7 @@ scenario('recordVerificationPure: verified is sticky against later mismatch', ()
 		direction: 'outgoing'
 	});
 	m = recordVerificationPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		verifyResult: { kind: 'verified' },
 		counterparty: 'bob',
@@ -328,12 +354,13 @@ scenario('recordVerificationPure: verified is sticky against later mismatch', ()
 	// A subsequent stale RPC error or re-render shouldn't
 	// downgrade.
 	m = recordVerificationPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		verifyResult: { kind: 'rpc_error', message: 'late' },
 		counterparty: 'bob',
 		amountConfirmed: true
 	});
-	const entry = m.get('ord-1');
+	const entry = m.get(tradeKey(OWNER, 'ord-1'));
 	assertEqual(entry?.phase, 'paid_verified', 'sticky verified');
 });
 
@@ -343,12 +370,14 @@ scenario('recordVerificationPure: no entry is created for an order never engaged
 	// This scenario used to pin the old
 	// behaviour, which created a paid_verified entry.
 	const m = recordVerificationPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-orphan',
 		verifyResult: { kind: 'verified' },
 		counterparty: 'bob',
 		amountConfirmed: true
 	});
-	assertTrue(m.get('ord-orphan') === undefined, 'not created');
+	assertTrue(m.get(tradeKey(OWNER, 'ord-orphan')) === undefined, 'not created');
+	assertEqual(m.size, 0, 'the store is still empty');
 });
 
 // ─── End-to-end happy path ────────────────────────────────────────
@@ -356,6 +385,7 @@ scenario('recordVerificationPure: no entry is created for an order never engaged
 scenario('e2e happy path: address → paid → verified', () => {
 	let m: ReadonlyMap<string, TradeState> = empty;
 	m = recordAddressSharedPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -364,9 +394,10 @@ scenario('e2e happy path: address → paid → verified', () => {
 		expectedMemo: 'abc12345',
 		direction: 'outgoing'
 	});
-	assertEqual(m.get('ord-1')?.phase, 'address_shared', 'p1');
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.phase, 'address_shared', 'p1');
 
 	m = recordFundsSentPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -375,21 +406,23 @@ scenario('e2e happy path: address → paid → verified', () => {
 		amount: 1700,
 		direction: 'outgoing'
 	});
-	assertEqual(m.get('ord-1')?.phase, 'paid', 'p2');
-	assertEqual(m.get('ord-1')?.verifyResult, 'pending', 'pending');
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.phase, 'paid', 'p2');
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.verifyResult, 'pending', 'pending');
 
 	m = recordVerificationPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		verifyResult: { kind: 'verified' },
 		counterparty: 'bob',
 		amountConfirmed: true
 	});
-	assertEqual(m.get('ord-1')?.phase, 'paid_verified', 'p3');
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.phase, 'paid_verified', 'p3');
 });
 
 scenario('e2e mismatch path: address → paid → mismatch', () => {
 	let m: ReadonlyMap<string, TradeState> = empty;
 	m = recordAddressSharedPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -398,6 +431,7 @@ scenario('e2e mismatch path: address → paid → mismatch', () => {
 		direction: 'outgoing'
 	});
 	m = recordFundsSentPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -407,12 +441,13 @@ scenario('e2e mismatch path: address → paid → mismatch', () => {
 		direction: 'outgoing'
 	});
 	m = recordVerificationPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		verifyResult: { kind: 'mismatch', field: 'memo' },
 		counterparty: 'bob',
 		amountConfirmed: true
 	});
-	const entry = m.get('ord-1');
+	const entry = m.get(tradeKey(OWNER, 'ord-1'));
 	assertEqual(entry?.phase, 'paid_mismatch', 'phase');
 	assertEqual(entry?.mismatchField, 'memo', 'field');
 });
@@ -421,6 +456,7 @@ scenario('e2e mismatch path: address → paid → mismatch', () => {
 
 scenario('F-40: outgoing locks engagedPeer', () => {
 	const m = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -428,11 +464,12 @@ scenario('F-40: outgoing locks engagedPeer', () => {
 		expectedMemo: 'abc12345',
 		direction: 'outgoing'
 	});
-	assertEqual(m.get('ord-1')?.engagedPeer, 'bob', 'engaged');
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.engagedPeer, 'bob', 'engaged');
 });
 
 scenario('F-40: incoming on a tentative (no-engagement) entry succeeds', () => {
 	const m = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'mallory',
 		method: 'blurt',
@@ -440,7 +477,7 @@ scenario('F-40: incoming on a tentative (no-engagement) entry succeeds', () => {
 		expectedMemo: 'poison01',
 		direction: 'incoming'
 	});
-	const entry = m.get('ord-1');
+	const entry = m.get(tradeKey(OWNER, 'ord-1'));
 	assertEqual(entry?.peer, 'mallory', 'peer set');
 	assertEqual(entry?.engagedPeer, undefined, 'no engagement');
 	assertEqual(entry?.expectedMemo, 'poison01', 'memo set');
@@ -449,6 +486,7 @@ scenario('F-40: incoming on a tentative (no-engagement) entry succeeds', () => {
 scenario('F-40: incoming from non-engaged peer is DROPPED after engagement', () => {
 	// User engages with Bob (sends address pill OUT to Bob).
 	let m = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -456,10 +494,11 @@ scenario('F-40: incoming from non-engaged peer is DROPPED after engagement', () 
 		expectedMemo: 'abc12345',
 		direction: 'outgoing'
 	});
-	const beforePoison = m.get('ord-1');
+	const beforePoison = m.get(tradeKey(OWNER, 'ord-1'));
 
 	// Mallory sends a poisoning incoming address-shared.
 	m = recordAddressSharedPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'mallory',
 		method: 'blurt',
@@ -468,7 +507,7 @@ scenario('F-40: incoming from non-engaged peer is DROPPED after engagement', () 
 		direction: 'incoming'
 	});
 
-	const afterPoison = m.get('ord-1');
+	const afterPoison = m.get(tradeKey(OWNER, 'ord-1'));
 	// Entry unchanged — Mallory's update was dropped.
 	assertEqual(afterPoison?.peer, 'bob', 'peer preserved');
 	assertEqual(afterPoison?.expectedMemo, 'abc12345', 'memo preserved');
@@ -477,6 +516,7 @@ scenario('F-40: incoming from non-engaged peer is DROPPED after engagement', () 
 
 scenario('F-40: incoming from engaged peer is APPLIED after engagement', () => {
 	let m = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -486,6 +526,7 @@ scenario('F-40: incoming from engaged peer is APPLIED after engagement', () => {
 	});
 	// Bob's reply (incoming funds-sent) — should apply, advance phase.
 	m = recordFundsSentPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -494,7 +535,7 @@ scenario('F-40: incoming from engaged peer is APPLIED after engagement', () => {
 		amount: 1700,
 		direction: 'incoming'
 	});
-	const entry = m.get('ord-1');
+	const entry = m.get(tradeKey(OWNER, 'ord-1'));
 	assertEqual(entry?.phase, 'paid', 'advanced to paid');
 	assertEqual(entry?.engagedPeer, 'bob', 'engagement preserved');
 	assertEqual(entry?.expectedMemo, 'abc12345', 'memo from outgoing preserved');
@@ -505,6 +546,7 @@ scenario(
 	() => {
 		// Mallory poisons a tentative entry first.
 		let m = recordAddressSharedPure(empty, {
+			orderOwner: OWNER,
 			orderPermlink: 'ord-1',
 			peer: 'mallory',
 			method: 'blurt',
@@ -516,6 +558,7 @@ scenario(
 		// This OVERWRITES the tentative entry — peer/memo/etc. get
 		// updated to bob's values, and engagedPeer is set to bob.
 		m = recordAddressSharedPure(m, {
+			orderOwner: OWNER,
 			orderPermlink: 'ord-1',
 			peer: 'bob',
 			method: 'blurt',
@@ -523,13 +566,14 @@ scenario(
 			expectedMemo: 'abc12345',
 			direction: 'outgoing'
 		});
-		let entry = m.get('ord-1');
+		let entry = m.get(tradeKey(OWNER, 'ord-1'));
 		assertEqual(entry?.engagedPeer, 'bob', 'engaged with bob');
 		assertEqual(entry?.expectedMemo, 'abc12345', 'memo replaced by outgoing');
 		assertEqual(entry?.peer, 'bob', 'peer replaced');
 
 		// Mallory tries again post-engagement — dropped.
 		m = recordAddressSharedPure(m, {
+			orderOwner: OWNER,
 			orderPermlink: 'ord-1',
 			peer: 'mallory',
 			method: 'blurt',
@@ -537,7 +581,7 @@ scenario(
 			expectedMemo: 'poison02',
 			direction: 'incoming'
 		});
-		entry = m.get('ord-1');
+		entry = m.get(tradeKey(OWNER, 'ord-1'));
 		assertEqual(entry?.expectedMemo, 'abc12345', 'still bob memo');
 		assertEqual(entry?.peer, 'bob', 'peer still bob');
 	}
@@ -550,6 +594,7 @@ scenario('F-40: engagement is sticky — outgoing to different peer does NOT re-
 	// stays locked to Bob.  This is defense-in-depth behavior — UI
 	// should prevent reaching this state, but the mutator guards.
 	let m = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -557,13 +602,14 @@ scenario('F-40: engagement is sticky — outgoing to different peer does NOT re-
 		direction: 'outgoing'
 	});
 	m = recordAddressSharedPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'charlie',
 		method: 'blurt',
 		address: 'alice',
 		direction: 'outgoing'
 	});
-	const entry = m.get('ord-1');
+	const entry = m.get(tradeKey(OWNER, 'ord-1'));
 	// Outgoing always APPLIES — entry's peer reflects the latest
 	// outgoing send.  But engagedPeer stays at the FIRST engaged
 	// peer (bob) per `existing?.engagedPeer ?? args.peer`.
@@ -573,6 +619,7 @@ scenario('F-40: engagement is sticky — outgoing to different peer does NOT re-
 
 scenario('F-40: incoming funds_sent from non-engaged peer dropped', () => {
 	let m = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'bob',
 		method: 'blurt',
@@ -580,8 +627,9 @@ scenario('F-40: incoming funds_sent from non-engaged peer dropped', () => {
 		expectedMemo: 'abc12345',
 		direction: 'outgoing'
 	});
-	const before = m.get('ord-1');
+	const before = m.get(tradeKey(OWNER, 'ord-1'));
 	m = recordFundsSentPure(m, {
+		orderOwner: OWNER,
 		orderPermlink: 'ord-1',
 		peer: 'mallory',
 		method: 'blurt',
@@ -589,12 +637,40 @@ scenario('F-40: incoming funds_sent from non-engaged peer dropped', () => {
 		amount: 1700,
 		direction: 'incoming'
 	});
-	const after = m.get('ord-1');
+	const after = m.get(tradeKey(OWNER, 'ord-1'));
 	// Mallory's funds-sent dropped — phase still address_shared.
 	assertEqual(after?.phase, 'address_shared', 'phase unchanged');
 	assertEqual(after?.peer, 'bob', 'peer unchanged');
 	assertEqual(after?.txid, undefined, 'no txid added');
 	assertEqual(after?.updatedAt, before?.updatedAt, 'updatedAt unchanged');
+});
+
+// ─── keyed by owner + permlink (review C-L3) ──────────────────────
+
+scenario("the same permlink on two owners' orders is two separate trades", () => {
+	let m = recordAddressSharedPure(empty, {
+		orderOwner: OWNER,
+		orderPermlink: 'ord-1',
+		peer: 'bob',
+		method: 'blurt',
+		address: 'alice',
+		expectedMemo: 'abc12345',
+		direction: 'outgoing'
+	});
+	m = recordFundsSentPure(m, {
+		orderOwner: 'carol',
+		orderPermlink: 'ord-1',
+		peer: 'carol',
+		method: 'blurt',
+		txid: 'a'.repeat(40),
+		amount: 5,
+		direction: 'outgoing'
+	});
+	assertEqual(m.size, 2, 'two entries');
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.phase, 'address_shared', "alice's order untouched");
+	assertEqual(m.get(tradeKey(OWNER, 'ord-1'))?.txid, undefined, "no txid on alice's order");
+	assertEqual(m.get(tradeKey('carol', 'ord-1'))?.phase, 'paid', "carol's order paid");
+	assertEqual(m.get(tradeKey('carol', 'ord-1'))?.orderOwner, 'carol', 'owner recorded');
 });
 
 console.log(`\n${'─'.repeat(54)}`);

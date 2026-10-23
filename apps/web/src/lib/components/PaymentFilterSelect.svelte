@@ -26,6 +26,7 @@
 -->
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
+	import { typedByUser } from '$lib/ui/typedByUser';
 	import type { PaymentMethodEntry } from '$lib/payments/registry';
 
 	/** Selected payment-method keys (e.g. ["paypal","barter_goods"]). */
@@ -222,6 +223,12 @@
 			aria-controls="payment-method-listbox"
 			onfocus={() => void ensureLoaded()}
 			oninput={() => {
+				// Only the person's own typing opens the menu: a password manager
+				// filling this field must not blur the page (typedByUser).
+				if (!typedByUser(inputEl)) {
+					query = '';
+					return;
+				}
 				open = true;
 				activeIndex = 0;
 			}}

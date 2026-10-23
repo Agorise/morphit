@@ -11,10 +11,33 @@ Shipped infrastructure lives at `apps/web/src/lib/notifications/`:
 - `vibrate.ts` — opt-in vibration (default off, mobile only).
 - `push.ts` — Web Push subscribe / unsubscribe client.
 - `preferences.ts` — per-category opt-in storage.
-- `tradeNotifications.ts` — order / chat / feedback event
-  glue against the indexer streams.
-- `crossPageTradeEvents.ts` — BroadcastChannel fan-out so the
-  same event in two open tabs only pings once.
+- `crossPageTradeEvents.ts` — the on/off switch (localStorage
+  `morphit.crossPageTradeEvents.enabled`, default on; Settings →
+  Privacy) for the cross-page trade listener below. It is not a
+  BroadcastChannel fan-out: nothing de-duplicates an event between two
+  open tabs except the OS notification's tag.
+- `chatUnread.ts` — the chat unread count, from read state plus the
+  account-wide chat activity stream (`lib/chat/globalChatActivityStream.ts`).
+- `chatNudge.ts` — when the in-chat "turn on chat notifications" nudge
+  shows.
+- (An earlier list named a `tradeNotifications.ts`; no such file
+  exists. Trade events are the job of `lib/trades/tradeEventListener.ts`,
+  described below.)
+
+The cross-page trade listener (`lib/trades/tradeEventListener.ts`,
+started by the root layout while signed in and the switch above is on)
+flips order badges and raises order notifications for structured chat
+messages (address shared, funds sent, …) without the chat being open.
+Since v1.21.14 (W-H2) it opens no stream of its own — it used to keep one
+chat stream open per recent peer, up to five, which with the app's other
+streams used up the six connections a browser allows per site on a
+plain-HTTP Tor/I2P instance. It listens to the account-wide activity
+stream; on a ping naming a peer (a fast message, or a durable inbound one
+whose ping carries no order) it reads that peer's conversation ONCE (a
+chat stream closed after its snapshot, or after 30 s), one peer at a
+time, and applies the new messages. A trade message only counts when it
+names the order of the thread it arrived in and its sender is a party to
+that order (W-H1); a party it cannot check yet is retried with back-off.
 - `index.ts` — public `notify(event)` surface called from
   every notification site.
 
@@ -31,11 +54,37 @@ Backend-side push infrastructure:
   open/focus).
 - Schema v33 — `push_subscriptions` + `push_pending` tables
   in `apps/indexer/src/db/schema.sql`.
-- Indexer event emission — `feedback.ts` and `chat.ts` handlers
-  enqueue `push_pending` rows; chat routes order-permlink
-  messages under `category='order'` and other messages under
-  `category='chat'` so users can opt out of chat noise but
-  still get trade alerts.
+- Indexer event emission — `push_pending` rows are written in
+  three places (checked 2026-10-21, v1.21.14):
+  - `apps/indexer/src/indexer/chatPushEnqueue.ts`
+    (`enqueueChatPush`), called by the durable chat handler
+    (`handlers/chat.ts`), by the head tailer (`headTailer.ts`,
+    including its rechecks), by a verified federation push and a
+    local delivery (`chatFastFederation.deliverVerifiedPush` with
+    the gates from `api/federationChatFast.ts`), and by a parked
+    first contact released when its stranger fee is recognised
+    (`parkedFirstContacts.ts`, from either fast route). Every
+    caller has already applied the block list; every route keys
+    the row on the transaction id, so a message is pushed once
+    however many routes deliver it. It also queues the offline
+    notice (`offlineNoticeEnqueue.ts` → `offline_notify_pending`),
+    whether or not the recipient has a push subscription.
+  - `apps/indexer/src/indexer/feedbackPushEnqueue.ts`
+    (`enqueueFeedbackPush`), called by the durable feedback
+    handler and by the head tailer.
+  - `apps/indexer/src/indexer/handlers/featureBid.ts`, directly:
+    the "outbid" push to a displaced featured-slot bidder.
+
+  Chat routes order-permlink messages under `category='order'`
+  and other messages under `category='chat'` so users can opt
+  out of chat noise but still get trade alerts. Until the
+  recipient has written to the sender, a sender's messages earn
+  one chat push per 24 hours (`chatPushEnqueue.ts`,
+  `NO_REPLY_PUSH_WINDOW_MS`; the relay keeps chat and order
+  tombstones 24 hours so the rule can see earlier pushes,
+  v1.21.14). A fast-path push goes out before the chain has the
+  message, by design; a message that never reaches the chain can
+  therefore have been pushed.
 
 `UnreadCounts` Readable store drives the title prefix +
 favicon badge + the in-app inbox-tab unread dots.
@@ -49,6 +98,20 @@ Authentication on the subscribe endpoint for a later change is
 rate-limited-only (no cryptographic proof of account ownership);
 the trade-off is documented in `docs/OPERATIONS.md` §42.5 — a
 future checkpoint may add posting-key signature verification.
+
+> **Server side as of v1.21.14 (checked 2026-10-21).** The
+> self-hosted / standard / off mode was never wired on the
+> server. There is no operator push server; the relay accepts
+> `privacy_mode: 'self_hosted'` from older clients and stores
+> every subscription as `'standard'`
+> (`apps/relay/src/policy/pushSubscriptions.ts`). "Off" means
+> not subscribing. Subscribe and unsubscribe now require a
+> posting-key signature by default
+> (`MORPHIT_RELAY_PUSH_REQUIRE_SIGNED=true`). A relay whose chain
+> endpoints are all hidden services sends no Web Push at all: a
+> browser push service is a public clearnet host
+> (`relayIsHiddenOnly` in `apps/relay/src/config/index.ts`;
+> OPERATIONS §51).
 
 **Last updated:** 2026-05-15 (Phase 3 shipped);
 prior shipping iterated across Phases 5d-F.
@@ -182,13 +245,22 @@ the technical stack:
 Tab is `document.visibilityState === 'visible'` AND page has focus →
 suppress ALL notifications except the title-bar prefix and favicon
 badge (which are ambient, not alerts). The user doesn't need a ping
-about a message they're already staring at.
+about a message they're already staring at. (In-page alerts, `notify()`.)
+
+**Web Push differs** (`service-worker.ts`): a chat or order-scoped push
+for a peer is suppressed whenever ANY tab on this device has that peer's
+conversation open (`/chat/<peer>`), focused or not, visible or not —
+having the thread open is the signal. A tab left open on a thread
+therefore silences that peer's pushes on that device.
 
 ### Coalesce bursts
 
-If 3 events of the same category fire within 30 seconds, produce ONE
-coalesced notification: "3 new messages from @alice" instead of three
-separate pings. Debounce window resets on each event.
+(Planned, not built.) The plan was ONE notification for a burst —
+"3 new messages from @alice". What the code does: `notify()` remembers
+each event id for 30 seconds and the same id again does not count
+twice, and an OS notification carries the tag
+`morphit-<category>-<id>`, so a redelivered event replaces its own
+notification. Different messages are separate notifications.
 
 ### Per-category granularity
 
@@ -197,7 +269,7 @@ Three independent opt-in toggles in Settings:
 - **Order events** — your order filled, expired, was replaced by
   counterparty offer, etc. RECOMMENDED ON. Highest signal-to-noise.
 - **Chat messages** — new message in an active trade chat. DEFAULT
-  OFF for high-volume traders; DEFAULT ON for low-volume.
+  ON (`preferences.ts`). (The plan said off for high-volume traders.)
 - **Feedback events** — someone left you feedback, or someone
   responded to your feedback. DEFAULT ON.
 
@@ -219,10 +291,15 @@ message. Want to know about future ones even when you're not here?
 [Enable notifications] [Not now]". Roughly 3x the grant rate of
 page-load prompts.
 
-If user declines, don't ask again for a week. If they decline twice,
-don't ask again this month. If they decline three times, never ask
-again (respect their decision, show a "Enable notifications" button
+The permission banner (`PermissionBanner.svelte`, raised only when the
+native channel is on in Settings and the browser has not been asked
+yet): if user declines, don't ask again for a week. If they decline
+twice, don't ask again this month. If they decline three times, never
+ask again (respect their decision, show a "Enable notifications" button
 in Settings for them to opt in if they change their mind).
+
+The in-chat nudge (`ChatNotificationNudge.svelte`, `chatNudge.ts`) has
+no such back-off: one "Not now" hides it for good on this browser.
 
 ### Quiet hours
 
@@ -259,6 +336,14 @@ knowing "this user just got pinged by morphit.io."
 
 Push message *content* is e2e encrypted in all cases, but "self-hosted
 only" hides metadata from Google/Mozilla too.
+
+> **Not built (server side, checked 2026-10-21).** No operator push
+> server exists, and the relay stores every subscription as
+> `'standard'`; see the note under the shipped-infrastructure list
+> above. The relay delivers only to the browser vendors' push
+> services (and hosts the operator adds in
+> `MORPHIT_RELAY_PUSH_EXTRA_HOSTS`), and a hidden-only relay sends no
+> Web Push.
 
 ## Phase plan
 
@@ -344,9 +429,9 @@ resolved.  Captured here so future contributors can read the
    wiring-completeness audit caught a "claim without code"
    regression.
 2. **Annoyance policy** — ✅ Shipped as designed: no notification
-   when the tab is focused, coalesce-30s on bursty events,
-   per-category opt-in (order ON, feedback ON, chat OFF by
-   default), audio + vibrate OFF by default, permission requested
+   when the tab is focused, a 30-second de-duplication by event id
+   (not the planned burst coalescing — see above), per-category
+   opt-in (order, feedback and chat all ON by default), audio + vibrate OFF by default, permission requested
    at the point of relevance not on page-load.
 3. **Push service architecture** — ✅ User-selectable
    (self-hosted / standard / off), matching the user-facing
@@ -355,20 +440,33 @@ resolved.  Captured here so future contributors can read the
    `scripts/generate-vapid-keys.sh`; the client passes the
    user's choice to the relay's `/v1/push/subscribe` endpoint at
    subscribe time and the row's `privacy_mode` column records
-   it.
-4. **Default states** — ✅ Chat default OFF.  High-volume traders
-   need silence by default; users wanting per-message pings can
-   opt into chat events in Settings → Notifications.  Order and
-   feedback events are ON by default because they're rare and
-   high-signal.
+   it. (**Corrected 2026-10-21:** the self-hosted mode was never
+   wired. The column is always written `'standard'`, whatever the
+   client sends; see the server note near the top.)
+4. **Default states** — Chat is ON by default (`preferences.ts`; the
+   original decision here was OFF). Order and feedback events are ON
+   by default because they're rare and high-signal. Every category can
+   be turned off in Settings → Notifications.
 
 The push-sender worker (`apps/relay/src/policy/pushSender.ts`)
-polls every 30 seconds (tunable), encrypts payloads per RFC 8291
+polls every 2 seconds (`MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS`,
+default 2000; it was 30 s), encrypts payloads per RFC 8291
 via the `web-push` library, handles 410 Gone with
-auto-cleanup, and drops events older than 1 hour to avoid
-delivering stale notifications.  Subscribe endpoint
-authentication was rate-limited-only
-added posting-key signature verification — every subscribe
+auto-cleanup, and drops events older than 1 hour
+(`MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS`) to avoid
+delivering stale notifications.  Since v1.21.14 a pass does not
+wait for the previous one: up to 32 rows are sent at once
+(`PUSH_ROWS_IN_FLIGHT`), a row's devices are pushed side by side,
+and one stalled push service (15 s timeout each) no longer holds
+up anyone else.  A sent row is retired (`sent_at`), not deleted,
+so a later enqueue of the same message lands on a conflict; the
+tombstones are pruned after an hour, chat and order ones after 24
+hours (`CHAT_PUSH_TOMBSTONE_RETENTION_SECONDS`, v1.21.14), because
+the indexer's one-push-a-day-until-reply rule reads them.  A relay
+whose chain endpoints are all hidden services runs no push sender;
+a janitor retires and prunes the queue by the same rules.  Subscribe endpoint
+authentication was rate-limited-only until
+posting-key signature verification was added — every subscribe
 request must carry a signature over
 `morphit:push:subscribe:<account>:<sha256(endpoint)>:<timestamp>`
 verified against the account's posting public key from chain.
@@ -376,3 +474,14 @@ verified against the account's posting public key from chain.
 indexer-enqueue time using the user's locale recorded in
 `push_subscriptions.locale` (also); ten locales supported
 matching the client's i18n set.
+
+**Offline notices (relay `apps/relay/src/notify/worker.ts`).** The
+indexer queues an `offline_notify_pending` row from the same
+enqueue as the chat push, fast path included. Since v1.21.14 the
+relay sends a notice only once its message is stored in
+`chat_messages` (allowing 2 minutes between the queued time, which
+may be the sender's clock, and the block time): until then the row
+waits, without counting as a try, for up to 3 hours after the
+message, and is then dropped as never on chain. A message shown
+and pushed on the fast path that never reaches the chain therefore
+gets no offline notice.

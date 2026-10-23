@@ -41,6 +41,7 @@
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { liveIdentity } from '$stores/identity';
 	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import sodium from 'libsodium-wrappers-sumo';
 	import {
 		prepareUnsignedTransferToVesting,
@@ -426,23 +427,27 @@
 
 			{#if hasActiveKey}
 				<!-- Password prompt: this session already holds an active key.
-				     The Morphit password unlocks the active-key envelope to sign. -->
-				<label class="mt-5 block">
-					<span class="text-sm font-semibold">
-						{$_('profile.wallet.password_label', { values: { account } })}
-					</span>
-					<input
-						type="password"
-						maxlength="64"
-						bind:value={passwordInput}
-						autocomplete="current-password"
-						disabled={phase.kind === 'working'}
-						class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
-					/>
-					{#if passwordError}
-						<p class="mt-1 text-xs text-red-600 dark:text-red-400">{passwordError}</p>
-					{/if}
-				</label>
+				     The Morphit password unlocks the active-key envelope to sign.
+				     Its own form (PasswordScope): outside one, Firefox wrote the saved
+				     user name into the amount above. -->
+				<PasswordScope {account}>
+					<label class="mt-5 block">
+						<span class="text-sm font-semibold">
+							{$_('profile.wallet.password_label', { values: { account } })}
+						</span>
+						<input
+							type="password"
+							maxlength="64"
+							bind:value={passwordInput}
+							autocomplete="current-password"
+							disabled={phase.kind === 'working'}
+							class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm dark:border-ink-700 dark:bg-ink-900"
+						/>
+						{#if passwordError}
+							<p class="mt-1 text-xs text-red-600 dark:text-red-400">{passwordError}</p>
+						{/if}
+					</label>
+				</PasswordScope>
 
 				<div class="mt-5 flex justify-end gap-2">
 					<button

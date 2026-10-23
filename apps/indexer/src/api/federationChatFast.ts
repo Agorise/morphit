@@ -50,6 +50,7 @@
  * endpoint cannot be used to ask "is @alice reading her mail here?"
  */
 
+import { headBlocked } from '$indexer/headBlocks';
 import { Hono } from 'hono';
 import { errorBody } from '$api/shared';
 import { rateLimit } from '$api/middleware/ratelimit';
@@ -322,6 +323,8 @@ export interface GateOptions {
 export function gatesFromDb(db: FastFederationDb, opts: GateOptions = {}): FastDeliveryGates {
 	return {
 		async recipientBlockedSender(recipient: string, sender: string): Promise<boolean> {
+			// A block the durable list does not have yet (S-L2, headBlocks.ts).
+			if (headBlocked(recipient, sender)) return true;
 			// Byte-for-byte the head tailer's query. The fast path must admit a
 			// SUBSET of durable admission, and two differently-worded block
 			// checks is how a subset quietly becomes a superset.
@@ -414,7 +417,10 @@ export function federationChatFastRoute(
 	const lookupPostingKey = postingKeyLookupFromDb(db, refreshPostingKey, {
 		...(options.durableIsCurrent !== undefined
 			? { durableIsCurrent: options.durableIsCurrent }
-			: {})
+			: {}),
+		// Pushes can name any sender for free: their chain reads have their own
+		// budget (see postingKeyLookupFromDb).
+		freeReadsBudget: 'push'
 	});
 	// meterFirstContact: this is the peer route, the one where a message
 	// arrived without costing its sender a thing. See GateOptions.

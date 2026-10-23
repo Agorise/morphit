@@ -17,8 +17,9 @@
  *        (text-free; the recipient renders the copy in their own locale)
  *   A-3: each broadcast carries recipient = the inquirer + order_permlink (the
  *        thread tag) + the encrypted ciphertext
- *   A-4: inquirers with no published chat pubkey are SKIPPED, not failed, and
- *        don't block the rest
+ *   A-4: inquirers with no posting key of their own (or no account) are
+ *        SKIPPED, not failed, and don't block the rest — since v1.21.14 every
+ *        message, this one included, goes to posting keys
  *   A-5: best-effort — one recipient's broadcast throwing does NOT stop the
  *        others (tallied as failed)
  *   A-6: no matching inquirers ⇒ {sent:0,skipped:0,failed:0}, zero broadcasts
@@ -74,15 +75,12 @@ function mockDeps(opts: {
 			if (opts.throwInquirers) throw new Error('boom');
 			return opts.inquirers;
 		},
-		fetchPeerChatPub: async (peer: string) =>
-			opts.noPub?.has(peer) ? null : new Uint8Array([1, 2, 3]),
-		deriveMyChatIdentity: async () => ({
-			priv: new Uint8Array([9]),
-			pub: new Uint8Array([8])
-		}),
-		encrypt: async (plaintext, _pub, _me, recipientAccount) => {
+		fetchPostingPubs: async (peer: string) =>
+			opts.noPub?.has(peer) ? [] : [new Uint8Array(33).fill(2)],
+		encryptPosting: async (plaintext, _pubs, _live, _me, recipientAccount) => {
 			encryptCalls.push({ plaintext, recipient: recipientAccount });
 			return {
+				v: 3,
 				ciphertext: `ct(${recipientAccount})`,
 				ephemeralPub: 'eph',
 				nonce: 'non',
@@ -155,7 +153,7 @@ const INQUIRERS: readonly string[] = [COUNTERPARTY, 'alice', 'bob', ME];
 	else fail('A-3 payload shape', JSON.stringify(broadcasts.map((b) => b.payload)));
 }
 
-// A-4: skip inquirers with no chat pub
+// A-4: skip inquirers with no posting key of their own
 {
 	const { deps, broadcasts } = mockDeps({
 		inquirers: INQUIRERS,
@@ -168,7 +166,7 @@ const INQUIRERS: readonly string[] = [COUNTERPARTY, 'alice', 'bob', ME];
 		live: FAKE_LIVE
 	});
 	if (res.sent === 1 && res.skipped === 1 && res.failed === 0 && broadcasts.length === 1) {
-		pass('A-4 inquirers with no chat pubkey are skipped (not failed), rest still sent');
+		pass('A-4 inquirers with no posting key of their own are skipped (not failed), rest still sent');
 	} else {
 		fail('A-4 skip no-pub', `sent=${res.sent} skipped=${res.skipped} failed=${res.failed}`);
 	}

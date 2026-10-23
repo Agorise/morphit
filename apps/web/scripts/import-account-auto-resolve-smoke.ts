@@ -62,10 +62,15 @@ check(
 );
 // v1.16.9 — the WIF field must resist Firefox's on-load autofill (which ignores
 // autocomplete="off" on password fields and dumps a saved site password in).
+// v1.21.14 — `readonly` + use:keyField, so EVERY render of the field starts locked
+// (the old one-way wifFieldLocked flag left it writable after a tab switch, and
+// Firefox filled it). password-field-scope-smoke holds the rule for all key fields.
+const wifTag = /<input\b(?:(?!\/>)[\s\S])*?name="morphit-posting-wif-import"(?:(?!\/>)[\s\S])*?\/>/.exec(
+	importPage
+)?.[0] ?? '';
 check(
-	'WIF field starts readonly (unlocked on focus) to dodge Firefox autofill',
-	/readonly=\{wifFieldLocked\}/.test(importPage) &&
-		/wifFieldLocked = false/.test(importPage)
+	'WIF field starts read-only on every render (`readonly` + use:keyField) to dodge Firefox autofill',
+	/^\s*readonly\s*$/m.test(wifTag) && /use:keyField/.test(wifTag) && !/wifFieldLocked/.test(importPage)
 );
 check(
 	'WIF field has a unique, non-credential name/id (not matched to a saved login)',

@@ -16,18 +16,19 @@
  *
  * THE FIX. Verify the indexer's CLAIMED op directly by trx_id
  * (verifyClaimedChatIdentityOnChain → chainRelay('get_transaction', …)): O(1),
- * immune to account activity. The chat send path (chatService) and the OOB
- * fingerprint path (peerPubFetch) both call verifyPeerChatIdentityOnChain,
- * which tries the claimed op first and keeps the history walk only as a
- * fallback.
+ * immune to account activity. The chat path (chatService — since v1.21.14
+ * only to READ older chat-key messages; the OOB fingerprint path that went
+ * through peerPubFetch compares posting keys now) calls
+ * verifyPeerChatIdentityOnChain, which tries the claimed op first and keeps
+ * the history walk only as a fallback.
  *
  * WHAT THIS SMOKE ASSERTS (structural — fails at lint time if the wiring
  * regresses back to a bare history walk at the call sites):
  *   1. chainVerify exports verifyClaimedChatIdentityOnChain + verifyPeerChatIdentityOnChain.
  *   2. the claimed-op verifier fetches the op via get_transaction (the O(1) path).
  *   3. the orchestrator tries the claimed op first (calls verifyClaimedChatIdentityOnChain).
- *   4. the two call sites (chatService, peerPubFetch) wire verifyPeerChatIdentityOnChain
- *      and no longer reference the raw history-walk (fetchLatestChatIdentityFromChainQuorum).
+ *   4. the call site (chatService) wires verifyPeerChatIdentityOnChain
+ *      and no longer references the raw history-walk (fetchLatestChatIdentityFromChainQuorum).
  *   5. pubPin threads the indexer's claimed ref into verifyOnChain (so the primary
  *      path can chase the exact op instead of re-deriving "the latest").
  *
@@ -70,12 +71,10 @@ console.log('\n── witness chat-identity claimed-op structural smoke ──�
 const CHAIN_VERIFY = 'apps/web/src/lib/chat/chainVerify.ts';
 const PUB_PIN = 'apps/web/src/lib/chat/pubPin.ts';
 const CHAT_SERVICE = 'apps/web/src/lib/chat/chatService.ts';
-const PEER_PUB_FETCH = 'apps/web/src/lib/chat/peerPubFetch.ts';
 
 const chainVerify = readStripped(CHAIN_VERIFY);
 const pubPin = readStripped(PUB_PIN);
 const chatService = readStripped(CHAT_SERVICE);
-const peerPubFetch = readStripped(PEER_PUB_FETCH);
 
 // 1. chainVerify exports both new functions.
 check(
@@ -115,7 +114,7 @@ check(
 	CHAIN_VERIFY
 );
 
-// 4. Both call sites wire the claimed-op orchestrator and no longer reference
+// 4. The call site wires the claimed-op orchestrator and no longer references
 //    the raw history walk directly (that walk survives ONLY inside chainVerify
 //    as the fallback).
 check(
@@ -127,16 +126,6 @@ check(
 	'chatService no longer references the raw history walk',
 	!chatService.includes('fetchLatestChatIdentityFromChainQuorum'),
 	`${CHAT_SERVICE} still mentions fetchLatestChatIdentityFromChainQuorum (should route through verifyPeerChatIdentityOnChain)`
-);
-check(
-	'peerPubFetch wires verifyPeerChatIdentityOnChain',
-	/verifyPeerChatIdentityOnChain\s*\(/.test(peerPubFetch),
-	PEER_PUB_FETCH
-);
-check(
-	'peerPubFetch no longer references the raw history walk',
-	!peerPubFetch.includes('fetchLatestChatIdentityFromChainQuorum'),
-	`${PEER_PUB_FETCH} still mentions fetchLatestChatIdentityFromChainQuorum`
 );
 
 // 5. pubPin threads the indexer's claimed ref into verifyOnChain, so the

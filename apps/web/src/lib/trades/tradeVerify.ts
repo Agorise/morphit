@@ -46,7 +46,7 @@
 
 import { browser } from '$app/environment';
 import { verifyBlurtTransfer } from '$lib/chat/blurtVerify';
-import { getTradeState, recordVerification } from '$lib/trades/tradeStatus';
+import { getTradeState, recordVerification, tradeKey } from '$lib/trades/tradeStatus';
 import { triggerBalanceRefresh } from '$lib/balance/bus';
 
 export interface VerifyTriggerArgs {
@@ -63,7 +63,8 @@ export interface VerifyTriggerArgs {
 	 *  Used as fallback when the trade isn't engaged with the
 	 *  sender. */
 	readonly echoedMemo: string;
-	/** Order permlink — keys the trade-status store entry. */
+	/** The order's owner and permlink — key the trade-status store entry. */
+	readonly orderOwner: string;
 	readonly orderPermlink: string;
 	/** Chain transaction id from the funds-sent payload. */
 	readonly txid: string;
@@ -86,7 +87,7 @@ export interface VerifyTriggerArgs {
 export const VERIFY_RETRY_WINDOW_MS = 90_000;
 export const VERIFY_RETRY_INTERVAL_MS = 6_000;
 
-/** orderPermlink\u0000txid currently inside a retry chain — so re-renders that
+/** tradeKey\u0000txid currently inside a retry chain — so re-renders that
  *  re-call triggerBlurtVerification don't spawn parallel chains hammering the
  *  RPC. verifyBlurtTransfer already caches DEFINITIVE results, but transient
  *  ones (the whole point of the retry) are deliberately not cached. */
@@ -106,7 +107,7 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 	// Only the counterparty the order is engaged with counts (see the file
 	// header). Anyone else: nothing to record, so nothing to verify here.
 	const counterparty = args.direction === 'incoming' ? args.sender : args.recipient;
-	const trade = getTradeState(args.orderPermlink);
+	const trade = getTradeState(args.orderOwner, args.orderPermlink);
 	if (trade === null || trade.engagedPeer !== counterparty) return;
 	// The seller's ask, not the claim.
 	const expectedMemo = trade.expectedMemo ?? args.echoedMemo;
@@ -114,7 +115,7 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 	const amountConfirmed = typeof asked === 'number' && Number.isFinite(asked) && asked > 0;
 	const expectedAmount = amountConfirmed ? asked : args.amountBlurt;
 
-	const key = `${args.orderPermlink}\u0000${args.txid}`;
+	const key = `${tradeKey(args.orderOwner, args.orderPermlink)}\u0000${args.txid}`;
 	if (verifyInFlight.has(key)) return; // a retry chain is already running
 	verifyInFlight.add(key);
 
@@ -139,6 +140,7 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 				}
 				verifyInFlight.delete(key);
 				recordVerification({
+					orderOwner: args.orderOwner,
 					orderPermlink: args.orderPermlink,
 					verifyResult: r,
 					counterparty,

@@ -211,8 +211,9 @@ one-line change in `$lib/prices/index.ts`.
 - Plan v1.3 — BLURT/USD $0.002 hardcoded fallback.
 - ADR-0001 — `custom_json` immutability (applies to
   `morphit_price_v1` the same as other ops).
-- `$lib/net/endpoints.ts` — the endpoint-rotation pattern the
-  `ApiRelayProvider` will reuse.
+- The browser's endpoint rotator (removed in v1.21.14, when the
+  browser stopped contacting RPC nodes) — the pattern the
+  `ApiRelayProvider` was to reuse.
 
 ## Amendments
 

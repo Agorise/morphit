@@ -74,9 +74,15 @@ check(
 
 // ── Global chat-activity SSE (sub-second, privacy-preserving) ───────────────
 const gcas = readFileSync(join(WEB, 'src', 'lib', 'chat', 'globalChatActivityStream.ts'), 'utf8');
+// v1.21.14 — the URL is built by ONE helper (chatActivityStreamUrl), which adds
+// the account's stream ticket (S-M8); the open goes through it.
 check(
 	'global chat-activity SSE connects same-origin to /v1/chat-activity/:me/stream',
-	/new EventSource\(`\/v1\/chat-activity\/\$\{encodeURIComponent\(me\)\}\/stream`\)/.test(gcas)
+	/return withStreamTicket\(`\/v1\/chat-activity\/\$\{encodeURIComponent\(me\)\}\/stream`, me\);/.test(
+		gcas
+	) &&
+		/const url = chatActivityStreamUrl\(me\);/.test(gcas) &&
+		/new EventSource\(url\)/.test(gcas)
 );
 check(
 	'global SSE exports start + subscribe',

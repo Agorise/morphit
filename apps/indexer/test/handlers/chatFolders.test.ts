@@ -62,7 +62,9 @@ describe('chatFolders handler', () => {
 		expect(mock.queries).toHaveLength(1);
 		const q = mock.queries[0]!;
 		expect(q.text).toContain('INSERT INTO chat_folders');
-		expect(q.text).toContain('source_block_num < EXCLUDED.source_block_num');
+		// `<=`: of two ops in one block the later wins (v1.21.14, S-L4; the
+		// behaviour is proved against Postgres in chat-folders-same-block.test.ts).
+		expect(q.text).toContain('source_block_num <= EXCLUDED.source_block_num');
 		expect(q.params[0]).toBe('alice');
 		expect(q.params[1]).toBe(ENC);
 	});

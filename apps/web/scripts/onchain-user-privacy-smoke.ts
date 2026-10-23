@@ -48,12 +48,16 @@ const flat = (s: string): string => s.replace(/\s+/g, ' ');
 // ── 1. Chat body — ENCRYPTED (this is also how a shared crypto
 //      address + amount travels: inside the chat ciphertext). ────────
 const chatSvc = flat(read('apps/web/src/lib/chat/chatService.ts'));
-if (/ciphertext: envelope\.ciphertext/.test(chatSvc) && /encryptToRecipient/.test(chatSvc)) {
-	ok('chat: the on-chain body is ciphertext from encryptToRecipient (X25519 + ChaCha20-Poly1305)');
+// v1.21.14: every message is sealed by the posting-key envelope
+// (encryptToPostingKey, ChaCha20-Poly1305 under a key wrapped for the
+// recipient's posting keys); the chat-key one (encryptToRecipient) is no
+// longer used to send.
+if (/ciphertext: envelope\.ciphertext/.test(chatSvc) && /encryptToPostingKey\(/.test(chatSvc)) {
+	ok('chat: the on-chain body is ciphertext from encryptToPostingKey (ECDH on posting keys + ChaCha20-Poly1305)');
 } else {
 	bad(
 		'chat',
-		'the chat op no longer broadcasts encryptToRecipient ciphertext — a message body (and every crypto address shared through chat) would be readable by the world, forever.'
+		'the chat op no longer broadcasts encryptToPostingKey ciphertext — a message body (and every crypto address shared through chat) would be readable by the world, forever.'
 	);
 }
 // The self-copy (keep-history) must be ciphertext too — it is the sender's

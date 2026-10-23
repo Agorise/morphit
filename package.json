@@ -1,6 +1,6 @@
 {
 	"name": "morphit",
-	"version": "1.21.13",
+	"version": "1.21.14",
 	"private": true,
 	"description": "Morphit — non-custodial, no-KYC P2P fiat↔BTC/XMR/BLURT marketplace",
 	"license": "AGPL-3.0-or-later",
@@ -56,7 +56,7 @@
 		"postcss": "^8.5.28",
 		"sanitize-html": "^2.18.0",
 		"morgan": "^1.12.1",
-		"dompurify": "^3.4.16",
+		"dompurify": "^3.4.17",
 		"body-parser@^2.0.0": "^2.3.0",
 		"postcss-selector-parser@^6.1.0": "^6.1.4",
 		"nanoid": "^3.3.18"

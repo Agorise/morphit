@@ -386,8 +386,10 @@
 			"unrecorded_label": "Non registrato sulla blockchain",
 			"unrecorded_detail": "Questo messaggio ti è arrivato direttamente dal server del mittente, ma la blockchain non l'ha mai registrato, quindi non esiste una prova permanente del suo invio. Se l'app del mittente lo ha segnalato come non inviato, potrebbe inviarlo di nuovo.",
 			"unrecorded_detail_own": "Questo messaggio è stato inviato da un'altra delle tue sessioni, ma la blockchain non l'ha mai registrato, quindi non esiste una prova permanente del suo invio. Puoi inviarlo di nuovo.",
-			"sender_unverified": "Mittente non verificato: questo messaggio è arrivato in un formato vecchio (o dopo un cambio di chiave che non hai accettato), quindi non si può provare che l'abbia scritto questa persona. Non pagare a un indirizzo che contiene senza confermarlo con lei in un altro modo.",
-			"peer_no_posting_key": "Questo account non ha una chiave posting propria (la gestiscono altri account), quindi non è possibile inviargli messaggi cifrati."
+			"sender_unverified": "Mittente non verificato: le chiavi dell'account di questa persona sono cambiate dall'ultima volta che avete chattato e non hai ancora confrontato il nuovo numero di sicurezza (⋮ → Verifica contatto), quindi non si può provare che l'abbia scritto lei. Non pagare a un indirizzo che contiene senza confermarlo con lei in un altro modo.",
+			"sender_unverified_older_format": "Inviato da una versione precedente dell'app, quindi non si può confermare che questo messaggio venga da questa persona: è normale finché tutti non aggiornano. Prima di pagare a un indirizzo che contiene, confermalo con lei in un altro modo.",
+			"peer_no_posting_key": "Questo account non ha una chiave posting propria (la gestiscono altri account), quindi non è possibile inviargli messaggi cifrati.",
+			"too_long": "Non inviato: troppo lungo per un solo messaggio di chat. Accorcialo e invialo di nuovo."
 		},
 		"composer": {
 			"aria_label": "Invia un messaggio",
@@ -502,8 +504,7 @@
 			},
 			"chain_unreachable": "Non è stato possibile raggiungere la blockchain per verificare le chiavi di questo contatto, quindi il messaggio non è stato inviato. Su Tor e I2P succede spesso, perché le connessioni impiegano più tempo a stabilirsi. Non c’è nulla che non va: riprova tra un momento.",
 			"pub_pin_key_changed": "Non inviato: la chiave di questa persona è cambiata. Succede quando reimposta le sue chiavi, oppure quando qualcuno cerca di leggere i tuoi messaggi. Apri ⋮ → Verifica contatto e confronta il nuovo numero di sicurezza con questa persona tramite un altro canale prima di accettarlo.",
-			"accept_new_key": "L'ho confrontato: accetta la nuova chiave",
-			"pub_pin_posting_key_changed": "Non inviato: queste non sono chiavi che hai verificato per questa persona. Il suo account ha una nuova chiave, oppure finora le hai scritto solo nel formato più vecchio. Succede quando qualcuno reimposta o aggiunge chiavi, oppure quando qualcuno cerca di leggere i tuoi messaggi. Apri ⋮ → Verifica contatto e confronta il numero di sicurezza con questa persona tramite un altro canale prima di accettarlo.",
+			"pub_pin_posting_key_changed": "Non inviato: le chiavi dell'account di questa persona sono cambiate dall'ultima volta che avete chattato. Succede quando qualcuno reimposta o aggiunge chiavi, oppure quando qualcuno cerca di leggere i tuoi messaggi. Apri ⋮ → Verifica contatto e confronta il numero di sicurezza con questa persona tramite un altro canale prima di accettarlo.",
 			"pub_pin_withdrawn": "Non abbiamo potuto inviare in sicurezza: il tuo server dice che questa persona non ha più la chiave che aveva segnalato prima, ma una chiave registrata sulla blockchain non può sparire. Il server potrebbe essere fuori sincrono o inventare dati. Riprova più tardi oppure usa un'altra istanza Morphit."
 		},
 		"live": "Dal vivo",
@@ -608,7 +609,8 @@
 			"address_invalid_xrp": "Indirizzo XRP Ledger non valido.  Atteso un indirizzo che inizia con r seguito da 24-34 caratteri base58 (nessun destination tag in questo campo).",
 			"pill_method_xrp": "Ripple (XRP)",
 			"blurt_account_not_found": "Non esiste alcun account Blurt con quel nome.",
-			"asset_label": "Moneta"
+			"asset_label": "Moneta",
+			"too_long_to_send": "È troppo lungo per un solo messaggio di chat. Accorcia la nota o il link PayJoin e riprova."
 		},
 		"funds_sent": {
 			"button": "Paga ora",
@@ -722,10 +724,6 @@
 			"subtitle": "Confronta questo numero di sicurezza di 60 cifre con @{peer} tramite un canale fidato fuori da {brand} (chiamata vocale, di persona, altra piattaforma). Se entrambi vedete lo stesso numero, nessuno ha sostituito le vostre chiavi.",
 			"computing": "Calcolo del numero di sicurezza…",
 			"locked": "Sblocca prima il tuo account per calcolare il numero di sicurezza.",
-			"tamper_heading": "Manomissione rilevata — NON continuare a chattare",
-			"tamper_body": "La chiave di chat che l'indexer ha fornito per questo contatto non corrisponde a quella della chain. È un segnale forte di MITM o compromissione. Smetti di fidarti di questa conversazione finché non capisci il motivo.",
-			"error_indexer": "Impossibile recuperare la chiave di chat del contatto dall'indexer.",
-			"error_bad_key": "La chiave di chat del contatto è malformata.",
 			"error_unknown": "Impossibile calcolare il numero di sicurezza. Riprova.",
 			"retry": "Riprova",
 			"fingerprint_aria": "Numero di sicurezza, 12 gruppi di 5 cifre",
@@ -744,9 +742,11 @@
 			"key_changed_accept": "I numeri coincidono: accetta la nuova chiave",
 			"no_account": "Non esiste alcun account Blurt con questo nome, quindi non c'è alcun numero di sicurezza da confrontare.",
 			"no_posting_key": "Questo account non ha una chiave posting propria (la gestiscono altri account), quindi non c'è alcun numero di sicurezza da confrontare.",
-			"own_key_stale": "La tua chiave sulla blockchain è vecchia (da allora hai cambiato le tue chiavi). Viene sostituita automaticamente la prossima volta che apri la chat con abbastanza BLURT per la commissione di rete. Fino ad allora, @{peer} potrebbe vedere un numero diverso.",
 			"first_use_note": "Queste sono le chiavi di @{peer} come le elenca ora la blockchain, e non è ancora fissato nulla. Se i numeri coincidono, usa queste chiavi, così i tuoi messaggi andranno esattamente a loro.",
-			"first_use_accept": "I numeri coincidono: usa queste chiavi"
+			"first_use_accept": "I numeri coincidono: usa queste chiavi",
+			"own_key_missing": "Questo sito non elenca la chiave posting con cui hai effettuato l'accesso tra le chiavi del tuo account, quindi non c'è alcun numero di sicurezza da confrontare. Se non hai appena cambiato le tue chiavi, non affidare le tue chat a questo sito.",
+			"own_extra_heading": "Il tuo account elenca altre chiavi posting",
+			"own_extra_body": "Oltre alla chiave con cui hai effettuato l'accesso, questo sito elenca per il tuo account le chiavi posting qui sotto, e i messaggi a te vengono cifrati anche per esse. Se una di queste non è tua, chi la possiede può leggere i messaggi che ti vengono inviati: cambia le tue chiavi e non affidare le tue chat a questo sito."
 		},
 		"boot_failed": "Impossibile caricare la chat. Prova a ricaricare la pagina.",
 		"mailing_address": {
@@ -1495,7 +1495,7 @@
 			},
 			"chat_identity_key": {
 				"q": "Devo configurare una chiave separata per usare la chat?",
-				"a": "No. La chat usa la tua chiave posting Blurt — la chiave che hai già. Non c'è niente in più da creare, pubblicare, salvare o perdere.\n\nCome funziona:\n• I messaggi per te vengono cifrati con la tua chiave posting pubblica, che è sulla catena Blurt da quando è stato creato il tuo account. Chiunque può scriverti, anche se non hai mai aperto la chat, e leggi i messaggi ogni volta che accedi. Chi invia paga la piccola commissione di rete; non ti serve BLURT per ricevere un messaggio.\n• La tua chiave privata non lascia mai il tuo browser.\n• Le conversazioni iniziate prima della versione 1.21.13 tra due persone che avevano entrambe già aperto la chat possono usare una chiave ricavata dalla chiave posting e pubblicata sulla catena a quel tempo. Continuano a funzionare come prima. Se allora ne hai pubblicata una e in seguito cambi la tua chiave posting, quella nuova viene pubblicata per te la prossima volta che apri la chat, con una piccola commissione di rete.\n\nIl compromesso: chiunque ottenga la tua chiave posting — per esempio rubando la tua frase di 12 parole — può anche leggere tutte le tue chat passate, e quelle nuove finché non cambi la tua chiave posting. Potrebbe già fingersi te, quindi ciò che devi proteggere non cambia: tieni al sicuro la tua frase di 12 parole e la tua password."
+				"a": "No. La chat usa la tua chiave posting Blurt — la chiave che hai già. Non c'è niente in più da creare, pubblicare, salvare o perdere.\n\nCome funziona:\n• I messaggi per te vengono cifrati con la tua chiave posting pubblica, che è sulla catena Blurt da quando è stato creato il tuo account. Chiunque può scriverti, anche se non hai mai aperto la chat, e leggi i messaggi ogni volta che accedi. Chi invia paga la piccola commissione di rete; non ti serve BLURT per ricevere un messaggio.\n• La tua chiave privata non lascia mai il tuo browser.\n• Le conversazioni precedenti alla versione 1.21.14 possono contenere messaggi in un formato più vecchio, che usava una chiave ricavata dalla chiave posting e pubblicata sulla catena a quel tempo. Restano leggibili. Dalla 1.21.14 ogni nuovo messaggio usa la tua chiave posting e non viene più pubblicato nulla per te.\n\nIl compromesso: chiunque ottenga la tua chiave posting — per esempio rubando la tua frase di 12 parole — può anche leggere tutte le tue chat passate, e quelle nuove finché non cambi la tua chiave posting. Potrebbe già fingersi te, quindi ciò che devi proteggere non cambia: tieni al sicuro la tua frase di 12 parole e la tua password."
 			},
 			"syndicate_trade_announcement": {
 				"q": "Cos'è la casella \"Sindaca il mio ordine\"?",
@@ -1775,7 +1775,7 @@
 			},
 			"ip_address_and_rpc_nodes": {
 				"q": "Qualcuno vede o divulga il mio indirizzo IP quando uso {brand}?",
-				"a": "**Cosa vede questo sito.** Come qualsiasi sito web, il server riceve il tuo indirizzo IP a ogni richiesta. Il codice lo tiene solo in memoria, per i limiti di frequenza — circa un minuto per le richieste normali, fino a 24 ore per i limiti di registrazione — e non lo scrive mai su disco o in un log, né lo invia da nessuna parte. Il server web tiene gli indirizzi solo in memoria per i propri limiti e i ban brevi, e non tiene alcun log di accesso con gli indirizzi. Niente cookie, analytics, tracker o telemetria. Ordini, chat cifrata, saldi e dati del block explorer sono tutti protetti on-chain.\n\n**L'unica possibile fuga di IP.** Al massimo una volta al giorno (e una volta dopo ogni aggiornamento del sito, o quando premi **Riprova** su un pannello delle commissioni), il tuo browser chiede a un nodo pubblico della rete — un nodo RPC di Blurt gestito da altri — il record di rilascio firmato che dice quale versione di Morphit è quella attuale. Sono due piccole richieste a un nodo (ciascuna può essere preceduta da un controllo preliminare CORS): le ultime 100 voci della cronologia di @morphit, poi il blocco che contiene il rilascio. Solo se quel nodo fallisce, invia un record non verificabile o indica un rilascio diverso da quello in uso su questo sito, si chiede lo stesso a un altro nodo. Se il rilascio è più vecchio di quelle 100 voci, viene fatta un'altra richiesta di cronologia (fino a circa 115 KB). Il risultato viene ricordato per 24 ore e condiviso da tutte le tue schede; se un nodo offre solo un rilascio più vecchio di quello di questo sito, il tuo browser chiede di nuovo entro un'ora. Se il tuo browser blocca la memoria di questo sito, non può ricordare, quindi chiede ogni volta che apri {brand}. Puoi vedere tutto nella scheda Rete del browser.\n\n**Quali nodi.** Su un indirizzo clearnet https o http semplice: i cinque nodi pubblici clearnet. Su un indirizzo .onion: solo i sette nodi .onion. Su un indirizzo .i2p: solo i sette nodi .b32.i2p.\n\n**Perché.** Il record indica il rilascio attuale, gli indirizzi delle commissioni di Morphit e le impronte dei file di avvio dell'app, e deve portare la firma di @morphit. Un nodo malevolo può far fallire il controllo o ritardare un avviso di aggiornamento, ma non può falsificare un rilascio. Il controllo scopre una build obsoleta o danneggiata — non un operatore che serve di proposito codice alterato, perché quell'operatore serve anche il controllo.\n\n**Cosa sa un nodo.** Il tuo indirizzo IP, l'indirizzo di questo sito (su .onion o .i2p, quell'indirizzo nascosto), lo User-Agent e la lingua del tuo browser, e che qualcuno ha chiesto la cronologia dei rilasci di @morphit. Non il tuo nome utente, i tuoi ordini, la tua chat o i tuoi saldi.\n\n**Usa Tor o una VPN** e il problema è chiuso: entrambi nascondono il tuo IP ai nodi e al tuo operatore."
+				"a": "**Cosa vede questo sito.** Come qualsiasi sito web, il server riceve il tuo indirizzo IP a ogni richiesta. Il codice lo tiene solo in memoria, per i limiti di frequenza — circa un minuto per le richieste normali, fino a 24 ore per i limiti di registrazione — e non lo scrive mai su disco o in un log, né lo invia da nessuna parte. Il server web tiene gli indirizzi solo in memoria per i propri limiti e i ban brevi, e non tiene alcun log di accesso con gli indirizzi. Niente cookie, analytics, tracker o telemetria. Ordini, chat cifrata, saldi e dati del block explorer sono tutti protetti on-chain.\n\n**Nessun altro.** Il tuo browser parla con questo sito e con nient'altro: nessun nodo Blurt, nessun servizio di prezzi, nessun tracker. L'unica eccezione sono le notifiche push, se le attivi (i siti raggiungibili solo via Tor o I2P non le offrono): allora il tuo browser usa anche il servizio push del suo produttore (Google, Mozilla, Apple o Microsoft), che consegna ogni avviso cifrato e vede quando arriva — vedi «Come funzionano le notifiche push con la mia privacy?». La politica di sicurezza di questo sito (la sua Content-Security-Policy) permette al tuo browser di collegarsi solo a questo sito. Ogni lettura dalla catena Blurt, ogni invio e il controllo quotidiano della release passano da questo sito, che interroga la rete per te: i nodi della rete vedono questo sito, mai te.\n\n**Il controllo della release.** Al massimo una volta al giorno (e una volta dopo ogni aggiornamento del sito, o quando premi **Riprova** in un pannello delle commissioni), il tuo browser chiede a questo sito il record di release firmato che dice quale versione di Morphit è quella attuale: due piccole richieste — le ultime 100 voci della cronologia di @morphit, poi il blocco che contiene la release. Se la release è più vecchia di quelle 100 voci, si fa un'altra richiesta di cronologia (fino a circa 115 KB). Questo sito risponde solo con ciò su cui due operatori RPC di Blurt concordano, e il tuo browser controlla da sé la firma di @morphit: nessuno può falsificare una release, anche se questo sito potrebbe tacere l'esistenza di una più nuova. Il risultato viene ricordato per 24 ore e condiviso da tutte le tue schede; se il record indica una release più vecchia di quella di questo sito, il tuo browser richiede entro un'ora, e se questo sito non è riuscito a ottenere una risposta, dopo 12 ore. Se il tuo browser blocca la memoria di questo sito, non può ricordare, quindi chiede ogni volta che apri {brand}. Puoi vedere tutto nella scheda Rete del browser.\n\n**I link che apri.** Un link di pagamento per un'altra moneta apre un block explorer pubblico in una nuova scheda, e quell'explorer vede il tuo IP come qualsiasi sito che visiti.\n\n**Usa Tor o una VPN** per nascondere il tuo IP anche a questo sito e a ogni explorer che apri."
 			}
 		},
 		"share_link": "Condividi",
@@ -2045,7 +2045,7 @@
 		},
 		"release_op": {
 			"title": "Release op (op di rilascio)",
-			"body": "Un'operazione sulla catena firmata dall'account @morphit che annuncia una nuova release di Morphit: la versione, lo SHA-256 del tarball sorgente e gli hash dei file che avviano il sito. Al massimo una volta al giorno il tuo browser legge la più recente da un nodo Blurt pubblico (un secondo nodo solo se il primo fallisce) e ne controlla la firma; se il sito esegue quella versione, confronta i file caricati con gli hash firmati e ti avvisa se differiscono. Questo rileva un file cambiato per errore o da un server parzialmente compromesso — non un operatore ostile, che serve anche il codice del controllo."
+			"body": "Un'operazione sulla catena firmata dall'account @morphit che annuncia una nuova release di Morphit: la versione, lo SHA-256 del tarball sorgente e gli hash dei file che avviano il sito. Al massimo una volta al giorno il tuo browser legge la più recente tramite questo sito, che risponde solo con ciò su cui due operatori RPC di Blurt concordano, e ne controlla da sé la firma; se il sito esegue quella versione, confronta i file caricati con gli hash firmati e ti avvisa se differiscono. Questo rileva un file cambiato per errore o da un server parzialmente compromesso — non un operatore ostile, che serve anche il codice del controllo."
 		},
 		"seed_phrase": {
 			"title": "Seed phrase",
@@ -2395,7 +2395,9 @@
 			"recipient_name_too_long": "Il nome del destinatario è troppo lungo (al massimo 100 caratteri).",
 			"note_too_long": "La nota è troppo lunga (al massimo 500 caratteri).",
 			"note_forbidden_chars": "La nota contiene una tabulazione, un a capo o un altro carattere di controllo invisibile. Rimuovilo e riprova.",
-			"order_permlink_invalid": "Questo indirizzo non può essere collegato all'ordine. Chiudi questa finestra e riaprila dall'ordine."
+			"order_permlink_invalid": "Questo indirizzo non può essere collegato all'ordine. Chiudi questa finestra e riaprila dall'ordine.",
+			"too_long_to_send": "Questo indirizzo è troppo lungo per un solo messaggio di chat. Accorcia la nota (o un altro campo) e riprova.",
+			"field_forbidden_chars": "Un campo contiene una tabulazione, un a capo o un altro carattere di controllo invisibile. Rimuovilo e riprova."
 		},
 		"send_failed": "Non è stato possibile inviare l'indirizzo. Controlla la connessione e riprova."
 	},
@@ -3956,7 +3958,7 @@
 		"chat_title": "La chat è cifrata end-to-end.",
 		"chat_body": "Ogni messaggio viene cifrato nel tuo browser prima di partire (uno scambio di chiavi a curva ellittica sulle vostre chiavi posting Blurt, e ChaCha20-Poly1305), con una chiave monouso nuova combinata con le chiavi di entrambi: solo tu e la tua controparte potete leggerlo, e la tua controparte sa che arriva davvero da te. Nessun server ha una chiave che lo apra. La chiave della tua controparte viene fissata: se mai cambia, {brand} si ferma e ti chiede prima, e un numero di sicurezza di 60 cifre vi permette di verificarvi a vicenda fuori da {brand}. Resta pubblica la busta: i messaggi stanno sulla catena Blurt, quindi si vede chi scrive a chi, quando, su quale ordine e quanto è lungo ogni messaggio, e non c'è forward secrecy. Il progetto completo è in {chat_crypto_doc}.",
 		"reproducible_title": "Release firmate e con impronta.",
-		"reproducible_body": "Ogni release viene compilata da un tag git firmato GPG su main, e @morphit la ancora sulla catena Blurt: lo SHA-256 del tarball dei sorgenti e del pacchetto offline, e gli hash dei file che avviano il sito (la pagina di base, il service worker, il codice di ingresso). Il tuo browser legge quel record firmato direttamente da un nodo Blurt pubblico, non da questo sito, ricontrolla con esso i file che questo sito gli ha servito e segnala in un avviso rosso quelli diversi; un nodo installa un aggiornamento solo se corrisponde. Così si scopre un file cambiato per errore o da un server parzialmente compromesso; non può proteggerti da un operatore ostile, che serve anche il codice di controllo. Gli script non hanno Subresource Integrity e le build non sono ancora riproducibili byte per byte, quindi verifichi un download con il suo hash e la sua firma (docs/VERIFY-YOUR-DOWNLOAD.md), non ricompilandolo.",
+		"reproducible_body": "Ogni release viene compilata da un tag git firmato GPG su main, e @morphit la ancora sulla catena Blurt: lo SHA-256 del tarball dei sorgenti e del pacchetto offline, e gli hash dei file che avviano il sito (la pagina di base, il service worker, il codice di ingresso). Il tuo browser legge quel record firmato tramite questo sito, che risponde solo con ciò su cui due operatori RPC di Blurt concordano, controlla da sé la firma di @morphit, ricontrolla con esso i file che questo sito gli ha servito e segnala in un avviso rosso quelli diversi; un nodo installa un aggiornamento solo se corrisponde. Così si scopre un file cambiato per errore o da un server parzialmente compromesso; non può proteggerti da un operatore ostile, che serve anche il codice di controllo. Gli script non hanno Subresource Integrity e le build non sono ancora riproducibili byte per byte, quindi verifichi un download con il suo hash e la sua firma (docs/VERIFY-YOUR-DOWNLOAD.md), non ricompilandolo.",
 		"open_source_title": "Open source, threat model aperto.",
 		"open_source_body": "Il threat model completo è nel {security_doc} del repo. Siamo espliciti su cosa proteggiamo e cosa no — fingere il contrario sarebbe peggio della sincerità.",
 		"footer_body": "Hai trovato un problema di sicurezza? Invialo solo come messaggio privato Matrix a @agorise:matrix.org. Non pubblicare mai i dettagli: né in una issue di Forgejo (lì le issue sono pubbliche), né in una stanza di chat, né sulla catena (un messaggio a {morphit_account} lì resta pubblico per sempre).",
@@ -4769,7 +4771,9 @@
 			"custom_tracking_url_invalid": "Il link di tracciamento deve essere un indirizzo https:// completo (al massimo 500 caratteri).",
 			"note_too_long": "La nota è troppo lunga (al massimo 500 caratteri).",
 			"note_forbidden_chars": "La nota contiene una tabulazione, un a capo o un altro carattere di controllo invisibile. Rimuovilo e riprova.",
-			"order_permlink_invalid": "Questa spedizione non può essere collegata all'ordine. Chiudi questa finestra e riaprila dall'ordine."
+			"order_permlink_invalid": "Questa spedizione non può essere collegata all'ordine. Chiudi questa finestra e riaprila dall'ordine.",
+			"too_long_to_send": "Questa spedizione è troppo lunga per un solo messaggio di chat. Accorcia la nota e riprova.",
+			"field_forbidden_chars": "Il nome del corriere contiene una tabulazione, un a capo o un altro carattere di controllo invisibile. Rimuovilo e riprova."
 		},
 		"send_failed": "Non è stato possibile inviare i dati della spedizione. Controlla la connessione e riprova."
 	},

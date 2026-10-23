@@ -178,6 +178,11 @@ export interface PairingEnvelope {
 	 *  serialization of `bundle`.  The recipient verifies against
 	 *  the on-chain posting pubkey of `bundle.account`. */
 	readonly signature: string;
+	/** A chat-stream ticket the phone signed for the desktop's instance
+	 *  (chat/streamTicket.ts): a paired desktop holds no key, so this is how it
+	 *  gets live chat. Not covered by `signature` — it carries its own, which
+	 *  the indexer checks — and optional (an older phone sends none). */
+	readonly stream_ticket?: string;
 }
 
 /** Wire shape of the delivery payload (phone → relay → desktop).
@@ -517,6 +522,8 @@ export async function buildDeliveryPayload(args: {
 	readonly bundle: PairingBundle;
 	readonly signer: BundleSigner;
 	readonly desktopEpkPub: Uint8Array;
+	/** See PairingEnvelope.stream_ticket. */
+	readonly streamTicket?: string;
 }): Promise<DeliveryPayload> {
 	await ensureSodium();
 	if (args.desktopEpkPub.length !== 32) {
@@ -527,7 +534,8 @@ export async function buildDeliveryPayload(args: {
 	const signature = await args.signer(canonical);
 	const envelope: PairingEnvelope = {
 		bundle: args.bundle,
-		signature: toHex(signature)
+		signature: toHex(signature),
+		...(args.streamTicket !== undefined ? { stream_ticket: args.streamTicket } : {})
 	};
 	const envelopeBytes = enc.encode(canonicalJson(envelope));
 
@@ -686,7 +694,10 @@ export async function verifyDeliveryPayload(args: {
 				signed_at: b.signed_at,
 				device_label: b.device_label
 			},
-			signature: p.signature
+			signature: p.signature,
+			...(typeof p.stream_ticket === 'string' && p.stream_ticket.length <= 600
+				? { stream_ticket: p.stream_ticket }
+				: {})
 		};
 	} catch {
 		return { kind: 'reject', reason: { kind: 'malformed_bundle' } };

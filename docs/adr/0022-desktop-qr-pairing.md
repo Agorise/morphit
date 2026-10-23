@@ -180,8 +180,8 @@ Fields:
   and `origin` must be the same origin. (Before v1.20.0
   this field said the phone would deliver straight to
   another operator's relay; that never worked
-  cross-origin — the phone page's CSP `connect-src` is
-  `'self'` plus the RPC nodes, and the target indexer's
+  cross-origin — the phone page's CSP `connect-src` was
+  `'self'` plus the RPC nodes (`'self'` only since v1.21.14), and the target indexer's
   CORS allows only GET/OPTIONS.)
 
 QR encodes this as a single base64url string of compact

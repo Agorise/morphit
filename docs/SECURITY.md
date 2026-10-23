@@ -46,7 +46,7 @@ disclosure (updated)" and "Bug bounty program" below.
 - Signing: happens in browser memory, key material zeroed after use where
   the JS engine permits
 - Transmission: no code path sends key material anywhere (the CSP's
-  `connect-src` allows only this site and the Blurt RPC nodes). This rests
+  `connect-src` allows only this site). This rests
   on the code, the code-review checklist and locked dependency versions.
   The page compares the files that start the app with the hashes in the
   chain-signed release; that catches a changed file served by an honest
@@ -60,11 +60,12 @@ Morphit enforces a strict tier policy:
 
 - **`posting`** is live in session memory. It signs every `custom_json` op
   (orders, feedback, chat ciphertext, profile updates). Routinely used.
-  It also seeds the chat identity key (X25519, derived deterministically
-  from posting via BLAKE2b — see ADR-0015).
+  Chat messages are encrypted to and proved by posting keys (since v1.21.14
+  every new one); it also seeds the X25519 chat key, derived from posting
+  via BLAKE2b, that opens older-format messages (ADR-0015).
 - **`memo`**: only its PUBLIC key is held in the session. Morphit features
-  do not use the memo private key (chat uses a posting-derived X25519
-  identity), so it is not cloned to sibling tabs or put in the reload
+  do not use the memo private key (chat uses the posting key), so it is
+  not cloned to sibling tabs or put in the reload
   stash.
 - **`active`** is NEVER held in session memory. Needed only to sign
   `transfer` ops (BLURT-denominated listing fee path). Accessed via the
@@ -83,7 +84,7 @@ fields. Code that wants to sign a transfer must go through
 `useActiveKey()`; there is no way to "just grab it from the identity."
 
 Rationale: compromise of posting exposes Morphit activity, and — because
-the chat identity is derived from it — every chat message sent to or by
+chat is encrypted with it — every chat message sent to or by
 that account (there is no forward secrecy, §3); it cannot transfer funds,
 rotate keys or take over the account. Active and
 owner, the high-value keys, spend ~milliseconds in cleartext memory per
@@ -229,22 +230,29 @@ on chain instead.
 
 ### 3. Chat is end-to-end encrypted (no forward secrecy)
 
-- X25519 key agreement + ChaCha20-Poly1305 AEAD via libsodium; see
-  `docs/CHAT-CRYPTO.md` and ADR-0015.
-- v2 envelope: the message key is BLAKE2b over two Diffie-Hellman results
-  (the sender's fresh ephemeral key with the recipient's chat key, and the
-  sender's chat key with the recipient's), bound to both account names and
-  the three public keys. The recipient opens it only with the sender's
-  PINNED chat key, so nobody holding only public keys (an indexer
-  included) can write a message "from" someone. Older v1 messages still
-  open but are marked "Sender not verified" and never move a trade forward.
-- **No forward secrecy in either mode.** The recipient's chat key, derived
-  from their posting key, decrypts every message they ever received. In the
-  default mode ('keep') the sender's key also reopens their own sent
-  messages; 'destroy' only removes the sender's own ability to reread.
-- Peers compare a 60-digit safety number. First contact is
-  trust-on-first-use; a later change of a peer's chat key holds messages
-  back until the user accepts the new key.
+- Elliptic-curve key agreement on the accounts' posting keys +
+  ChaCha20-Poly1305 AEAD; see `docs/CHAT-CRYPTO.md` and ADR-0015.
+- Every message is sent in the posting-key envelope (v3; since v1.21.14 the
+  only one sent — chat relies on the posting key only): a fresh content key,
+  wrapped for each of the recipient's posting keys with a key that is
+  BLAKE2b over two Diffie-Hellman results (the sender's fresh ephemeral key
+  with the recipient's key, and the sender's posting key with the
+  recipient's), bound to both account names and the message. The recipient
+  proves the sender by the sender's PINNED posting keys, so nobody holding
+  only public keys (an indexer included) can write a message "from" someone.
+- Older formats are still read: v2 (X25519 chat keys derived from the
+  posting key, written by older versions) is proved only by a chat key
+  pinned before v1.21.14, and otherwise shown as "sent from an older
+  version"; v1 messages are marked "Sender not verified". An unproved
+  message never moves a trade forward.
+- **No forward secrecy in either mode.** The recipient's posting key (and
+  the chat key derived from it, for older messages) decrypts every message
+  they ever received. In the default mode ('keep') the sender's key also
+  reopens their own sent messages; 'destroy' only removes the sender's own
+  ability to reread.
+- Peers compare a 60-digit safety number, made from both accounts' posting
+  keys. First contact is trust-on-first-use; a later change of a peer's
+  posting keys holds messages back until the user accepts the new keys.
 - Ciphertext on Blurt, plaintext only in participants' browsers. Who
   talks to whom, when, about which order, and read receipts are public
   (`docs/METADATA-LEAK-CATALOG.md`).
@@ -253,35 +261,36 @@ on chain instead.
 
 - No cookies (encrypted keystore uses localStorage / sessionStorage)
 - No analytics, no third-party scripts, no telemetry
-- **One browser → third-party request: the release check.** At most
-  once a day per browser and running build (success or failure is
-  remembered 24 h and shared by every tab), the browser asks ONE Blurt
-  RPC node for `@morphit`'s latest release: two requests (one
-  `get_account_history` of the last 100 entries, one `get_block` for the
-  block that holds the release; browsers may add a CORS preflight before
-  each). If the release op is older than those 100 entries, one more
-  history read of up to ~115 KB. A second node is asked the same reads
-  only when the first fails,
-  serves a record that cannot be verified (unsigned, another key,
-  malformed, none) or a genuine release whose version differs from the
-  running build; never a third. A verified release OLDER than the build
-  the site runs is not taken as the current release: its treasury is
-  never used (the newest release this browser already verified keeps
-  supplying the fee addresses, or they stay hidden and "About this
-  instance" says the newest release could not be confirmed), and that
-  answer is checked again within the hour instead of a day. An order numbered under a previous
-  treasury BTC key is checked against releases this browser already
-  verified, with no request. The node pool
-  depends on the page's origin: any clearnet page (https or plain
-  http) uses the 5 clearnet nodes, a `.onion` page the 7 onion nodes,
-  an `.i2p` page the 7 `.b32.i2p` nodes.
-  Each node sees the visitor's IP (on clearnet), `Origin`,
-  `User-Agent` and `Accept-Language`; nothing about the account. A
-  release is accepted only if the transaction id recomputed from the
-  block matches and its signature recovers to `@morphit`'s pinned key,
-  so a node can make the check fail but cannot make a forged release
-  pass. Everything else (chain reads, broadcasts, prices) goes through
-  the operator's own server.
+- **No browser → third-party request (since v1.21.14).** The CSP's
+  `connect-src` is `'self'`: the browser talks to this site only (with
+  push notifications turned on, the browser itself also hears from its
+  vendor's push service; see `docs/METADATA-LEAK-CATALOG.md`). The
+  daily release check reads through it too. At most once a day per
+  browser and running build (the result is remembered 24 h and shared
+  by every tab; when the check got no answer, 12 hours), the browser
+  asks this site's indexer
+  (`POST /v1/chain/agreed`) for `@morphit`'s latest release: two
+  requests (one `get_account_history` of the last 100 entries, one
+  `get_block` for the block that holds the release); one more history
+  read of up to ~115 KB if the release op is older than those 100
+  entries. The indexer answers only with what two RPC operators of its
+  pool return alike (the quorum chat blocks use), so one hostile node
+  cannot forge an answer or raise a false alarm, and the browser still
+  accepts a release only if the transaction id recomputed from the block
+  matches and its signature recovers to `@morphit`'s pinned key — neither
+  a node nor the instance can make a forged release pass. What the
+  instance can do is withhold a newer release or not answer (the check
+  then claims nothing), or show its own visitors a false alarm: a
+  release signed by another key, which the page reports as such
+  (ADR-0019). A verified release OLDER than the build the site
+  runs is not taken as the current release: its treasury is never used
+  (the newest release this browser already verified keeps supplying the
+  fee addresses, or they stay hidden and "About this instance" says the
+  newest release could not be confirmed), and that answer is checked
+  again within the hour instead of a day. An order numbered under a
+  previous treasury BTC key is checked against releases this browser
+  already verified, with no request. Everything else (chain reads,
+  broadcasts, prices) goes through the operator's own server as well.
 - Access logs are off: every shipped nginx server block sets
   `access_log off` (`ops/nginx/*.conf`, `ops/bunkerweb/frontend/nginx.conf`).
   The bare-metal configs log only critical errors (to the journal) and log
@@ -437,8 +446,8 @@ The checklist is applied in review; it is not an automated CI gate.
 | Purpose                 | Primitive                      | Library        |
 |-------------------------|--------------------------------|----------------|
 | Keypair (signing)       | secp256k1 (Blurt-compatible)   | dblurt         |
-| Chat identity           | X25519 (BLAKE2b from posting)  | libsodium      |
-| Chat key agreement      | X25519 (per-message ephemeral) | libsodium      |
+| Chat key agreement      | secp256k1 ECDH on posting keys (per-message ephemeral) | noble-secp256k1 |
+| Older chat (read only)  | X25519 (BLAKE2b from posting)  | libsodium      |
 | Chat AEAD               | ChaCha20-Poly1305 (IETF)       | libsodium      |
 | Keystore AEAD           | XSalsa20-Poly1305 (secretbox)  | libsodium      |
 | Password KDF            | Argon2id                       | libsodium      |
@@ -480,7 +489,7 @@ script-src 'self' 'wasm-unsafe-eval';
 style-src 'self' 'unsafe-inline';
 img-src 'self' data: blob:;
 font-src 'self';
-connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com;
+connect-src 'self';
 media-src 'none';
 object-src 'none';
 child-src 'none';
@@ -499,12 +508,8 @@ base-uri 'self'
   `eval`.
 - `style-src` keeps `'unsafe-inline'` (Svelte transitions and the branding
   theme use inline styles).
-- `connect-src` lists only this origin and the five HTTPS Blurt RPC nodes
-  the browser uses. A `.onion` or `.i2p` mirror sends its own list (its
-  hidden RPC nodes). There is no setting for a user to add another
-  node. Every request the browser makes to
-  an RPC node sets `credentials: 'omit'`, `referrerPolicy: 'no-referrer'`
-  and `cache: 'no-store'`; payloads are JSON-RPC reads, never key material.
+- `connect-src` is this origin only, on every name (clearnet, `.onion`,
+  `.i2p`): the browser contacts no Blurt RPC node and no price host.
 - No CDNs, no Google Fonts, no analytics origins; `frame-ancestors 'none'`.
 
 ## Responsible disclosure
@@ -526,8 +531,10 @@ public.
       (public; visible on the blockchain anyway)
     - `morphit.displayName` — the user's chosen display name (public;
       broadcast as `morphit_profile_v1` when registered)
-    - `morphit.rpcEndpoints` — the user's customized RPC endpoint list
-      (low-sensitivity; reveals which community mirrors they prefer)
+    - `morphit.rpcEndpoints` — an RPC endpoint list older builds let a
+      user customize; nothing writes or reads it any more (the browser
+      contacts no RPC node), but a value an older build left may remain
+      (low-sensitivity; reveals which community mirrors they preferred)
     - the address-reuse history — one-way tags only:
       HMAC-SHA256(per-install random salt, asset ‖ address), truncated to
       16 bytes; never the address, a date or an order id. An attacker

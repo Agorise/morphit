@@ -107,7 +107,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('/v1/chat history paging', () => {
 			`INSERT INTO chat_messages (sender, recipient, ciphertext, header, created_at, source_trx_id, order_permlink)
 			 SELECT CASE WHEN g % 2 = 0 THEN 'mallory' ELSE 'mallet' END,
 			        CASE WHEN g % 2 = 0 THEN 'mallet' ELSE 'mallory' END,
-			        'c', '{}'::jsonb, TIMESTAMPTZ '2026-02-01' + g * INTERVAL '1 second', 'deep' || g, NULL
+			        'c', '{}'::jsonb, TIMESTAMPTZ '2026-02-01 00:00:00+00' + g * INTERVAL '1 second', 'deep' || g, NULL
 			   FROM generate_series(1, 200000) g`
 		);
 		await fx.db.query('ANALYZE chat_messages');

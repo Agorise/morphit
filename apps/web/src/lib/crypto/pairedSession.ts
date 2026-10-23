@@ -61,6 +61,10 @@ export interface PairedSession {
 	readonly chatPubkey: string;
 	readonly pairingId: string;
 	readonly pairedAt: number;
+	/** The chat-stream ticket the phone signed for this desktop
+	 *  (chat/streamTicket.ts). A bearer token for this account's chat
+	 *  streams on this instance only, until it expires; no key. */
+	readonly streamTicket?: string;
 }
 
 /** Read the paired-readonly session record, or null if none is
@@ -145,5 +149,10 @@ function isValidPairedSession(x: unknown): x is PairedSession {
 	if (r.pairedAt < 0) return false;
 	if (r.pairedAt > now + 86400) return false; // far future: > 24h ahead
 	if (r.pairedAt < now - MAX_PAIRED_AGE_SECONDS) return false; // far past: > 365d behind
+	if (
+		r.streamTicket !== undefined &&
+		(typeof r.streamTicket !== 'string' || r.streamTicket.length > 600)
+	)
+		return false;
 	return true;
 }

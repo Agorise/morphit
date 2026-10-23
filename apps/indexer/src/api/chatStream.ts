@@ -43,7 +43,13 @@
  */
 
 import { Hono } from 'hono';
-import { acquireStreamSlot, streamCapResponse } from '$api/streamCaps';
+import {
+	acquireStreamSlot,
+	clientGoneSignal,
+	streamCapResponse,
+	streamTicketRefused
+} from '$api/streamCaps';
+import { instanceHosts, verifyStreamTicket, type TicketKeyLookup } from '$api/streamTicket';
 
 import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
@@ -205,10 +211,18 @@ export async function fetchSinceId(
 	}));
 }
 
-export function chatStreamRoute(db: Database, poller: Poller): Hono {
+export function chatStreamRoute(
+	db: Database,
+	poller: Poller,
+	opts: {
+		readonly lookupKey: TicketKeyLookup;
+		/** Configured names of this instance (origins, hidden addresses). */
+		readonly instanceHosts?: readonly (string | undefined)[];
+	}
+): Hono {
 	const app = new Hono();
 
-	app.get('/:a/:b/stream', (c) => {
+	app.get('/:a/:b/stream', async (c) => {
 		const a = c.req.param('a');
 		const b = c.req.param('b');
 		const parsed = parseFilter(a, b);
@@ -217,9 +231,26 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 		}
 		const filter = parsed;
 
+		// Only one of the two may watch the conversation live (v1.21.14 full
+		// chat audit, S-M8): a ticket signed by their posting key, for this host.
+		// Before the first await (review B, F1): see clientGoneSignal.
+		const gone = clientGoneSignal(c);
+		const ticket = await verifyStreamTicket(
+			c.req.query('ticket'),
+			[filter.lo, filter.hi],
+			instanceHosts(opts.instanceHosts ?? [], c.req.header('host')),
+			opts.lookupKey
+		);
+		if (!ticket.ok)
+			return ticket.reason === 'busy'
+				? streamCapResponse(c)
+				: streamTicketRefused(c, ticket.reason);
+
 		// v1.20.0 (E4): a slot under the open-stream caps, released exactly
 		// once when this stream ends however it ends.
-		const releaseSlot = acquireStreamSlot(c);
+		// The client left while its ticket was checked: no stream, no slot.
+		if (gone.aborted) return new Response(null, { status: 204 });
+		const releaseSlot = acquireStreamSlot(c, ticket.ticket.account);
 		if (releaseSlot === null) return streamCapResponse(c);
 
 		const encoder = new TextEncoder();
@@ -287,6 +318,14 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 						/* already closed */
 					}
 				};
+
+				// A client that leaves now, or left while the ticket was checked,
+				// is never seen by the server's own cancel (review B, F1).
+				if (gone.aborted) {
+					cleanup();
+					return;
+				}
+				gone.addEventListener('abort', cleanup, { once: true });
 
 				/** Look up a single message by id and push if it
 				 *  matches the filter.  Bumps latestEmittedId so

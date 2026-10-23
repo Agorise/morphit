@@ -91,9 +91,10 @@ import {
 	deliverVerifiedPush,
 	durableIsCurrentFor,
 	chainPostingKeyRefresher,
+	notePostingKeyFromQuorum,
 	postingKeyLookupFromDb
 } from '$indexer/chatFastFederation';
-import { trxSignedByPostingKey } from '$indexer/chainTrxSignature';
+import { trxPostingSignatureState, trxSignedByActiveAuthority } from '$indexer/chainTrxSignature';
 import { closePinnedClearnet } from '$indexer/pinnedClearnetPost';
 import { ChatFastDispatcher } from '$indexer/chatFastDispatcher';
 import { closePool } from '$indexer/hiddenServicePool';
@@ -545,8 +546,9 @@ async function main(): Promise<void> {
 
 	// ─── 6b. Chat head-block fast-path tailer (ADR-0048) ──
 	// Tails the chain HEAD (not the irreversible point) to emit chat SSE
-	// within a few seconds instead of ~45-60s. NEVER writes the DB — the
-	// poller above stays the sole source of truth. Always on — the
+	// within a few seconds instead of ~45-60s. Writes no message state (only
+	// notification queue rows) — the poller above stays the sole source of
+	// truth. Always on — the
 	// MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED flag was removed in v1.7.0
 	// (ADR-0051); the tailer runs unconditionally.
 	// Fire-and-forget; a crash here must NOT take down the process (unlike
@@ -613,7 +615,8 @@ async function main(): Promise<void> {
 	// word. Same lookup the intake uses: an unconfirmed key is confirmed through
 	// the quorum refresher (in the background; that message is not shown live).
 	const headTailer = new HeadTailer(config, db, blurt, {
-		signedBySigner: trxSignedByPostingKey(chatKeyLookup)
+		signerState: trxPostingSignatureState(chatKeyLookup),
+		signedByActive: trxSignedByActiveAuthority(blurt)
 	});
 	const headTailerPromise = headTailer.run().catch((err) => {
 		pollerLog.error('chat_fastpath_fatal', {}, err);
@@ -855,12 +858,14 @@ async function main(): Promise<void> {
 	accountApp.use('*', rateLimit('resource', config.resourceRatePerMin));
 	accountApp.route('/', accountBalanceRoute(blurt));
 	accountApp.route('/', accountHistoryRoute(blurt));
-	accountApp.route('/', accountKeysRoute(blurt));
+	accountApp.route('/', accountKeysRoute(blurt, { onAgreedPostingKey: notePostingKeyFromQuorum }));
 	app.route('/v1/account', accountApp);
 
 	// /v1/chain (block explorer + the ref-block properties proxy)
-	// and /v1/broadcast (the write proxy) each forward ONE upstream Blurt
-	// RPC call per request, so they get the same per-IP 'resource' rate-limit
+	// and /v1/broadcast (the write proxy) each forward at most ONE upstream
+	// Blurt RPC call per request (`/v1/chain/agreed`, the release check's
+	// quorum read, shares one read among all requests: see chainExplorer.ts),
+	// so they get the same per-IP 'resource' rate-limit
 	// tier as every other upstream-touching proxy (e.g. /v1/account). Without it
 	// an unauthenticated flood of well-formed-but-bogus requests could amplify
 	// load onto the operator's RPC pool. 600/min (the resource default) is far
@@ -877,12 +882,13 @@ async function main(): Promise<void> {
 	broadcastApp.use('*', rateLimit('resource', config.resourceRatePerMin));
 	broadcastApp.route(
 		'/',
-		broadcastRoute(blurt, chatFastDispatcher, (located, trxId) => {
+		broadcastRoute(blurt, chatFastDispatcher, (located, trxId, sentAt) => {
 			// Both parties on THIS instance: deliver straight to our own listeners
 			// rather than waiting for the head tailer to read the message back off
 			// the chain. Same gates as every other fast delivery — the block list
-			// and the safe-subset notification gate — through the same function.
-			void deliverVerifiedPush(located, trxId, localChatGates).catch(() => undefined);
+			// and the safe-subset notification gate — through the same function,
+			// stamped with the same sender time a peer's push of it would carry.
+			void deliverVerifiedPush(located, trxId, localChatGates, sentAt).catch(() => undefined);
 		})
 	);
 	app.route('/v1/broadcast', broadcastApp);
@@ -924,7 +930,21 @@ async function main(): Promise<void> {
 	// reverse proxies set no connection cap, and over Tor they cannot tell
 	// visitors apart.
 	app.use('/v1/chat/:a/:b/stream', rateLimit('list', config.listRatePerMin));
-	app.route('/v1/chat', chatStreamRoute(apiDb, poller));
+	// v1.21.14 (full chat audit, S-M8/S-M7): both chat streams need a ticket
+	// signed by the account's posting key (streamTicket.ts), checked with the
+	// same key lookup the fast path uses.
+	const streamTicketHosts = [
+		config.publicOrigin,
+		config.instanceOrigin,
+		config.instanceTorAddress,
+		config.instanceI2pB32Address,
+		config.instanceI2pNameAddress,
+		config.instanceLokinetAddress
+	];
+	app.route(
+		'/v1/chat',
+		chatStreamRoute(apiDb, poller, { lookupKey: chatKeyLookup, instanceHosts: streamTicketHosts })
+	);
 
 	// Global (all-conversations) chat-activity SSE for one account. Its own
 	// /v1/chat-activity prefix so it can't collide with /v1/chat/:a/:b (an
@@ -933,7 +953,10 @@ async function main(): Promise<void> {
 	// ping (on-chain-public), never ciphertext — see the file header for the
 	// full privacy rationale.
 	app.use('/v1/chat-activity/*', rateLimit('list', config.listRatePerMin));
-	app.route('/v1/chat-activity', chatActivityStreamRoute());
+	app.route(
+		'/v1/chat-activity',
+		chatActivityStreamRoute({ lookupKey: chatKeyLookup, instanceHosts: streamTicketHosts })
+	);
 
 	const chatApp = new Hono();
 	chatApp.use('*', rateLimit('list', config.listRatePerMin));

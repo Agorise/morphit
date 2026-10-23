@@ -32,6 +32,7 @@
 	import { parseAmountInput } from '$lib/orders/amountInput';
 	import {
 		encodeAddressPayload,
+		fitsChatMessage,
 		generateBlurtMemo,
 		isValidAddress,
 		jitterAmountForAsset,
@@ -487,6 +488,14 @@
 					: {})
 			};
 			const wire = encodeAddressPayload(payload);
+			// v1.21.14 full chat audit, W-M5: too long to travel as one chat
+			// message (a long PayJoin link does it): say so BEFORE anything is
+			// signed — the indexer would refuse it after the fee was paid.
+			if (!fitsChatMessage(wire)) {
+				sendError = $_('chat.address.too_long_to_send');
+				sending = false;
+				return;
+			}
 			// Send, then remember (hashed) that this address was shared, so a
 			// later share of the same address surfaces the reuse warning. A
 			// failed send is not remembered.

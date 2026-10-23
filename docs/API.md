@@ -1025,7 +1025,15 @@ to be useful:
 - **`/v1/account`** and **`/v1/chain`** — the web app's chain reads, relayed by this
   indexer so the browser never contacts an RPC node for them: an account's balance, keys and
   history (`GET /v1/account/:account/history?from=&limit=`), the block explorer's reads and
-  `POST /v1/chain/condenser` / `POST /v1/chain/key-references`. A history page larger than a
+  `POST /v1/chain/condenser` / `POST /v1/chain/key-references`, and the release check's
+  `POST /v1/chain/agreed` (body `{method, params}`: only `get_account_history` of `morphit` with
+  `[morphit, -1, 100 | 10000]`, answered with `[the newest morphit_release_v1 entry]` or `[]`, and
+  `get_block` `[n]` for the block an agreed history named in the last ten minutes, answered with
+  `{block_id, transactions: [that release's transaction]}`; anything else 400. Answered only when
+  two RPC operators of the pool agree on that entry or that transaction, else 502; one read is
+  shared by every visitor and kept from when it settles — a minute for history, ten for a block,
+  30 s for a failure — so no per-visitor ceiling applies beyond the `/v1/chain` resource tier; a
+  visitor waits at most 45 s, then 503 with `Retry-After: 30` while the read goes on). A history page larger than a
   reply of that `limit` may be is refused with 413 `reply_too_large` (ask for fewer entries), and
   a busy indexer answers 503 `history_busy` with `Retry-After` (wait, then ask the same page
   again). Pages over 1,000 entries are not hedged across nodes.

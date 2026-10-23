@@ -14,6 +14,7 @@ import type pg from 'pg';
 
 import { broadcastRoute } from '$api/broadcast';
 import { ChatFastDispatcher } from '$indexer/chatFastDispatcher';
+import { CLIENT_EXPIRY_LEAD_MS } from '$indexer/chatFastFederation';
 import type { LocatedChatOp } from '$indexer/headTailer';
 import type { BlurtClient } from '$blurt/client';
 
@@ -74,17 +75,25 @@ function dispatcher(): ChatFastDispatcher {
 	});
 }
 
-async function send(trx: unknown): Promise<{ status: number; delivered: LocatedChatOp[] }> {
+async function send(
+	trx: unknown
+): Promise<{ status: number; delivered: LocatedChatOp[]; sentAt: Date[] }> {
 	const delivered: LocatedChatOp[] = [];
-	const app = broadcastRoute(acceptingNode, dispatcher(), (located) => delivered.push(located));
+	const sentAt: Date[] = [];
+	const app = broadcastRoute(acceptingNode, dispatcher(), (located, _id, at) => {
+		delivered.push(located);
+		sentAt.push(at);
+	});
 	const res = await app.request('/', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({ trx, chat_async: true })
 	});
-	// The route decides and makes the local delivery before it answers, so
-	// once the answer is here `delivered` is final.
-	return { status: res.status, delivered };
+	// A message verified before the chain is delivered before the answer; one
+	// checked after the node accepted it, a few turns of the event loop later
+	// (v1.21.14). Nothing here does I/O, so yielding is enough.
+	for (let i = 0; i < 50; i++) await new Promise((r) => setTimeout(r, 0));
+	return { status: res.status, delivered, sentAt };
 }
 
 describe('local chat delivery from /v1/broadcast', () => {
@@ -92,6 +101,14 @@ describe('local chat delivery from /v1/broadcast', () => {
 		const r = await send(chatTrx(ALICE, 'real1'));
 		expect(r.status).toBe(200);
 		expect(r.delivered.map((d) => `${d.signer}->${d.recipient}`)).toEqual(['alice->bob']);
+	});
+
+	it("is stamped with the sender's time from the signed expiry, as a peer's push of it is (S-L1)", async () => {
+		const trx = chatTrx(ALICE, 'real-time') as { expiration: string };
+		const r = await send(trx);
+		expect(r.sentAt.map((d) => d.getTime())).toEqual([
+			Date.parse(trx.expiration + 'Z') - CLIENT_EXPIRY_LEAD_MS
+		]);
 	});
 
 	it('a message naming alice but signed by another key is NOT, though the node accepted it', async () => {

@@ -1,11 +1,8 @@
 /**
- * tradeEventListener — global chat SSE subscriber that powers
- * cross-page trade-status updates, toasts, and (opt-in)
- * browser notifications.
+ * tradeEventListener — the global listener that powers cross-page
+ * trade-status updates, toasts, and (opt-in) browser notifications.
  *
- * Phase F.5.  When the user is logged in, this module opens
- * one chat SSE stream per peer in their recent-peers list.
- * Incoming structured payloads (morphit_addr,
+ * Phase F.5.  Incoming structured payloads (morphit_addr,
  * morphit_funds_sent) update the tradeStatus store.  Relevant
  * events also fire UI affordances:
  *
@@ -15,27 +12,41 @@
  *   - Browser notification: if the user opted in via Settings
  *     and the document is hidden.
  *
- * ─── Why one stream per peer (not a single global stream) ─────
+ * ─── What it listens to (v1.21.14 full chat audit, W-H2) ──────────
  *
- * The indexer's chat SSE endpoint takes (me, peer).  A single
- * "subscribe to all chat events involving me" endpoint would be
- * cleaner but would require new indexer surface area.  Keeping
- * the streams per-peer respects the existing protocol; the
- * connection cost is bounded by recent-peers size (~10 max).
+ * It used to hold one chat stream OPEN per recent peer (up to five), next
+ * to the account-wide activity stream and the open conversation's own: seven
+ * long-lived connections to one site. A Tor or I2P instance is plain
+ * http:// (no HTTP/2), and a browser allows six HTTP/1.1 connections per
+ * site, so sends, history reads and the backup poll queued behind streams.
  *
- * Trade-off: the user's ConversationView ALSO opens a stream
- * for the active conversation.  Both this listener and the
- * conversation view receive the same events.  The store
- * mutators are idempotent (monotonic phase advancement) so
- * duplicate calls are safe; toast firing is gated to avoid
- * double-toasting.
+ * Now it holds NONE of its own. The account-wide activity stream
+ * (globalChatActivityStream) already names the peer of every new message;
+ * on a ping the listener reads that peer's conversation once — a chat
+ * stream opened only for its first answer (the snapshot, which carries the
+ * newest durable rows AND the fast copies not yet durable) and closed at
+ * once — one peer at a time. At most MAX_LISTENER_STREAMS such read is open
+ * at any moment, so the app holds at most three long-lived connections to
+ * its site: the activity stream, the open conversation, and this read.
+ *
+ * ─── Which messages count ─────────────────────────────────────────
+ *
+ * A message is known by its SENDER AND ENCRYPTED BYTES (as chatService's
+ * wireOf), never by id: every fast copy carries id 0, so keying by id
+ * dropped every fast copy after the first and processed each durable copy a
+ * second time, putting a verified payment back to "pending" (W-M4). The
+ * first read of a peer takes what is already durable as history (not
+ * news, like the old per-peer snapshot); fast copies in it are news.
+ *
+ * A payload moves a trade only for the order of the thread it arrived in,
+ * when that order belongs to its sender or to us (W-H1; see
+ * applyRecord), under that owner (C-L3).
  *
  * ─── Lifecycle ────────────────────────────────────────────────
  *
- * +layout.svelte mounts a single instance via startTradeEventListener
- * once the user is logged in.  refreshTradeEventListener is
- * called whenever the recent-peers list changes.  Lock /
- * logout calls stopTradeEventListener.
+ * +layout.svelte starts it once the user is unlocked
+ * (startTradeEventListener) and stops it on lock / logout
+ * (stopTradeEventListener).
  */
 
 import { browser } from '$app/environment';
@@ -45,10 +56,11 @@ import { decodePayload, isValidBlurtAccount } from '$lib/chat/payload';
 // inside tryDecrypt below — byte budget. A static import here
 // would drag libsodium into the shared [lang] layout closure (this
 // listener is started from +layout), i.e. onto EVERY page's first load.
-import { loadRecentPeers } from '$lib/chat/recentPeers';
+import { subscribeChatActivityPings } from '$lib/chat/globalChatActivityStream';
 import { recordAddressShared, recordFundsSent } from '$lib/trades/tradeStatus';
 import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
 import { planListenerDispatch } from '$lib/trades/listenerDispatch';
+import { orderOwnerOf } from '$lib/trades/orderParties';
 import { showToast } from '$lib/stores/toast';
 import { get } from 'svelte/store';
 import { _, locale } from 'svelte-i18n';
@@ -57,41 +69,61 @@ import { notify } from '$lib/notifications';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
 import type { LiveIdentity } from '$crypto/keygen';
 
-interface PerPeerStream {
-	readonly peer: string;
-	readonly handle: ChatStreamHandle;
-	/** Set of message ids we've already routed.  The SSE snapshot
-	 *  on connect / reconnect can replay messages we've already
-	 *  seen; dedup prevents toasting the same arrival twice. */
-	readonly seenIds: Set<number>;
-}
-
-/** Phase F.5 audit fix (F-21) — cap concurrent listener streams.
- *
- *  Browsers limit 6 concurrent connections per origin on
- *  HTTP/1.1.  Each listener stream uses one of those slots for
- *  its lifetime (SSE long-poll).  If we open one stream per peer
- *  in the full recent-peers list (up to 20), we'd exhaust the
- *  HTTP/1.1 budget — most streams would queue indefinitely and
- *  the cross-page trade-status feature would silently fail.
- *
- *  HTTP/2 doesn't have this problem (limit is in the hundreds),
- *  but Morphit operators control the deployment and may run
- *  HTTP/1.1.  Capping at 5 leaves at least one connection slot
- *  free for ad-hoc requests (profile fetches, stream-reconnect
- *  retries) under HTTP/1.1.
- *
- *  Recent-peers list is sorted most-recent-first by
- *  recordRecentPeer; we slice the prefix so the user's most
- *  active conversations get cross-page coverage.  Older recent
- *  peers fall back to the in-page chatService when the user
- *  opens that specific conversation.
- *
- *  Document HTTP/2 as deployment requirement in OPERATIONS.md. */
-const MAX_LISTENER_STREAMS = 5;
+/** At most this many conversation reads (each a chat stream open until its
+ *  snapshot) at once — W-H2. One: they run one after the other. */
+const MAX_LISTENER_STREAMS = 1;
+/** A read with no snapshot by then is given up (and tried again later). */
+export const LISTENER_READ_TIMEOUT_MS = 30_000;
+/** A failed read is tried again after this, doubling, at most this often. */
+const READ_RETRY_MIN_MS = 2_000;
+const READ_RETRY_MAX_MS = 60_000;
+const READ_RETRY_MAX_TRIES = 5;
+/** Messages remembered per peer, and peers remembered. */
+const MAX_SEEN_PER_PEER = 200;
+const MAX_PEERS_SEEN = 50;
 
 let me: string | null = null;
-const streams = new Map<string, PerPeerStream>();
+let unsubscribePings: (() => void) | null = null;
+/** Bumped by every start/stop: work begun under an older one stops. */
+let generation = 0;
+/** Peers waiting for a read, in order; and those being read now. */
+const queue: string[] = [];
+const reading = new Map<string, ChatStreamHandle>();
+/** peer → the messages (sender + bytes) already looked at. */
+const seen = new Map<string, Set<string>>();
+const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const retryTries = new Map<string, number>();
+
+/** A message's identity: its sender and encrypted bytes — the fast copy and
+ *  the durable one are the same message (chatService wireOf). */
+function copyKey(rec: ChatMessageRecord): string {
+	const h = (rec.header ?? {}) as { ephemeral_pub?: unknown; nonce?: unknown };
+	const part = (v: unknown): string => (typeof v === 'string' ? v : '');
+	return `${rec.sender}|${rec.ciphertext}|${part(h.ephemeral_pub)}|${part(h.nonce)}`;
+}
+
+function seenFor(peer: string): Set<string> | undefined {
+	return seen.get(peer);
+}
+
+function markSeen(peer: string, key: string): void {
+	let set = seen.get(peer);
+	if (set === undefined) {
+		set = new Set();
+		seen.set(peer, set);
+		while (seen.size > MAX_PEERS_SEEN) {
+			const oldest = seen.keys().next().value;
+			if (oldest === undefined) break;
+			seen.delete(oldest);
+		}
+	}
+	set.add(key);
+	while (set.size > MAX_SEEN_PER_PEER) {
+		const oldest = set.values().next().value;
+		if (oldest === undefined) break;
+		set.delete(oldest);
+	}
+}
 
 /** Decrypt a record using the locally-cached identity if
  *  available.  Returns the plaintext on success or null on any
@@ -137,14 +169,18 @@ export async function openTradeMessage(
 		) {
 			return null;
 		}
-		if (header.v === 3) {
+		if (header.v === 3 || header.v === 4) {
 			// The posting-key envelope (v1.21.13): opened with our posting key; it
 			// moves a trade only when made with the sender's PINNED posting key
 			// (as a v2 message needs the pinned chat key). Not pinned yet → nothing
-			// is proved here; the chat view pins on first contact.
+			// is proved here; the chat view pins on first contact. v4 (C-M2)
+			// opens only under the order of the record it came in, the owner
+			// and the time it was sealed with.
 			const rk = header.rk;
 			const wk = header.wk;
+			const v4 = header.v === 4;
 			if (
+				(v4 && (!chatCrypto.validEnvelopeTime(header.t) || typeof header.o !== 'string')) ||
 				typeof header.sk !== 'string' ||
 				!Array.isArray(rk) ||
 				!rk.every((k) => typeof k === 'string') ||
@@ -168,7 +204,9 @@ export async function openTradeMessage(
 			try {
 				const opened = await chatCrypto.decryptPostingEnvelope(
 					{
-						v: 3,
+						...(v4
+							? { v: 4 as const, t: header.t as number, o: header.o as string }
+							: { v: 3 as const }),
 						ephemeralPub: header.ephemeral_pub,
 						nonce: header.nonce,
 						ciphertext: rec.ciphertext,
@@ -179,7 +217,8 @@ export async function openTradeMessage(
 					reader,
 					rec.sender,
 					rec.recipient,
-					senderPosting
+					senderPosting,
+					rec.order_permlink ?? null
 				);
 				return opened.authenticated ? opened.text : null;
 			} finally {
@@ -233,32 +272,38 @@ export async function openTradeMessage(
 	}
 }
 
-async function handleAppend(peer: string, rec: ChatMessageRecord): Promise<void> {
-	const stream = streams.get(peer);
-	if (stream === undefined) return;
-	if (stream.seenIds.has(rec.id)) return;
-	addSeenId(stream.seenIds, rec.id);
-
+/**
+ * One new message of the peer's: decrypt it (proved senders only), and apply
+ * its trade payload, if any. 'retry' when whose order it names could not be
+ * told now — it is looked at again on the next read.
+ */
+async function applyRecord(rec: ChatMessageRecord, gen: number): Promise<'done' | 'retry'> {
 	// Phase F.5 audit fix (F-26) — defense-in-depth account name
 	// validation.  The indexer already validates sender names but
 	// a malformed value slipping through would corrupt store keys
 	// and deep-links.  Cheap to re-check.
-	if (!isValidBlurtAccount(rec.sender)) return;
+	if (!isValidBlurtAccount(rec.sender)) return 'done';
 
 	const plaintext = await tryDecrypt(rec);
-	if (plaintext === null) return;
-
-	// Phase F.5 audit fix (F-30) — re-check listener state after
-	// the async decrypt window.  If the stream was closed (peer
-	// rotated out, listener stopped) OR the user explicit-locked
-	// (clears `me` and `clearAllTradeStates`) during decryption,
-	// abort before any store write.  Without this guard, a
-	// post-lock store write could leak a trade-status entry that
-	// the explicit-lock contract promised to wipe.
-	if (me === null) return;
-	if (!streams.has(peer)) return;
+	if (plaintext === null || gen !== generation || me === null) return 'done';
 
 	const decoded = decodePayload(plaintext);
+	if (decoded.kind !== 'address' && decoded.kind !== 'funds_sent') return 'done';
+	const order = decoded.payload.orderPermlink;
+	// v1.21.14 full chat audit, W-H1: only the order of the thread the message
+	// arrived in (its order_permlink) …
+	if (!order || order !== (rec.order_permlink ?? null)) return 'done';
+	// … and only an order of the sender's or ours, recorded under its owner.
+	const owner = await orderOwnerOf(order, rec.sender, me).catch(() => null);
+	// Phase F.5 audit fix (F-30) — the listener stopped (lock, logout) while
+	// that was asked: no store write after the explicit-lock wipe.
+	if (gen !== generation || me === null) return 'done';
+	if (owner === null) return 'retry';
+	if (owner === false) return 'done';
+	// v4: sealed about ANOTHER owner's order by the same permlink (the
+	// message opened, so its header owner is the sender's own words; C-M2).
+	const h = rec.header as Record<string, unknown> | null;
+	if (h !== null && typeof h === 'object' && h.v === 4 && h.o !== owner) return 'done';
 
 	// Phase F.5 audit fix (F-32) — pure dispatch.  All routing
 	// decisions live in listenerDispatch.ts; this function applies
@@ -266,6 +311,7 @@ async function handleAppend(peer: string, rec: ChatMessageRecord): Promise<void>
 	const plan = planListenerDispatch(decoded, {
 		sender: rec.sender,
 		me,
+		orderOwner: owner,
 		currentPathname: typeof window !== 'undefined' ? window.location.pathname : '',
 		lang: get(locale) ?? 'en'
 	});
@@ -307,104 +353,157 @@ async function handleAppend(peer: string, rec: ChatMessageRecord): Promise<void>
 			id: plan.notify.notificationTag
 		});
 	}
+	return 'done';
 }
 
-/** Phase F.5 audit fix (F-22) — cap on seenIds Set per stream.
- *  Snapshot is 50 IDs; live arrivals append.  100 gives 2× the
- *  snapshot's worth of headroom so reconnect-replay doesn't
- *  collide with the cap.  At 8 bytes per number ID × 5 streams ×
- *  100 ids = ~4KB total.  Without the cap, a long-lived
- *  listener accumulates one ID per chat message ever seen on
- *  any monitored peer → unbounded growth. */
-const MAX_SEEN_IDS = 100;
-
-function openStream(peer: string): void {
-	if (me === null) return;
-	if (streams.has(peer)) return;
-
-	const seenIds = new Set<number>();
-	const handle = createChatStream({
-		me,
-		peer,
-		handlers: {
-			onSnapshot: (snap) => {
-				// Snapshot on initial connect: pre-populate seenIds
-				// from history so we don't toast for messages that
-				// landed BEFORE this listener attached.  The toast
-				// is for live arrivals only.
-				for (const item of snap.items) {
-					addSeenId(seenIds, item.id);
-				}
-			},
-			applyAppend: (rec) => {
-				void handleAppend(peer, rec);
-			}
-		}
-	});
-	handle.start();
-	streams.set(peer, { peer, handle, seenIds });
-}
-
-/** Add an ID to the seen-set, evicting the oldest entry when
- *  over cap.  Sets preserve insertion order in JS, so iterating
- *  yields oldest-first. */
-function addSeenId(set: Set<number>, id: number): void {
-	if (set.has(id)) return;
-	set.add(id);
-	while (set.size > MAX_SEEN_IDS) {
-		// Iterator's first value is the oldest insertion.
-		const oldest = set.values().next().value;
-		if (oldest === undefined) break;
-		set.delete(oldest);
+/**
+ * What one read of `peer`'s conversation brought (its snapshot, newest
+ * first): look at each message not looked at before, oldest first. On the
+ * FIRST read of a peer, its durable messages are history — what was already
+ * there when the listener started — and only fast copies (not yet durable,
+ * so under a minute old) are news.
+ */
+async function processSnapshot(
+	peer: string,
+	items: readonly ChatMessageRecord[],
+	gen: number
+): Promise<void> {
+	const firstRead = seenFor(peer) === undefined;
+	if (firstRead) {
+		// Mark the peer as read once even when nothing in it is news.
+		seen.set(peer, new Set());
+	}
+	for (const rec of [...items].reverse()) {
+		if (gen !== generation || me === null) return;
+		if (rec.sender === me) continue; // we don't toast our own outgoing
+		const key = copyKey(rec);
+		if (seenFor(peer)?.has(key) === true) continue;
+		markSeen(peer, key);
+		if (firstRead && rec.id !== 0) continue;
+		if ((await applyRecord(rec, gen)) === 'retry') seenFor(peer)?.delete(key);
 	}
 }
 
-function closeStream(peer: string): void {
-	const stream = streams.get(peer);
-	if (stream === undefined) return;
-	stream.handle.stop();
-	streams.delete(peer);
+/** Read `peer`'s conversation once: a chat stream kept open only until its
+ *  snapshot (or an error, or LISTENER_READ_TIMEOUT_MS). true when it came. */
+function readOnce(peer: string, gen: number): Promise<boolean> {
+	return new Promise((resolve) => {
+		if (me === null) {
+			resolve(false);
+			return;
+		}
+		let finished = false;
+		let snapshot: readonly ChatMessageRecord[] | null = null;
+		const finish = (): void => {
+			if (finished) return;
+			finished = true;
+			clearTimeout(timer);
+			handle.stop();
+			reading.delete(peer);
+			if (snapshot === null) {
+				resolve(false);
+				return;
+			}
+			void processSnapshot(peer, snapshot, gen).then(
+				() => resolve(true),
+				() => resolve(true)
+			);
+		};
+		const handle = createChatStream({
+			me,
+			peer,
+			handlers: {
+				onSnapshot: (snap) => {
+					snapshot = snap.items;
+					finish();
+				},
+				// Closed right after its snapshot: appends are the next read's.
+				applyAppend: () => undefined,
+				// An error before the snapshot: this read failed (tried again).
+				onStreamingChange: (s) => {
+					if (!s) finish();
+				}
+			}
+		});
+		reading.set(peer, handle);
+		const timer = setTimeout(finish, LISTENER_READ_TIMEOUT_MS);
+		handle.start();
+	});
 }
 
-/** Start the listener for a logged-in user.  Opens streams for
- *  every peer currently in the recent-peers list.  Idempotent —
- *  calling multiple times for the same `account` is a no-op. */
+/** Start the next queued read, if there is room. */
+function pump(): void {
+	while (me !== null && reading.size < MAX_LISTENER_STREAMS && queue.length > 0) {
+		const peer = queue.shift()!;
+		const gen = generation;
+		void readOnce(peer, gen).then((ok) => {
+			if (gen !== generation) return;
+			if (ok) retryTries.delete(peer);
+			else scheduleRetry(peer);
+			pump();
+		});
+	}
+}
+
+/** A read that failed: queue it again after a pause that grows. */
+function scheduleRetry(peer: string): void {
+	const tries = (retryTries.get(peer) ?? 0) + 1;
+	if (tries > READ_RETRY_MAX_TRIES) {
+		// The next activity ping for this peer starts over.
+		retryTries.delete(peer);
+		return;
+	}
+	retryTries.set(peer, tries);
+	if (retryTimers.has(peer)) return;
+	const wait = Math.min(READ_RETRY_MIN_MS * 2 ** (tries - 1), READ_RETRY_MAX_MS);
+	retryTimers.set(
+		peer,
+		setTimeout(() => {
+			retryTimers.delete(peer);
+			enqueue(peer);
+		}, wait)
+	);
+}
+
+/** Read `peer`'s conversation soon (once, however many pings ask). */
+function enqueue(peer: string): void {
+	if (me === null || peer === me || !isValidBlurtAccount(peer)) return;
+	if (queue.includes(peer)) return;
+	queue.push(peer);
+	pump();
+}
+
+/** Start the listener for a logged-in user.  Idempotent — calling
+ *  multiple times for the same `account` is a no-op. */
 export function startTradeEventListener(account: string): void {
 	if (!browser) return;
 	if (me === account) return;
 	if (me !== null) stopTradeEventListener();
 	me = account;
-	// F-21: cap stream count to MAX_LISTENER_STREAMS, picking the
-	// most-recent peers (recent-peers list is sorted newest-first).
-	const peers = loadRecentPeers().slice(0, MAX_LISTENER_STREAMS);
-	for (const peer of peers) {
-		if (peer === account) continue; // self-chat not a thing
-		openStream(peer);
-	}
+	generation++;
+	unsubscribePings = subscribeChatActivityPings((ping) => {
+		// A message WE wrote (named by the fast path): nothing to look at.
+		// `order: null` is the durable path's "something was stored" —
+		// whichever way it went — so the peer's conversation is read
+		// (reconcile), never taken as a thread named ''.
+		if (ping.inbound === false && ping.order !== null) return;
+		enqueue(ping.peer);
+	});
 }
 
-/** Refresh the active set against the current recent-peers list.
- *  Open streams for new peers, close streams for peers no longer
- *  in the list.  Called when recordRecentPeer fires. */
-export function refreshTradeEventListener(): void {
-	if (me === null) return;
-	// F-21: same cap as startup.  As conversations rotate (new
-	// peer appears at the top), older peers drop out of the
-	// listener even if still in the recent-peers list.
-	const peers: Set<string> = new Set(loadRecentPeers().slice(0, MAX_LISTENER_STREAMS));
-	for (const existing of streams.keys()) {
-		if (!peers.has(existing)) closeStream(existing);
-	}
-	for (const peer of peers) {
-		if (peer === me) continue;
-		if (!streams.has(peer)) openStream(peer);
-	}
-}
-
-/** Stop all streams.  Called on lock / logout. */
+/** Stop everything.  Called on lock / logout. */
 export function stopTradeEventListener(): void {
-	for (const peer of [...streams.keys()]) {
-		closeStream(peer);
+	generation++;
+	if (unsubscribePings !== null) {
+		unsubscribePings();
+		unsubscribePings = null;
 	}
+	for (const handle of reading.values()) handle.stop();
+	reading.clear();
+	queue.length = 0;
+	for (const t of retryTimers.values()) clearTimeout(t);
+	retryTimers.clear();
+	retryTries.clear();
+	seen.clear();
 	me = null;
 }

@@ -15,6 +15,9 @@ import { clearChatFolders } from './chatFolders';
 import { clearAllPins } from './pubPin';
 import { clearRecentPeers } from './recentPeers';
 import { resetBlocks } from './blocks';
+import { clearStreamTickets } from './streamTicket';
+import { _clearVerifyCache } from './blurtVerify';
+import { clearAllTradeStates } from '$lib/trades/tradeStatus';
 
 export function resetChatOnSignOut(): void {
 	for (const reset of [
@@ -22,7 +25,13 @@ export function resetChatOnSignOut(): void {
 		clearChatFolders,
 		clearAllPins,
 		clearRecentPeers,
-		resetBlocks
+		resetBlocks,
+		// Tickets this page signed for the account's live streams (review C, L2).
+		clearStreamTickets,
+		// The account's trades and payment checks, as an explicit lock clears
+		// them: the next account in this tab must not see them.
+		clearAllTradeStates,
+		_clearVerifyCache
 	]) {
 		try {
 			reset();

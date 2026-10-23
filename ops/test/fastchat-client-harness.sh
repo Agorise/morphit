@@ -177,29 +177,23 @@ fi
 
 # ── the same message arriving twice ──────────────────────────────────
 try 'C1 the provisional/durable collapse is removed' "$CHAT" \
-	'					if (twin) {' \
-	'					if (false) {'
+	'				if (twin) {' \
+	'				if (false) {'
 
 try 'C2 the collapse adopts the id but does not stop' "$CHAT" \
-	'							adoptDurable(twin, rec);
-						}
-						added = true;
-						continue;
-					}
+	'					if (changed) added = true;
+					continue;
 				}' \
-	'							adoptDurable(twin, rec);
-						}
-						added = true;
-					}
+	'					if (changed) added = true;
 				}'
 
 try 'C3 a provisional adopts an id from another provisional' "$CHAT" \
-	'						if (isDurable && (twin.id === null || twin.id === 0)) {' \
-	'						if (twin.id === null || twin.id === 0) {'
+	'					if (isDurable && (twin.id === null || twin.id === 0)) {' \
+	'					if (twin.id === null || twin.id === 0) {'
 
 try 'C8 twins are matched on the sender'"'"'s tag alone again' "$CHAT" \
-	'							m.wire === wire' \
-	'							true'
+	'm.sender === rec.sender && m.wire === wire' \
+	'm.sender === rec.sender && m.clientTag !== null && m.clientTag === clientTagFromHeader(rec.header)'
 
 # ── a message the chain never records (neverRecorded.test.ts) ────────
 # The sender's side. Each of these was a real way for a dropped message to sit
@@ -252,17 +246,15 @@ try 'N9 a provisional from our other session is stored with the id 0 it arrived 
 					id: rec.id,'
 
 try 'N10 an absorbed retry runs the side effects again' "$CHAT" \
-	'						absorbRetryCopy(linked, rec, incomingTag, declared);
-						added = true;
+	'						if (absorbRetryCopy(linked, rec, incomingTag, declared, d.boundT)) added = true;
 						continue;' \
-	'						absorbRetryCopy(linked, rec, incomingTag, declared);
-						added = true;'
+	'						if (absorbRetryCopy(linked, rec, incomingTag, declared, d.boundT)) added = true;'
 
 try 'N11 a fresh provisional retry inherits the old verdict' "$CHAT" \
 	'			m.provisionalSinceMs = Date.now();
 			m.unrecorded = false;
-		}' \
-	'		}'
+			return true;' \
+	'			return true;'
 
 # The link's two halves, and who may use it.
 try 'N12 a retry links on its tag alone, whatever it says' "$CHAT" \

@@ -1,8 +1,8 @@
 /**
  * v1.20.2 — /compare's peer orderbook, fetched by the visitor's OWN instance
  * (api/compareOrderbook.ts). The browser could not fetch it: every instance's
- * CSP `connect-src` allows only 'self' and the RPC nodes ("Failed to fetch",
- * morphit.io → timeapp, 2026-10-01).
+ * CSP `connect-src` allows only 'self' ("Failed to fetch", morphit.io →
+ * timeapp, 2026-10-01, when it also allowed the RPC nodes).
  *
  * Unit tests inject the fetcher; the hidden path is also run for REAL: a peer
  * HTTP server reached through a SOCKS5 stand-in for Tor, through the real

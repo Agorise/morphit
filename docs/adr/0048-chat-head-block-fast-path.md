@@ -14,6 +14,41 @@
 >   nothing for the switch to protect.
 >
 > Read ADR-0051 before relying on anything below about scope or configuration. (implemented), 2026-07-02
+>
+> **2026-10-21 amendment (v1.21.14, full chat audit).** Four statements below
+> are false against the current code and are marked in place with
+> **v1.21.14:**. In short:
+>
+> - **"Never writes the database"** is not true. The tailer writes no message
+>   state — no `chat_messages` row, nothing about orders, fees or keys — but it
+>   enqueues notifications: a `push_pending` row for a chat message or review
+>   that passes its gate, and through the same chat enqueue an
+>   `offline_notify_pending` row (`chatPushEnqueue.ts`,
+>   `feedbackPushEnqueue.ts`, `offlineNoticeEnqueue.ts`).
+> - **"Reads only the block feed and the block list"** is stale. It also reads
+>   `chat_messages` (is this transaction already stored?), the signer's posting
+>   key (`accounts`, or a two-operator quorum read through the RPC pool), the
+>   notify gate's tables, and the push and offline-notice tables. It also
+>   recognises, in memory only, block ops and stranger fees seen at the head
+>   (`headBlocks.ts`, `headStrangerFees.ts`).
+> - **"Worst case ≈ 5.5 s"** was never measured, and was not true: the loop
+>   slept a full interval after each tick, so the tick's own RPC calls added
+>   to it. The audit measured, from broadcast to emit before either browser
+>   hop, up to 4,142 ms with 100 ms RPC calls and 2,882–5,923 ms with 800 ms
+>   calls (a hidden-only node).
+> - **The environment variables** are stale. There is no on/off switch
+>   (removed in v1.7.0, ADR-0051), and the interval is
+>   `MORPHIT_INDEXER_FASTPATH_INTERVAL_MS`, default **1000** since v1.21.14.
+>
+> What changed in v1.21.14: the loop runs at a fixed rate (the next tick is
+> due one interval after the last one started); a tick asks for the block
+> after the last one scanned before anything else, so a new block costs one
+> RPC round trip, and reads the head number only after a block is found and
+> on one idle tick in ten (`HEAD_READ_EVERY_TICKS`); a chat op whose
+> signature could not be checked yet is looked at again after 0.75 s, then
+> 2 s and 4 s later (`RECHECK_DELAYS_MS`, at most 200 waiting); block ops and
+> stranger fees seen at the head are honoured before the durable path records
+> them. ADR-0052's v1.21.14 amendment has the full list.
 **Supersedes:** none
 **Superseded by:** none
 **Related:** ADR-0008 (irreversible-only indexing), ADR-0015 (chat E2EE envelope)
@@ -51,12 +86,25 @@ provisional against its later durable copy by the on-chain `client_tag`.
 **On by default** (`MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=true`), interval
 `MORPHIT_INDEXER_CHAT_FASTPATH_INTERVAL_MS=2000`.
 
+**v1.21.14:** neither variable exists now. The switch was removed in v1.7.0
+(ADR-0051); the interval is `MORPHIT_INDEXER_FASTPATH_INTERVAL_MS`
+(`apps/indexer/src/config/index.ts`), default 1000 ms, at a fixed rate.
+
 ### Six hard invariants (the safety contract)
 
 1. **Never writes the database.** The tailer only reads (the block feed + a
    block-list lookup) and emits in-process events. The durable poller stays
    the only writer, so the ADR-0008 guarantee is untouched for chat history
    and for every other op type.
+   **v1.21.14:** the guarantee about history still holds — the tailer writes
+   no `chat_messages` row and no other message, order, fee or key state — but
+   "never writes" does not: it enqueues notifications (`push_pending` for a
+   chat message or a review; since v1.21.9 also `offline_notify_pending`),
+   deduplicated
+   with the durable enqueue on the transaction id. And it reads more than the
+   block feed and the block list: whether the transaction is already stored,
+   the signer's posting key (a quorum RPC read when the stored key is not
+   confirmed or there is no row), and the notify gate's tables.
 2. **Chat only.** It extracts exactly `morphit_chat_v1`. Orders, fees,
    feedback, transfers — everything with money or durable state at stake —
    stay irreversible-only, always. A head-block op is not yet irreversible and
@@ -76,6 +124,13 @@ provisional against its later durable copy by the on-chain `client_tag`.
    them for persistent history, and a spammer's message being briefly visible
    before it fails to persist is a bounded, acceptable degradation. The block
    check is the only gate whose bypass would be a genuine safety hole.
+   **v1.21.14:** delivery into an open chatroom is still gated only by the
+   block list, which now also includes a block op signed at the head and not
+   yet durable (`headBlocks.ts`). Everything else a message can trigger — the
+   Web Push, the inbox ping, the replay into a chatroom opened later — follows
+   the safe-subset gate shared with the federation intake
+   (`fastNotifyGate.ts`). The tailer also checks each op's signature against
+   the signer's posting key (since v1.20.0).
 5. **Client-tag gated.** The tailer only emits messages whose header carries a
    non-empty `client_tag` — the key the client uses to dedupe the provisional
    against its durable twin. A message with no `client_tag` can't be deduped,
@@ -129,6 +184,20 @@ the ~45–60s irreversibility wait. The 2000ms interval keeps the worst case
 under ~6s; lowering it tightens latency at the cost of more head polls,
 raising it reduces RPC load.
 
+**v1.21.14:** the sum above left out the tick's own RPC calls. The loop slept
+a full interval after each tick, and a tick made two round trips (the head
+number, then the block) before it could emit, so a slow RPC endpoint added
+its latency to every message. Measured by the audit, broadcast to emit and
+before either browser hop: up to 4,142 ms with 100 ms RPC calls, and
+2,882–5,923 ms with 800 ms calls. Now the interval is 1,000 ms at a fixed rate
+and a tick asks for the next block directly, so the components are: up to
+one block interval (3 s) for the message to be in a block, up to one tick
+interval to the next poll, one block read, and the signature check. A sender
+whose posting key needs a chain read (no `accounts` row, or a key not yet
+confirmed) adds a quorum key read, retried at 0.75 s, then 2 s and 4 s later.
+These components have not been re-measured as a single figure, and they
+exclude both browser hops.
+
 ### RPC load
 
 The tailer adds one `getDynamicGlobalProperties` per interval (~30/min at
@@ -137,6 +206,13 @@ production — the same rate the poller fetches irreversible blocks). Roughly a
 2× increase in block-feed calls versus the poller alone. The RPC pool
 (`@morphit/rpc-pool`) handles the extra load; a far-behind tailer skips ahead
 (`MAX_CATCHUP_BLOCKS = 120`) rather than bursting.
+
+**v1.21.14:** at the 1,000 ms default a tick reads the next block every
+second (about 60 calls a minute, most of them answered "not yet"), and the
+head number after each new block and on one idle tick in ten. Signature
+checks add a quorum key read for a sender whose key is not confirmed, and a
+head-block stranger fee adds a quorum read of the payer's active keys (at
+most 30 a minute, `headStrangerFees.ts`).
 
 ## Rollout: on by default, ship together
 
@@ -154,7 +230,8 @@ build — self-healing, and SSE connections typically reconnect on deploy
 anyway.
 
 Operators who want a message not shown until it is irreversible can set
-`MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=false`.
+`MORPHIT_INDEXER_CHAT_FASTPATH_ENABLED=false`. (**Removed in v1.7.0**,
+ADR-0051: the variable is now ignored and the tailer always runs.)
 
 ## Alternatives considered
 
@@ -194,6 +271,11 @@ Operators who want a message not shown until it is irreversible can set
 - Indexer `tsc --noEmit`: clean.
 - `chat-head-tailer-validation-parity-smoke` (8): op-id/constant parity +
   DB-read-only + fast-channel-only + chat-only + client-tag-gate.
+  (**v1.21.14:** the file is
+  `apps/indexer/scripts/head-tailer-validation-parity-smoke.ts`. Its
+  "DB-read-only" check looks for write statements in `headTailer.ts`'s own
+  source; the notification rows the tailer causes are written by the enqueue
+  modules it imports, which that check does not read.)
 - `chat-fastpath-dedup-smoke` (8): provisional-aware reconcile, twin collapse,
   never-overwrite-real-id, and the money-flow no-re-record invariant.
 - Existing chat suites unchanged: `chat-handler` (26), `chat-stream` (18),

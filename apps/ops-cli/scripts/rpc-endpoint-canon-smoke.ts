@@ -3,11 +3,8 @@
  *
  * Pins the canonical Blurt RPC endpoint set (the single source of truth
  * in @morphit/operator-config) against the copies that CANNOT import it:
- *   - the frontend's DEFAULT_RPC_ENDPOINTS (browser bundle — can't pull
- *     in a node package). this is now the browser-CORS-clean
- *     SUBSET of canon (a browser can only use nodes that return a valid
- *     single Access-Control-Allow-Origin), so it is checked as a non-empty
- *     SUBSET with no stray node, NOT set-equal.
+ *   - (the web app carries NO copy since v1.21.14: the browser contacts no
+ *     RPC node; checked below)
  *   - the env examples (ops/env/indexer.env.example,
  *     ops/env/relay.env.example). These are SERVER-side (no CORS), so they
  *     stay set-EQUAL to canon.
@@ -67,72 +64,15 @@ if (!DEFAULT_BLURT_RPC_ENDPOINTS.some((u) => DEAD_RE.test(u)))
 	ok('canonical set does not contain the dead node (firefight regression)');
 else bad('the dead node is back in the canonical set — it is permanently offline');
 
-// ── frontend literal (browser-CORS-clean SUBSET of canon) ───────────
-// the browser list is the CORS-clean SUBSET of the canonical
-// pool — a browser can only use a node that returns a single valid
-// Access-Control-Allow-Origin, and three canonical nodes fail browser
-// CORS (beblurt double-value; blurt.one + dagobert missing header). So
-// the frontend list is NOT set-equal to canon; it must be a non-empty
-// subset with NO stray node (drift guard) + enough nodes for failover.
+// ── the web app carries no node list ────────────────────────────────
+// Since v1.21.14 the browser contacts no Blurt RPC node (every page's CSP is
+// connect-src 'self'; the release check reads through the instance), so the
+// web app must not carry a copy of the pool that could drift or be used.
 {
 	const src = readFileSync(join(REPO, 'apps', 'web', 'src', 'lib', 'net', 'config.ts'), 'utf8');
-	const m = /DEFAULT_RPC_ENDPOINTS[^=]*=\s*\[([\s\S]*?)\]/.exec(src);
-	if (!m) {
-		bad('could not find DEFAULT_RPC_ENDPOINTS in apps/web/src/lib/net/config.ts');
-	} else {
-		const urls = new Set(Array.from(m[1]!.matchAll(/'(https:\/\/[^']+)'/g)).map((x) => x[1]!));
-		const stray = [...urls].filter((u) => !canon.has(u));
-		if (stray.length === 0)
-			ok('frontend DEFAULT_RPC_ENDPOINTS is a subset of the canonical pool (no stray node)');
-		else
-			bad(
-				'frontend DEFAULT_RPC_ENDPOINTS contains node(s) not in the canonical pool',
-				`stray=[${show(stray)}] canon=[${show(canon)}]`
-			);
-		if (urls.size >= 2) ok(`frontend browser pool has ${urls.size} endpoints (>=2 for failover)`);
-		else bad('frontend browser pool has fewer than 2 endpoints — too little browser failover', show(urls));
-		if ([...urls].every((u) => u.startsWith('https://'))) ok('frontend endpoints are all https://');
-		else bad('a frontend endpoint is not https://', show(urls));
-
-		// cp(post-beta28): SERVER_ONLY_CANONICAL_RPC_ENDPOINTS — the
-		// CORS-omitted canonical nodes the settings panel shows READ-ONLY
-		// so the operator sees the complete 6-node pool. Must be a subset
-		// of canon, DISJOINT from the browser list, and together with it
-		// cover the WHOLE canonical pool (the "show all 6" guarantee).
-		const soM = /SERVER_ONLY_CANONICAL_RPC_ENDPOINTS[^=]*=\s*\[([\s\S]*?)\]/.exec(src);
-		if (!soM) {
-			bad('could not find SERVER_ONLY_CANONICAL_RPC_ENDPOINTS in apps/web/src/lib/net/config.ts');
-		} else {
-			const serverOnly = new Set(
-				Array.from(soM[1]!.matchAll(/'(https:\/\/[^']+)'/g)).map((x) => x[1]!)
-			);
-			const soStray = [...serverOnly].filter((u) => !canon.has(u));
-			if (soStray.length === 0)
-				ok('SERVER_ONLY_CANONICAL_RPC_ENDPOINTS is a subset of the canonical pool (no stray node)');
-			else
-				bad(
-					'SERVER_ONLY_CANONICAL_RPC_ENDPOINTS contains node(s) not in the canonical pool',
-					`stray=[${show(soStray)}]`
-				);
-
-			const overlap = [...serverOnly].filter((u) => urls.has(u));
-			if (overlap.length === 0) ok('browser DEFAULT and SERVER_ONLY endpoint lists are disjoint');
-			else
-				bad(
-					'an endpoint is in BOTH the browser DEFAULT and SERVER_ONLY lists',
-					`overlap=[${show(overlap)}]`
-				);
-
-			const union = new Set([...urls, ...serverOnly]);
-			if (setEq(union, canon))
-				ok('browser DEFAULT ∪ SERVER_ONLY === the full canonical pool (settings panel shows every canonical node)');
-			else
-				bad(
-					'browser DEFAULT ∪ SERVER_ONLY does not equal the canonical pool',
-					`union=[${show(union)}] canon=[${show(canon)}]`
-				);
-		}
-	}
+	const nodes = [...canon].filter((u) => src.includes(u.replace(/\/+$/, '')));
+	if (nodes.length === 0) ok('the web app config names no Blurt RPC node');
+	else bad('the web app config names Blurt RPC node(s) again', show(nodes));
 }
 
 // ── env examples ────────────────────────────────────────────────────

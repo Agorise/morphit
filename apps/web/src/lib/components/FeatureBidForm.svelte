@@ -34,6 +34,7 @@
 	import { identity, liveIdentity } from '$stores/identity';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import sodium from 'libsodium-wrappers-sumo';
 	import { broadcastFeatureBid } from '$blurt/ops/featureBid';
 	import { ChainRejectedError, BroadcastUnavailableError } from '$blurt/broadcastTransport';
@@ -454,23 +455,27 @@
 	{#if hasActiveKey && canBid}
 		<!-- Password prompt (session already holds an active key). Same JIT
 		     pattern as /post: never persisted, cleared after submit, and the
-		     plaintext active key only exists inside the useActiveKey callback. -->
-		<label class="mb-3 block">
-			<span class="mb-1 block text-xs font-semibold text-ink-700 dark:text-ink-200">
-				{passwordLabel}
-			</span>
-			<input
-				type="password"
-				maxlength="64"
-				bind:value={password}
-				autocomplete="current-password"
-				disabled={submitting}
-				class="w-full rounded-lg border bg-white px-3 py-2 text-sm focus:border-morphit-emerald focus:outline-none focus:ring-1 focus:ring-morphit-emerald dark:bg-ink-900 {passwordError
-					? 'border-red-500 dark:border-red-500'
-					: 'border-ink-300 dark:border-ink-700'}"
-				class:password-flash={flashPassword}
-			/>
-		</label>
+		     plaintext active key only exists inside the useActiveKey callback.
+		     Its own form (PasswordScope), so a password manager fills nothing
+		     else on the page. -->
+		<PasswordScope account={signingAccount}>
+			<label class="mb-3 block">
+				<span class="mb-1 block text-xs font-semibold text-ink-700 dark:text-ink-200">
+					{passwordLabel}
+				</span>
+				<input
+					type="password"
+					maxlength="64"
+					bind:value={password}
+					autocomplete="current-password"
+					disabled={submitting}
+					class="w-full rounded-lg border bg-white px-3 py-2 text-sm focus:border-morphit-emerald focus:outline-none focus:ring-1 focus:ring-morphit-emerald dark:bg-ink-900 {passwordError
+						? 'border-red-500 dark:border-red-500'
+						: 'border-ink-300 dark:border-ink-700'}"
+					class:password-flash={flashPassword}
+				/>
+			</label>
+		</PasswordScope>
 		{#if passwordError}
 			<p class="-mt-2 mb-3 text-sm font-medium text-red-600 dark:text-red-400" role="alert">
 				{passwordError}

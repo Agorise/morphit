@@ -40,6 +40,7 @@ function fakeStore(
 	const calls = { slot: 0, link: 0, dropped: 0, strangerAsked: 0 };
 	const store = {
 		repliedSince: async () => false,
+		unreadStoredFrom: async () => true,
 		blocked: async () => false,
 		readSince: async () => false,
 		alreadyNoticed: async () => false,

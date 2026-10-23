@@ -60,8 +60,8 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: [
 			'const OWN_SENT_CACHE_MAX = 1000;',
 			'const ownSentPlaintext = new Map<string, string>();',
-			'function ownSentKey(me: string, clientTag: string): string {',
-			'function rememberOwnSent(me: string, clientTag: string, plaintext: string): void {',
+			'function ownSentKey(me: string, peer: string, order: string | null, clientTag: string): string {',
+			'function rememberOwnSent(',
 			'export function clearOwnSentPlaintextCache(): void {',
 			'ownSentPlaintext.clear();'
 		]
@@ -69,14 +69,17 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: '2 — cache is bounded (oldest-eviction over the cap)',
 		file: SVC,
-		mustHave: ['if (ownSentPlaintext.size > OWN_SENT_CACHE_MAX) {', 'ownSentPlaintext.keys().next().value']
+		mustHave: [
+			'if (ownSentPlaintext.size > OWN_SENT_CACHE_MAX) {',
+			'ownSentPlaintext.keys().next().value'
+		]
 	},
 	{
-		name: '3 — sendMessage remembers OUR plaintext keyed by (me, clientTag)',
+		name: '3 — sendMessage remembers OUR plaintext keyed by (me, peer, order thread, clientTag)',
 		file: SVC,
 		mustHave: [
 			'const clientTag = deps.generateClientTag();',
-			'rememberOwnSent(deps.me, clientTag, trimmed);'
+			'rememberOwnSent(deps.me, deps.peer, deps.orderPermlink, clientTag, trimmed);'
 		]
 	},
 	{
@@ -85,7 +88,7 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: [
 			'const ownTag = clientTagFromHeader(rec.header);',
 			'deps.getLiveIdentity() !== null && ownTag !== null',
-			'ownSentPlaintext.get(ownSentKey(deps.me, ownTag))',
+			'ownSentFor(deps.me, rec, ownTag)',
 			// v1.18.0: named, because the retry link compares it before the push.
 			'const ownText = ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER;',
 			'text: ownText,'

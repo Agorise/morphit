@@ -71,19 +71,59 @@ locally.
 
 ## Data flow — chat
 
-1. Sender derives a fresh ephemeral X25519 keypair and derives the
-   message key from two ECDHs — ephemeral × recipient and sender ×
-   recipient chat keys (both derived from Blurt posting keys) — via
-   BLAKE2b (envelope v2, `docs/CHAT-CRYPTO.md`).
-2. The plaintext is encrypted with ChaCha20-Poly1305-IETF. The
-   ephemeral pubkey travels in the message header.
-3. The signed `custom_json` (`id = morphit_chat_v1`) goes through the
-   sender's indexer (`/v1/broadcast`) to the chain. Before it is in a
-   block, the indexer may push it over Tor to verified peer instances
-   so it shows there within seconds (ADR-0052).
-4. Counterparty's client reads it, decrypts locally with the sender's
-   pinned chat key.
-5. Indexer, relay, server operators only ever see ciphertext — plus
+1. The sender's browser encrypts the message with
+   ChaCha20-Poly1305-IETF, in one of two envelopes
+   (`docs/CHAT-CRYPTO.md` decides which):
+   - **v2, chat keys.** A fresh ephemeral X25519 keypair; the message
+     key comes from two ECDHs — ephemeral × recipient and sender ×
+     recipient chat keys (both derived from Blurt posting keys,
+     published on chain) — via BLAKE2b.
+   - **v3, posting keys** (v1.21.13). Used whenever v2 is not (for
+     example, a peer with no published chat key). A fresh content key encrypts the message once and is wrapped
+     for each of the recipient's posting keys that can sign alone (up
+     to three), each wrap keyed from ECDHs on secp256k1 posting keys
+     (ephemeral × recipient and sender × recipient). The recipient's
+     keys come from the indexer's `/v1/account/:account/keys`, which
+     answers only when two RPC operators agree (v1.21.14), unless they
+     are already pinned.
+   The header carries the envelope version and the ephemeral key (and,
+   for v3, the posting keys and wraps).
+2. The signed `custom_json` (`id = morphit_chat_v1`) goes to the
+   sender's own indexer (`/v1/broadcast`), which forwards it to one
+   Blurt RPC node — without waiting for a block when the browser asks
+   for that (`chat_async`).
+3. Three fast routes show it before it is in the durable record. All
+   three are display and notification only: they check the op's
+   signature against the signer's posting key and the recipient's
+   block list, emit on the same in-process event bus, and write no
+   message state (ADR-0048, ADR-0052).
+   - **Federation push.** The sender's indexer pushes the transaction
+     over Tor, one fresh circuit per push, to probe-verified peer
+     instances (at most 40) — before the node has accepted it when its
+     own check passed, otherwise after. Each peer verifies it again on
+     a bounded queue. No Tor configured: no push.
+   - **Local delivery.** When both people use the same instance, it
+     delivers to its own listeners once the node has accepted the
+     message and the signature has verified there.
+   - **Head tailer.** Every indexer polls for the next head block
+     (every second by default) and emits any chat op in it that no
+     other route has already delivered (the fast-emit ledger).
+   The browser receives these on two live streams (the inbox activity
+   stream and the open conversation), which need a ticket signed by
+   the account's posting key (v1.21.14). Whether a fast message may
+   also light the inbox, raise a Web Push or be replayed into a
+   conversation opened later is a separate, narrower gate. The browser
+   collapses a fast copy into its later durable copy by `client_tag`.
+4. The durable poller stores the message in `chat_messages` once its
+   block is irreversible (45–63 s), after the anti-spam gates
+   (stranger fee, no-reply caps). A block holding a chat or inbox op
+   is applied only when two RPC operators serve the same transaction
+   (v1.21.14). This is the only chat history.
+5. Counterparty's client decrypts locally: v2 with its own chat key and
+   the sender's pinned chat key; v3 with its own posting key, the
+   sender proved when the header's sender key is one of the posting
+   keys pinned for them.
+6. Indexer, relay, server operators only ever see ciphertext — plus
    the public metadata (who, when, which order, read receipts).
 
 ## Data flow — feedback
@@ -126,7 +166,7 @@ No single host, domain, operator, or network is load-bearing.
 - Private keys **never**:
   - appear in any `fetch()`, `XHR`, `WebSocket`, or `postMessage()` to a
     remote origin (by code and the review checklist; the CSP limits
-    `connect-src` to this origin and the browser's RPC nodes)
+    `connect-src` to this origin)
   - appear in any log
   - appear in any database
   - transit any Morphit-operated server

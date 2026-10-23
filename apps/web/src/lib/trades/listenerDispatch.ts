@@ -27,6 +27,9 @@ export interface ListenerDispatchContext {
 	/** Local user's blurt account.  Used as `recipient` for
 	 *  incoming-payload verification. */
 	readonly me: string;
+	/** Who posted the payload's order (orderParties.orderOwnerOf): the
+	 *  sender or `me`. Keys the trade-store entry with the permlink. */
+	readonly orderOwner: string;
 	/** Current page pathname (e.g. window.location.pathname).
 	 *  Used for the F-38 same-page suppression check.  Pass
 	 *  empty string in non-browser contexts; the dispatcher
@@ -45,6 +48,7 @@ export type StoreEffect =
 	| {
 			readonly kind: 'recordAddressShared';
 			readonly args: {
+				readonly orderOwner: string;
 				readonly orderPermlink: string;
 				readonly peer: string;
 				readonly method: ChatAssetTicker;
@@ -57,6 +61,7 @@ export type StoreEffect =
 	| {
 			readonly kind: 'recordFundsSent';
 			readonly args: {
+				readonly orderOwner: string;
 				readonly orderPermlink: string;
 				readonly peer: string;
 				readonly method: ChatAssetTicker;
@@ -75,6 +80,7 @@ export interface VerifyEffect {
 	 *  amount the seller asked for, not this, whenever one was asked. */
 	readonly amountBlurt: number;
 	readonly echoedMemo: string;
+	readonly orderOwner: string;
 	readonly orderPermlink: string;
 	readonly txid: string;
 	/** Always 'incoming' here: the listener only routes payments TO us. */
@@ -142,6 +148,7 @@ export function planListenerDispatch(
 		store = {
 			kind: 'recordAddressShared',
 			args: {
+				orderOwner: ctx.orderOwner,
 				orderPermlink,
 				peer: ctx.sender,
 				method: decoded.payload.method,
@@ -155,6 +162,7 @@ export function planListenerDispatch(
 		store = {
 			kind: 'recordFundsSent',
 			args: {
+				orderOwner: ctx.orderOwner,
 				orderPermlink,
 				peer: ctx.sender,
 				method: decoded.payload.method,
@@ -178,6 +186,7 @@ export function planListenerDispatch(
 					sender: ctx.sender,
 					amountBlurt: amountNum,
 					echoedMemo: decoded.payload.memo ?? '',
+					orderOwner: ctx.orderOwner,
 					orderPermlink,
 					txid: decoded.payload.txid,
 					direction: 'incoming'

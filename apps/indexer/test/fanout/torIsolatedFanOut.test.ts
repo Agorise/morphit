@@ -154,11 +154,13 @@ describe('how a push travels', () => {
 		const peer: FastPeer = { origin: `http://${ONION_A}`, hidden: true, key: 'p' };
 		sender.enqueue(chatTrx('alice', 0), [peer]); // in flight
 		sender.enqueue(chatTrx('alice', 1), [peer]);
-		sender.enqueue(chatTrx('carol', 2), [peer]);
+		sender.enqueue(chatTrx('carol', 2), [peer]); // carol does not wait for alice
 		sender.enqueue(chatTrx('alice', 3), [peer]);
 		release();
 		await sender.drain(2000);
-		expect(pushes.map((p) => p.signers)).toEqual([['alice'], ['alice'], ['carol'], ['alice']]);
+		// alice's later two travel together once her first push is done; carol's
+		// never shares a push with hers.
+		expect(pushes.map((p) => p.signers)).toEqual([['alice'], ['carol'], ['alice', 'alice']]);
 	});
 });
 

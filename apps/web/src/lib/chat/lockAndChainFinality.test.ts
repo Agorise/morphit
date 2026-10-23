@@ -138,11 +138,13 @@ function rig(
 		broadcast: broadcast as unknown as ChatControllerDeps['broadcast'],
 		fetchPeerChatPub: (async () => fakePub) as unknown as ChatControllerDeps['fetchPeerChatPub'],
 		deriveMyChatIdentity: async () => ({ priv: fakePriv, pub: fakePub }),
-		encrypt: (async (p: string) => ({
+		// Every message goes to the peer's posting keys (v1.21.14).
+		fetchPostingPubs: async () => [new Uint8Array(33).fill(2)],
+		encryptPosting: (async (p: string) => ({
 			ciphertext: b64(p),
 			ephemeralPub: b64('e'),
 			nonce: b64('n')
-		})) as unknown as ChatControllerDeps['encrypt'],
+		})) as unknown as ChatControllerDeps['encryptPosting'],
 		decrypt: (opts.decrypt ??
 			(async (env: { ciphertext: string }) =>
 				unb64(env.ciphertext))) as unknown as ChatControllerDeps['decrypt'],

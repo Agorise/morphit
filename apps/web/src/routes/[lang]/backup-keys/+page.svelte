@@ -5,6 +5,7 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
+	import PasswordScope from '$components/PasswordScope.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import {
@@ -303,30 +304,34 @@
 				{$_('backup_keys.set_password.heading')}
 			</h2>
 			<p class="mt-3 text-ink-800 dark:text-ink-200">{$_('backup_keys.set_password.body')}</p>
-			<label class="mt-4 block">
-				<span class="block text-sm font-semibold"
-					>{$_('backup_keys.set_password.password_label')}</span
-				>
-				<input
-					type="password"
-					maxlength="64"
-					autocomplete="new-password"
-					bind:value={newPassword}
-					class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-				/>
-			</label>
-			<label class="mt-3 block">
-				<span class="block text-sm font-semibold"
-					>{$_('backup_keys.set_password.confirm_label')}</span
-				>
-				<input
-					type="password"
-					maxlength="64"
-					autocomplete="new-password"
-					bind:value={newPasswordConfirm}
-					class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-				/>
-			</label>
+			<!-- Password fields sit in a form of their own (PasswordScope), so a
+			     password manager fills nothing else on the page. -->
+			<PasswordScope>
+				<label class="mt-4 block">
+					<span class="block text-sm font-semibold"
+						>{$_('backup_keys.set_password.password_label')}</span
+					>
+					<input
+						type="password"
+						maxlength="64"
+						autocomplete="new-password"
+						bind:value={newPassword}
+						class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					/>
+				</label>
+				<label class="mt-3 block">
+					<span class="block text-sm font-semibold"
+						>{$_('backup_keys.set_password.confirm_label')}</span
+					>
+					<input
+						type="password"
+						maxlength="64"
+						autocomplete="new-password"
+						bind:value={newPasswordConfirm}
+						class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					/>
+				</label>
+			</PasswordScope>
 			{#if protectError}
 				<div class="mt-3"><StatusLine kind="error">{protectError}</StatusLine></div>
 			{/if}
@@ -400,24 +405,26 @@
 									</BusyButton>
 								</div>
 							{:else if seedPhase.kind === 'prompting' || seedPhase.kind === 'verifying'}
-								<label class="mt-3 block">
-									<span class="block text-sm font-semibold">
-										{$_('backup_keys.show_seed.password_label')}
-									</span>
-									<input
-										type="password"
-										maxlength="64"
-										bind:value={seedPassword}
-										autocomplete="current-password"
-										disabled={seedPhase.kind === 'verifying'}
-										onkeydown={(e) => {
-											if (e.key === 'Enter' && seedPassword.length > 0) {
-												void verifyAndShowSeed();
-											}
-										}}
-										class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-									/>
-								</label>
+								<PasswordScope>
+									<label class="mt-3 block">
+										<span class="block text-sm font-semibold">
+											{$_('backup_keys.show_seed.password_label')}
+										</span>
+										<input
+											type="password"
+											maxlength="64"
+											bind:value={seedPassword}
+											autocomplete="current-password"
+											disabled={seedPhase.kind === 'verifying'}
+											onkeydown={(e) => {
+												if (e.key === 'Enter' && seedPassword.length > 0) {
+													void verifyAndShowSeed();
+												}
+											}}
+											class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+										/>
+									</label>
+								</PasswordScope>
 								<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">
 									{$_('backup_keys.show_seed.password_hint')}
 								</p>

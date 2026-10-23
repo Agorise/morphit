@@ -383,14 +383,16 @@ The chain is the same.  Everything else is isolated.
 
 ## What about the frontend?
 
-The frontend (apps/web) builds against `DEFAULT_RPC_ENDPOINTS`
-in `apps/web/src/lib/net/config.ts`, which is a hardcoded
-list of Blurt mainnet RPC nodes.  Users can override
-per-browser via Settings → Endpoints.
+The frontend (apps/web) holds no Blurt RPC list.  The
+browser contacts only its own instance (every page's CSP is
+`connect-src 'self'`): chain reads, broadcasts and the daily
+release check all go to that instance's indexer, which reads
+the RPC nodes in its own `MORPHIT_INDEXER_RPC_ENDPOINTS`.
 
-For staging-on-mainnet, no change is needed — the frontend
-hits the same mainnet RPCs as the indexer, and the indexer's
-own data is still isolated to your staging DB.
+For staging-on-mainnet, no change is needed — the staging
+frontend talks to the staging indexer, which reads the same
+mainnet RPCs as production, and the indexer's own data is
+still isolated to your staging DB.
 
 (For testnet, the frontend would also need code changes —
 see the appendix at the bottom.)

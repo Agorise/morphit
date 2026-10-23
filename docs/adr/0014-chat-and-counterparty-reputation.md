@@ -87,6 +87,33 @@ the resolved cipher choice).
 - `custom_json` ops are the transport for all Morphit activity.
   The chain enforces signature validity per op; our indexer
   enforces payload shape.
+
+  > **2026-10-21 correction (v1.21.14, full chat audit).** The
+  > chain checks a signature when a node accepts a transaction.
+  > The indexer does not see that check: it reads blocks from RPC
+  > nodes, and a hostile or broken node can serve a block holding
+  > a transaction that was never on chain. The durable chat
+  > handlers (`chat`, `chat_read`, `chat_folders`,
+  > `chat_identity`, `stranger_fee`, `block`) do not verify
+  > signatures; they store each op as written by the account it
+  > names. What holds now:
+  >
+  > - **Durable record:** a block carrying any of those ops is
+  >   applied only when two RPC operators (counted by node name)
+  >   serve the same transaction — id, content and signatures — at
+  >   each such position
+  >   (`apps/indexer/src/indexer/fee/btcFeeBlockConfirm.ts`,
+  >   `CHAT_TRUST_OP_IDS`). An RPC pool with a single operator has
+  >   nothing to compare and applies such blocks on that one
+  >   operator's word.
+  > - **Fast path:** the head tailer, the federation intake and
+  >   local delivery each check the op's signature against the
+  >   signer's posting key (a confirmed stored key, or a
+  >   two-operator quorum read) before showing the message.
+  > - **In the browser:** whether a message is shown as from its
+  >   sender rests on the envelope's sender authentication against
+  >   the sender's pinned key (`docs/CHAT-CRYPTO.md`), not on the
+  >   indexer.
 - An order has a permlink. This is a natural "channel
   identifier" — two users are in a chat scoped to an order.
 

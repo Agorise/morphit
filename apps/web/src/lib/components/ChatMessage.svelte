@@ -37,7 +37,8 @@
 		PEER_NOT_FOUND_SENTINEL,
 		PEER_NO_POSTING_KEY_SENTINEL,
 		ON_CHAIN_NOT_ACCEPTED_SENTINEL,
-		SESSION_LOCKED_SENTINEL
+		SESSION_LOCKED_SENTINEL,
+		MESSAGE_TOO_LONG_SENTINEL
 	} from '$lib/chat/chatService';
 	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
 	import { CARRIERS, buildTrackingUrl } from '$lib/shipping/carriers';
@@ -59,11 +60,10 @@
 	import ExplorerLink from '$lib/components/ExplorerLink.svelte';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
-	import { tradeStates } from '$lib/trades/tradeStatus';
+	import { tradeStates, tradeStateOf, tradeStateWith } from '$lib/trades/tradeStatus';
 	import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
 	import { VERIFY_RETRY_WINDOW_MS, VERIFY_RETRY_INTERVAL_MS } from '$lib/trades/tradeVerify';
 	import { isPairedReadOnly } from '$lib/stores/identity';
-	import { acceptKeyChange } from '$lib/chat/pubPin';
 	import QrPanel from '$components/QrPanel.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 
@@ -148,6 +148,17 @@
 		/** the sender's raster avatar data URI (mutually
 		 *  exclusive with senderAvatarSvg). */
 		senderAvatarDataUri?: string | null;
+		/** v1.21.14 full chat audit, W-M2: a message refused over a changed key
+		 *  offers Verify peer — where the new safety number is shown and Accept
+		 *  pins exactly the key it was made from — instead of accepting
+		 *  whatever key is pending, unseen, in one tap. Called with the
+		 *  message's localSeq (sent again once accepted). */
+		onVerifyPeer?: (localSeq: number) => void;
+		/** Who posted the order this thread is about (ConversationView resolves
+		 *  it), or null while unknown / with no order. W-L6: the "settled with
+		 *  another trader" notice is shown only for a message from that owner.
+		 *  C-L3: with the permlink, it keys the thread order's trade state. */
+		orderOwner?: string | null;
 		/** the sender's canonical BLT posting key (full base58
 		 *  string). Truncated head(9)…tail(4) for the whoami — the SAME
 		 *  shape IdentityLabel shows in the header, so the same peer's key
@@ -163,6 +174,8 @@
 		onRetry,
 		onPayNow,
 		onMarkSent,
+		onVerifyPeer,
+		orderOwner = null,
 		showWhoami = false,
 		senderAvatarSvg = null,
 		senderAvatarDataUri = null,
@@ -247,7 +260,25 @@
 	 *  already know its plaintext (we just sent it), but consistency
 	 *  with the recipient's render means an OUTGOING address share
 	 *  should render as a pill on the sender's side too. */
-	const decoded = $derived(isPlaceholder ? null : decodePayload(message.text));
+	const decoded = $derived.by(() => {
+		if (isPlaceholder) return null;
+		const d = decodePayload(message.text);
+		// v1.21.14 full chat audit, W-L6: the ready-made "this order was
+		// settled with another trader" notice speaks for the ORDER'S OWNER. It
+		// is shown only for a proved message from that owner, about the order
+		// of this very thread; anything else claiming it reads as the plain
+		// text it is (anyone could send the bare JSON, unverified, about any
+		// order).
+		if (
+			d.kind === 'order_settled_elsewhere' &&
+			(message.senderUnverified === true ||
+				d.payload.orderPermlink !== message.orderPermlink ||
+				orderOwner !== message.sender)
+		) {
+			return { kind: 'plaintext' as const };
+		}
+		return d;
+	});
 
 	/** Split plaintext into text + http(s) link segments so URLs become
 	 *  clickable (opening in a new tab) WITHOUT ever using @html on
@@ -452,21 +483,29 @@
 	 *  for cross-page consistency.
 	 *
 	 *  Phase F.5 audit fix (F-39) — read from the shared map
-	 *  directly via $tradeStates.get(permlink) rather than
+	 *  directly (tradeStateOf: owner + permlink) rather than
 	 *  allocating a per-permlink derived store. */
 	const tradeStateValue = $derived.by(() => {
 		if (decoded?.kind !== 'funds_sent') return null;
 		// An unproved sender's claim gets no badge from the order's state.
 		if (message.senderUnverified === true) return null;
 		const permlink = decoded.payload.orderPermlink;
-		if (!permlink) return null;
-		const st = $tradeStates.get(permlink) ?? null;
+		// C-L3: the owner is known for this thread's order only.
+		if (!permlink || permlink !== message.orderPermlink) return null;
+		const st = tradeStateOf($tradeStates, orderOwner, permlink);
 		// The store speaks for the order's ENGAGED counterparty only: a
 		// funds-sent pill from anyone else must not show that trade's badge.
 		const counterparty = isOutgoing ? peer : message.sender;
 		if (st === null || st.engagedPeer !== counterparty) return null;
 		return st;
 	});
+
+	/** The peer this thread's trade is engaged with, once its entry exists. The
+	 *  verification below waits for it and runs again when it changes: a claim
+	 *  shown before the address was recorded is verified once it is. */
+	const threadEngagedPeer = $derived(
+		tradeStateOf($tradeStates, orderOwner, message.orderPermlink)?.engagedPeer
+	);
 
 	/** Effective verify result — store takes precedence over
 	 *  component-local. */
@@ -514,6 +553,12 @@
 		}
 
 		if (p.orderPermlink) {
+			// C-L3: the store entry is keyed by the order's owner, known for this
+			// thread's order only (re-run once it resolves).
+			const owner = orderOwner;
+			if (p.orderPermlink !== message.orderPermlink || owner === null) return;
+			// Nothing to record on until the trade is engaged (re-run then).
+			if (threadEngagedPeer === undefined) return;
 			// Phase F.5 audit fix (F-41) — delegate to the
 			// centralized trigger.  Idempotent with the listener +
 			// chatService merge.  Same trigger used for both
@@ -523,6 +568,7 @@
 				sender: chainSender,
 				amountBlurt: amountNum,
 				echoedMemo: p.memo ?? '',
+				orderOwner: owner,
 				orderPermlink: p.orderPermlink,
 				txid: p.txid,
 				direction: isOutgoing ? 'outgoing' : 'incoming'
@@ -825,10 +871,21 @@
 				{@const isIncoming = !isOutgoing}
 				{@const parsedAmount = p.amount !== undefined ? parseFloat(p.amount) : NaN}
 				{@const alreadyPaid =
-					p.orderPermlink !== undefined &&
-					($tradeStates.get(p.orderPermlink)?.phase ?? 'address_shared') !== 'address_shared'}
+					(tradeStateWith($tradeStates, orderOwner, p.orderPermlink, message.sender)?.phase ??
+						'address_shared') !== 'address_shared'}
+				{@const ownOrder =
+					// v1.21.14 full chat audit, W-H1: an address naming ANOTHER order
+					// than this thread's offers no Pay now / Mark sent — paying it would
+					// record the payment against that order and tie it to this peer.
+					p.orderPermlink === undefined || p.orderPermlink === message.orderPermlink}
+				{@const ownerKnown =
+					// C-L3: in an order thread, whose order it is must be known, or a
+					// payment already made cannot be seen (fail closed).
+					!message.orderPermlink || orderOwner !== null}
 				{@const canPayNow =
 					onPayNow !== undefined &&
+					ownOrder &&
+					ownerKnown &&
 					message.senderUnverified !== true &&
 					p.method === 'blurt' &&
 					isIncoming &&
@@ -837,6 +894,8 @@
 					!alreadyPaid}
 				{@const canMarkSent =
 					onMarkSent !== undefined &&
+					ownOrder &&
+					ownerKnown &&
 					message.senderUnverified !== true &&
 					(p.method === 'btc' ||
 						p.method === 'xmr' ||
@@ -1626,14 +1685,27 @@
 			</div>
 		{/if}
 
-		<!-- An incoming message whose sender is not proved (older v1 envelope, or
-		     a key change not accepted yet): readable, but anyone who knows our
-		     public chat key could have written it. Said plainly, and loudest on
-		     a payment request. -->
+		<!-- An incoming message whose sender is not proved. Two different things
+		     (v1.21.14, posting-key-only chat):
+		       - an OLDER format (chat keys, from an older Morphit, also on other
+		         instances): ordinary for a while, so said calmly, in the muted
+		         colour — still with the advice not to pay to an address in it
+		         unconfirmed;
+		       - a posting-key message made with a key that is not the peer's
+		         pinned set: their keys changed and the new safety number is not
+		         accepted yet. Said plainly, in amber, pointing to Verify peer.
+		     Never "older format" for the second: a first conversation used to
+		     show that on every message. -->
 		{#if !isOutgoing && message.senderUnverified === true && !message.decryptFailed}
-			<p class="max-w-prose self-start text-xs text-amber-800 dark:text-amber-300" role="note">
-				{$_('chat.message.sender_unverified')}
-			</p>
+			{#if message.olderFormat === true}
+				<p class="max-w-prose self-start text-xs text-ink-500 dark:text-ink-400" role="note">
+					{$_('chat.message.sender_unverified_older_format')}
+				</p>
+			{:else}
+				<p class="max-w-prose self-start text-xs text-amber-800 dark:text-amber-300" role="note">
+					{$_('chat.message.sender_unverified')}
+				</p>
+			{/if}
 		{/if}
 
 		<!-- A copy the chain never recorded. Not an error the reader can act on,
@@ -1699,6 +1771,9 @@
 					{$_('chat.message.on_chain_not_accepted')}
 				{:else if message.error === SESSION_LOCKED_SENTINEL}
 					{$_('chat.message.session_locked')}
+				{:else if message.error === MESSAGE_TOO_LONG_SENTINEL}
+					<!-- v1.21.14 full chat audit, W-M5: not broadcast (no fee). -->
+					{$_('chat.message.too_long')}
 				{:else if message.error === 'chain_unreachable'}
 					<!-- Not a pub_pin_* code on purpose: the chain was never
 					     reached, so nothing about the peer's key is in doubt and
@@ -1713,19 +1788,16 @@
 			     The four security codes share one FAQ entry
 			     (chat_key_changed) so a single link works for all of
 			     them. -->
-			{#if (message.error === 'pub_pin_key_changed' || message.error === 'pub_pin_posting_key_changed') && peer !== undefined && onRetry !== undefined}
-				<!-- The changed key is used only after this explicit choice
-				     (pubPin.acceptKeyChange), and only the KIND of key this
-				     message named; never silently. -->
+			{#if (message.error === 'pub_pin_key_changed' || message.error === 'pub_pin_posting_key_changed') && onVerifyPeer !== undefined}
+				<!-- The changed key is used only after the user compared the new
+				     safety number in Verify peer and accepted exactly the key it was
+				     made from (W-M2); the message is then sent again. -->
 				<button
 					type="button"
 					class="mr-2 text-xs font-semibold text-red-700 underline hover:no-underline dark:text-red-300"
-					onclick={() => {
-						const kind = message.error === 'pub_pin_posting_key_changed' ? 'posting' : 'chat';
-						if (peer !== undefined && acceptKeyChange(peer, kind)) onRetry?.(message.localSeq);
-					}}
+					onclick={() => onVerifyPeer?.(message.localSeq)}
 				>
-					{$_('chat.security.accept_new_key')}
+					{$_('chat.menu.verify_peer')}
 				</button>
 			{/if}
 			{#if typeof message.error === 'string' && message.error.startsWith('pub_pin_')}

@@ -1,12 +1,15 @@
 /**
  * The release check's outcome, remembered in this browser for 24 h.
  *
- * The release check (./releaseFetch.ts) is the one request a visitor's browser
- * makes to third parties: public Blurt nodes, which see the visitor's IP. Its
- * outcome — a verified release OR a failure — is kept in localStorage for 24
- * hours, so a browser contacts the nodes at most once a day, even when the
- * nodes are unreachable or the instance runs an older version than the one
- * announced.
+ * The release check (./releaseFetch.ts) reads @morphit's signed release
+ * record through this instance (`POST /v1/chain/agreed`; the browser contacts
+ * nothing else). Its outcome — a verified release OR a failure — is kept in
+ * localStorage for 24 hours, so a browser asks at most once a day, even when
+ * the instance runs an older version than the one announced. A check that got
+ * NO answer (the instance could not get two operators to agree, or was slow,
+ * or busy) is asked again after 12 hours (RELEASE_FAILED_TTL_MS): it says
+ * nothing about the release, and keeping it a day silenced the stale-build
+ * and integrity banners for a day.
  *
  * An outcome is reused only while it can still mean what it meant:
  *   - it is younger than 24 h (and not from the future: a clock set back);
@@ -46,6 +49,10 @@ export const LEGACY_RELEASE_CACHE_KEYS: readonly string[] = ['morphit.releaseChe
 export const RELEASE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 /** How long an answer older than the running build is remembered. */
 export const RELEASE_UNCONFIRMED_TTL_MS = 60 * 60 * 1000;
+/** How long a check that got no answer ('rpc_failed') is remembered: so a
+ *  browser checks at most twice a day (a standing decision), and a passing
+ *  outage does not silence the banners for a whole day. */
+export const RELEASE_FAILED_TTL_MS = 12 * 60 * 60 * 1000;
 /** Prefix of the per-tab claims (`<prefix>.<id>`) that elect the one tab
  *  running the check, when the browser has no Web Locks ($net/onceAcrossTabs). */
 export const RELEASE_CHECK_CLAIM_KEY = 'morphit.releaseCheck.v2.claim';
@@ -177,7 +184,12 @@ export function decideReleaseOutcome(
 	newest: CachedRelease | null,
 	runningVersion: string
 ): { outcome: CachedOutcome; ttlMs: number; newest: CachedRelease | null } {
-	if (!fetched.ok) return { outcome: fetched, ttlMs: RELEASE_CACHE_TTL_MS, newest };
+	if (!fetched.ok)
+		return {
+			outcome: fetched,
+			ttlMs: fetched.error.kind === 'rpc_failed' ? RELEASE_FAILED_TTL_MS : RELEASE_CACHE_TTL_MS,
+			newest
+		};
 	const r = fetched.value;
 	if (compareReleaseVersions(r.payload.version, runningVersion) >= 0) {
 		return {

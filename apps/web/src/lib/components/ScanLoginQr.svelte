@@ -244,7 +244,7 @@
 				}
 				return;
 			}
-			const { signer, account, chatPubkey } = signerBundle;
+			const { signer, account, chatPubkey, streamTicketFor } = signerBundle;
 			const bundle = buildPairingBundle({
 				qr: validatedQr,
 				account,
@@ -253,10 +253,19 @@
 				deviceLabel: navigatorDeviceLabel()
 			});
 			const desktopEpkPub = base64ToBytes(validatedQr.epk);
+			// Live chat for the desktop: a stream ticket for ITS instance (the
+			// QR's origin), signed here, since the desktop holds no key.
+			let streamTicket: string | undefined;
+			try {
+				streamTicket = streamTicketFor(new URL(validatedQr.origin).hostname);
+			} catch {
+				streamTicket = undefined;
+			}
 			const delivery = await buildDeliveryPayload({
 				bundle,
 				signer,
-				desktopEpkPub
+				desktopEpkPub,
+				streamTicket
 			});
 
 			// Same instance: POST to the QR's relay (this page's own

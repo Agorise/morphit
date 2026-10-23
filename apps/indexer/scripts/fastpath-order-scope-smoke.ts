@@ -130,7 +130,8 @@ check(
 // ─── ADR-0051 invariant #1, the load-bearing premise of all of it ─
 check(
 	'the tailer still NEVER writes the database',
-	!/\bINSERT\b|\bUPDATE\b|\bDELETE\b|withTx\(/i.test(tailer),
+	// SQL writes, not a word: `this.rechecks.delete(timer)` is a Set, not a table.
+	!/\bINSERT\s+INTO\b|\bUPDATE\s+\w+\s+SET\b|\bDELETE\s+FROM\b|\bUPSERT\b|withTx\(/i.test(tailer),
 	'if the fast path can write, a reorg can corrupt state and ADR-0051 collapses'
 );
 

@@ -5,7 +5,7 @@
  * `/v1/login-pairing/:pid/deliver`, exactly as it always has.
  *
  * ANOTHER FEDERATION INSTANCE: the page cannot reach it — its CSP `connect-src`
- * is 'self' plus the RPC nodes, the other indexer's CORS refuses a cross-origin
+ * is 'self' only, the other indexer's CORS refuses a cross-origin
  * POST, and on an .onion or .i2p page a clearnet origin is not reachable at all
  * (nor the reverse). So the phone hands the bundle to its OWN indexer (same
  * origin) at `POST /v1/pairing/forward`, which carries it to that instance if,

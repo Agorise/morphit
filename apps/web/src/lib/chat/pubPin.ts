@@ -78,10 +78,10 @@ const POSTING_REF = { blockNum: 0, trxId: '0'.repeat(40) } as const;
  *  (base64 strings joined by this; base64 never contains it). */
 const SET_SEP = ',';
 /** v1.21.13 — the chat key THIS account was last seen to have published, per
- *  account (the indexer's word, or our own publish). Once seen, a later "you
- *  have published nothing" from the indexer cannot move this account's
- *  conversations off their chat keys: an op on chain is never withdrawn.
- *  Stored, sealed and wiped exactly like the pins (it names the account). */
+ *  account: what decided whether a message went out in the chat-key format.
+ *  Not written or read since v1.21.14 (every message is in the posting-key
+ *  format); a record from before is still sealed, restored and wiped exactly
+ *  like the pins (it names the account), so the sealed format is unchanged. */
 const OWN_KEY = 'morphit.chat.own_published';
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 const TRX_ID_RE = /^[a-f0-9]{40}$/;
@@ -250,12 +250,30 @@ function clearPending(peer: string): void {
  *  the other — the user saw, and compared, only the one that was shown. */
 export type KeyKind = 'chat' | 'posting';
 
-/** The user confirmed "safety number changed" for `peer`: the pending key of
- *  that `kind` becomes the pin. Returns false when nothing was pending. */
-export function acceptKeyChange(peer: string, kind: KeyKind): boolean {
-	if (kind === 'posting') return acceptPostingKeyChange(peer);
+/**
+ * The user compared the new safety number for `peer` and it matched: the
+ * pending key of that `kind` becomes the pin — but only if it is still the
+ * key the number was made from (`shown`: the chat key's base64, or the set
+ * of posting keys). Returns false when nothing is pending or what is pending
+ * is not what was shown.
+ *
+ * v1.21.14 full chat audit, W-M2: it used to pin whatever was pending AT THE
+ * CLICK. A later lookup (a send, a retry, another tab) replaces the pending
+ * key, so the number compared and the key accepted could differ — and the
+ * one-tap "accept the new key" on a refused message showed no number at all.
+ */
+export function acceptKeyChange(
+	peer: string,
+	kind: KeyKind,
+	shown: string | readonly string[]
+): boolean {
+	if (kind === 'posting') {
+		const pending = pendingPostingKeyChange(peer);
+		if (pending === null || typeof shown === 'string' || !sameKeySet(pending, shown)) return false;
+		return acceptPostingKeyChange(peer);
+	}
 	const next = pendingKeyChange(peer);
-	if (next === null) return false;
+	if (next === null || next.pubB64 !== shown) return false;
 	const old = getPin(peer);
 	const past =
 		old === null
@@ -509,8 +527,34 @@ export function pendingPostingKeyChange(peer: string): string[] | null {
 
 function writePostingPin(peer: string, keys: readonly string[]): void {
 	const pins = readRaw(POSTING_KEY);
-	pins[peer] = { ...POSTING_REF, pubB64: joinSet(keys) };
+	// The keys this replaces are kept as PAST keys (v1.21.14 review C, L4): they
+	// open nothing and prove nothing, but a message made with one is then shown
+	// with the calm "older" note instead of a warning to compare a safety number
+	// the user has just compared.
+	const old = pins[peer];
+	const past = old
+		? [...splitSet(old.pubB64), ...(old.pastPubsB64 ?? [])]
+				.filter((k, i, all) => !keys.includes(k) && all.indexOf(k) === i)
+				.slice(0, MAX_PAST_PUBS)
+		: [];
+	pins[peer] = {
+		...POSTING_REF,
+		pubB64: joinSet(keys),
+		...(past.length > 0 ? { pastPubsB64: past } : {})
+	};
 	writeRaw(pins, POSTING_KEY);
+}
+
+/** Posting keys an accepted change replaced (see writePostingPin). */
+export function replacedPostingFor(peer: string): string[] {
+	if (!ACCOUNT_NAME_RE.test(peer)) return [];
+	return [...(readRaw(POSTING_KEY)[peer]?.pastPubsB64 ?? [])];
+}
+
+function sameKeySet(a: readonly string[], b: readonly string[]): boolean {
+	const x = new Set(a);
+	const y = new Set(b);
+	return x.size === y.size && [...x].every((k) => y.has(k));
 }
 
 function acceptPostingKeyChange(peer: string): boolean {
@@ -563,11 +607,13 @@ export function peekPostingKeyPin(peer: string, chainKeysB64: readonly string[])
  * indexer read them from the chain).
  *
  *  - Not pinned: pin them (trust on first use — the chain's answer, read like
- *    every other key check through this instance's indexer) — unless
- *    `needsConsent` (the peer's CHAT key is pinned here: the user already
- *    trusts a key of theirs, and a first posting set must not slip in beside
- *    it on an indexer's word). Then it is held as a pending change and
- *    refused with `pub_pin_posting_key_changed`, like a changed set.
+ *    every other key check through this instance's indexer), whatever chat
+ *    key of the peer's is pinned here. (Until v1.21.14 a pinned chat key held
+ *    a first set back as a pending change, refused like a changed set: chat
+ *    relies on the posting key only now, and that hold made a normal first
+ *    conversation show every message from the peer as "Sender not verified"
+ *    and refuse every reply. A pending entry it left, with nothing pinned, is
+ *    dropped here: it was never a change.)
  *  - Every key on the account is pinned already: use them; the pin narrows
  *    to them when some were removed.
  *  - The account has a key that is not pinned: a change — the peer reset or
@@ -577,8 +623,7 @@ export function peekPostingKeyPin(peer: string, chainKeysB64: readonly string[])
  */
 export async function resolvePostingKeyPin(
 	peer: string,
-	chainKeysB64: readonly string[],
-	opts: { needsConsent?: boolean } = {}
+	chainKeysB64: readonly string[]
 ): Promise<string[]> {
 	if (!ACCOUNT_NAME_RE.test(peer) || chainKeysB64.length === 0) {
 		throw new PubPinError(
@@ -590,12 +635,9 @@ export async function resolvePostingKeyPin(
 	// The pins a Lock sealed are compared against too.
 	await unsealSettled();
 	const view = peekPostingKeyPin(peer, chainKeysB64);
-	if (view.kind === 'changed' || (view.kind === 'first_use' && opts.needsConsent === true)) {
+	if (view.kind === 'changed') {
 		const pending = readRaw(POSTING_PENDING_KEY);
-		pending[peer] = {
-			...POSTING_REF,
-			pubB64: joinSet(view.kind === 'changed' ? view.chain : view.keys)
-		};
+		pending[peer] = { ...POSTING_REF, pubB64: joinSet(view.chain) };
 		writeRaw(pending, POSTING_PENDING_KEY);
 		throw new PubPinError(
 			PUB_PIN_ERROR.posting_key_changed,
@@ -606,23 +648,14 @@ export async function resolvePostingKeyPin(
 	if (view.kind === 'first_use' || view.keys.length !== pinnedPostingFor(peer).length) {
 		writePostingPin(peer, view.keys);
 	}
+	if (view.kind === 'first_use') {
+		const pending = readRaw(POSTING_PENDING_KEY);
+		if (peer in pending) {
+			delete pending[peer];
+			writeRaw(pending, POSTING_PENDING_KEY);
+		}
+	}
 	return view.keys;
-}
-
-// ─── This account's own published chat key (v1.21.13) ─────────────
-
-/** The chat key `account` was last seen to have published (base64), or null. */
-export function ownPublishedRecord(account: string): string | null {
-	if (!ACCOUNT_NAME_RE.test(account)) return null;
-	return readRaw(OWN_KEY)[account]?.pubB64 ?? null;
-}
-
-/** Remember that `account`'s chat key on chain is `pubB64`. */
-export function recordOwnPublished(account: string, pubB64: string): void {
-	if (!ACCOUNT_NAME_RE.test(account) || pubB64.length === 0) return;
-	const m = readRaw(OWN_KEY);
-	m[account] = { ...POSTING_REF, pubB64 };
-	writeRaw(m, OWN_KEY);
 }
 
 /** For tests / debugging only: list all currently-pinned peers. */
@@ -741,8 +774,9 @@ export async function resolveChatPubFromIndexer(
 			// indexer outright on first contact.  A hostile indexer
 			// could substitute the pub on first fetch and win
 			// permanently (subsequent fetches match the now-pinned
-			// hostile pub).  Now: verify with the chain quorum
-			// before pinning.
+			// hostile pub).  Now: verify with the chain (read
+			// through this instance's chain relay — one source, not a
+			// quorum) before pinning.
 			const chain = await verifyOnChain(peer, indexerPin);
 			if (chain === null) {
 				throw new PubPinError(

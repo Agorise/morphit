@@ -1,9 +1,10 @@
 /**
- * The "settled with someone else" auto-reply chooses its envelope by the same
- * rule as a conversation (chatService.seal, v1.21.13): v2 only when our chat
- * key is current and the inquirer has one; otherwise v3 to the inquirer's
- * PINNED posting keys, every one of them. Never a silent move off checked keys
- * (review M7).
+ * The "settled with someone else" auto-reply is sent exactly like a
+ * conversation's messages (chatService.seal): since v1.21.14 ALWAYS the
+ * posting-key envelope (v3) to the inquirer's PINNED posting keys, every one
+ * of them — chat relies on the posting key only. Trusted on first use whatever
+ * chat key of theirs is pinned; never a silent move off a changed set (review
+ * M7).
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { LiveIdentity } from '$crypto/keygen';
@@ -23,28 +24,18 @@ function setup(over: Partial<SettledElsewhereDeps> = {}) {
 		recipientKeys: keys.map((k) => String(k[0])),
 		wraps: keys.map(() => 'w')
 	}));
-	const encrypt = vi.fn(async () => ({
-		v: 2 as const,
-		ciphertext: 'c',
-		ephemeralPub: 'e',
-		nonce: 'n'
-	}));
 	const deps: SettledElsewhereDeps = {
 		fetchOrderInquirers: async () => ['ann', 'ben', 'cy'],
-		fetchPeerChatPub: async (p) => (p === 'ann' ? new Uint8Array(32).fill(1) : null),
-		deriveMyChatIdentity: async () => ({ priv: new Uint8Array(32), pub: new Uint8Array(32) }),
-		encrypt,
 		broadcast: async (_l, payload) => {
 			sent.push(payload);
 			return { block_num: null, trx_id: 't' };
 		},
 		generateClientTag: () => '0'.repeat(32),
 		fetchPostingPubs: async () => [K(1), K(2)],
-		myChatKeyStatus: async () => 'current',
 		encryptPosting,
 		...over
 	};
-	return { deps, sent, encrypt, encryptPosting };
+	return { deps, sent, encryptPosting };
 }
 const run = (deps: SettledElsewhereDeps) =>
 	announceSettledElsewhere(deps, {
@@ -54,41 +45,19 @@ const run = (deps: SettledElsewhereDeps) =>
 		live: LIVE
 	});
 
-describe('announceSettledElsewhere — which envelope', () => {
-	it('ours current: v2 to an inquirer with a chat key; v3 to every posting key of the others', async () => {
+describe('announceSettledElsewhere — the posting-key envelope, always', () => {
+	it('v3 to every posting key of every inquirer (none in the chat-key format)', async () => {
 		const t = setup();
 		expect(await run(t.deps)).toEqual({ sent: 3, skipped: 0, failed: 0 });
 		const by = Object.fromEntries(
 			t.sent.map((p) => [p.recipient, p.header as Record<string, unknown>])
 		);
-		expect(by.ann!.v).toBe(2);
-		expect(by.ben!.v).toBe(3);
-		expect(by.ben!.rk).toEqual(['1', '2']);
-		expect(by.ben!.wk).toEqual(['w', 'w']);
-	});
-
-	it('ours none: v3 to everyone, and no inquirer’s chat key is asked for', async () => {
-		const fetchPeerChatPub = vi.fn(async () => new Uint8Array(32).fill(1));
-		const t = setup({ myChatKeyStatus: async () => 'none', fetchPeerChatPub });
-		expect(await run(t.deps)).toEqual({ sent: 3, skipped: 0, failed: 0 });
-		expect(t.sent.every((p) => (p.header as Record<string, unknown>).v === 3)).toBe(true);
-		expect(fetchPeerChatPub).not.toHaveBeenCalled();
-	});
-
-	it('ours unknown: nothing is sent to anyone', async () => {
-		const t = setup({
-			myChatKeyStatus: async () => {
-				throw new Error('down');
-			}
-		});
-		expect(await run(t.deps)).toEqual({ sent: 0, skipped: 0, failed: 3 });
-		expect(t.sent).toHaveLength(0);
-	});
-
-	it('an inquirer whose chat key is pinned, and the indexer says has none: not written to', async () => {
-		const t = setup({ pinnedPeerPubs: (p) => (p === 'ben' ? [new Uint8Array(32)] : []) });
-		expect(await run(t.deps)).toEqual({ sent: 2, skipped: 0, failed: 1 });
-		expect(t.sent.map((p) => p.recipient)).not.toContain('ben');
+		for (const who of ['ann', 'ben', 'cy']) {
+			expect(by[who]!.v).toBe(3);
+			expect(by[who]!.rk).toEqual(['1', '2']);
+			expect(by[who]!.wk).toEqual(['w', 'w']);
+		}
+		expect(t.sent.every((p) => p.order_permlink === 'sell-btc-usd-abc123')).toBe(true);
 	});
 
 	it('the posting keys go through the pins: a changed set is not written to', async () => {
@@ -100,26 +69,13 @@ describe('announceSettledElsewhere — which envelope', () => {
 		expect(await run(t.deps)).toEqual({ sent: 2, skipped: 0, failed: 1 });
 		const ben = t.sent.find((p) => p.recipient === 'ben')!.header as Record<string, unknown>;
 		expect(ben.rk).toEqual(['2']); // the pinned keys, not the chain's first
-	});
-
-	it('an inquirer whose chat key is pinned gets no posting keys on first use (consent asked)', async () => {
-		const pinPostingKey = vi.fn(
-			async (_p: string, keys: readonly Uint8Array[], opts?: { needsConsent?: boolean }) => {
-				if (opts?.needsConsent === true) throw new Error('posting keys not checked yet');
-				return [...keys];
-			}
-		);
-		const t = setup({
-			myChatKeyStatus: async () => 'none',
-			pinPostingKey,
-			pinnedPeerPubs: (p) => (p === 'cy' ? [new Uint8Array(32)] : [])
-		});
-		expect(await run(t.deps)).toEqual({ sent: 2, skipped: 0, failed: 1 });
-		expect(t.sent.map((p) => p.recipient)).not.toContain('cy');
+		expect(pinPostingKey.mock.calls.map((c) => c.length)).toEqual([2, 2, 2]);
 	});
 
 	it('no such account, or no posting key of its own: skipped', async () => {
-		const t = setup({ fetchPostingPubs: async (p) => (p === 'ben' ? null : []) });
+		const t = setup({
+			fetchPostingPubs: async (p) => (p === 'ben' ? null : p === 'cy' ? [] : [K(1)])
+		});
 		expect(await run(t.deps)).toEqual({ sent: 1, skipped: 2, failed: 0 });
 	});
 });

@@ -67,14 +67,11 @@ export function recordRecentPeer(peer: string): void {
 	if (filtered.length > MAX_RECENT_PEERS) filtered.length = MAX_RECENT_PEERS;
 	writeRaw(filtered);
 
-	// Phase F.5 audit fix (F-29) — notify subscribers (the trade-
-	// event listener) that the recent-peers list changed.  Without
-	// this, the listener doesn't pick up new conversations until
-	// the next lock/unlock cycle.  Custom event keeps the modules
-	// decoupled — recentPeers doesn't import the listener.
-	if (typeof window !== 'undefined') {
-		window.dispatchEvent(new CustomEvent('morphit:recent-peers-changed'));
-	}
+	// (Phase F.5, F-29 dispatched a `morphit:recent-peers-changed` event
+	// here for the trade-event listener, which watched this list. Since
+	// v1.21.14 full chat audit, W-H2, the listener follows the account-wide
+	// chat activity stream instead and nothing listened to the event any
+	// more, so it is gone.)
 }
 
 /**

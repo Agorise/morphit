@@ -94,7 +94,13 @@ function deps(over: Partial<ChatControllerDeps> = {}) {
 			priv: new Uint8Array(32).fill(9),
 			pub: new Uint8Array(32).fill(7)
 		}),
-		encrypt: async (t: string) => ({ ciphertext: b64(t), ephemeralPub: 'ZQ==', nonce: 'bg==' }),
+		// Every message goes to the peer's posting keys (v1.21.14).
+		fetchPostingPubs: async () => [new Uint8Array(33).fill(2)],
+		encryptPosting: async (t: string) => ({
+			ciphertext: b64(t),
+			ephemeralPub: 'ZQ==',
+			nonce: 'bg=='
+		}),
 		decrypt: async (env) => ({ text: unb64(env.ciphertext), authenticated: true }),
 		decryptSelfCopy: async (env) => (env.selfCiphertext ? unb64(env.selfCiphertext) : null),
 		sleep: async () => undefined,
@@ -237,11 +243,11 @@ describe('chat history paging (v1.21.6)', () => {
 			orderPermlink: 'order-a'
 		});
 		const c = await started(d);
-		expect(getTradeState('order-a')?.txid).toBe(NEW);
+		expect(getTradeState('bob', 'order-a')?.txid).toBe(NEW);
 		await c.loadOlder();
 		await c.loadOlder();
 		expect(c.snapshot()).toHaveLength(122);
-		expect(getTradeState('order-a')?.txid).toBe(NEW);
+		expect(getTradeState('bob', 'order-a')?.txid).toBe(NEW);
 		// Backfill is marked, so the view does not count it as news.
 		expect(c.snapshot()[0]!.backfilled).toBe(true);
 		expect(c.snapshot().at(-1)!.backfilled).toBeUndefined();
@@ -471,11 +477,11 @@ describe('chat history paging (v1.21.6)', () => {
 		const M = rec(250, claimFor(NEW, 'order-a'), { order: 'order-a', at: 250 });
 		thread.push(M);
 		await c.loadOlder();
-		expect(getTradeState('order-a')?.txid).toBeUndefined();
+		expect(getTradeState('bob', 'order-a')?.txid).toBeUndefined();
 		// …then the stream delivers it.
 		h!.onAppend(M);
 		await vi.advanceTimersByTimeAsync(0);
-		expect(getTradeState('order-a')?.txid).toBe(NEW);
+		expect(getTradeState('bob', 'order-a')?.txid).toBe(NEW);
 		expect(c.snapshot().filter((m) => m.id === 250)).toHaveLength(1);
 		c.destroy();
 	});
@@ -484,6 +490,7 @@ describe('chat history paging (v1.21.6)', () => {
 		const OLD = 'a'.repeat(64);
 		const NEW = 'b'.repeat(64);
 		recordFundsSent({
+			orderOwner: 'bob',
 			orderPermlink: 'order-x',
 			peer: 'bob',
 			method: 'btc',
@@ -501,7 +508,7 @@ describe('chat history paging (v1.21.6)', () => {
 		expect(c.snapshot()).toHaveLength(0);
 		await c.loadOlder();
 		expect(c.snapshot()).toHaveLength(1);
-		expect(getTradeState('order-x')?.txid).toBe(NEW);
+		expect(getTradeState('bob', 'order-x')?.txid).toBe(NEW);
 		c.destroy();
 	});
 
