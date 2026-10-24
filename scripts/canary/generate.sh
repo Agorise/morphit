@@ -353,9 +353,12 @@ news_from_onion_feeds() {
 		_n=$((_n + 1))
 		echo "canary: fetching news headline from $feed over Tor..." >&2
 		(
-			# Stopped once another feed has won: the TERM reaches curl too.
+			# Stopped once another feed has won: the TERM reaches curl too, and
+			# this subshell waits for it, so the stopped curl is reaped here —
+			# not left as a zombie for whatever adopts it (a container's PID 1
+			# often never reaps; v1.21.15).
 			_curl=''
-			trap '[ -n "$_curl" ] && kill "$_curl" 2>/dev/null; exit 0' TERM
+			trap 'if [ -n "$_curl" ]; then kill "$_curl" 2>/dev/null; wait "$_curl" 2>/dev/null; fi; exit 0' TERM
 			curl -fsSL --socks5-hostname "$CANARY_TOR_SOCKS" --proxy-user "morphit-news-$_n:x" \
 				--max-time 60 -A "$NEWS_UA" "$feed" >"$_dir/$_n.xml" 2>/dev/null &
 			_curl=$!

@@ -59,6 +59,7 @@ while [ $# -gt 0 ]; do
 done
 echo "$url $socks" >> "${calls}"
 echo "$$ $url" >> "${calls}.pids"
+echo "$PPID $url" >> "${calls}.pids"
 for i in 1 2 3 4 5; do
 	v="FAKE_$i"; spec="\${!v:-}"
 	[ -n "$spec" ] || continue
@@ -74,10 +75,50 @@ exit 7
 );
 chmodSync(join(bin, 'curl'), 0o755);
 
+// Runs the script under a parent that adopts orphans and never reaps them —
+// what PID 1 (`tail -f /dev/null`) is in the CI container — and, while it is
+// still that parent, reports what became of each process named in WATCH_PIDS
+// for WATCH_URL: "gone", or its state ("Z" a zombie: stopped but never reaped;
+// anything else: still running). On a desktop, init reaps an orphan at once,
+// so this is the only place such a leak shows.
+const NO_REAP = `import ctypes, os, subprocess, sys, time
+assert ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) == 0  # PR_SET_CHILD_SUBREAPER
+p = subprocess.Popen(sys.argv[1:])
+_, st = os.waitpid(p.pid, 0)
+def state(pid):
+    try:
+        with open('/proc/%s/stat' % pid) as f:
+            return f.read().rsplit(') ', 1)[1].split(' ')[0]
+    except OSError:
+        return 'gone'
+pids = []
+try:
+    for line in open(os.environ['WATCH_PIDS']):
+        pid, url = line.split()
+        if url == os.environ['WATCH_URL']:
+            pids.append(pid)
+except OSError:
+    pass
+for _ in range(30):
+    if all(state(x) == 'gone' for x in pids):
+        break
+    time.sleep(0.1)
+for x in pids:
+    print('WATCH %s %s' % (x, state(x)))
+sys.exit(os.waitstatus_to_exitcode(st))`;
+
 function run(
 	torOnly: boolean,
-	env: Record<string, string>
-): { won: string; headline: string; calls: string[]; status: number | null; err: string } {
+	env: Record<string, string>,
+	noReap = false
+): {
+	won: string;
+	headline: string;
+	calls: string[];
+	status: number | null;
+	err: string;
+	watch: string[];
+} {
 	rmSync(calls, { force: true });
 	rmSync(`${calls}.pids`, { force: true });
 	const script = `set -euo pipefail
@@ -92,11 +133,15 @@ ${section}
 echo "WON=$NEWS_WON_SRC"
 echo "HEADLINE=$NEWS_HEADLINE"
 `;
-	const r = spawnSync('bash', ['-c', script], {
-		encoding: 'utf8',
-		timeout: 90_000,
-		env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ...env }
-	});
+	const r = spawnSync(
+		noReap ? 'python3' : 'bash',
+		noReap ? ['-c', NO_REAP, 'bash', '-c', script] : ['-c', script],
+		{
+			encoding: 'utf8',
+			timeout: 90_000,
+			env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ...env }
+		}
+	);
 	const won = /^WON=(.*)$/m.exec(r.stdout)?.[1] ?? '';
 	const headline = /^HEADLINE=(.*)$/m.exec(r.stdout)?.[1] ?? '';
 	let c: string[] = [];
@@ -108,7 +153,8 @@ echo "HEADLINE=$NEWS_HEADLINE"
 	} catch {
 		/* no calls */
 	}
-	return { won, headline, calls: c, status: r.status, err: r.stderr };
+	const watch = [...r.stdout.matchAll(/^WATCH (\S+) (\S+)$/gm)].map((m) => `${m[1]} ${m[2]}`);
+	return { won, headline, calls: c, status: r.status, err: r.stderr, watch };
 }
 const onionCalls = (c: string[]): string[] => c.filter((l) => l.split(' ')[0]!.includes('.onion'));
 
@@ -175,30 +221,27 @@ const C = 'https://c234567890123456789012345678901234567890123456789012345.onion
 {
 	// The losers are stopped once a feed has won: no curl outlives the race.
 	const t0 = Date.now();
-	const r = run(false, {
-		MORPHIT_CANARY_ONION_NEWS_RSS: `${A} ${B}`,
-		FAKE_1: 'a2345678|0.1|A over Tor',
-		FAKE_2: 'b2345678|30|B too slow'
-	});
-	// The fake curl wrote its own PID; is the slow one still alive once the
-	// stop has had a moment to land (up to 3 s — it was asked to wait 30)?
-	let lingering = '';
-	for (let tries = 0; tries < 30; tries++) {
-		lingering = '';
-		try {
-			for (const line of readFileSync(`${calls}.pids`, 'utf8').trim().split('\n')) {
-				const [pid, url] = line.split(' ');
-				if (url === B && spawnSync('kill', ['-0', pid!]).status === 0) lingering = `${pid} ${url}`;
-			}
-		} catch {
-			lingering = 'no pid file';
-		}
-		if (lingering === '') break;
-		spawnSync('sleep', ['0.1']);
-	}
+	const r = run(
+		false,
+		{
+			MORPHIT_CANARY_ONION_NEWS_RSS: `${A} ${B}`,
+			FAKE_1: 'a2345678|0.1|A over Tor',
+			FAKE_2: 'b2345678|30|B too slow',
+			WATCH_PIDS: `${calls}.pids`,
+			WATCH_URL: B
+		},
+		true
+	);
+	// The fake curl wrote its own PID and its parent's (the subshell that
+	// fetches that feed); for the slow feed both must be gone within 3 s of the
+	// stop (it was asked to wait 30) — not running, and not a zombie.
+	const lingering = r.watch.filter((w) => !w.endsWith(' gone')).join(', ');
 	check(
-		'the slower feeds are stopped once one wins (no curl left running)',
-		r.headline === 'A over Tor' && Date.now() - t0 < 20_000 && lingering === '',
+		'the slower feeds are stopped once one wins, and reaped (no curl left running, no zombie — even under a parent that never reaps)',
+		r.headline === 'A over Tor' &&
+			Date.now() - t0 < 20_000 &&
+			r.watch.length === 2 &&
+			lingering === '',
 		`${JSON.stringify(r)} lingering=${lingering}`
 	);
 }
