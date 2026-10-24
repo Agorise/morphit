@@ -8,7 +8,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadConfig, resolveXmrQuorum } from '../../src/config/index';
+import { loadConfig, resolveBtcQuorum, resolveXmrQuorum } from '../../src/config/index';
+import {
+	DEFAULT_BTC_FEE_EXPLORERS,
+	DEFAULT_XMR_FEE_EXPLORERS
+} from '@morphit/operator-config/fee-sources';
 import { DEFAULT_MONERO_PROOF_VERIFIER_CONFIG } from '../../src/indexer/fee/moneroProofVerifier';
 
 const BASE: Record<string, string> = {
@@ -84,5 +88,11 @@ describe('XMR explorer quorum', () => {
 		expect(resolveXmrQuorum(undefined, 1).value).toBe(1);
 		expect(resolveXmrQuorum(undefined, 0).value).toBe(1);
 		expect(resolveXmrQuorum(3, 5).value).toBe(3);
+	});
+	it('the one-explorer note names the real size of the default lists (v1.21.15: BTC 8, XMR 9)', () => {
+		expect(DEFAULT_BTC_FEE_EXPLORERS.length).toBe(8);
+		expect(DEFAULT_XMR_FEE_EXPLORERS.length).toBe(9);
+		expect(resolveXmrQuorum(undefined, 1).note).toContain('(the default list has 9)');
+		expect(resolveBtcQuorum(undefined, 1).note).toContain('(the default list has 8)');
 	});
 });

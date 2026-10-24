@@ -157,6 +157,7 @@ import {
 	type BaseFetchRuntime
 } from '../lib/frontendBaseFetch.ts';
 import { healTorOnlyOs } from '../lib/torOnlyOsHeal.ts';
+import { healClockFallback, realClockFallbackRuntime } from '../lib/clockFallbackHeal.ts';
 import { heal as healServicePrivileges } from '../lib/unitPrivilegeHeal.ts';
 import { heal as healForwarding } from '../lib/sysctlForwardHeal.ts';
 import { heal as healTlsRenewalHeal } from '../lib/tlsRenewHeal.ts';
@@ -2401,6 +2402,12 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// tarball is then handed to the SAME offline apply path below — only the trust
 	// gate is overridden (its anchor is the on-chain SHA, not a GPG sig/primary).
 	let hiddenResolution: HiddenUpgradeResolution | null = null;
+	/** v1.21.15: on a CLEARNET node whose every release source failed, the
+	 *  release fetched from the federation over Tor/I2P instead (verified the
+	 *  same way). Kept apart from hiddenResolution: it does not make this node
+	 *  hidden-only for the rest of the upgrade (npm and the record reads keep
+	 *  their clearnet path). */
+	let hiddenFallback: HiddenUpgradeResolution | null = null;
 	// /etc/morphit is relocatable for tests, as for
 	// mcpEnvFile(); unset on a real box.
 	const etcDir = process.env.MORPHIT_ETC_DIR ?? '/etc/morphit';
@@ -2656,7 +2663,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// was verified before the fetch), so saying anything about a missing .asc
 		// there would be noise. For a hand-supplied tarball, say which check step 6
 		// will use instead — calmly: an unsigned offline bundle is normal.
-		if (offline.sigPath === null && hiddenResolution === null) {
+		if (offline.sigPath === null && hiddenResolution === null && hiddenFallback === null) {
 			info(
 				"No sibling .asc signature next to the tarball; it will be checked against @morphit's signed " +
 					'release record on chain instead, and refused if that record does not name its hash.'
@@ -2697,7 +2704,77 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			// what lets an upgrade begun online CONTINUE (or a fully offline box
 			// upgrade) with the cable unplugged, exactly like the first install.
 			const dropped = findLocalOfflineRelease(installDir);
-			if (dropped !== null) {
+			// A dropped tarball the operator put there wins — unless it is not newer
+			// than what runs here (a leftover from an earlier offline upgrade: nothing
+			// clears /opt/morphit-offline), so it never blocks the fallback below.
+			const droppedUseful =
+				dropped !== null &&
+				(localInfo === null || allowDowngrade || isNewerRelease(dropped.tag, localInfo.tag));
+			// Only for a release the on-chain record names as newer (nothing is
+			// downloaded for a release this server already runs), and never for
+			// `--json` (its stdout carries the JSON only, and it installs nothing).
+			// `--check-only` never gets here with a record: it does not read one
+			// (above), so it downloads nothing either.
+			if (
+				!droppedUseful &&
+				!jsonOutput &&
+				onchainSeen !== null &&
+				(localInfo === null || isNewerRelease(onchainSeen, localInfo.tag))
+			) {
+				// v1.21.15: no release source answered over clearnet — ask the other
+				// Morphit instances over Tor/I2P, as a zero-clearnet node always does.
+				// Verified against @morphit's signed record; any failure here only
+				// leads to the message below.
+				const fbSpin = startPausableSpinner(
+					'No release source answered — fetching the release over Tor/I2P…',
+					spinOut,
+					{ elapsed: true }
+				);
+				try {
+					hiddenFallback = await tryResolveHiddenUpgrade({
+						...hiddenOpts,
+						fallback: true,
+						onProgress: (m) => fbSpin.say(() => info(m)),
+						onStatus: (l) => fbSpin.relabel(l),
+						...(opts.trust?.postingPubkey !== undefined
+							? { postingPubkey: opts.trust.postingPubkey }
+							: {}),
+						...(opts.trust?.chainRead !== undefined ? { chainRead: opts.trust.chainRead } : {}),
+						// A bonus try on a clearnet node: the record is read once, no waiting.
+						anchorWait: { ...(opts.anchorWait ?? {}), waitMs: 0 }
+					});
+				} catch (err) {
+					fetchErrors.push(`Tor/I2P (the other Morphit instances): ${fallbackFailureText(err)}`);
+				}
+				fbSpin.stop();
+				if (hiddenFallback !== null) {
+					// The fetched copy lives in a temp dir of its own: never left behind.
+					const fetchedDir = dirname(hiddenFallback.tarballPath);
+					process.once('exit', () => rmSync(fetchedDir, { recursive: true, force: true }));
+				}
+				// The fetch can take minutes: another session may have upgraded this
+				// server meanwhile (as the zero-clearnet path checks after each try).
+				if (hiddenFallback !== null && localInfo !== null) {
+					const nowInfo = readLocalReleaseInfo(installDir);
+					if (nowInfo === null || nowInfo.tag !== localInfo.tag) {
+						rmSync(dirname(hiddenFallback.tarballPath), { recursive: true, force: true });
+						info(
+							nowInfo !== null
+								? `This server now runs ${sanitizeForTerm(nowInfo.tag)}: another upgrade changed it while this one fetched the release, so this one stops here (it changed nothing). Run \`sudo morphit-ops upgrade\` again to check for a newer release.`
+								: `This server's release-info.json changed while this upgrade fetched the release, so it stops here (it changed nothing). Run \`sudo morphit-ops upgrade\` again.`
+						);
+						return 5;
+					}
+				}
+			}
+			if (hiddenFallback !== null) {
+				offline = {
+					tarballPath: hiddenFallback.tarballPath,
+					sigPath: null,
+					tag: `v${hiddenFallback.version}`
+				};
+				latest = synthOfflineRelease(offline.tag, offline.tarballPath, null);
+			} else if (dropped !== null) {
 				offline = dropped;
 				latest = synthOfflineRelease(dropped.tag, dropped.tarballPath, dropped.sigPath);
 				info(`No network — falling back to the local offline release: ${dropped.tarballPath}`);
@@ -2709,8 +2786,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 						fetchErrors.join('\n  ') +
 						(onchainSeen !== null &&
 						(localInfo === null || isNewerRelease(onchainSeen, localInfo.tag))
-							? `\n  @morphit's on-chain release record names ${sanitizeForTerm(onchainSeen)}: that release is out. ` +
-								`Run the upgrade again once ${host} answers.`
+							? `\n  @morphit's on-chain release record names ${sanitizeForTerm(onchainSeen)}, but it could not be fetched ` +
+								`from ${host}, its mirrors or the other Morphit instances. Nothing was changed. Run the upgrade again later.`
 							: '')
 				);
 				return 5;
@@ -2872,6 +2949,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// it is never used as a network source offline.
 		bytesSource = { host: 'local-file', repo: offline.tarballPath, isPrimary: false };
 		info(`Using local tarball (${chosenAssets.tarball.name}).`);
+		// A copy fetched over Tor/I2P sits in a temp dir of its own (resolver-made):
+		// the scratch copy above is what is used from here on (v1.21.15 review).
+		const fetched = hiddenResolution ?? hiddenFallback;
+		if (fetched !== null) rmSync(dirname(fetched.tarballPath), { recursive: true, force: true });
 	} else {
 		// 5a. The primary's .sha256: a transit check, and a cross-check against the
 		// chain in step 6. On its own it no longer makes a tarball installable.
@@ -2960,7 +3041,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					sigPath,
 					opts.trust?.signerFingerprints ?? RELEASE_SIGNER_FINGERPRINTS
 				);
-	let anchor: ReleaseAnchor | null = hiddenResolution?.anchor ?? null;
+	let anchor: ReleaseAnchor | null = (hiddenResolution ?? hiddenFallback)?.anchor ?? null;
 	if (anchor === null) {
 		const viaIndexer: CondenserRead =
 			opts.trust?.chainRead ??
@@ -3034,8 +3115,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		chainHash,
 		primaryHash,
 		actualHash,
-		hidden:
-			hiddenResolution !== null ? { servedBy: hiddenResolution.servedBy, tag: latestTag } : null
+		hidden: ((h) => (h !== null ? { servedBy: h.servedBy, tag: latestTag } : null))(
+			hiddenResolution ?? hiddenFallback
+		)
 	});
 	if (!trust.allowed) {
 		printError(`Cannot verify the integrity of release ${latestTag}.\n  ${trust.reason}`);
@@ -5186,6 +5268,18 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		[
 			'the service-user heal',
 			() => reportHeal(healServicePrivileges({ info, warn, spinner: (l) => startDotsSpinner(l) }))
+		],
+		// v1.21.15 (lib/clockFallbackHeal.ts): on a node that keeps clearnet NTP,
+		// the clock falls back to the onion time sources over Tor when NTP cannot
+		// keep it (a tor-only node has its own timer, from the heal above).
+		[
+			'the clock fallback heal',
+			() =>
+				reportHeal(
+					Promise.resolve(
+						healClockFallback(healCtx(), realClockFallbackRuntime(selfHealInstallDir()))
+					)
+				)
 		],
 		// lib/indexerMemoryHeal.ts: the indexer gets its memory cap (MemoryMax) on
 		// the running service too. The upgrade refreshes the units (and reloads
@@ -8204,6 +8298,33 @@ async function fetchReleaseJson(
 		clearTimeout(timer);
 		closeQuietly(agent);
 	}
+}
+
+/** One line for why the Tor/I2P fallback of a clearnet node did not get the
+ *  release (v1.21.15 review): plain words for the usual causes, the
+ *  resolver's own message otherwise. */
+export function fallbackFailureText(err: unknown): string {
+	const msg = err instanceof Error ? err.message : String(err);
+	if (err instanceof HiddenUpgradeWaitError) {
+		const peers = err.peers;
+		if (
+			err.stage === 'fetch' &&
+			peers.length > 0 &&
+			peers.every((p) => p.result === 'unreachable')
+		) {
+			return (
+				`none of the ${peers.length} instance address(es) could be reached over Tor/I2P — is Tor running on ` +
+				'this server? (sudo systemctl status tor)'
+			);
+		}
+		if (err.stage === 'fetch' && peers.length > 0 && peers.every((p) => p.result === 'missing')) {
+			return 'no other instance has this release yet (they get it as they upgrade).';
+		}
+		if (err.stage === 'peers') return 'no other instance publishes a Tor or I2P address yet.';
+		if (err.stage === 'record')
+			return "@morphit's signed record for this release could not be read yet.";
+	}
+	return msg;
 }
 
 async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRelease> {

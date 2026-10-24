@@ -265,7 +265,6 @@ apps/ops-cli/src/commands/importAltnetKey.ts
 apps/ops-cli/src/commands/showKey.ts
 apps/ops-cli/src/commands/ssl.ts
 apps/ops-cli/src/init/chainCheck.ts
-apps/ops-cli/src/init/explorerHealth.ts
 apps/ops-cli/src/init/hiddenUpgradeFetch.ts
 apps/ops-cli/src/init/hiddenUpgradeTransport.ts
 apps/ops-cli/src/init/i2pGenerate.ts

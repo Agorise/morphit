@@ -84,7 +84,7 @@ Two new env vars (both with sane defaults):
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED` | `false` | Opt-in master switch.  Off for new instances with no peers.  Ignored on a hidden-only node, where the monitor always runs: its samples feed that node's primary (federated) price (v1.18.0, F31). |
+| `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED` | `false` | Opt-in switch for the ALERT.  Off for new instances with no peers.  Ignored on a hidden-only node, where it always alerts: its samples feed that node's primary (federated) price (v1.18.0, F31).  Since v1.21.15 the sampling itself runs on every node (the samples are a clearnet node's federated fallback price). |
 | `MORPHIT_INDEXER_PEER_PRICE_SAMPLE_INTERVAL_MINUTES` | `30` | How often to sample peers.  ≥5 min recommended. |
 
 Numeric thresholds (built into the code, not env-tunable):
@@ -230,7 +230,8 @@ get tagged `'unknown'` and excluded from the median.
 ## Operator action required
 
 - **None mandatory.**  Default `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=false`
-  is safe for any instance.
+  is safe for any instance (it keeps the alert off; since v1.21.15 the
+  sampling runs regardless).
 
 - **Optional for operators with federation peers:** set the env
   var to `true` after confirming you have ≥3 reachable peers via

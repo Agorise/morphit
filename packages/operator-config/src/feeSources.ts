@@ -20,6 +20,18 @@
  *     runbtc 6.7 s, suddenwhipvapor 8.4 s.
  *   Prices (/getAllMarketPrices): Haveno 15.2 s, Haveno (Cake) 32.5 s,
  *     Haveno (Agorise) 9.4 s, Bisq alexej996 6.9 s, Bisq runbtc 8.8 s.
+ * Checked by the maintainer in Tor Browser on 2026-10-23 (v1.21.15):
+ *   BTC: mempool.foundation.xyz's onion answered /api/blocks/tip/height (added);
+ *   runbtc's /api answered too (kept, though its front page did not load);
+ *   Cake Wallet's mempool onion timed out (left out of the data sources; it is
+ *   still a link on hidden pages, where its page loaded).
+ *   XMR: xmr.mx's onion answered /api/networkinfo only behind a captcha, which
+ *   a server cannot pass — left out. The I2P explorers (RunBTC's mempool,
+ *   xmr.mx) loaded in an I2P browser earlier; their APIs were not checked, and
+ *   are added on the maintainer's word: a page that is not the JSON API
+ *   (a captcha page, a 404 page) counts as a malformed answer, not as "no such
+ *   payment" (only the explorer's own explicit "not found" means that, and only
+ *   from enough explorers at once).
  * Left out: no answer at all — mempool devinbileck, xmrblocks
  * moneroexamples/xmrchain, xmrblocks emzy, xmrblocks devinbileck; answered
  * only with a web page, JSON API not shown to be on — Blockchair, xmr.mx,
@@ -36,7 +48,15 @@ export const DEFAULT_BTC_ONION_EXPLORERS: readonly string[] = [
 	// mempool, runbtc
 	'http://runbtcx3wfygbq2wdde6qzjnpyrqn3gvbks7t5jdymmunxttdvvttpyd.onion/api',
 	// Blockstream Esplora
-	'http://explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion/api'
+	'http://explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion/api',
+	// mempool.foundation.xyz (Foundation Devices) — v1.21.15
+	'http://3pd56qzgyg7p4sk7rlcxrrsbx7nfucdckautxjqbre7uw7kr3ah53byd.onion/api'
+] as const;
+
+/** Esplora API bases on I2P, asked through i2pd (v1.21.15). */
+export const DEFAULT_BTC_I2P_EXPLORERS: readonly string[] = [
+	// mempool, runbtc
+	'http://44naenfnp6foaegpmujdn4pmhtgo52tjkgs2d3ir2wo7d7mfbufq.b32.i2p/api'
 ] as const;
 
 /** Clearnet Esplora API bases — the fallback, where clearnet is allowed. */
@@ -48,6 +68,7 @@ export const DEFAULT_BTC_CLEARNET_EXPLORERS: readonly string[] = [
 /** The default MORPHIT_INDEXER_BTC_EXPLORER_URLS. */
 export const DEFAULT_BTC_FEE_EXPLORERS: readonly string[] = [
 	...DEFAULT_BTC_ONION_EXPLORERS,
+	...DEFAULT_BTC_I2P_EXPLORERS,
 	...DEFAULT_BTC_CLEARNET_EXPLORERS
 ];
 
@@ -59,6 +80,13 @@ export const DEFAULT_XMR_ONION_EXPLORERS: readonly string[] = [
 	'http://xmrexplrthytnunr4jasr3vnjc6jo5idsyxzv74a7ep7dy7lwcv2eoyd.onion',
 	// xmrblocks, suddenwhipvapor
 	'http://nklwsomtuok6dhqqecp3a26xzgokfgmeuaplcdkaxehncg57yzarvbad.onion'
+] as const;
+
+/** onion-monero-blockchain-explorer instances on I2P, asked through i2pd
+ *  (v1.21.15). */
+export const DEFAULT_XMR_I2P_EXPLORERS: readonly string[] = [
+	// xmr.mx
+	'http://ravfxexpucy437tc4slicbf5atir2akrcqanog3tgsc3mcdfmrqq.b32.i2p'
 ] as const;
 
 /**
@@ -80,6 +108,7 @@ export const DEFAULT_XMR_CLEARNET_EXPLORERS: readonly string[] = [
 /** The default MORPHIT_INDEXER_XMR_EXPLORER_URLS. */
 export const DEFAULT_XMR_FEE_EXPLORERS: readonly string[] = [
 	...DEFAULT_XMR_ONION_EXPLORERS,
+	...DEFAULT_XMR_I2P_EXPLORERS,
 	...DEFAULT_XMR_CLEARNET_EXPLORERS
 ];
 

@@ -102,7 +102,105 @@ export function parseHead(result: unknown): BlurtHead | null {
 	const id = r.head_block_id;
 	const time = r.time;
 	if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return null;
-	if (typeof id !== 'string' || id.length === 0) return null;
-	if (typeof time !== 'string' || time.length === 0) return null;
+	// v1.21.15: these go into a signed canary. A Blurt block id is 20 bytes
+	// (40 hex) and its first 4 bytes are the block number, big-endian
+	// (block_header::id() in Blurt's libraries/protocol/block.cpp): an id that
+	// does not carry this height is not this block's.
+	if (typeof id !== 'string' || !/^[0-9a-f]{40}$/.test(id)) return null;
+	// (This also keeps the height a whole number below 2^32.)
+	if (Number.parseInt(id.slice(0, 8), 16) !== n) return null;
+	// The chain's own time format (UTC, whole seconds, no zone suffix).
+	if (typeof time !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(time)) return null;
 	return { head_block_number: n, head_block_id: id, time };
+}
+
+/**
+ * Ask every node at once and take the FIRST valid head — the fastest hidden
+ * node (v1.21.15). Null when every node failed. `fetchOne` is injected.
+ */
+export async function fetchBlurtHeadFastest(
+	nodes: readonly string[],
+	fetchOne: (url: string) => Promise<BlurtHead | null>
+): Promise<{ head: BlurtHead; url: string } | null> {
+	if (nodes.length === 0) return null;
+	return new Promise((resolve) => {
+		let pending = nodes.length;
+		let done = false;
+		for (const url of nodes) {
+			fetchOne(url)
+				.catch(() => null)
+				.then((head) => {
+					pending--;
+					if (done) return;
+					if (head) {
+						done = true;
+						resolve({ head, url });
+					} else if (pending === 0) {
+						done = true;
+						resolve(null);
+					}
+				});
+		}
+	});
+}
+
+/** One step of the canary's Blurt head fetch. */
+export interface CanaryBlurtPhase {
+	readonly mode: 'walk' | 'race';
+	readonly nodes: readonly string[];
+}
+
+/**
+ * The order the canary asks for the Blurt head (v1.21.15):
+ *   - a Tor-only node: the override's nodes ALL AT ONCE (the fastest valid
+ *     head wins), then — only when none answered — every other default .onion
+ *     node all at once (D12: never clearnet; the override keeps priority);
+ *   - a clearnet node: the override's nodes, then the clearnet defaults, in
+ *     order; only when every one failed, the hidden (.onion / .i2p) defaults
+ *     all at once, through the local Tor / i2pd proxy.
+ */
+export function planCanaryBlurtPhases(opts: {
+	readonly override: string | undefined;
+	readonly torOnly: boolean;
+	readonly clearnet: readonly string[];
+	readonly hidden: readonly string[];
+}): CanaryBlurtPhase[] {
+	if (opts.torOnly) {
+		// The override's nodes keep priority (D12: preferred-first): they are asked
+		// first, all at once; only when none answers, every other default onion.
+		const preferred = resolveCanaryNodes(opts.override, []);
+		const asked = new Set(preferred);
+		const rest = canaryDefaultNodes(true, opts.clearnet, opts.hidden).filter(
+			(u) => !asked.has(u.trim())
+		);
+		const out: CanaryBlurtPhase[] = [];
+		if (preferred.length > 0) out.push({ mode: 'race', nodes: preferred });
+		if (rest.length > 0) out.push({ mode: 'race', nodes: rest });
+		return out;
+	}
+	const walk = resolveCanaryNodes(opts.override, opts.clearnet);
+	const tried = new Set(walk);
+	const race = resolveCanaryNodes(
+		undefined,
+		opts.hidden.filter((u) => !tried.has(u.trim()))
+	);
+	const phases: CanaryBlurtPhase[] = [];
+	if (walk.length > 0) phases.push({ mode: 'walk', nodes: walk });
+	if (race.length > 0) phases.push({ mode: 'race', nodes: race });
+	return phases;
+}
+
+/** Run the phases in order; the first phase that yields a head wins. */
+export async function fetchBlurtHeadPhased(
+	phases: readonly CanaryBlurtPhase[],
+	fetchOne: (url: string) => Promise<BlurtHead | null>
+): Promise<{ head: BlurtHead; url: string } | null> {
+	for (const phase of phases) {
+		const got =
+			phase.mode === 'race'
+				? await fetchBlurtHeadFastest(phase.nodes, fetchOne)
+				: await fetchBlurtHeadWithFailover(phase.nodes, fetchOne);
+		if (got) return got;
+	}
+	return null;
 }

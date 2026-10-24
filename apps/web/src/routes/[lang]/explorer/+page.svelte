@@ -21,6 +21,16 @@
 		morphitExplorerBlockUrl
 	} from '$lib/explorer/urls';
 	import Head from '$components/Head.svelte';
+	import { onMount } from 'svelte';
+	import { currentPageNetwork } from '$lib/explorer/hiddenExplorers';
+
+	// v1.21.15 — blocks.blurtwallet.com is a clearnet site: offer it only on a
+	// clearnet page. Decided after mount (this page is prerendered once for
+	// every host), so a hidden page never carries the link, not even briefly.
+	let showClearnetFallback = $state(false);
+	onMount(() => {
+		showClearnetFallback = currentPageNetwork() === 'clearnet';
+	});
 
 	let raw = $state('');
 	let lastError = $state<string | null>(null);
@@ -128,18 +138,20 @@
 				{$_('explorer.nav.activity_description')}
 			</p>
 		</a>
-		<a
-			href="https://blocks.blurtwallet.com"
-			target="_blank"
-			rel="noopener noreferrer"
-			class="card transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
-		>
-			<h2 class="font-display text-base font-bold">
-				{$_('explorer.nav.fallback_title')} ↗
-			</h2>
-			<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
-				{$_('explorer.nav.fallback_description')}
-			</p>
-		</a>
+		{#if showClearnetFallback}
+			<a
+				href="https://blocks.blurtwallet.com"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="card transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
+			>
+				<h2 class="font-display text-base font-bold">
+					{$_('explorer.nav.fallback_title')} ↗
+				</h2>
+				<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+					{$_('explorer.nav.fallback_description')}
+				</p>
+			</a>
+		{/if}
 	</aside>
 </section>

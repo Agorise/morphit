@@ -88,6 +88,29 @@ interface ExplorerTxResponse {
 	};
 }
 
+/**
+ * Is a 404 body an explorer's own "no such transaction"? (v1.21.15 review)
+ *   - Esplora's backend (Blockstream's and mempool's electrs) answers
+ *     `Transaction not found` as text/plain (electrs src/rest.rs);
+ *   - mempool's own backend (a mempool on bitcoind) answers
+ *     `No such mempool or blockchain transaction`, as `{"error": "…"}` when
+ *     JSON is asked for (backend/src/api/bitcoin/bitcoin.routes.ts).
+ * Anything else — an HTML 404 page, a captcha, a proxy's error — is not.
+ */
+export function isExplorerTxNotFound(body: string): boolean {
+	let text = body.trim();
+	if (text.startsWith('{')) {
+		try {
+			const j = JSON.parse(text) as { error?: unknown };
+			text = typeof j.error === 'string' ? j.error.trim() : '';
+		} catch {
+			return false;
+		}
+	}
+	const t = text.toLowerCase().replace(/\.$/, '');
+	return t === 'transaction not found' || t === 'no such mempool or blockchain transaction';
+}
+
 export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 	readonly name = 'btc-explorer';
 	private readonly pool: EndpointPool;
@@ -540,6 +563,20 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 				explorerInit({ method: 'GET', accept: 'application/json' }, ac.signal)
 			);
 			if (res.status === 404) {
+				// (v1.21.15 review) Only the explorer's own "no such transaction"
+				// counts as one — a 404 web page, a captcha or a proxy's error page
+				// says nothing about the transaction, and a quorum of "not found"
+				// rejects the fee.
+				let text = '';
+				try {
+					text = await readExplorerText(res, ac, 4096);
+				} catch {
+					text = '';
+				}
+				if (!isExplorerTxNotFound(text)) {
+					log.warn('explorer_404_without_not_found', { explorer: baseUrl, txid });
+					return { kind: 'data_malformed' };
+				}
 				log.warn('explorer_tx_not_found', {
 					explorer: baseUrl,
 					txid

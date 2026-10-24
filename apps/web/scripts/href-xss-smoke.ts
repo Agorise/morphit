@@ -181,7 +181,11 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// reachable.  The static tracer can't follow morphitExplorer*Url →
 		// localePath through the {@const} + ternary, but a reviewer has
 		// confirmed safe.
-		new Set(["txUrl ? lp(txUrl) : '#'", "blockUrl ? lp(blockUrl) : '#'"])
+		// v1.21.15: `fallbackUrl` is a `{@const}` of
+		// blurtWalletExplorerFallbackUrl(...) (a SAFE_BUILDER: hardcoded
+		// https://blocks.blurtwallet.com base, validated target, null on a
+		// hidden page), rendered only under `{#if}` on the same call.
+		new Set(["txUrl ? lp(txUrl) : '#'", "blockUrl ? lp(blockUrl) : '#'", 'fallbackUrl'])
 	],
 	[
 		'apps/web/src/routes/[lang]/explorer/block/[num=blocknum]/+page.svelte',
@@ -196,7 +200,11 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// controlled internal paths built from validated chain data; no operator/
 		// peer-controlled scheme is reachable. (Added when the explorer-link lang-
 		// prefix fix wrapped these two `href`s in lp().)
-		new Set(["prevUrl ? lp(prevUrl) : '#'", "txUrl ? lp(txUrl) : '#'"])
+		// v1.21.15: `fallbackUrl` is a `{@const}` of
+		// blurtWalletExplorerFallbackUrl(...) (a SAFE_BUILDER: hardcoded
+		// https://blocks.blurtwallet.com base, validated target, null on a
+		// hidden page), rendered only under `{#if}` on the same call.
+		new Set(["prevUrl ? lp(prevUrl) : '#'", "txUrl ? lp(txUrl) : '#'", 'fallbackUrl'])
 	],
 	[
 		'apps/web/src/routes/[lang]/explorer/tx/[id=trxid]/+page.svelte',
@@ -204,7 +212,11 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// morphitExplorerBlockUrl(tx.block_num) (validates a finite positive
 		// integer → hardcoded `/explorer/block/<n>` or null), wrapped in lp() with
 		// a '#' fallback. Same safe profile as the block/account entries above.
-		new Set(["blockUrl ? lp(blockUrl) : '#'"])
+		// v1.21.15: `fallbackUrl` is a `{@const}` of
+		// blurtWalletExplorerFallbackUrl(...) (a SAFE_BUILDER: hardcoded
+		// https://blocks.blurtwallet.com base, validated target, null on a
+		// hidden page), rendered only under `{#if}` on the same call.
+		new Set(["blockUrl ? lp(blockUrl) : '#'", 'fallbackUrl'])
 	],
 	[
 		'apps/web/src/lib/components/RssFeedPicker.svelte',

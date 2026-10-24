@@ -185,6 +185,24 @@
     - morphit_toros_socks.port is not defined
 
 # ── time ─────────────────────────────────────────────────────────────────────
+# v1.21.15: a node that kept clearnet NTP before may have the clock fallback
+# (main.yml); its own Tor time check replaces it, so the two never run side by
+# side.
+- name: Tor-only OS — stop the clearnet-node clock fallback, if this node has it
+  ansible.builtin.systemd:
+    name: morphit-clock-fallback.timer
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Tor-only OS — remove the clearnet-node clock fallback units
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop:
+    - morphit-clock-fallback.service
+    - morphit-clock-fallback.timer
+
 - name: Tor-only OS — install the Tor time check units
   ansible.builtin.copy:
     src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/{{ item }}"

@@ -555,10 +555,17 @@ A bad value safely falls back to `/`, so the figure never blanks.
 in every canary — the Blurt and Bitcoin chain heads and a
 news headline — are fetched with wide failover so a single
 provider outage can't stall the weekly refresh.  The Blurt
-head rotates across the canonical RPC list; the Bitcoin
+head rotates across the canonical RPC list and, if every
+node fails, asks the hidden ones through Tor / i2pd
+(v1.21.15); the Bitcoin
 head hops across five independent explorers (Blockstream,
-mempool.space, Blockchain.com, Blockchair, BlockCypher);
-the news line falls through six independent feeds.  The
+mempool.space, Blockchain.com, Blockchair, BlockCypher),
+and when every one of them fails it asks the onion and
+I2P explorers through the box's Tor proxy / i2pd, all at
+once, and uses the first head two of them agree on (v1.21.15);
+the news line falls through six independent feeds, then the
+newsrooms' onion feeds through Tor (the BBC's by default,
+`MORPHIT_CANARY_ONION_NEWS_RSS`; v1.21.15).  The
 Bitcoin head and news line are SECONDARY to the Blurt head,
 so even if every one of their providers is unreachable the
 canary still signs (recording them as unavailable) instead
@@ -733,10 +740,10 @@ defense blocks (each `null` until it has data):
   stays quiet rather than comparing against the static floor (which
   would false-alarm).  Also peer-independent.
 - **`peer` — Defense F (cross-instance).** Only meaningful once your
-  instance is federated with ≥3 reachable peers and
-  `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true` — or is hidden-only
-  (empty `MORPHIT_INDEXER_RPC_ENDPOINTS`), where the monitor always runs
-  because its samples ARE that node's primary price.
+  instance is federated with ≥3 reachable peers. Every node samples (v1.21.15);
+  `alert` can fire only where alerts are on —
+  `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true`, or a hidden-only node
+  (empty `MORPHIT_INDEXER_RPC_ENDPOINTS`), whose samples ARE its primary price.
   `peers_queried` / `peer_median` / `my_price` / `deviation` /
   `above_threshold` / `alert` compare your derived price against the
   federation median.
@@ -1744,14 +1751,22 @@ values are expressed in.  This is purely a display-side change;
 order matching and on-chain fees are unaffected.  See ADR-0040.
 
 **Update — Defense F cross-instance peer disagreement
-detector**: opt-in via `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true`,
+detector**: its ALERT is opt-in via `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true`
+(its sampling runs on every node since v1.21.15, see below),
 and always on for a hidden-only node (v1.18.0): there the federated median
 of these samples is the primary price, and with the monitor off it never had a
 sample. A hidden-only node samples each peer over every hidden address it
 published — I2P first, then Tor, then Lokinet — and never over clearnet.
-When on, the indexer periodically (every 30 min) queries peer
-Morphit instances' `/v1/price/morphit-native/receipt` and alerts
-on sustained disagreement >25% for >4 hours.  Catches the case
+A clearnet node asks each peer's web address first and, when that gives no
+receipt, its Tor and I2P addresses (v1.21.15; never a `.loki` one). Since
+v1.21.15 the SAMPLING runs on every node, whatever the switch says: on a
+clearnet node whose every clearnet price source is down, the federated median
+of these samples comes before your own trades' price alone (USD only, where
+the chain-pinned fee bounds it). The switch still decides the ALERT on a
+clearnet node; a hidden-only node always alerts.
+The indexer periodically (every 30 min) queries peer
+Morphit instances' `/v1/price/morphit-native/receipt` and, when the alert is
+on, alerts on sustained disagreement >25% for >4 hours.  Catches the case
 where YOUR indexer is reporting a different price than the rest
 of the federation (operator pressured, captured, compromised,
 or geographically isolated).  Requires ≥3 reachable peers in
@@ -1889,8 +1904,9 @@ price is correct and peers are wrong): the alert auto-suppresses
 for 24h after firing, then re-fires if disagreement persists.
 You can also temporarily set
 `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=false` and restart;
-this stops querying peers entirely — except on a hidden-only node, where
-the samples are the price itself and the monitor keeps running.  Re-enable once the
+this silences the alert (the sampling goes on: since v1.21.15 its samples
+are the clearnet node's fallback price too) — except on a hidden-only node,
+where the samples are the price itself and the alert stays on.  Re-enable once the
 underlying situation resolves.
 
 If the alert is a true positive (your indexer is wrong): pause
@@ -2878,6 +2894,22 @@ sudo journalctl -u morphit-tor-timesync -n 20
 sudo journalctl -u morphit-tor-only-recover -n 20
 sudo sh /usr/local/lib/morphit/morphit-tor-timesync.sh --check      # measure only; never changes the clock
 chronyc -n sources                                                  # empty: chrony asks no public server
+```
+
+**The clock fallback on a node that keeps clearnet NTP (v1.21.15).** The same time check runs there too,
+through `morphit-clock-fallback.timer` (30 minutes after boot, then every 6 hours), which runs
+`morphit-clock-fallback.sh`: while the NTP client (chrony or systemd-timesyncd) reports the clock
+synchronised (`timedatectl show -p NTPSynchronized` is `yes`), it does nothing and asks no onion service
+(`result=ntp-synced`); when NTP cannot keep the clock — UDP 123 blocked, the pools unreachable — it runs
+`morphit-tor-timesync.sh`, which sets the clock from the onion sources by the same rule as above. Only one
+time check runs at a time (a second one reports `result=busy` and changes nothing). New installs get it from
+the Ansible tor role, existing nodes on their next upgrade; a node switched to tor-only has these units
+removed (its own timer replaces them). Check it (on the clearnet node):
+
+```sh
+systemctl list-timers morphit-clock-fallback.timer
+sudo journalctl -u morphit-clock-fallback -n 20
+sudo sh /usr/local/lib/morphit/morphit-clock-fallback.sh --check   # what it would do now
 ```
 
 Undo by hand (on the tor-only node) — the backups are under `/var/lib/morphit-tor-only/`:
@@ -8129,20 +8161,45 @@ The generator fetches three external resources when you run it
 
 - a Blurt RPC for the chain head (defaults to the built-in
   `DEFAULT_BLURT_RPC_ENDPOINTS` rotator with failover — any Blurt
-  RPC works; pin one with `MORPHIT_CANARY_BLURT_RPC` if you prefer),
+  RPC works; pin one with `MORPHIT_CANARY_BLURT_RPC` if you prefer);
+  if every one fails, the hidden RPC nodes
+  (`DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS`) are asked all at once through
+  the box's Tor proxy or i2pd and the fastest valid answer is used —
+  never directly (v1.21.15),
 - a Bitcoin chain head from five public providers in turn
   (Blockstream, mempool.space, Blockchain.com, Blockchair,
-  BlockCypher; `scripts/canary/btcHeadFailover.ts`),
+  BlockCypher; `scripts/canary/btcHeadFailover.ts`); if every one
+  fails, the onion and I2P Esplora explorers the fee verifier uses
+  (`DEFAULT_CANARY_BTC_HIDDEN_SOURCES`) are asked all at once through
+  the box's Tor proxy (`MORPHIT_CANARY_TOR_SOCKS`, default
+  `127.0.0.1:9050`; an `.i2p` one through `MORPHIT_CANARY_I2P_HTTP_PROXY`,
+  default `127.0.0.1:4444`) and the first head two of them agree on is
+  used — never directly (v1.21.15). Pinning `MORPHIT_CANARY_BTC_EXPLORER`
+  asks that one only,
 - an RSS feed for news entropy (default Cointelegraph — choose any
-  high-frequency public feed you trust).
+  high-frequency public feed you trust), then five other newsrooms' feeds;
+  if none gives a headline, onion news feeds (by default the BBC's;
+  `MORPHIT_CANARY_ONION_NEWS_RSS`, space-separated `.onion` URLs, replaces the
+  list) are asked all at once through the box's Tor proxy and the fastest
+  headline is used — never directly (v1.21.15).
 
 On a Tor-only box (an `.onion` or `.b32.i2p` origin, or
 `MORPHIT_CANARY_TOR_ONLY=1`) all three go through the box's Tor SOCKS
-proxy, never directly: the chain head from the hidden Blurt RPC nodes,
-the Bitcoin head and the news feed from their usual `https://` addresses
+proxy, never directly: the chain head from the hidden Blurt RPC nodes
+(your pinned ones first, then the others; each group all at once, the fastest
+valid answer wins; v1.21.15),
+the Bitcoin head first from the onion and I2P explorers (all at once, the first
+head two of them agree on wins; v1.21.15), then from the usual `https://` addresses
 through a Tor exit, with the certificate checked as for a direct
-connection. (Before this was fixed, every Bitcoin explorer failed over Tor
+connection; the news headline first from the onion feeds (all at once, the
+fastest wins; v1.21.15), then the clearnet feeds through a Tor exit. (Before this was fixed, every Bitcoin explorer failed over Tor
 and a Tor-only canary's Bitcoin block height read "(unavailable at signing time …)".)
+
+What these sources answer goes into a signed statement, so it is checked
+first (v1.21.15): a Blurt head must be a real block id that carries its height,
+a Bitcoin hash must show its proof of work, every answer is read up to 64 KB,
+and the headline is cut to one line of plain ASCII (at most 200 characters;
+one holding `-----` is not used) and filled in literally.
 
 Users who fetch /canary.txt only hit your own static file, so the
 canary never leaks user IPs to third parties.
@@ -10639,8 +10696,9 @@ at its `/api/outputs?txprove=1` endpoint; a raw-tx explorer or a node gets
 only the txid (the kinds below).  You choose how many sources to ask, and
 which.
 
-**The default ships with eight (v1.21.0): two onion explorers, then the
-clearnet six — three explorers + three public Monero nodes.**  How strong the cross-check
+**The default ships with nine (v1.21.15): two onion explorers and one I2P
+explorer, then the clearnet six — three explorers + three public Monero
+nodes.**  How strong the cross-check
 actually is depends on `MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`
 — the number of explorers that must AGREE on the proven amount
 before a result is accepted.  **Since v1.20.0 its default is
@@ -10649,7 +10707,7 @@ so a single compromised or coerced explorer cannot decide a
 verification on its own.  If your own explorer list has only one
 entry, the quorum drops to `1` and the indexer says so at boot.
 A higher setting asks for more agreeing sources (`3` = any three of them; the
-onion tier alone is then skipped, it has only two).  At `1` you get
+hidden tier — two onion explorers and one I2P — can then just meet it on its own).  At `1` you get
 availability, not agreement-based defense.
 
 ```bash
@@ -10672,12 +10730,14 @@ of them: the order waits for more sources and the journal says
 init` wrote the list of its day into `/opt/morphit/morphit.env`, and nodes set up
 before v1.20.0 still listed three dead explorers and none of the newer sources. The
 upgrade's "Monero fee-source heal" removes the retired explorers below and adds each
-current default ONCE — since v1.21.0 that includes the two onion explorers
+current default ONCE — since v1.21.0 that includes the two onion explorers, since
+v1.21.15 xmr.mx's I2P explorer
 (remembered in `/var/lib/morphit/fee-explorer-defaults.json`, so a default you remove
 afterwards stays removed); your own explorers stay where they are, and a list you set
 EMPTY (XMR fees off) is left empty. The "Bitcoin fee-source heal" does the same for
-`MORPHIT_INDEXER_BTC_EXPLORER_URLS` (adds the four onion explorers to the wizard's
-two clearnet ones). A node installed by Ansible never sets either key and simply
+`MORPHIT_INDEXER_BTC_EXPLORER_URLS` (adds the onion explorers to the wizard's
+two clearnet ones; since v1.21.15 also mempool.foundation.xyz's onion and runbtc's
+I2P mempool). A node installed by Ansible never sets either key and simply
 takes the current default.
 
 The list holds three kinds of source.
@@ -10766,8 +10826,8 @@ An upgrade to v1.20.2 or later removes them from the env file by itself (see abo
   a sidebar tool, not a verification source.
 
 **Option 1: Public multi-explorer (default).**  No
-operator setup.  The two onion explorers answer first, over Tor,
-and must agree; the clearnet sources are the fallback.  The txprove
+operator setup.  The two onion explorers (over Tor) and the I2P one (through
+i2pd) answer first, and two must agree; the clearnet sources are the fallback.  The txprove
 explorers see the per-payment data (txid, address, tx key) — an onion
 one never sees your node's address; moneroblocks.info and the nodes
 see only the txid.  None of them accumulates any wallet-level secret
@@ -10874,8 +10934,8 @@ reorg, or a stale view at one explorer.
   undetected.
 - 2 explorers: outages tolerated by either; lies
   detectable as long as both don't lie identically.
-- The default (two onion explorers, then six clearnet
-  sources): high availability + cross-check.  With the quorum
+- The default (two onion explorers and one I2P explorer, then six
+  clearnet sources): high availability + cross-check.  With the quorum
   at `2`, two would need to be compromised collude-style to
   lie undetected.
 - Several explorers including self-hosted: as above PLUS
@@ -10895,22 +10955,32 @@ and a zero-clearnet node asks nothing else: verifying fees needs no third-party
 clearnet service. The default lists live in ONE place,
 `packages/operator-config/src/feeSources.ts`, and apply whenever the env key is
 unset (each onion one answered over Tor when the maintainer checked on
-2026-10-02):
+2026-10-02; mempool.foundation.xyz's on 2026-10-23). Since v1.21.15 the lists
+also carry I2P explorers, asked through i2pd with the onion ones (both are
+"hidden" sources: asked first, kept on a zero-clearnet node):
 
-- **BTC** (`MORPHIT_INDEXER_BTC_EXPLORER_URLS`, 6 by default): four onion Esplora
+- **BTC** (`MORPHIT_INDEXER_BTC_EXPLORER_URLS`, 8 by default): five onion Esplora
   explorers — mempool.space's official onion, mempool emzy, mempool runbtc,
-  Blockstream Esplora — then `https://blockstream.info/api` and
-  `https://mempool.space/api`.
-- **XMR** (`MORPHIT_INDEXER_XMR_EXPLORER_URLS`, 8 by default): two onion xmrblocks
-  explorers (runbtc, suddenwhipvapor), then the six clearnet sources of §40.4.
+  Blockstream Esplora, mempool.foundation.xyz — and runbtc's I2P mempool, then
+  `https://blockstream.info/api` and `https://mempool.space/api`.
+- **XMR** (`MORPHIT_INDEXER_XMR_EXPLORER_URLS`, 9 by default): two onion xmrblocks
+  explorers (runbtc, suddenwhipvapor) and xmr.mx's I2P explorer, then the six
+  clearnet sources of §40.4.
 - **Prices** (`MORPHIT_INDEXER_PRICENODE_URLS`, 5 by default): the Haveno and Bisq
   pricenodes, §13.
 
 Left out of the defaults: services that did not answer at all (mempool
-devinbileck; xmrblocks moneroexamples, emzy and devinbileck), services that
-answered only with a web page, so their JSON API is not shown to be on
-(Blockchair, xmr.mx, P2Pool.io's explorer), the P2Pool observers (not block
-explorers) and the Monero stagenet / testnet explorers.
+devinbileck; xmrblocks moneroexamples, emzy and devinbileck; Cake Wallet's
+mempool onion timed out on 2026-10-23), services that answered only with a web
+page, so their JSON API is not shown to be on (Blockchair, P2Pool.io's
+explorer), xmr.mx's onion (its API sits behind a captcha a server cannot pass),
+the P2Pool observers (not block explorers) and the Monero stagenet / testnet
+explorers. A source that answers with a page instead of its JSON API (a captcha,
+an error page) counts as a malformed answer, not as "no such payment". Only an
+explicit "not found" means that, and only from as many sources as the quorum:
+an Esplora explorer's own `Transaction not found` (or mempool's `No such
+mempool or blockchain transaction`), a Monero explorer's JSON error, or a
+Monero node's missed-transaction list. A bare HTTP 404 is not one (v1.21.15).
 
 **How a request travels.** Through the indexer's own Tor SOCKS port
 (`MORPHIT_INDEXER_TOR_SOCKS`), on a **fresh circuit per request** (random SOCKS
@@ -12107,6 +12177,43 @@ max-age=300`).  Restart the indexer service for the env-var
 change to take effect; the cache header is the only delay
 between restart and full propagation to all browsers.
 
+### Explorer links on a hidden site (v1.21.15)
+
+A page opened on your `.onion`, `.i2p` or `.loki` address never links a
+payment to a clearnet block explorer. It links only to explorers that are
+Tor or I2P services themselves, built into Morphit
+(`apps/web/src/lib/explorer/hiddenExplorers.ts`):
+
+| Page | Explorers offered, best first |
+|---|---|
+| `.onion` | the Tor list |
+| `.i2p` | the I2P list (Bitcoin, Monero), then the Tor list |
+| `.loki` | the Tor list (no Lokinet explorers are known) |
+| clearnet | unchanged: the clearnet lists and your overrides |
+
+The Tor list: for Bitcoin, mempool.space, Blockstream, mempool.emzy.de,
+Foundation and Cake Wallet onions, then Blockchair and 3xpl; for Monero,
+xmr.mx and P2Pool.io's explorer, then Blockchair and 3xpl; for every other
+coin and token network, Blockchair's and 3xpl's onions (3xpl first for
+Zcash). Decred and Pirate Chain have no working Tor or I2P explorer, so a
+hidden page shows no link for them (the transaction id stays on the page to
+copy), and no "check on blocks.blurtwallet.com" link either. Every address
+was opened in Tor Browser / an I2P browser before it was added.
+
+Your `MORPHIT_FRONTEND_*_CHAT_LINK_URL` overrides still apply, each on the
+pages that can open it: on the clearnet site an override to a clearnet
+explorer (a `.onion` / `.i2p` one is skipped there — a clearnet browser cannot
+open it); on a `.onion` or `.loki` page one to a Tor v3 onion; on an `.i2p`
+page one to an I2P or a Tor v3 onion explorer. Otherwise the built-in list
+applies. An
+override may use plain `http://` only for a Tor v3 `.onion` or an `.i2p`
+host (the hidden network encrypts the connection, and hidden explorers serve
+http); everything else must be `https://`:
+
+```bash
+MORPHIT_FRONTEND_BTC_CHAT_LINK_URL="http://<your-56-character-address>.onion/tx/{txid}"
+```
+
 ### Per-network explorer URL overrides (USDT only)
 
 USDT is Morphit's first multi-network asset (ERC-20, TRC-20,
@@ -12153,7 +12260,8 @@ MORPHIT_FRONTEND_BCH_CHAT_LINK_URL="https://my-self-hosted-bch-explorer.example.
 
 `{txid}` is the placeholder substituted at render time with the
 lowercased transaction ID (BCH txids are hex like BTC).
-Validation: must be `https://`, must contain literal `{txid}`,
+Validation: must be `https://` (or `http://` to a Tor v3 `.onion` / `.i2p`
+host), must contain literal `{txid}`,
 must parse as a URL after substitution.  An invalid template
 fails indexer startup with a clear error message rather than
 silently shipping a broken link.
@@ -12193,7 +12301,8 @@ MORPHIT_FRONTEND_LTC_CHAT_LINK_URL="https://my-self-hosted-ltc-explorer.example.
 
 `{txid}` is the placeholder substituted at render time with the
 lowercased transaction ID (LTC txids are hex like BTC).
-Validation: must be `https://`, must contain literal `{txid}`,
+Validation: must be `https://` (or `http://` to a Tor v3 `.onion` / `.i2p`
+host), must contain literal `{txid}`,
 must parse as a URL after substitution.  Invalid templates
 fail indexer startup with a clear error message.
 
@@ -12232,7 +12341,8 @@ MORPHIT_FRONTEND_DASH_CHAT_LINK_URL="https://my-self-hosted-dash-explorer.exampl
 
 `{txid}` is the placeholder substituted at render time with the
 lowercased transaction ID (DASH txids are hex like BTC).
-Validation: must be `https://`, must contain literal `{txid}`,
+Validation: must be `https://` (or `http://` to a Tor v3 `.onion` / `.i2p`
+host), must contain literal `{txid}`,
 must parse as a URL after substitution.  Invalid templates
 fail indexer startup with a clear error message.
 
@@ -12271,15 +12381,18 @@ MORPHIT_FRONTEND_<TICKER>_CHAT_LINK_URL="https://my-explorer.example.org/tx/{txi
 ```
 
 `{txid}` is the placeholder substituted at render time with the
-lowercased transaction ID.  Validation: must be `https://`, must
-contain literal `{txid}`, must parse as a URL after substitution.
+lowercased transaction ID.  Validation: must be `https://` (or
+`http://` to a Tor v3 `.onion` / `.i2p` host), must contain literal `{txid}`, must parse as a URL after substitution.
 Invalid templates fail indexer startup with a clear error.
 
 The ops-cli `morphit-ops init` wizard step 12 (Chat-link external
 explorer URLs) walks through all 13 single-network chat-link
 explorer overrides in canonical asset-registry order
 (BTC → XMR → BCH → LTC → DASH → DOGE → ZEC → ARRR → DCR → SOL →
-ETH → XRP), each with the same probe-reachability check.
+ETH → XRP), each with the same probe-reachability check — except an
+`.onion` / `.i2p` / `.loki` one, which is never probed from the server (that
+would hand the name to its resolver; v1.21.15), and no probe follows a redirect
+to such a host.
 
 Bundled defaults + alternative-explorer surveys at addition time:
 

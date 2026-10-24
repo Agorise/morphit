@@ -14,10 +14,11 @@ import { DEFAULT_XMR_EXPLORERS, parseXmrExplorerList } from '../../src/config/xm
 import { DEFAULT_MONERO_PROOF_VERIFIER_CONFIG } from '../../src/indexer/fee/moneroProofVerifier';
 
 describe('XMR explorer list', () => {
-	it('defaults to two onion explorers, then xmrchain.net, moneroexplorer.org (txprove), moneroblocks.info (raw-tx) and three public nodes', () => {
+	it('defaults to two onion explorers and xmr.mx on I2P (v1.21.15), then xmrchain.net, moneroexplorer.org (txprove), moneroblocks.info (raw-tx) and three public nodes', () => {
 		expect(DEFAULT_XMR_EXPLORERS).toEqual([
 			'http://xmrexplrthytnunr4jasr3vnjc6jo5idsyxzv74a7ep7dy7lwcv2eoyd.onion',
 			'http://nklwsomtuok6dhqqecp3a26xzgokfgmeuaplcdkaxehncg57yzarvbad.onion',
+			'http://ravfxexpucy437tc4slicbf5atir2akrcqanog3tgsc3mcdfmrqq.b32.i2p',
 			'https://xmrchain.net',
 			'https://moneroexplorer.org',
 			'raw-tx+https://moneroblocks.info',

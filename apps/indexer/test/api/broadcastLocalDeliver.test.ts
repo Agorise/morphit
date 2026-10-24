@@ -117,3 +117,14 @@ describe('local chat delivery from /v1/broadcast', () => {
 		expect(r.delivered).toEqual([]);
 	});
 });
+
+describe('/v1/broadcast input bounds', () => {
+	it('a transaction with an oversized extensions list is refused before anything else (v1.21.15)', async () => {
+		const trx = chatTrx(ALICE, 'ext') as Record<string, unknown>;
+		const r = await send({ ...trx, extensions: Array.from({ length: 10_000 }, () => 0) });
+		expect(r.status).toBe(400);
+		expect(r.delivered).toEqual([]);
+		const ok = await send({ ...trx, extensions: [] });
+		expect(ok.status).toBe(200);
+	});
+});

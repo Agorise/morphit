@@ -162,7 +162,14 @@ down, and a release chain that one RPC node could forge. After the fixes:
    node's block, and the consistency sample only raises an alarm.
 3. **The shared hidden-service identity.** It is softened, not gone.
 4. **Directory Sybils** crowding the federation, since registration is
-   cheap.
+   cheap. Their pull on the federated price is bounded by the chain-pinned
+   fee band, and since v1.21.15 a node that cannot read that bound uses no
+   federated price at all.
+5. **Inputs from sources it does not run** (v1.21.15 review). The warrant
+   canary signs chain heads and a news headline fetched from other people's
+   servers, now also over Tor and I2P: those values are checked and copied
+   literally, two hidden explorers must agree on the Bitcoin head, and an
+   explorer's error page no longer counts as "no such payment".
 
 Items the run could not prove either way are listed in the audit's
 unproven list: an `ETag`-based cross-visit check, a co-residency oracle

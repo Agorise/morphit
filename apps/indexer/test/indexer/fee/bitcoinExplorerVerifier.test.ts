@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
 	BitcoinExplorerFeeVerifier,
+	isExplorerTxNotFound,
 	type BitcoinExplorerFeeVerifierConfig
 } from '$indexer/fee/bitcoinExplorerVerifier';
 import type { FeeClaim } from '$indexer/fee/verifier';
@@ -51,7 +52,7 @@ function mockFetchJson(body: unknown, status = 200): typeof fetch {
 
 /** Mock fetch that returns different responses per URL substring. */
 function mockFetchByUrl(
-	responses: Record<string, { body?: unknown; status?: number; throws?: Error }>
+	responses: Record<string, { body?: unknown; text?: string; status?: number; throws?: Error }>
 ): typeof fetch {
 	return vi.fn(async (input: Parameters<typeof fetch>[0]) => {
 		const url = typeof input === 'string' ? input : input.toString();
@@ -59,7 +60,8 @@ function mockFetchByUrl(
 			if (url.includes(match)) {
 				if (cfg.throws) throw cfg.throws;
 				const status = cfg.status ?? 200;
-				return new Response(JSON.stringify(cfg.body), { status: status });
+				// `text`: the body exactly as the explorer sends it.
+				return new Response(cfg.text ?? JSON.stringify(cfg.body), { status: status });
 			}
 		}
 		throw new Error(`unmocked URL: ${url}`);
@@ -342,9 +344,11 @@ describe('BitcoinExplorerFeeVerifier — pending_external paths', () => {
 	it('a quorum of explorers returning 404 → rejected (tx_not_found), not pending', async () => {
 		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		try {
+			// What electrs (Blockstream's and mempool's Esplora backend) sends
+			// for an unknown txid: 404, text/plain "Transaction not found".
 			const fetchImpl = mockFetchByUrl({
-				blockstream: { status: 404 },
-				'mempool.space': { status: 404 }
+				blockstream: { status: 404, text: 'Transaction not found' },
+				'mempool.space': { status: 404, text: 'Transaction not found' }
 			});
 			const verifier = new BitcoinExplorerFeeVerifier(baseConfig(), fetchImpl);
 			const result = await verifier.verify(claim());
@@ -352,6 +356,66 @@ describe('BitcoinExplorerFeeVerifier — pending_external paths', () => {
 		} finally {
 			warnSpy.mockRestore();
 		}
+	});
+
+	it("mempool's own backend's not-found (JSON, as asked) counts as not found too (v1.21.15)", async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const fetchImpl = mockFetchByUrl({
+				blockstream: { status: 404, text: 'Transaction not found' },
+				'mempool.space': {
+					status: 404,
+					text: '{"error":"No such mempool or blockchain transaction"}'
+				}
+			});
+			const verifier = new BitcoinExplorerFeeVerifier(
+				baseConfig({ minSuccessfulResponses: 2 }),
+				fetchImpl
+			);
+			expect((await verifier.verify(claim())).kind).toBe('rejected');
+		} finally {
+			warnSpy.mockRestore();
+		}
+	});
+
+	it('a 404 that is a web page or a captcha is NOT "not found": a quorum of them does not reject the fee (v1.21.15)', async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const fetchImpl = mockFetchByUrl({
+				blockstream: { status: 404, text: '<!doctype html><title>404 Not Found</title>' },
+				'mempool.space': { status: 404, text: '<html>Please solve this captcha</html>' }
+			});
+			const verifier = new BitcoinExplorerFeeVerifier(
+				baseConfig({ minSuccessfulResponses: 2 }),
+				fetchImpl
+			);
+			expect((await verifier.verify(claim())).kind).toBe('pending_external');
+			// An empty 404 says nothing either.
+			const empty = new BitcoinExplorerFeeVerifier(
+				baseConfig({ minSuccessfulResponses: 2 }),
+				mockFetchByUrl({
+					blockstream: { status: 404, text: '' },
+					'mempool.space': { status: 404, text: '' }
+				})
+			);
+			expect((await empty.verify(claim())).kind).toBe('pending_external');
+		} finally {
+			warnSpy.mockRestore();
+		}
+	});
+
+	it('isExplorerTxNotFound: the two real bodies only', () => {
+		expect(isExplorerTxNotFound('Transaction not found')).toBe(true);
+		expect(isExplorerTxNotFound('Transaction not found\n')).toBe(true);
+		expect(isExplorerTxNotFound('{"error":"No such mempool or blockchain transaction"}')).toBe(
+			true
+		);
+		expect(isExplorerTxNotFound('No such mempool or blockchain transaction')).toBe(true);
+		expect(isExplorerTxNotFound('Block not found')).toBe(false);
+		expect(isExplorerTxNotFound('<html>Transaction not found</html>')).toBe(false);
+		expect(isExplorerTxNotFound('{"error":"Failed to get transaction"}')).toBe(false);
+		expect(isExplorerTxNotFound('{not json')).toBe(false);
+		expect(isExplorerTxNotFound('')).toBe(false);
 	});
 
 	it('a 404 below the quorum (the other explorer down) stays pending_external', async () => {

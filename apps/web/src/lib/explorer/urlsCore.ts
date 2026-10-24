@@ -531,6 +531,16 @@ export function substituteTxidIntoTemplate(
 	}
 }
 
+/** A Tor v3 onion host (56 base32 characters) or an I2P host — the only
+ *  hosts a chat-link template may reach over plain `http://` (v1.21.15): the
+ *  hidden network itself encrypts and authenticates the connection, and the
+ *  hidden explorers serve http only. Expects a lowercased hostname (what
+ *  `new URL()` gives). PURE. */
+export function isHiddenServiceHost(hostname: string): boolean {
+	if (typeof hostname !== 'string') return false;
+	return /^[a-z2-7]{56}\.onion$/.test(hostname) || /^(?:[a-z0-9-]+\.)+i2p$/.test(hostname);
+}
+
 /** Validate a chat-link URL template.  Same contract as the
  *  ops-cli wizard's parseChatLinkTemplate and the indexer
  *  config's isValidChatLinkTemplate.  Returns true on success,
@@ -538,19 +548,22 @@ export function substituteTxidIntoTemplate(
  *  defensively reject malformed operator overrides at hydration
  *  (defense-in-depth: the indexer's zod schema is supposed to
  *  catch these, but a hostile or buggy indexer might still
- *  serve garbage). */
+ *  serve garbage).
+ *
+ *  `https://` anywhere; `http://` only to a Tor v3 onion or an I2P host
+ *  (v1.21.15 — what an operator of a hidden site links to). */
 export function isValidChatLinkTemplate(s: string): boolean {
 	if (typeof s !== 'string') return false;
-	if (!s.startsWith('https://')) return false;
+	if (!s.startsWith('https://') && !s.startsWith('http://')) return false;
 	if (!s.includes('{txid}')) return false;
 	const sampleTxid =
 		'0000000000000000000000000000000000000000000000000000000000000000';
 	const filled = s.replace(/\{txid\}/g, sampleTxid);
 	try {
 		const parsed = new URL(filled);
-		if (parsed.protocol !== 'https:') return false;
 		if (parsed.username !== '' || parsed.password !== '') return false;
-		return true;
+		if (parsed.protocol === 'https:') return true;
+		return parsed.protocol === 'http:' && isHiddenServiceHost(parsed.hostname);
 	} catch {
 		return false;
 	}

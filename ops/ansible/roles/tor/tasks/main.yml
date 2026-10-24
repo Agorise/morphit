@@ -138,3 +138,43 @@
 - name: Tor-only node — keep the operating system itself off clearnet
   ansible.builtin.include_tasks: tor-only-os.yml
   when: morphit_tor_only | default(false) | bool
+
+# v1.21.15: a node that KEEPS clearnet NTP gets the clock fallback — when NTP
+# cannot keep the clock (UDP 123 blocked, the pools unreachable), it is set from
+# onion time sources over Tor (morphit-clock-fallback.sh does nothing while NTP
+# reports the clock synchronised, else runs morphit-tor-timesync.sh). A tor-only
+# node has morphit-tor-timesync.timer instead (tor-only-os.yml, which removes
+# these units). Existing nodes get the same from `morphit-ops upgrade`
+# (apps/ops-cli/src/lib/clockFallbackHeal.ts).
+- name: Clock fallback — install its script and the Tor time check (root-owned copies)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../tor-only/{{ item }}"
+    dest: "/usr/local/lib/morphit/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - morphit-tor-timesync.sh
+    - morphit-clock-fallback.sh
+  when: not (morphit_tor_only | default(false) | bool)
+
+- name: Clock fallback — install its units
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+    remote_src: true
+  loop:
+    - morphit-clock-fallback.service
+    - morphit-clock-fallback.timer
+  when: not (morphit_tor_only | default(false) | bool)
+
+- name: Clock fallback — check every 6 hours whether NTP keeps the clock
+  ansible.builtin.systemd:
+    name: morphit-clock-fallback.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: not (morphit_tor_only | default(false) | bool)

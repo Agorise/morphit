@@ -54,6 +54,9 @@ export const HELPER_SCRIPTS: ReadonlyArray<{ readonly release: string; readonly 
 	// v1.20.0 (C13): tor-only nodes only (tor role + lib/torOnlyOsHeal.ts).
 	{ release: 'ops/tor-only/morphit-tor-only-os.sh', name: 'morphit-tor-only-os.sh' },
 	{ release: 'ops/tor-only/morphit-tor-timesync.sh', name: 'morphit-tor-timesync.sh' },
+	// v1.21.15: nodes that keep clearnet NTP (tor role + lib/clockFallbackHeal.ts);
+	// it runs morphit-tor-timesync.sh above only when NTP cannot keep the clock.
+	{ release: 'ops/tor-only/morphit-clock-fallback.sh', name: 'morphit-clock-fallback.sh' },
 	// the pre-start helper the indexer and relay units run as root
 	// (installed by lib/unitPrivilegeHeal.ts and the morphit role).
 	{ release: 'ops/scripts/morphit-service-perms.sh', name: 'morphit-service-perms.sh' },

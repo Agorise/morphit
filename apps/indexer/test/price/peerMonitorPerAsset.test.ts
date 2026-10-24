@@ -48,4 +48,14 @@ describe('per-asset peer-price monitors', () => {
 	it('an agreeing BTC monitor running alongside does not reset BLURT', async () => {
 		expect(await hoursUntilBlurtAlert(true)).toBe(PEER_DISAGREEMENT_SUSTAINED_HOURS);
 	});
+
+	it('v1.21.15: with alerts off (a clearnet node with the switch off) it samples and compares, but never alerts', async () => {
+		let compared = 0;
+		for (let h = 0; h <= 8; h += 0.5) {
+			const r = await runPeerPriceSampleCycle({ ...blurt, alerts: false }, new Date(T0 + h * H));
+			expect(r.alertFired).toBe(false);
+			if (r.comparedAgainstMedian) compared++;
+		}
+		expect(compared).toBeGreaterThan(0);
+	});
 });

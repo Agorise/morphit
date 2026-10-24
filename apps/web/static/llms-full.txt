@@ -1786,7 +1786,7 @@ The new icon opens Morphit full screen, like an app. Notifications on iPhone and
 
 Yes. Go to [the explorer](/explorer) to look up any Blurt account, transaction or block. It is public and needs no account. Morphit's own actions (orders, reviews, chat messages, which stay encrypted, and more) are labelled in plain words, so you can tell what each one is.
 
-Payments in other coins happen on their own blockchains. When a transaction ID for one of them appears in a chat, Morphit links it to an outside explorer for that coin, for example mempool.space for Bitcoin and xmrchain.net for Monero. The site's operator can change these links.
+Payments in other coins happen on their own blockchains. When a transaction ID for one of them appears in a chat, Morphit links it to an outside explorer for that coin, for example mempool.space for Bitcoin and xmrchain.net for Monero. The site's operator can change these links. On this site's Tor, I2P or Lokinet address these links open only explorers that are on Tor or I2P themselves; a coin that has none shows no link.
 
 ---
 
@@ -2332,7 +2332,7 @@ Anyone with the ID can look the payment up on a public block explorer. On open c
 
 **The release check.** At most once a day (and once after each site update, or when you press **Try again** on a fee panel), your browser asks this site for the signed release record that says which Morphit version is current: two small requests — the last 100 entries of @morphit's history, then the block holding the release. If the release is older than those 100 entries, one more history request is made (up to about 115 KB). This site answers only with what two Blurt RPC operators agree on, and your browser checks @morphit's signature itself: nobody can fake a release, though this site could hold back news of a newer one. The result is remembered for 24 hours and shared by all your tabs; if the record names a release older than this site's, your browser asks again within the hour, and if this site could not get an answer, after 12 hours. If your browser blocks this site's storage, it can't remember, so it asks each time you open Morphit. You can watch all of it in your browser's Network tab.
 
-**Links you open.** A payment link for another coin opens a public block explorer in a new tab, and that explorer sees your IP like any site you visit.
+**Links you open.** A payment link for another coin opens a public block explorer in a new tab, and that explorer sees your IP like any site you visit. On this site's Tor, I2P or Lokinet address these links open only explorers that are on Tor or I2P themselves; a coin that has none shows no link.
 
 **Use Tor or a VPN** to hide your IP from this site and from any explorer you open.
 

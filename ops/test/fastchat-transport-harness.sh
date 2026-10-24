@@ -710,19 +710,19 @@ try 'T55 a request we declined to make is recorded against the peer' "$PROBE" \
 
 # ── a hidden-only node gets its peer prices (F31) ────────────────────
 try 'T56 the price sampler knows only i2p_b32 and tor again' "$PRICE" \
-	'	return hosts
-		.map((h, i) => ({ h, i }))' \
-	"	return hosts
-		.filter((h) => h.endsWith('.b32.i2p') || h.endsWith('.onion'))
-		.map((h, i) => ({ h, i }))"
+	'		return hosts
+			.map((h, i) => ({ h, i }))' \
+	"		return hosts
+			.filter((h) => h.endsWith('.b32.i2p') || h.endsWith('.onion'))
+			.map((h, i) => ({ h, i }))"
 
 try 'T57 the price sampler tries Tor before I2P' "$PRICE" \
 	'{ i2p: 0, tor: 1, loki: 2 }' \
 	'{ i2p: 1, tor: 0, loki: 2 }'
 
 try 'T58 a hidden address goes through the clearnet fetch' "$PRICE" \
-	'			const r = hiddenOnly' \
-	'			const r = false'
+	'				!hiddenOnly && hiddenNetworkOfBase(base) === null' \
+	'				true'
 
 try 'T59 a peer is tried at its first address only' "$PRICE" \
 	'		for (const base of t.bases) {' \

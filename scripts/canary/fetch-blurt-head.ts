@@ -24,25 +24,45 @@ import {
 	DEFAULT_BLURT_RPC_ENDPOINTS,
 	DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS
 } from '@morphit/operator-config';
-import { canaryIsTorOnly, installTorDispatcherIfTorOnly } from './torSocksDispatcher.js';
+import { hiddenNetworkOf } from '@morphit/hidden-transport';
+import {
+	canaryHiddenDispatcherFor,
+	canaryHostLooksHidden,
+	canaryIsTorOnly,
+	installTorDispatcherIfTorOnly
+} from './torSocksDispatcher.js';
 import {
 	type BlurtHead,
-	canaryDefaultNodes,
-	fetchBlurtHeadWithFailover,
+	fetchBlurtHeadPhased,
 	parseHead,
-	resolveCanaryNodes
+	planCanaryBlurtPhases
 } from './blurtHeadFailover.js';
+import { readTextCapped } from './readCapped.js';
 
 /** Per-node timeout. Matches the old `curl --max-time 15`. */
 const TIMEOUT_MS = 15_000;
+/** Per-node timeout for an onion / I2P node (a rendezvous alone can take tens
+ *  of seconds). */
+const HIDDEN_TIMEOUT_MS = 60_000;
 
 /** Live single-node fetch: POST get_dynamic_global_properties, parse+validate,
  *  or return null on ANY failure so the walk moves to the next node. */
 async function fetchOneLive(url: string): Promise<BlurtHead | null> {
+	// v1.21.15: a hidden node only through Tor / i2pd — never dialled directly.
+	const hiddenNet = hiddenNetworkOf(url) ?? (canaryHostLooksHidden(url) ? 'hidden' : null);
+	const isHidden = hiddenNet !== null;
+	const dispatcher = isHidden ? canaryHiddenDispatcherFor(url) : null;
+	if (isHidden && dispatcher === null) {
+		process.stderr.write(`canary:   ${url} -> no ${hiddenNet} proxy configured — skipped\n`);
+		return null;
+	}
+	// lib.dom's RequestInit omits undici's `dispatcher`; Node's fetch honours it.
+	const via = dispatcher === null ? {} : ({ dispatcher } as Record<string, unknown>);
 	const ctrl = new AbortController();
-	const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+	const timer = setTimeout(() => ctrl.abort(), isHidden ? HIDDEN_TIMEOUT_MS : TIMEOUT_MS);
 	try {
 		const resp = await fetch(url, {
+			...via,
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
@@ -57,7 +77,17 @@ async function fetchOneLive(url: string): Promise<BlurtHead | null> {
 			process.stderr.write(`canary:   ${url} -> HTTP ${resp.status}\n`);
 			return null;
 		}
-		const data = (await resp.json()) as { result?: unknown };
+		const body = await readTextCapped(resp);
+		if (body === null) {
+			process.stderr.write(`canary:   ${url} -> answer larger than 64 KB — not used\n`);
+			return null;
+		}
+		let data: { result?: unknown } | null;
+		try {
+			data = JSON.parse(body) as { result?: unknown } | null;
+		} catch {
+			data = null;
+		}
 		const head = parseHead(data?.result);
 		if (!head) {
 			process.stderr.write(`canary:   ${url} -> malformed / empty result\n`);
@@ -89,20 +119,23 @@ async function main(): Promise<void> {
 	// not publish) — it never falls back to a direct clearnet connection.
 	const route = installTorDispatcherIfTorOnly();
 	process.stderr.write(`canary: chain-head fetch route = ${route}\n`);
-	// Override (comma list) PREFERRED-FIRST, then the default list — which on a
-	// tor-only node is every default hidden .onion, never clearnet (D12).
-	const nodes = resolveCanaryNodes(
-		process.env.MORPHIT_CANARY_BLURT_RPC,
-		canaryDefaultNodes(
-			canaryIsTorOnly(),
-			DEFAULT_BLURT_RPC_ENDPOINTS,
-			DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS
-		)
-	);
+	// Tor-only: the override's nodes + every default .onion, all at once (the
+	// fastest valid head wins), never clearnet (D12). Clearnet: override then
+	// defaults in order, and only when all failed the hidden nodes at once
+	// through Tor / i2pd (v1.21.15).
+	const phases = planCanaryBlurtPhases({
+		override: process.env.MORPHIT_CANARY_BLURT_RPC,
+		torOnly: canaryIsTorOnly(),
+		clearnet: DEFAULT_BLURT_RPC_ENDPOINTS,
+		hidden: DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS
+	});
+	const nodes = phases.flatMap((p) => p.nodes);
 	process.stderr.write(
-		`canary: fetching Blurt chain head (failover across ${nodes.length} node(s))...\n`
+		`canary: fetching Blurt chain head (${phases
+			.map((p) => `${p.nodes.length} ${p.mode === 'race' ? 'at once, fastest wins' : 'in order'}`)
+			.join(', then hidden ')})...\n`
 	);
-	const got = await fetchBlurtHeadWithFailover(nodes, fetchOneLive);
+	const got = await fetchBlurtHeadPhased(phases, fetchOneLive);
 	if (!got) {
 		process.stderr.write(
 			`canary: all ${nodes.length} Blurt RPC endpoint(s) failed — could not fetch chain head\n`

@@ -12,7 +12,7 @@
       "category": "not-reachable",
       "title": "qs: Denial of Service via Attacker Controlled isBuffer",
       "lastReviewed": "2026-10-06",
-      "rationale": "Only qs 6.5.5 under request (matrix-bot -> matrix-bot-sdk -> request), the Matrix alert bot's HTTP client, is affected; express (4.22.3, installed by matrix-bot-sdk) and the MCP SDK's express 5 now resolve qs 6.16.0, outside the advisory. request only builds and merges query strings for the bot's own calls to the operator-configured homeserver; no Morphit code starts an express app (the MCP server is a plain node:http server) and no outside request reaches request's qs. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out."
+      "rationale": "Only qs 6.5.5 under request (matrix-bot -> matrix-bot-sdk -> request), the Matrix alert bot's HTTP client, is affected; express (4.22.3, installed by matrix-bot-sdk) and the MCP SDK's express 5 now resolve qs 6.16.1, outside the advisory. request only builds and merges query strings for the bot's own calls to the operator-configured homeserver; no Morphit code starts an express app (the MCP server is a plain node:http server) and no outside request reaches request's qs. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out."
     },
     "GHSA-4w7w-66w2-5vf9": {
       "package": "vite",
@@ -166,14 +166,6 @@
       "lastReviewed": "2026-10-02",
       "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). The dev server's open-in-editor helper, Windows only."
     },
-    "GHSA-vfj7-8cjw-p6xm": {
-      "package": "braces",
-      "severity": "high",
-      "category": "dev-build-only",
-      "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
-      "lastReviewed": "2026-10-03",
-      "rationale": "braces 3.0.3 (also reported through micromatch and tailwindcss's chokidar) is reached only by build tooling: tailwindcss 3, fast-glob, svelte-check; every one is a devDependency (package-lock marks braces, micromatch, chokidar dev). The patterns it expands are the repo's own globs (tailwind content paths, file watchers), never a request or user input, so no outside party can hand it a deeply nested pattern. No fixed release exists (3.0.3 is the latest, the advisory covers <=3.0.3); npm's only offer is tailwindcss 4, a major change. Revisit when braces publishes a fix or when tailwindcss 4 is adopted."
-    },
     "GHSA-w5hq-g745-h8pq": {
       "package": "uuid",
       "severity": "moderate",
@@ -189,6 +181,14 @@
       "title": "Vitest: Code injection via unauthenticated manual mock registration",
       "lastReviewed": "2026-10-21",
       "rationale": "Dev/test tooling only; never shipped to or run on a node. The mock-registration endpoint belongs to Vitest's own server (browser mode / UI), which Morphit's test runs never start: vitest runs in node and jsdom environments only. The fix is in vitest 4.1.12 and later; the repo is on vitest 2.1.x (SvelteKit and Vite 5), so it needs the same major upgrade as the Vite advisories above."
+    },
+    "GHSA-mrhx-c7xc-m3w5": {
+      "package": "zod",
+      "severity": "high",
+      "category": "not-reachable",
+      "title": "Zod can exhaust memory while validating oversized constrained collections",
+      "lastReviewed": "2026-10-23",
+      "rationale": "Zod 3.25.76 (indexer, relay, MCP server, matrix bot; and inside @session.js/client and the MCP SDK). The advisory needs an array schema WITHOUT a length bound fed outside input: zod then collects an issue per failing element without limit. Every zod array schema Morphit applies to outside input is bounded: indexer /v1/broadcast operations .max(10), signatures .max(8), extensions .max(16) (bounded in v1.21.15 for this advisory; test/api/broadcastLocalDeliver.test.ts), relay push muted_categories .max(3), relay create account_auths .max(0) / key_auths .length(1); request bodies are size-capped before parsing. @session.js/client's only zod schema is a number (its poll interval); the MCP SDK's schemas parse a local client's tool calls. No zod 3 release fixes it; the fix line is zod 4.6.6, a major upgrade across four apps."
     }
   }
 }

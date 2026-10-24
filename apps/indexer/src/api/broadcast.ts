@@ -93,7 +93,10 @@ const txSchema = z.object({
 	// TypeError. Every Morphit client sends `extensions: []`, so this never
 	// fired; a client that did not would have had its chat message accepted by
 	// the chain and then answered 502, with a retry button that duplicates it.
-	extensions: z.array(z.unknown()).default([]),
+	// Bounded (v1.21.15): a Blurt transaction carries no extensions in
+	// practice, and an unbounded array schema is GHSA-mrhx-c7xc-m3w5's shape
+	// (zod collects an issue per failing element, without limit).
+	extensions: z.array(z.unknown()).max(16).default([]),
 	signatures: z
 		.array(
 			z

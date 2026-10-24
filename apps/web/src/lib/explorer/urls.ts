@@ -81,6 +81,14 @@ import {
 	validateDaiTxid,
 	type DaiNetwork
 } from '$lib/assets/networks';
+import {
+	currentPageNetwork,
+	hiddenExplorerTemplates,
+	isHiddenServiceUrl,
+	overrideFitsPage,
+	type HiddenExplorerKey,
+	type PageNetwork
+} from './hiddenExplorers';
 
 export {
 	BUNDLED_BTC_CHAT_LINK_URL,
@@ -214,6 +222,50 @@ const EXPLORER_REGISTRY: Readonly<Record<ExternalAsset, ExplorerEntry>> = Object
 	})
 });
 
+/** v1.21.15 — the explorer links for a page opened on a hidden network
+ *  (`.onion`, `.i2p`, `.loki`): ONLY hidden explorers, never a clearnet one
+ *  (hiddenExplorers.ts). The operator's template comes first when it points
+ *  at a hidden service itself; a clearnet override is skipped on such a page.
+ *  `txid` is already normalized for the chain. Empty when the chain has no
+ *  hidden explorer (Decred, Pirate Chain) — the page then shows no link. */
+function hiddenPageUrls(
+	key: HiddenExplorerKey,
+	txid: string,
+	override: string | null | undefined,
+	network: Exclude<PageNetwork, 'clearnet'>
+): readonly string[] {
+	const seen = new Set<string>();
+	const result: string[] = [];
+	const push = (tpl: string): void => {
+		const url = substituteTxidIntoTemplate(tpl, txid);
+		if (url === null || seen.has(url) || !isHiddenServiceUrl(url)) return;
+		seen.add(url);
+		result.push(url);
+	};
+	if (
+		override !== null &&
+		override !== undefined &&
+		isValidChatLinkTemplate(override) &&
+		overrideFitsPage(override, network)
+	) {
+		push(override);
+	}
+	for (const tpl of hiddenExplorerTemplates(key, network) ?? []) push(tpl);
+	return result;
+}
+
+/** A native asset's txid as its explorers expect it (v1.21.15 review). Solana
+ *  signatures are base58: case-sensitive, so never lowercased (a lowercased one
+ *  is a different string and no explorer finds it). Ethereum hashes take the
+ *  0x prefix (Etherscan and Blockchair answer 404 to bare hex). Every other
+ *  chain here is hex, lowercased. PURE. */
+export function normalizeNativeTxid(asset: ExternalAsset, txid: string): string {
+	if (asset === 'SOL') return txid;
+	const lc = txid.toLowerCase();
+	if (asset === 'ETH') return lc.startsWith('0x') ? lc : `0x${lc}`;
+	return lc;
+}
+
 /** Builds an external-explorer URL for a non-Blurt asset's
  *  transaction.  Returns null on validation failure.
  *
@@ -226,8 +278,12 @@ export function externalExplorerUrl(asset: ExternalAsset, txid: string): string 
 	const entry = EXPLORER_REGISTRY[asset];
 	if (entry === undefined) return null;
 	if (!entry.txidRe.test(txid)) return null;
-	const lower = txid.toLowerCase();
+	const lower = normalizeNativeTxid(asset, txid);
 	const operatorTpl = getInstanceSnapshot().chat_link_urls[entry.instanceTplKey];
+	const network = currentPageNetwork();
+	if (network !== 'clearnet') {
+		return hiddenPageUrls(asset, lower, operatorTpl, network)[0] ?? null;
+	}
 	// (defense-in-depth) — re-validate the
 	// operator-supplied template before using it.  The indexer's
 	// zod schema is supposed to catch malformed templates at
@@ -237,7 +293,11 @@ export function externalExplorerUrl(asset: ExternalAsset, txid: string): string 
 	// would land in an `<a href={...}>` and execute on click.
 	// On invalid-from-indexer, fall through to the bundled default
 	// instead of producing the malicious URL.
-	const tpl = operatorTpl !== null && operatorTpl !== undefined && isValidChatLinkTemplate(operatorTpl)
+	const tpl =
+		operatorTpl !== null &&
+		operatorTpl !== undefined &&
+		isValidChatLinkTemplate(operatorTpl) &&
+		overrideFitsPage(operatorTpl, 'clearnet')
 		? operatorTpl
 		: entry.bundledDefault;
 	return substituteTxidIntoTemplate(tpl, lower);
@@ -261,8 +321,10 @@ export function externalExplorerUrls(asset: ExternalAsset, txid: string): readon
 	const entry = EXPLORER_REGISTRY[asset];
 	if (entry === undefined) return [];
 	if (!entry.txidRe.test(txid)) return [];
-	const lower = txid.toLowerCase();
+	const lower = normalizeNativeTxid(asset, txid);
 	const operatorTpl = getInstanceSnapshot().chat_link_urls[entry.instanceTplKey];
+	const network = currentPageNetwork();
+	if (network !== 'clearnet') return hiddenPageUrls(asset, lower, operatorTpl, network);
 	const seen = new Set<string>();
 	const result: string[] = [];
 	const push = (tpl: string): void => {
@@ -272,7 +334,12 @@ export function externalExplorerUrls(asset: ExternalAsset, txid: string): readon
 		seen.add(url);
 		result.push(url);
 	};
-	if (operatorTpl !== null && operatorTpl !== undefined && isValidChatLinkTemplate(operatorTpl)) {
+	if (
+		operatorTpl !== null &&
+		operatorTpl !== undefined &&
+		isValidChatLinkTemplate(operatorTpl) &&
+		overrideFitsPage(operatorTpl, 'clearnet')
+	) {
 		push(operatorTpl);
 	}
 	for (const tpl of entry.bundledList) {
@@ -310,6 +377,10 @@ export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | nu
 	// Operator override path: read the instance store.
 	const usdtOverrides = getInstanceSnapshot().chat_link_urls.usdt;
 	const override = usdtOverrides ? usdtOverrides[network] : null;
+	const pageNetwork = currentPageNetwork();
+	if (pageNetwork !== 'clearnet') {
+		return hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null;
+	}
 
 	// (defense-in-depth) — re-validate the
 	// operator-supplied template before using it.  Without this,
@@ -317,7 +388,7 @@ export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | nu
 	// URL that becomes an `<a href={...}>` and executes on click.
 	// On validation failure, fall through to the bundled default
 	// instead of substituting into the malicious template.
-	if (override && isValidChatLinkTemplate(override)) {
+	if (override && isValidChatLinkTemplate(override) && overrideFitsPage(override, 'clearnet')) {
 		// Operator configured a per-network template — substitute
 		// the txid into it.  Normalize the txid the same way the
 		// bundled-default path does:
@@ -352,10 +423,14 @@ export function usdcExplorerUrl(network: UsdcNetwork, txid: string): string | nu
 
 	const usdcOverrides = getInstanceSnapshot().chat_link_urls.usdc;
 	const override = usdcOverrides ? usdcOverrides[network] : null;
+	const pageNetwork = currentPageNetwork();
+	if (pageNetwork !== 'clearnet') {
+		return hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null;
+	}
 
 	// (defense-in-depth) — same XSS-protection
 	// posture as usdtExplorerUrl above.
-	if (override && isValidChatLinkTemplate(override)) {
+	if (override && isValidChatLinkTemplate(override) && overrideFitsPage(override, 'clearnet')) {
 		// EVM-family normalization (USDC has no
 		// TRC-20 / BEP-20 branches; only SPL is non-EVM here).
 		let normalized: string;
@@ -385,12 +460,16 @@ export function daiExplorerUrl(network: DaiNetwork, txid: string): string | null
 
 	const daiOverrides = getInstanceSnapshot().chat_link_urls.dai;
 	const override = daiOverrides ? daiOverrides[network] : null;
+	const pageNetwork = currentPageNetwork();
+	if (pageNetwork !== 'clearnet') {
+		return hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null;
+	}
 
 	// (defense-in-depth) — same XSS-protection
 	// posture as usdtExplorerUrl + usdcExplorerUrl above.  Hostile
 	// indexer serving `javascript:...` template would be rejected
 	// here and the bundled default would be used instead.
-	if (override && isValidChatLinkTemplate(override)) {
+	if (override && isValidChatLinkTemplate(override) && overrideFitsPage(override, 'clearnet')) {
 		// EVM-family normalization (all 4 DAI
 		// networks are EVM; no SPL/TRC-20 branch).  Etherscan,
 		// Polygonscan, Basescan, Arbiscan all return 404 to
@@ -439,6 +518,10 @@ function tokenExplorerUrls(
 	override: string | null | undefined
 ): readonly string[] {
 	const normalized = normalizeTokenTxid(network, txid);
+	const pageNetwork = currentPageNetwork();
+	if (pageNetwork !== 'clearnet') {
+		return hiddenPageUrls(network as HiddenExplorerKey, normalized, override, pageNetwork);
+	}
 	const alternatives = TOKEN_NETWORK_EXPLORER_URLS[network] ?? [];
 	const seen = new Set<string>();
 	const result: string[] = [];
@@ -453,7 +536,12 @@ function tokenExplorerUrls(
 	// template before use, exactly as the singular builders do.  A
 	// hostile/compromised indexer serving a `javascript:` template is
 	// rejected here and we fall through to the bundled list.
-	if (override !== null && override !== undefined && isValidChatLinkTemplate(override)) {
+	if (
+		override !== null &&
+		override !== undefined &&
+		isValidChatLinkTemplate(override) &&
+		overrideFitsPage(override, 'clearnet')
+	) {
 		push(override);
 	}
 	for (const tpl of alternatives) push(tpl);
@@ -512,12 +600,15 @@ export function morphitExplorerBlockUrl(blockNumber: number): string | null {
  *  a target (e.g. RPC error, or a deeply historical op our
  *  walking depth didn't reach).
  *
- *  Per the user: this is the ONLY external Blurt explorer we
- *  link to; blockchain.blurt.world doesn't exist. */
+ *  This is the ONLY external Blurt explorer we link to;
+ *  blockchain.blurt.world doesn't exist.  Null on a hidden page. */
 export function blurtWalletExplorerFallbackUrl(
 	kind: 'tx' | 'account' | 'block',
 	target: string | number
 ): string | null {
+	// v1.21.15 — a clearnet site: never offered on a hidden page (there is no
+	// hidden Blurt explorer, so the page shows no fallback link there).
+	if (currentPageNetwork() !== 'clearnet') return null;
 	const base = 'https://blocks.blurtwallet.com';
 	if (kind === 'tx') {
 		if (typeof target !== 'string' || !BLURT_TRXID_RE.test(target)) return null;

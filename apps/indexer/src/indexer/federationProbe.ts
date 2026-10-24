@@ -1459,6 +1459,12 @@ export async function fetchJson<T>(
 		throw new ClearnetRefusedError(parsed.origin);
 	}
 	const hostname = parsed.hostname.toLowerCase();
+	// (v1.21.15) A Tor / I2P / Lokinet name is never a clearnet address: the
+	// lookup below would hand it to the system resolver (and on to the ISP's).
+	// Such a peer is reached through Tor / i2pd, never here.
+	if (/\.(onion|i2p|loki)$/.test(hostname.replace(/\.$/, ''))) {
+		throw new Error('fetchJson: refusing to resolve a hidden-service name');
+	}
 	// First defense: literal-hostname denylist (catches obvious
 	// `https://localhost/`, `https://127.0.0.1/`, etc.).
 	if (isPrivateHostname(hostname)) {

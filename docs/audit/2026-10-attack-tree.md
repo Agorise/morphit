@@ -279,6 +279,15 @@ GOAL e: fake release, fake trades or reputation, fake chat, fake directory
 ├── e4  Fake directory entries or phishing contact links — stop: origin/alt/contact validation,
 │         reserved names · guard: operatorRegisterOrigin.test.ts, operator-tag-reserved-l3.test.ts
 ├── e5  Fake warrant canary — signed offline by the maintainer; verified with scripts/canary/verify.ts
+│   ├── e5.1  A chain-head or news source writes its own text into the signed canary
+│   │         stop: FIXED (v1.21.15) — values filled literally (no awk escapes, no `&`), the
+│   │               headline one line of plain ASCII without armor lines or {{…}}, heads checked
+│   │               (a Blurt id must carry its height), answers capped at 64 KB
+│   │         guard: canary-generate-compose-smoke, canary-rpc-failover-smoke
+│   └── e5.2  A lying onion/I2P explorer picks the Bitcoin head the canary signs
+│             stop: FIXED (v1.21.15) — two hidden explorers must give the same head; a hash
+│                   without the proof-of-work zeros is refused · guard: canary-btc-failover-smoke
+│             residual: two colluding explorers (the Blurt head stays the primary proof)
 └── e6  Operator serves a backdoored build with a green integrity check
           stop: none possible in the page — the operator serves the checker. The runtime hash
                 check catches accidental or partial tampering only, and the docs say so.
@@ -323,5 +332,6 @@ GOAL f: deny service to users or to the federation
 | 6    | f4 directory Sybil                                                                         | f    | known                                 |
 | 7    | c1.3 / d3 operator agreement on hidden RPC pools: the default hidden nodes are project-run | c, d | known; the op signatures stop forgery |
 | 8    | a6.6 v3 chat messages carry the indexer's order and time (v4 is sent from next release)    | a, e | PARTLY FIXED; read first             |
+| 9    | e5.2 two colluding hidden explorers agree on a false Bitcoin head (secondary proof only)  | e    | known; the Blurt head is primary      |
 | —    | b1.8 MCP on tor-only, d1.4 tarball flags                                                   | b, d | ASSERTED (no test)                    |
 | —    | a1.1 ModSecurity audit state inside the BunkerWeb container; d4 tag-pinned BunkerWeb image | a, d | not covered by a test                 |

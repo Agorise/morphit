@@ -35,10 +35,12 @@ const PRE_V120_LIST = [
 	'https://moneroexplorer.org'
 ];
 /** The default sources such a list lacks: since v1.20.3 the two onion
- *  explorers (first in the default list), then the v1.20.0–v1.20.2 ones. */
+ *  explorers (first in the default list), since v1.21.15 xmr.mx on I2P, then
+ *  the v1.20.0–v1.20.2 ones. */
 const NEW_SOURCES = [
 	'http://xmrexplrthytnunr4jasr3vnjc6jo5idsyxzv74a7ep7dy7lwcv2eoyd.onion',
 	'http://nklwsomtuok6dhqqecp3a26xzgokfgmeuaplcdkaxehncg57yzarvbad.onion',
+	'http://ravfxexpucy437tc4slicbf5atir2akrcqanog3tgsc3mcdfmrqq.b32.i2p',
 	'raw-tx+https://moneroblocks.info',
 	'node+https://xmr-node.cakewallet.com:18081',
 	'node+https://node.monero.fail',
@@ -68,11 +70,21 @@ const wizardEnv = (list: readonly string[]) =>
 	].join('\n');
 
 describe('planXmrExplorerList', () => {
-	it('a pre-v1.20 list: the three dead explorers go, the six newer sources come, the two live ones stay', () => {
+	it('a pre-v1.20 list: the three dead explorers go, the seven newer sources come, the two live ones stay', () => {
 		const p = planXmrExplorerList(PRE_V120_LIST, new Set());
 		expect(p.removed).toEqual(RETIRED_XMR_FEE_EXPLORERS);
 		expect(p.added).toEqual(NEW_SOURCES);
 		expect(p.next).toEqual(['https://xmrchain.net', 'https://moneroexplorer.org', ...NEW_SOURCES]);
+	});
+	it('v1.21.15 on a node healed before: only xmr.mx on I2P is added', () => {
+		const before = DEFAULT_XMR_FEE_EXPLORERS.filter((u) => !u.includes('.b32.i2p'));
+		const offered = new Set(before.map((u) => u.toLowerCase()));
+		const p = planXmrExplorerList(before, offered);
+		expect(p.added).toEqual([
+			'http://ravfxexpucy437tc4slicbf5atir2akrcqanog3tgsc3mcdfmrqq.b32.i2p'
+		]);
+		expect(p.next).toEqual([...before, ...p.added]);
+		expect(planXmrExplorerList(p.next ?? [], new Set([...offered, ...p.added])).next).toBeNull();
 	});
 	it('the current default list: nothing to do', () => {
 		expect(planXmrExplorerList(DEFAULT_XMR_FEE_EXPLORERS, new Set()).next).toBeNull();
@@ -114,7 +126,7 @@ describe('healXmrExplorerList on a box', () => {
 		);
 		expect(statSync(f).mode & 0o777).toBe(0o600);
 		expect(logs[0]).toMatch(/^Monero fee checks: added http:\/\/xmrexplr/);
-		expect(JSON.parse(readFileSync(offeredStatePath(root), 'utf8')).offered).toHaveLength(8);
+		expect(JSON.parse(readFileSync(offeredStatePath(root), 'utf8')).offered).toHaveLength(9);
 		expect(healXmrExplorerList(root)).toEqual({ kind: 'already' });
 	});
 	it('respects a later removal by the operator on the next upgrade', () => {

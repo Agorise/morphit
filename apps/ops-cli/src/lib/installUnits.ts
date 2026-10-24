@@ -97,3 +97,59 @@ export function installAndEnableUnits(opts: {
 				detail: `${opts.timer} is ${enabled ? 'enabled' : 'not enabled'} and ${active ? 'active' : 'not active'}`
 			};
 }
+
+export interface RemoveUnitsResult {
+	readonly ok: boolean;
+	/** Unit files removed this run (empty: none was installed). */
+	readonly removed: readonly string[];
+	readonly detail?: string;
+}
+
+/**
+ * The reverse (v1.21.15): stop and disable `timer`, then remove `units` from
+ * `systemdDir`, VERIFIED (each file must be gone). Only regular files are
+ * removed; nothing installed → nothing done. Never throws.
+ */
+export function disableAndRemoveUnits(opts: {
+	readonly systemdDir: string;
+	readonly units: readonly string[];
+	readonly timer: string;
+	readonly noSystemd?: boolean;
+	readonly exec?: UnitsExec;
+}): RemoveUnitsResult {
+	const exec = opts.exec ?? realExec;
+	const present = opts.units.filter((u) => {
+		try {
+			return lstatSync(join(opts.systemdDir, u)).isFile();
+		} catch {
+			return false;
+		}
+	});
+	if (present.length === 0) return { ok: true, removed: [] };
+	if (!opts.noSystemd) exec('systemctl', ['disable', '--now', opts.timer]);
+	const removed: string[] = [];
+	for (const u of present) {
+		try {
+			rmSync(join(opts.systemdDir, u));
+			removed.push(u);
+		} catch (err) {
+			return {
+				ok: false,
+				removed,
+				detail: `${join(opts.systemdDir, u)}: ${err instanceof Error ? err.message : String(err)}`
+			};
+		}
+	}
+	if (!opts.noSystemd) exec('systemctl', ['daemon-reload']);
+	const left = opts.units.filter((u) => {
+		try {
+			lstatSync(join(opts.systemdDir, u));
+			return true;
+		} catch {
+			return false;
+		}
+	});
+	return left.length === 0
+		? { ok: true, removed }
+		: { ok: false, removed, detail: `still there: ${left.join(', ')}` };
+}

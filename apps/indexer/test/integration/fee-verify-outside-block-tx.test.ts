@@ -53,7 +53,16 @@ const explorer = (async (url: string | URL) => {
 			{ status: 200, headers: { 'content-type': 'application/json' } }
 		);
 	}
-	return new Response('not found', { status: 404 });
+	// What the explorers answer for a transaction they do not have: electrs
+	// (Bitcoin) a plain-text 404; onion-monero-blockchain-explorer (Monero) a
+	// JSON "fail" (page.h json_outputs: "Cant find tx hash").
+	if (String(url).includes('/api/outputs') || String(url).includes('/api/transaction/')) {
+		return new Response(JSON.stringify({ status: 'fail', data: { title: 'Cant find tx hash' } }), {
+			status: 200,
+			headers: { 'content-type': 'application/json' }
+		});
+	}
+	return new Response('Transaction not found', { status: 404 });
 }) as typeof fetch;
 
 const verifiers = {

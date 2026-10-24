@@ -194,6 +194,12 @@ export interface PeerPriceMonitorConfig {
 	readonly alertCooldownHours?: number;
 	readonly minObservations?: number;
 	readonly fetchTimeoutMs?: number;
+	/** v1.21.15: whether a sustained disagreement is ALERTED (default true).
+	 *  A clearnet node now samples peers whatever
+	 *  MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED says — the samples are the
+	 *  federated price it falls back to when every clearnet price source is
+	 *  down — and that switch keeps deciding only the alert. */
+	readonly alerts?: boolean;
 	/** When true (hidden-only node), fetch each peer's receipt over its on-chain
 	 *  hidden addresses — I2P, Tor or Lokinet — instead of its clearnet origin,
 	 *  which a hidden-only node never contacts. Peers that publish no hidden
@@ -202,6 +208,9 @@ export interface PeerPriceMonitorConfig {
 	/** The transport for a hidden address. Defaults to the proxies this
 	 *  indexer is configured with; injected by tests. */
 	readonly hiddenFetch?: <T>(url: string, timeoutMs: number) => Promise<T>;
+	/** The transport for a peer's clearnet origin. Defaults to the SSRF-hardened
+	 *  `fetchJson`; injected by tests. */
+	readonly clearnetFetch?: <T>(url: string, timeoutMs: number) => Promise<T>;
 }
 
 /** Result of one sample cycle — observation count + comparison
@@ -225,7 +234,12 @@ const PRICE_NETWORK_RANK: Readonly<Record<string, number>> = { i2p: 0, tor: 1, l
 /**
  * Every base URL a peer's price receipt may be fetched from, in the order to try
  * them. PURE.
- *   - clearnet node → the peer's clearnet `origin`, alone (unchanged).
+ *   - clearnet node → the peer's clearnet `origin` first; then (v1.21.15) its
+ *     published Tor and I2P addresses, I2P first, tried only when the origin
+ *     gave no receipt — the owner's rule: a clearnet source that does not
+ *     answer is tried on its hidden addresses. Never a `.loki` one here: a
+ *     clearnet node runs no Lokinet, and resolving the name would hand it to
+ *     the ISP's resolver.
  *   - hidden-only node → EVERY hidden address the peer published on chain —
  *     `.b32.i2p`, a named `.i2p`, `.onion`, `.loki` — as `http://<host>`, I2P
  *     first. Empty when it published none: a hidden-only node then skips it and
@@ -242,16 +256,41 @@ export function peerReceiptBases(
 	regAltNetworks: unknown,
 	hiddenOnly: boolean
 ): string[] {
-	if (!hiddenOnly) return [origin];
-	if (regAltNetworks === null || typeof regAltNetworks !== 'object') return [];
-	const hosts = publishedHiddenHosts(
-		regAltNetworks as Parameters<typeof publishedHiddenHosts>[0]
-	);
-	const rank = (h: string): number => PRICE_NETWORK_RANK[hiddenHostNetworkOf(h) ?? ''] ?? 9;
-	return hosts
-		.map((h, i) => ({ h, i }))
-		.sort((a, b) => rank(a.h) - rank(b.h) || a.i - b.i)
-		.map(({ h }) => `http://${h}`);
+	const hidden = (): string[] => {
+		if (regAltNetworks === null || typeof regAltNetworks !== 'object') return [];
+		const hosts = publishedHiddenHosts(
+			regAltNetworks as Parameters<typeof publishedHiddenHosts>[0]
+		).filter((h) => hiddenOnly || hiddenHostNetworkOf(h) === 'tor' || hiddenHostNetworkOf(h) === 'i2p');
+		const rank = (h: string): number => PRICE_NETWORK_RANK[hiddenHostNetworkOf(h) ?? ''] ?? 9;
+		return hosts
+			.map((h, i) => ({ h, i }))
+			.sort((a, b) => rank(a.h) - rank(b.h) || a.i - b.i)
+			.map(({ h }) => `http://${h}`);
+	};
+	if (hiddenOnly) return hidden();
+	// A clearnet node's first try is the peer's web address — unless that is
+	// itself a hidden name (an older registration). Then it is a Tor / I2P
+	// address like the others (asked through Tor / i2pd), or, for a .loki or a
+	// malformed hidden name, not asked at all: it must never reach the system
+	// resolver. (v1.21.15 review)
+	const originNet = hiddenNetworkOfBase(origin);
+	const first = originNet === 'loki' || originNet === 'other' ? [] : [origin];
+	return [...new Set([...first, ...hidden()])];
+}
+
+/** The hidden network a base URL's host is on: 'tor' / 'i2p' / 'loki', 'other'
+ *  for any other .onion / .i2p / .loki name (e.g. a malformed onion), or null
+ *  for a clearnet host. */
+export function hiddenNetworkOfBase(base: string): 'tor' | 'i2p' | 'loki' | 'other' | null {
+	let host: string;
+	try {
+		host = new URL(base).hostname.toLowerCase().replace(/\.$/, '');
+	} catch {
+		return 'other';
+	}
+	const net = hiddenHostNetworkOf(host);
+	if (net !== null) return net;
+	return /\.(onion|i2p|loki)$/.test(host) ? 'other' : null;
 }
 
 /** The first base {@link peerReceiptBases} would try, or null. Kept for callers
@@ -417,7 +456,8 @@ export async function runPeerPriceSampleCycle(
 		fetchTimeoutMs: fetchTimeoutMsRaw = PEER_FETCH_TIMEOUT_MS,
 		hiddenOnly = false,
 		hiddenFetch = <T>(url: string, timeoutMs: number): Promise<T> =>
-			fetchJsonViaHiddenService<T>(url, hiddenServiceProxyConfigFromEnv(), timeoutMs)
+			fetchJsonViaHiddenService<T>(url, hiddenServiceProxyConfigFromEnv(), timeoutMs),
+		clearnetFetch = <T>(url: string): Promise<T> => fetchJson<T>(url)
 	} = cfg;
 
 	// A hidden-only node reaches every peer over Tor/I2P (see hiddenOnly above),
@@ -430,9 +470,14 @@ export async function runPeerPriceSampleCycle(
 	//
 	// This is the FIFTH layer of the same flat-timeout mistake found in one
 	// session (dispatcher, indexer client, RPC pool, relay client, this).
-	const fetchTimeoutMs = hiddenOnly
-		? Math.max(fetchTimeoutMsRaw, Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000))
-		: fetchTimeoutMsRaw;
+	// v1.21.15: a value that is not a positive number ("60s", empty) falls back
+	// to 60 s — as NaN, every hidden fetch would time out at once.
+	const hiddenEnv = Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
+	const hiddenTimeoutMs = Math.max(
+		fetchTimeoutMsRaw,
+		Number.isFinite(hiddenEnv) && hiddenEnv > 0 ? hiddenEnv : 60_000
+	);
+	const fetchTimeoutMs = hiddenOnly ? hiddenTimeoutMs : fetchTimeoutMsRaw;
 
 	// Step 1: discover peers from federation directory.  Only query
 	// peers that the federation prober has vetted as good/quiet
@@ -464,11 +509,18 @@ export async function runPeerPriceSampleCycle(
 	/** One peer's receipt: its addresses in order, first answer wins. A peer on
 	 *  two networks is still ONE sample — the median counts instances, and a
 	 *  peer must not weigh double for having published twice. */
-	const receiptFrom = async (t: { bases: string[] }): Promise<PeerReceipt | null> => {
+	const receiptFrom = async (t: {
+		origin: string;
+		bases: string[];
+	}): Promise<PeerReceipt | null> => {
 		for (const base of t.bases) {
-			const r = hiddenOnly
-				? await fetchPeerReceipt(base, asset, denominationFiat, fetchTimeoutMs, hiddenFetch)
-				: await fetchPeerReceipt(base, asset, denominationFiat, fetchTimeoutMs);
+			// Chosen by the address itself: a clearnet host on a clearnet node goes
+			// out directly; every hidden one through Tor / i2pd — including a
+			// peer whose registered origin is a hidden name.
+			const r =
+				!hiddenOnly && hiddenNetworkOfBase(base) === null
+					? await fetchPeerReceipt(base, asset, denominationFiat, fetchTimeoutMs, clearnetFetch)
+					: await fetchPeerReceipt(base, asset, denominationFiat, hiddenTimeoutMs, hiddenFetch);
 			if (r !== null) return r;
 		}
 		return null;
@@ -611,13 +663,15 @@ export async function runPeerPriceSampleCycle(
 	}
 
 	// Step 7: fire alert if criteria met.
-	const fireAlert = shouldFireAlert(
-		state.aboveThresholdSince,
-		now,
-		state.lastAlertFiredAt,
-		sustainedHours,
-		alertCooldownHours
-	);
+	const fireAlert =
+		cfg.alerts !== false &&
+		shouldFireAlert(
+			state.aboveThresholdSince,
+			now,
+			state.lastAlertFiredAt,
+			sustainedHours,
+			alertCooldownHours
+		);
 	if (fireAlert) {
 		log.warn('peer_price_disagreement_alert', {
 			asset,
@@ -671,9 +725,14 @@ export function startPeerPriceMonitor(
 ): () => void {
 	const intervalMs = intervalMinutes * 60 * 1000;
 	let running = true;
+	// v1.21.15: one cycle at a time. Over Tor a cycle can outlast the interval
+	// (a peer per address, 60 s each); a second one started meanwhile would
+	// sample the same peers again and record each twice.
+	let busy = false;
 
 	async function tick(): Promise<void> {
-		if (!running) return;
+		if (!running || busy) return;
+		busy = true;
 		try {
 			const result = await runPeerPriceSampleCycle(cfg);
 			// surface the latest cycle result so /v1/health can
@@ -686,6 +745,8 @@ export function startPeerPriceMonitor(
 			await pruneOldObservations(cfg.db);
 		} catch (err) {
 			log.error('peer_price_sample_cycle_failed', { err: String(err) });
+		} finally {
+			busy = false;
 		}
 	}
 

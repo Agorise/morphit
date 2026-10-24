@@ -326,8 +326,16 @@ const listOf = (...names: string[]): string[] | null => {
 	const parts = names.map((n) => arrayCount(FEE_SOURCES, n));
 	return parts.every((p) => p !== null) ? parts.flatMap((p) => p!) : null;
 };
-const XMR = listOf('DEFAULT_XMR_ONION_EXPLORERS', 'DEFAULT_XMR_CLEARNET_EXPLORERS');
-const BTC_FEE = listOf('DEFAULT_BTC_ONION_EXPLORERS', 'DEFAULT_BTC_CLEARNET_EXPLORERS');
+const XMR = listOf(
+	'DEFAULT_XMR_ONION_EXPLORERS',
+	'DEFAULT_XMR_I2P_EXPLORERS',
+	'DEFAULT_XMR_CLEARNET_EXPLORERS'
+);
+const BTC_FEE = listOf(
+	'DEFAULT_BTC_ONION_EXPLORERS',
+	'DEFAULT_BTC_I2P_EXPLORERS',
+	'DEFAULT_BTC_CLEARNET_EXPLORERS'
+);
 const PRICENODES = listOf('DEFAULT_PRICENODES');
 const ops = read('docs/OPERATIONS.md');
 claimEquals(

@@ -37,9 +37,50 @@ import { isHiddenSourceUrl } from '@morphit/operator-config/fee-sources';
  *  would hand its name to the system resolver (a leak, and it cannot resolve
  *  anyway). The indexer reaches it over Tor / I2P and probes it itself. */
 const hiddenSkip = (url: string): ProbeStatus | null =>
-	isHiddenSourceUrl(url) ? { kind: 'hidden_not_probed' } : null;
+	isHiddenSourceUrl(url) || hasHiddenNetworkSuffix(url) ? { kind: 'hidden_not_probed' } : null;
+
+/** v1.21.15: ANY host under .onion / .i2p / .loki (a trailing dot ignored),
+ *  also one that is not a valid v3 address — never resolved by this box. */
+function hasHiddenNetworkSuffix(url: string): boolean {
+	try {
+		const h = new URL(url.trim().replace(/^(raw-tx|node)\+/, '')).hostname
+			.toLowerCase()
+			.replace(/\.$/, '');
+		return /\.(onion|i2p|loki)$/.test(h);
+	} catch {
+		return false;
+	}
+}
 
 const PROBE_TIMEOUT_MS = 5_000;
+
+/**
+ * fetch(), following redirects BY HAND so a clearnet explorer that redirects
+ * to a .onion / .i2p / .loki address never makes this box resolve that name
+ * (v1.21.15 review): such a redirect is not followed, and its 3xx answer is
+ * what the caller sees. Up to 5 redirects, as a browser would.
+ */
+async function fetchNoHiddenRedirect(
+	fetchImpl: typeof fetch,
+	url: string,
+	init: RequestInit
+): Promise<Response> {
+	let current = url;
+	for (let hop = 0; hop < 5; hop++) {
+		const res = await fetchImpl(current, { ...init, redirect: 'manual' });
+		const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+		if (location === null) return res;
+		let next: string;
+		try {
+			next = new URL(location, current).toString();
+		} catch {
+			return res;
+		}
+		if (hasHiddenNetworkSuffix(next) || isHiddenSourceUrl(next)) return res;
+		current = next;
+	}
+	return fetchImpl(current, { ...init, redirect: 'manual' });
+}
 
 /** Probe a BTC explorer URL.  Expects the Esplora-style API
  *  surface used by blockstream.info / mempool.space (`/api`).
@@ -60,7 +101,7 @@ export async function probeBitcoinExplorer(
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), PROBE_TIMEOUT_MS);
 	try {
-		const res = await fetchImpl(url, {
+		const res = await fetchNoHiddenRedirect(fetchImpl, url, {
 			method: 'GET',
 			headers: { accept: 'text/plain, application/json' },
 			signal: ac.signal
@@ -112,14 +153,15 @@ export async function probeMoneroExplorer(
 ): Promise<ProbeStatus> {
 	const skip = hiddenSkip(baseUrl);
 	if (skip !== null) return skip;
-	if (baseUrl.startsWith('raw-tx+')) return probeRawTxMoneroExplorer(baseUrl.slice('raw-tx+'.length), fetchImpl);
+	if (baseUrl.startsWith('raw-tx+'))
+		return probeRawTxMoneroExplorer(baseUrl.slice('raw-tx+'.length), fetchImpl);
 	if (baseUrl.startsWith('node+')) return probeMoneroNode(baseUrl.slice('node+'.length), fetchImpl);
 	const url = `${baseUrl.replace(/\/+$/, '')}/api/networkinfo`;
 	const started = Date.now();
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), PROBE_TIMEOUT_MS);
 	try {
-		const res = await fetchImpl(url, {
+		const res = await fetchNoHiddenRedirect(fetchImpl, url, {
 			method: 'GET',
 			headers: { accept: 'application/json' },
 			signal: ac.signal
@@ -135,17 +177,11 @@ export async function probeMoneroExplorer(
 		const body = (await res.json()) as unknown;
 		// Expected shape:
 		//   { status: "success", data: { height: <number>, ... } }
-		if (
-			typeof body !== 'object' ||
-			body === null ||
-			!('status' in body) ||
-			!('data' in body)
-		) {
+		if (typeof body !== 'object' || body === null || !('status' in body) || !('data' in body)) {
 			return {
 				kind: 'wrong_shape',
 				latencyMs,
-				reason:
-					'response missing status/data keys (not onion-monero-blockchain-explorer API?)'
+				reason: 'response missing status/data keys (not onion-monero-blockchain-explorer API?)'
 			};
 		}
 		const data = (body as { data: unknown }).data;
@@ -172,23 +208,38 @@ export async function probeMoneroExplorer(
 
 /** (v1.20.0) A raw-tx Monero explorer (moneroblocks.info API): `/api/get_stats`
  *  must answer JSON with a numeric `height`. */
-async function probeRawTxMoneroExplorer(baseUrl: string, fetchImpl: typeof fetch): Promise<ProbeStatus> {
+async function probeRawTxMoneroExplorer(
+	baseUrl: string,
+	fetchImpl: typeof fetch
+): Promise<ProbeStatus> {
 	const url = `${baseUrl.replace(/\/+$/, '')}/api/get_stats`;
 	const started = Date.now();
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), PROBE_TIMEOUT_MS);
 	try {
-		const res = await fetchImpl(url, { method: 'GET', headers: { accept: 'application/json' }, signal: ac.signal });
+		const res = await fetchNoHiddenRedirect(fetchImpl, url, {
+			method: 'GET',
+			headers: { accept: 'application/json' },
+			signal: ac.signal
+		});
 		const latencyMs = Date.now() - started;
 		if (!res.ok) return { kind: 'wrong_shape', latencyMs, reason: `HTTP ${res.status}` };
 		const body = (await res.json()) as { height?: unknown } | null;
 		if (typeof body?.height !== 'number') {
-			return { kind: 'wrong_shape', latencyMs, reason: 'no numeric height from /api/get_stats (not the moneroblocks.info API?)' };
+			return {
+				kind: 'wrong_shape',
+				latencyMs,
+				reason: 'no numeric height from /api/get_stats (not the moneroblocks.info API?)'
+			};
 		}
 		return { kind: 'ok', latencyMs };
 	} catch (err) {
 		const reason =
-			err instanceof Error ? (err.name === 'AbortError' ? `timeout after ${PROBE_TIMEOUT_MS}ms` : err.message) : String(err);
+			err instanceof Error
+				? err.name === 'AbortError'
+					? `timeout after ${PROBE_TIMEOUT_MS}ms`
+					: err.message
+				: String(err);
 		return { kind: 'unreachable', reason };
 	} finally {
 		clearTimeout(timer);
@@ -205,12 +256,24 @@ async function probeMoneroNode(baseUrl: string, fetchImpl: typeof fetch): Promis
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), PROBE_TIMEOUT_MS);
 	try {
-		const res = await fetchImpl(url, { method: 'GET', headers: { accept: 'application/json' }, signal: ac.signal });
+		const res = await fetchNoHiddenRedirect(fetchImpl, url, {
+			method: 'GET',
+			headers: { accept: 'application/json' },
+			signal: ac.signal
+		});
 		const latencyMs = Date.now() - started;
 		if (!res.ok) return { kind: 'wrong_shape', latencyMs, reason: `HTTP ${res.status}` };
-		const body = (await res.json()) as { height?: unknown; status?: unknown; untrusted?: unknown } | null;
+		const body = (await res.json()) as {
+			height?: unknown;
+			status?: unknown;
+			untrusted?: unknown;
+		} | null;
 		if (typeof body?.height !== 'number' || body.status !== 'OK') {
-			return { kind: 'wrong_shape', latencyMs, reason: 'no height / status OK from /get_height (not a Monero node?)' };
+			return {
+				kind: 'wrong_shape',
+				latencyMs,
+				reason: 'no height / status OK from /get_height (not a Monero node?)'
+			};
 		}
 		if (body.untrusted === true) {
 			return { kind: 'wrong_shape', latencyMs, reason: 'the node is still syncing (untrusted)' };
@@ -218,7 +281,11 @@ async function probeMoneroNode(baseUrl: string, fetchImpl: typeof fetch): Promis
 		return { kind: 'ok', latencyMs };
 	} catch (err) {
 		const reason =
-			err instanceof Error ? (err.name === 'AbortError' ? `timeout after ${PROBE_TIMEOUT_MS}ms` : err.message) : String(err);
+			err instanceof Error
+				? err.name === 'AbortError'
+					? `timeout after ${PROBE_TIMEOUT_MS}ms`
+					: err.message
+				: String(err);
 		return { kind: 'unreachable', reason };
 	} finally {
 		clearTimeout(timer);
@@ -238,6 +305,10 @@ export async function probeChatLinkExplorer(
 	urlTemplate: string,
 	fetchImpl: typeof fetch = fetch
 ): Promise<ProbeStatus> {
+	// v1.21.15: an onion / I2P explorer link is never probed from here (a plain
+	// fetch would hand its name to the system resolver), as for fee sources.
+	const skip = hiddenSkip(urlTemplate.replace(/\{txid\}/g, '0'));
+	if (skip !== null) return skip;
 	let probeUrl: string;
 	try {
 		const tplWithSample = urlTemplate.replace(
@@ -253,7 +324,7 @@ export async function probeChatLinkExplorer(
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), PROBE_TIMEOUT_MS);
 	try {
-		const res = await fetchImpl(probeUrl, {
+		const res = await fetchNoHiddenRedirect(fetchImpl, probeUrl, {
 			method: 'HEAD',
 			signal: ac.signal
 		});

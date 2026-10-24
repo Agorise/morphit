@@ -6,8 +6,8 @@
  * /opt/morphit/morphit.env with the defaults of its day — blockstream.info and
  * mempool.space only — so such a node would keep asking clearnet websites and
  * never the onion explorers the indexer now asks first, over Tor. This adds
- * each current default (the four onion explorers; the two clearnet ones stay
- * as the fallback) the same way the Monero list heal does
+ * each current default (the onion explorers and, from v1.21.15, the I2P one;
+ * the two clearnet ones stay as the fallback) the same way the Monero list heal does
  * (lib/feeExplorerListHeal.ts): once, keeping every entry the operator has and
  * its order, never re-adding a default the operator removed after it was
  * offered, and never touching an explicitly empty list (BTC fees off). An

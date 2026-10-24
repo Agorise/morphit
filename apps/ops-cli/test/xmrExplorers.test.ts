@@ -13,11 +13,12 @@ import { probeBitcoinExplorer, probeMoneroExplorer } from '../src/init/explorerH
 import { DEFAULT_XMR_EXPLORERS as INDEXER_DEFAULT_XMR_EXPLORERS } from '../../indexer/src/config/xmrExplorers.ts';
 
 describe('XMR fee explorers in the wizard', () => {
-	it("defaults to the indexer's list (v1.20.3: two onion explorers, then three explorers + three public nodes)", () => {
+	it("defaults to the indexer's list (v1.20.3: two onion explorers; v1.21.15: xmr.mx on I2P; then three explorers + three public nodes)", () => {
 		expect(DEFAULT_XMR_FEE_EXPLORERS).toEqual([...INDEXER_DEFAULT_XMR_EXPLORERS]);
 		expect(DEFAULT_XMR_FEE_EXPLORERS).toEqual([
 			'http://xmrexplrthytnunr4jasr3vnjc6jo5idsyxzv74a7ep7dy7lwcv2eoyd.onion',
 			'http://nklwsomtuok6dhqqecp3a26xzgokfgmeuaplcdkaxehncg57yzarvbad.onion',
+			'http://ravfxexpucy437tc4slicbf5atir2akrcqanog3tgsc3mcdfmrqq.b32.i2p',
 			'https://xmrchain.net',
 			'https://moneroexplorer.org',
 			'raw-tx+https://moneroblocks.info',

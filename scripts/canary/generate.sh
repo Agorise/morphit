@@ -27,17 +27,31 @@
 #                                    stall the canary.
 #   $MORPHIT_CANARY_BTC_EXPLORER   — OPTIONAL. Pin ONE Bitcoin Esplora API base
 #                                    (e.g. your own bitcoind/Esplora) for the
-#                                    BTC freshness proof. Left unset, the fetch
-#                                    fails over across the canonical
-#                                    DEFAULT_BTC_EXPLORER_APIS list; if EVERY
-#                                    explorer is unreachable the BTC head
-#                                    degrades gracefully (the Blurt head is the
-#                                    primary proof) rather than aborting.
+#                                    BTC freshness proof — that one only (no
+#                                    other explorer, hidden or not, is then
+#                                    asked). Left unset, the fetch fails over
+#                                    across the canonical clearnet list
+#                                    (DEFAULT_CANARY_BTC_SOURCES), then the
+#                                    onion and I2P explorers through Tor / i2pd
+#                                    (two must agree); if EVERY explorer is
+#                                    unreachable the BTC head degrades
+#                                    gracefully (the Blurt head is the primary
+#                                    proof) rather than aborting.
 #   $MORPHIT_CANARY_NEWS_RSS       — RSS feed URL for news entropy
 #                                    (default: https://cointelegraph.com/rss,
 #                                    operator should pick a
 #                                    high-frequency public feed
 #                                    they trust).
+#   $MORPHIT_CANARY_ONION_NEWS_RSS — OPTIONAL (v1.21.15). Space-separated onion
+#                                    RSS feeds asked through Tor when every
+#                                    clearnet feed fails (first on a tor-only
+#                                    node). Default: the BBC's onion feed.
+#   $MORPHIT_CANARY_TOR_ONLY       — OPTIONAL. 1/0; unset, derived from a
+#                                    .onion / .i2p instance origin.
+#   $MORPHIT_CANARY_TOR_SOCKS      — OPTIONAL. Tor's SocksPort for every hidden
+#                                    source (default 127.0.0.1:9050).
+#   $MORPHIT_CANARY_I2P_HTTP_PROXY — OPTIONAL (v1.21.15). i2pd's HTTP proxy for
+#                                    the I2P sources (default 127.0.0.1:4444).
 #
 # Cron suggestion (weekly, Sundays at 03:14 UTC):
 #   14 3 * * 0  cd /opt/morphit && bash scripts/canary/generate.sh \
@@ -189,17 +203,35 @@ BLURT_HEAD_HEIGHT="$(printf '%s' "$BLURT_HEAD_LINE" | cut -f1)"
 BLURT_HEAD_HASH="$(printf '%s' "$BLURT_HEAD_LINE" | cut -f2)"
 BLURT_HEAD_TIMESTAMP="$(printf '%s' "$BLURT_HEAD_LINE" | cut -f3)Z"
 
-if [ -z "$BLURT_HEAD_HEIGHT" ] || [ "$BLURT_HEAD_HEIGHT" = "null" ]; then
-	echo "canary: Blurt RPC returned no head_block_number" >&2
+# The helper checks these already; checked again here because they go into a
+# signed statement (v1.21.15): a height in digits, a 40-hex block id whose
+# first 8 hex digits are that height (how Blurt builds a block id), and a chain
+# time in its own format.
+case "$BLURT_HEAD_HEIGHT" in
+	'' | *[!0-9]*)
+		echo "canary: Blurt RPC returned no usable head_block_number" >&2
+		exit 1
+		;;
+esac
+if ! printf '%s' "$BLURT_HEAD_HASH" | grep -Eq '^[0-9a-f]{40}$' ||
+	[ "$((16#${BLURT_HEAD_HASH:0:8}))" != "$((10#$BLURT_HEAD_HEIGHT))" ]; then
+	echo "canary: Blurt RPC returned a block id that does not belong to block $BLURT_HEAD_HEIGHT" >&2
+	exit 1
+fi
+if ! printf '%s' "$BLURT_HEAD_TIMESTAMP" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'; then
+	echo "canary: Blurt RPC returned no usable chain time" >&2
 	exit 1
 fi
 
 # ─── Freshness proof: Bitcoin chain head (SECONDARY) ─────────────
 # Fetched through the shared explorer rotator (scripts/canary/fetch-btc-head.ts):
-# it hops across the canonical DEFAULT_BTC_EXPLORER_APIS list (Esplora bases)
+# it hops across the canonical clearnet list (DEFAULT_CANARY_BTC_SOURCES)
 # until one answers, so a single dead or region-blocked explorer no longer
 # stalls the canary — the same fix the Blurt head got. Pin one base
 # with MORPHIT_CANARY_BTC_EXPLORER (e.g. your own bitcoind/Esplora).
+# v1.21.15: the onion and I2P explorers too, through Tor / i2pd only — first on
+# a Tor-only node, and on a clearnet node when every clearnet explorer failed;
+# all at once, and the first head two of them agree on is used.
 #
 # The BTC head is a SECONDARY freshness proof — the Blurt head above already
 # proves the canary is fresh — so if EVERY explorer is unreachable we DEGRADE
@@ -209,9 +241,12 @@ fi
 # before this, the canary pinned blockstream.info alone with a fatal
 # abort, and a single timeout there killed the whole weekly refresh.
 BTC_HEAD_LINE="$("$RUN_TSX" "$REPO_ROOT/scripts/canary/fetch-btc-head.ts" || true)"
-if [ -n "$BTC_HEAD_LINE" ]; then
-	BTC_HEAD_HEIGHT="$(printf '%s' "$BTC_HEAD_LINE" | cut -f1)"
-	BTC_HEAD_HASH="$(printf '%s' "$BTC_HEAD_LINE" | cut -f2)"
+BTC_HEAD_HEIGHT="$(printf '%s' "$BTC_HEAD_LINE" | cut -f1)"
+BTC_HEAD_HASH="$(printf '%s' "$BTC_HEAD_LINE" | cut -f2)"
+# Checked again before it is signed (v1.21.15): digits, and a 64-hex hash.
+if printf '%s' "$BTC_HEAD_HEIGHT" | grep -Eq '^[0-9]+$' &&
+	printf '%s' "$BTC_HEAD_HASH" | grep -Eq '^[0-9a-f]{64}$'; then
+	:
 else
 	echo "canary: all Bitcoin explorers unreachable — degrading the BTC head (the Blurt chain head above is the primary freshness proof)" >&2
 	BTC_HEAD_HEIGHT="(unavailable at signing time — every configured Bitcoin explorer was unreachable; the Blurt chain head above is the primary freshness proof)"
@@ -234,22 +269,12 @@ NEWS_WON_SRC=''
 # public feeds across different organisations and countries: BBC, The
 # Guardian, NPR, Al Jazeera, and the New York Times. Spread this wide so a
 # single provider outage or a Cloudflare 403 cannot drop the news line.
-for feed in "$NEWS_RSS" \
-	"https://feeds.bbci.co.uk/news/rss.xml" \
-	"https://www.theguardian.com/world/rss" \
-	"https://feeds.npr.org/1001/rss.xml" \
-	"https://www.aljazeera.com/xml/rss/all.xml" \
-	"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"; do
-	echo "canary: fetching news headline from $feed..." >&2
-	# `|| true` keeps a failed/blocked fetch from tripping `set -e`. On tor-only
-	# CURL_PROXY_ARGS pins the fetch to Tor SOCKS (socks5h → proxy-side DNS); on
-	# clearnet it is empty, so this line is byte-identical to before.
-	NEWS_XML="$(curl -fsSL "${CURL_PROXY_ARGS[@]}" --max-time 15 -A "$NEWS_UA" "$feed" || true)"
-	[ -n "$NEWS_XML" ] || continue
-	# Extract the first <title> after <item> - robust against varying RSS
-	# layouts. Strip CDATA wrappers and HTML entities. Trailing `|| true`
-	# lets a feed with no <item>/<title> match fall through, not abort.
-	NEWS_HEADLINE="$(echo "$NEWS_XML" \
+# One feed's first headline (empty when it has none). Extract the first
+# <title> after <item> - robust against varying RSS layouts. Strip CDATA
+# wrappers and HTML entities. Trailing `|| true` lets a feed with no
+# <item>/<title> match fall through, not abort.
+news_headline_of() {
+	news_clean "$(echo "$1" \
 		| awk 'BEGIN{RS="<item>"} NR==2{print}' \
 		| grep -o '<title>[^<]*</title>' \
 		| head -1 \
@@ -257,10 +282,121 @@ for feed in "$NEWS_RSS" \
 		      -e 's|<!\[CDATA\[||g' -e 's|\]\]>||g' \
 		      -e 's|&amp;|\&|g' -e 's|&lt;|<|g' -e 's|&gt;|>|g' -e 's|&quot;|"|g' \
 		      -e 's|&apos;|'\''|g' || true)"
-	[ -n "$NEWS_HEADLINE" ] || continue
-	NEWS_WON_SRC="$feed"
-	break
-done
+}
+
+# A headline is text from someone else's server going into a SIGNED file
+# (v1.21.15): keep it to one line of plain printable ASCII (the canary is pure
+# ASCII; accented letters and curly quotes are transliterated where iconv can),
+# no backslash, braces made parentheses (so it can never read as a
+# {{PLACEHOLDER}}), spaces collapsed, at most 200 characters. One that holds
+# "-----" (it could read as a PGP armor line) is not used at all: empty.
+news_clean() {
+	local h
+	h="$(printf '%s' "$1" | tr '\t\r\n' '   ')"
+	if command -v iconv >/dev/null 2>&1; then
+		# -c leaves out what it cannot convert (and then exits 1: not an error).
+		local t
+		t="$(printf '%s' "$h" | LC_ALL=C.UTF-8 iconv -c -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null)" || true
+		if [ -n "$t" ]; then h="$t"; fi
+	fi
+	h="$(printf '%s' "$h" | LC_ALL=C tr -cd '\040-\176' | LC_ALL=C tr -d '\\' | LC_ALL=C tr '{}' '()' \
+		| sed -e 's/  */ /g' -e 's/^ //' -e 's/ $//')"
+	h="${h:0:200}"
+	case "$h" in *-----*) h='' ;; esac
+	printf '%s' "$h"
+}
+
+# The operator's feed and the clearnet ones, in order, first headline wins.
+news_from_clearnet_feeds() {
+	for feed in "$NEWS_RSS" \
+		"https://feeds.bbci.co.uk/news/rss.xml" \
+		"https://www.theguardian.com/world/rss" \
+		"https://feeds.npr.org/1001/rss.xml" \
+		"https://www.aljazeera.com/xml/rss/all.xml" \
+		"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"; do
+		echo "canary: fetching news headline from $feed..." >&2
+		# `|| true` keeps a failed/blocked fetch from tripping `set -e`. On tor-only
+		# CURL_PROXY_ARGS pins the fetch to Tor SOCKS (socks5h → proxy-side DNS); on
+		# clearnet it is empty, so this line is byte-identical to before.
+		NEWS_XML="$(curl -fsSL "${CURL_PROXY_ARGS[@]}" --max-time 15 -A "$NEWS_UA" "$feed" || true)"
+		[ -n "$NEWS_XML" ] || continue
+		NEWS_HEADLINE="$(news_headline_of "$NEWS_XML")"
+		[ -n "$NEWS_HEADLINE" ] || continue
+		NEWS_WON_SRC="$feed"
+		return 0
+	done
+	return 1
+}
+
+# v1.21.15: the same newsrooms' ONION feeds, asked ALL AT ONCE through the
+# box's Tor SOCKS proxy (socks5h: the name is resolved inside Tor; one circuit
+# each), the fastest one with a headline wins. Tried FIRST on a tor-only node
+# and, on a clearnet node, only when every clearnet feed above failed — the
+# owner's rule: when clearnet does not answer, use the hidden sources. Never
+# fetched without the proxy. MORPHIT_CANARY_ONION_NEWS_RSS (space-separated)
+# replaces the list.
+# Default: the BBC's onion feed — the one of five newsroom onion feeds that
+# loaded in Tor Browser when the maintainer checked on 2026-10-23 (The
+# Guardian's and the New York Times' timed out, ProPublica's onion was not
+# found).
+ONION_NEWS_RSS="${MORPHIT_CANARY_ONION_NEWS_RSS:-https://www.bbcnewsd73hkzno2ini43t4gblxvycyac5aw4gnv7t2rccijh7745uqd.onion/news/rss.xml}"
+news_from_onion_feeds() {
+	_dir="$(mktemp -d)"
+	_n=0
+	for feed in $ONION_NEWS_RSS; do
+		# The HOST must be an .onion (not just the path: https://x.example/a.onion/).
+		_host="$(printf '%s' "$feed" | sed -n 's#^https\{0,1\}://\([^/:?]*\).*$#\1#p' | tr 'A-Z' 'a-z')"
+		case "$_host" in
+			*.onion) : ;;
+			*) echo "canary: ignoring onion news feed '$feed' (not an .onion address)" >&2; continue ;;
+		esac
+		_n=$((_n + 1))
+		echo "canary: fetching news headline from $feed over Tor..." >&2
+		(
+			# Stopped once another feed has won: the TERM reaches curl too.
+			_curl=''
+			trap '[ -n "$_curl" ] && kill "$_curl" 2>/dev/null; exit 0' TERM
+			curl -fsSL --socks5-hostname "$CANARY_TOR_SOCKS" --proxy-user "morphit-news-$_n:x" \
+				--max-time 60 -A "$NEWS_UA" "$feed" >"$_dir/$_n.xml" 2>/dev/null &
+			_curl=$!
+			wait "$_curl" || true
+			printf '%s\n' "$feed" >"$_dir/$_n.src"
+			: >"$_dir/$_n.done"
+		) &
+	done
+	_left=600 # 60 s in 0.1 s steps
+	_seen=' '
+	while [ "$_left" -gt 0 ]; do
+		# Counted BEFORE the scan: a feed that finishes during the scan is read
+		# on the next pass, never skipped by the "all finished" exit below.
+		_finished="$(find "$_dir" -name '*.done' | wc -l)"
+		for _d in $(ls -tr "$_dir"/*.done 2>/dev/null); do
+			_k="$(basename "$_d" .done)"
+			case "$_seen" in *" $_k "*) continue ;; esac
+			_seen="$_seen$_k "
+			_h="$(news_headline_of "$(cat "$_dir/$_k.xml" 2>/dev/null)")"
+			if [ -n "$_h" ]; then
+				NEWS_HEADLINE="$_h"
+				NEWS_WON_SRC="$(cat "$_dir/$_k.src")"
+				kill $(jobs -p) 2>/dev/null || true
+				rm -rf "$_dir"
+				return 0
+			fi
+		done
+		[ "$_finished" -ge "$_n" ] && break
+		sleep 0.1
+		_left=$((_left - 1))
+	done
+	kill $(jobs -p) 2>/dev/null || true
+	rm -rf "$_dir"
+	return 1
+}
+
+if [ "$CANARY_TOR_ONLY" = 1 ]; then
+	news_from_onion_feeds || news_from_clearnet_feeds || true
+else
+	news_from_clearnet_feeds || news_from_onion_feeds || true
+fi
 
 if [ -n "$NEWS_WON_SRC" ]; then
 	# Record the feed that actually produced the headline (emitted below
@@ -316,43 +452,59 @@ fi
 UNSIGNED="$(mktemp -t morphit-canary-XXXXXX.txt)"
 trap 'rm -f "$UNSIGNED"' EXIT
 
-# Read template, substitute placeholders.  We do this in awk for
-# strict literal substitution (sed would re-interpret special
-# characters in news headlines).
-awk \
-	-v operator_name="$MORPHIT_CANARY_OPERATOR_NAME" \
-	-v origin="$MORPHIT_CANARY_INSTANCE_ORIGIN" \
-	-v generated="$GENERATED_AT_ISO" \
-	-v valid="$VALID_THROUGH_ISO" \
-	-v op_account="$MORPHIT_CANARY_OPERATOR_ACCOUNT" \
-	-v blurt_height="$BLURT_HEAD_HEIGHT" \
-	-v blurt_hash="$BLURT_HEAD_HASH" \
-	-v blurt_ts="$BLURT_HEAD_TIMESTAMP" \
-	-v btc_height="$BTC_HEAD_HEIGHT" \
-	-v btc_hash="$BTC_HEAD_HASH" \
-	-v news="$NEWS_HEADLINE" \
-	-v news_src="$NEWS_RSS" \
-	-v news_at="$NEWS_FETCHED_AT" \
-	'{
-		gsub(/\{\{OPERATOR_NAME\}\}/,       operator_name);
-		gsub(/\{\{INSTANCE_ORIGIN\}\}/,     origin);
-		gsub(/\{\{GENERATED_AT_ISO\}\}/,    generated);
-		gsub(/\{\{VALID_THROUGH_ISO\}\}/,   valid);
-		gsub(/\{\{OPERATOR_ACCOUNT\}\}/,    op_account);
-		gsub(/\{\{BLURT_HEAD_HEIGHT\}\}/,   blurt_height);
-		gsub(/\{\{BLURT_HEAD_HASH\}\}/,     blurt_hash);
-		gsub(/\{\{BLURT_HEAD_TIMESTAMP\}\}/,blurt_ts);
-		gsub(/\{\{BTC_HEAD_HEIGHT\}\}/,     btc_height);
-		gsub(/\{\{BTC_HEAD_HASH\}\}/,       btc_hash);
-		gsub(/\{\{NEWS_HEADLINE\}\}/,       news);
-		gsub(/\{\{NEWS_SOURCE\}\}/,         news_src);
-		gsub(/\{\{NEWS_FETCHED_AT\}\}/,     news_at);
-		print
+# Read template, substitute placeholders.  Every value reaches awk through
+# its environment (ENVIRON) and is put in place with index/substr: a literal
+# copy. (v1.21.15: `-v` turned a backslash in a value into an escape, and
+# gsub() turned an `&` into the matched placeholder — a "Q&A" headline came out
+# as "Q{{NEWS_HEADLINE}}A", which verify.ts then rejects.)
+C_OPERATOR_NAME="$MORPHIT_CANARY_OPERATOR_NAME" \
+C_INSTANCE_ORIGIN="$MORPHIT_CANARY_INSTANCE_ORIGIN" \
+C_GENERATED_AT_ISO="$GENERATED_AT_ISO" \
+C_VALID_THROUGH_ISO="$VALID_THROUGH_ISO" \
+C_OPERATOR_ACCOUNT="$MORPHIT_CANARY_OPERATOR_ACCOUNT" \
+C_BLURT_HEAD_HEIGHT="$BLURT_HEAD_HEIGHT" \
+C_BLURT_HEAD_HASH="$BLURT_HEAD_HASH" \
+C_BLURT_HEAD_TIMESTAMP="$BLURT_HEAD_TIMESTAMP" \
+C_BTC_HEAD_HEIGHT="$BTC_HEAD_HEIGHT" \
+C_BTC_HEAD_HASH="$BTC_HEAD_HASH" \
+C_NEWS_HEADLINE="$NEWS_HEADLINE" \
+C_NEWS_SOURCE="$NEWS_RSS" \
+C_NEWS_FETCHED_AT="$NEWS_FETCHED_AT" \
+awk '
+	# Replace every {{NAME}} in the line with ENVIRON["C_NAME"], literally.
+	function put(name,    ph, val, i, out) {
+		ph = "{{" name "}}"
+		val = ENVIRON["C_" name]
+		out = ""
+		while ((i = index(line, ph)) > 0) {
+			out = out substr(line, 1, i - 1) val
+			line = substr(line, i + length(ph))
+		}
+		line = out line
+	}
+	{
+		line = $0
+		put("OPERATOR_NAME")
+		put("INSTANCE_ORIGIN")
+		put("GENERATED_AT_ISO")
+		put("VALID_THROUGH_ISO")
+		put("OPERATOR_ACCOUNT")
+		put("BLURT_HEAD_HEIGHT")
+		put("BLURT_HEAD_HASH")
+		put("BLURT_HEAD_TIMESTAMP")
+		put("BTC_HEAD_HEIGHT")
+		put("BTC_HEAD_HASH")
+		put("NEWS_HEADLINE")
+		put("NEWS_SOURCE")
+		put("NEWS_FETCHED_AT")
+		print line
 	}' "$TEMPLATE" > "$UNSIGNED"
 
 # Drop everything from the BEGIN PGP SIGNATURE block onward — gpg
 # will append its own signature block to the cleartext.
-sed -i '/-----BEGIN PGP SIGNATURE-----/,$d' "$UNSIGNED"
+# Anchored: only the template's own armor line (a whole line), never text in
+# a value.
+sed -i '/^-----BEGIN PGP SIGNATURE-----$/,$d' "$UNSIGNED"
 
 # ─── Sign ────────────────────────────────────────────────────────
 

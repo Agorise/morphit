@@ -59,10 +59,22 @@ if (failures.length === 0) {
 		tplPlaceholders.add(m[1]!);
 	}
 
-	// Find all gsub(/\{\{NAME\}\}/, …) substitutions in the generator.
+	// Find all put("NAME") substitutions in the generator (v1.21.15: each a
+	// literal copy of ENVIRON["C_NAME"]), and check each value is handed in.
 	const genSubs = new Set<string>();
-	for (const m of gen.matchAll(/gsub\(\/\\\{\\\{([A-Z0-9_]+)\\\}\\\}\/,\s*([a-z0-9_]+)\)/g)) {
+	for (const m of gen.matchAll(/\bput\("([A-Z0-9_]+)"\)/g)) {
 		genSubs.add(m[1]!);
+		if (!new RegExp(`^C_${m[1]}=`, 'm').test(gen)) {
+			failures.push(
+				`generate.sh puts {{${m[1]}}} but never hands it C_${m[1]} — the placeholder would be emptied.`
+			);
+		}
+	}
+	// The old forms mangled values (`&` and `\`); they must not come back.
+	if (/gsub\(\/\\\{\\\{/.test(gen) || /awk[^']*-v [a-z_]+=/.test(gen)) {
+		failures.push(
+			'generate.sh fills placeholders with gsub() / awk -v again — use put() and ENVIRON.'
+		);
 	}
 
 	console.log(`  template: ${tplPlaceholders.size} placeholder(s)`);
@@ -79,7 +91,7 @@ if (failures.length === 0) {
 	if (genSubs.size === 0) {
 		failures.push(
 			'generator parser found 0 substitutions — has the awk ' +
-				'gsub() pattern changed?  Update this smoke regex.'
+				'put() pattern changed?  Update this smoke regex.'
 		);
 	}
 
@@ -95,7 +107,7 @@ if (failures.length === 0) {
 		if (PLACEHOLDERS_NOT_SUBSTITUTED.has(ph)) continue;
 		if (!genSubs.has(ph)) {
 			failures.push(
-				`template has {{${ph}}} but generate.sh has no gsub() for it ` +
+				`template has {{${ph}}} but generate.sh has no put() for it ` +
 					`— published canary will contain the literal {{${ph}}}.`
 			);
 		}
@@ -129,7 +141,7 @@ if (failures.length === 0) {
 	// Confirm the generator deletes the PGP block before signing.
 	// If this sed line ever disappears, the template's PGP placeholder
 	// would leak through into the signed output.
-	if (!gen.includes('/-----BEGIN PGP SIGNATURE-----/,$d')) {
+	if (!gen.includes("sed -i '/^-----BEGIN PGP SIGNATURE-----$/,$d'")) {
 		failures.push(
 			'generator no longer strips the PGP placeholder block before ' +
 				'signing — the literal placeholder will appear in the canary.'

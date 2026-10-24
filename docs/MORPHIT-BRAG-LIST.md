@@ -241,7 +241,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 101. **Operator-configurable price denomination.** The "~$0.12" subtext next to listing-fee Blurt amounts isn't hardcoded to USD — operators pick their instance's display unit (USD, EUR, GBP, JPY, BRL, CNY, INR, RUB, AED, XDR for the IMF basket, XAU for gold ounces, or any 3-8 character ticker their market uses). Works today for non-USD-native markets, hedges against future scenarios where USD's reserve-currency role erodes. One env var, no code change; listing-fee API returns a `denomination_fiat` field so frontends know which unit they're rendering.
 
-102. **Cross-instance peer-disagreement detector (Defense F).** Opt-in monitor that periodically queries peer Morphit instances' price-receipt endpoint, computes the federation median, and alerts on sustained 25%+ disagreement vs your own derived price. Catches the case where YOUR indexer is the one being manipulated — pressured operator, captured server, geographic isolation — rather than the trader-level manipulation the sybil filters address. Uses median (not mean) so a single bad peer can't swing the result, requires ≥3 peers minimum, and filters by same-denomination so EUR-vs-USD instances aren't compared apples-to-oranges (which closes the last open item from the 8-defense black-hat table).
+102. **Cross-instance peer-disagreement detector (Defense F).** A monitor that periodically queries peer Morphit instances' price-receipt endpoint (on every node; the alert is opt-in), computes the federation median, and alerts on sustained 25%+ disagreement vs your own derived price. Catches the case where YOUR indexer is the one being manipulated — pressured operator, captured server, geographic isolation — rather than the trader-level manipulation the sybil filters address. Uses median (not mean) so a single bad peer can't swing the result, requires ≥3 peers minimum, and filters by same-denomination so EUR-vs-USD instances aren't compared apples-to-oranges (which closes the last open item from the 8-defense black-hat table).
 
 103. **Multi-asset self-sovereign pricing.** BLURT/USD comes from api.blurt.blog first, whenever its value is plausible, with an outlier-rejected median across independent external feeds as the fallback; BTC and XMR come from five Haveno and Bisq pricenodes reached over Tor (a value only when at least two agree and they are the majority, their median), with the clearnet median only as the fallback where clearnet is allowed, then the optional morphit_native source, then a static floor. Prices are display-only: fee verification reads no price. The receipt endpoint `/v1/price/morphit-native/receipt?asset=BTC` shows exactly how a derived price was made.
 
@@ -299,7 +299,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 128. **Subaddress nudge.** When you try to share a standard Monero address (starts with `4`), Morphit gently suggests using a subaddress (starts with `8`) instead. Standard addresses link every received payment to the same view key; "Stealth" subaddresses break that linkage. Not paternalistic — it's a soft nudge with a brief explanation.
 
-129. **Multi-source verification for XMR fees — eight independent sources by default.** Five Monero explorers (two on Tor onion addresses, asked first over Tor; then xmrchain.net and moneroexplorer.org, which prove the payment, and moneroblocks.info, which serves the raw transaction that Morphit checks itself) plus three public Monero nodes. Two must agree by default (`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`), so one lying source is outvoted or the check waits. Configurable, self-hosted explorers included (see `OPERATIONS.md §40.4`).
+129. **Multi-source verification for XMR fees — nine independent sources by default.** Six Monero explorers (two on Tor onion addresses and one on I2P, asked first over Tor and I2P; then xmrchain.net and moneroexplorer.org, which prove the payment, and moneroblocks.info, which serves the raw transaction that Morphit checks itself) plus three public Monero nodes. Two must agree by default (`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`), so one lying source is outvoted or the check waits. Configurable, self-hosted explorers included (see `OPERATIONS.md §40.4`).
 
 130. **The "I sent the funds" flow includes XMR-specific tooling.** TxID and tx-key copy-paste, integrated subaddress hints — Monero-aware throughout, not just "another asset on the dropdown."
 
@@ -315,7 +315,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 7. For Bitcoin users specifically
 
-136. **Multi-explorer Bitcoin verification, over Tor.** Morphit cross-checks Bitcoin payments against multiple explorers — by default four Esplora explorers on Tor onion addresses (mempool.space's own, mempool emzy, mempool runbtc, Blockstream), asked first over Tor, with blockstream.info and mempool.space as the clearnet fallback; operator-configurable — no single explorer is a trust anchor.
+136. **Multi-explorer Bitcoin verification, over Tor.** Morphit cross-checks Bitcoin payments against multiple explorers — by default five Esplora explorers on Tor onion addresses (mempool.space's own, mempool emzy, mempool runbtc, Blockstream, mempool.foundation.xyz) and runbtc's on I2P, asked first over Tor and I2P, with blockstream.info and mempool.space as the clearnet fallback; operator-configurable — no single explorer is a trust anchor.
 
 137. **Bitcoin support is genuine.** Not a "we technically allow BTC" afterthought. The fee verifier, the explorer URL builder, the asset registry, the FAQ — all treat BTC as a primary asset.
 
@@ -441,7 +441,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 194. **No Monero "lite" client logic.** Morphit does NOT try to interpret your Monero wallet. It's a coordination layer; your wallet is your wallet.
 
-195. **Eight independent Monero sources in the default config** (five explorers — two on Tor onion addresses, then xmrchain.net, moneroexplorer.org and moneroblocks.info, the last verified locally from the raw transaction — and three public Monero nodes), operator-configurable to any list, including self-hosted explorers.
+195. **Nine independent Monero sources in the default config** (six explorers — two on Tor onion addresses and one on I2P, then xmrchain.net, moneroexplorer.org and moneroblocks.info, the last verified locally from the raw transaction — and three public Monero nodes), operator-configurable to any list, including self-hosted explorers.
 
 196. **Trade verification logic is per-asset.** Bitcoin uses one path (multi-explorer cross-check on UTXO confirmation), Monero uses another (TxID + amount-match against the recipient's expected, no view key required) — designed for each chain's actual privacy model.
 
@@ -559,7 +559,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 247. **Trading-activity dashboard at `/explorer/activity`.** Daily fee revenue, top-5 trading pairs, federation-wide order volume — all derived from public chain data, no analytics scripts. Useful for traders deciding which assets are liquid, and for operators showing prospective traders what the marketplace looks like at scale. Same data the project uses internally; nothing hidden.
 
-248. **Cross-chain explorer links inside chat with alternatives.** A Bitcoin txid links to mempool.space (or the operator's configured explorer), Monero to xmrchain.net, Blurt to the in-app `/explorer`. A small "+N more ▾" reveals bundled alternatives for users who don't trust or can't reach the primary. The default click is unchanged; the dropdown is opt-in.
+248. **Cross-chain explorer links inside chat with alternatives.** A Bitcoin txid links to mempool.space (or the operator's configured explorer), Monero to xmrchain.net, Blurt to the in-app `/explorer` — and on the site's Tor/I2P address, to Tor/I2P explorers instead, never a clearnet one. A small "+N more ▾" reveals bundled alternatives for users who don't trust or can't reach the primary. The default click is unchanged; the dropdown is opt-in.
 
 249. **Display-payment QR codes for receiving addresses.** Share a receive address through the trade flow and Morphit can render it as a QR code on screen, using the right URI scheme per asset (BIP-21 for Bitcoin-family, official Monero URI, ZIP-321 for Zcash, Solana Pay, EIP-681 for EVM, XRPL URI, and more). The buyer scans with their mobile wallet's camera. Works on `.onion` instances, works in Tor Browser, works without any third-party QR-image service — the QR library is lazy-loaded so users who never tap "Show QR" don't pay the bytes.
 
@@ -695,7 +695,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 313. **Per-operator chat-link external explorer URLs.** When a counterparty sends a BTC or XMR transaction ID in chat, Morphit renders it as a clickable link that opens the transaction in an external block explorer. Operators who self-host their own explorers can override per-instance; everyone else inherits the bundled defaults. The override is per-operator (not per-user) — a user who wants different behavior chooses a different Morphit instance.
 
-314. **Multi-source quorum gate on fee verifiers.** Operators can require N-of-M explorer agreement before accepting a fee verdict; below the threshold the order waits as pending-external rather than accepting a degraded single-source result. The default is 2, over a default list of eight XMR sources.
+314. **Multi-source quorum gate on fee verifiers.** Operators can require N-of-M explorer agreement before accepting a fee verdict; below the threshold the order waits as pending-external rather than accepting a degraded single-source result. The default is 2, over a default list of nine XMR sources.
 
 315. **Setup wizard configures explorer URLs with live health probes.** Each URL gets a ✓ / ⚠ / ✗ status indicator with latency on screen. Probes hit each clearnet explorer's standard health endpoint — no real transaction IDs or addresses sent; an onion or I2P explorer is listed as not probed, since the wizard would have to look its name up outside Tor. Non-blocking: operators can configure URLs that fail probes (might be configuring an explorer not yet online, or running offline).
 

@@ -483,9 +483,15 @@ async function main(): Promise<void> {
 	// asset prices from our own trades or the static floor while /v1/instance
 	// reports the price leg as federated. The switch exists for the ALERT side,
 	// on a clearnet node with other upstreams; a hidden-only node has no other.
-	const peerMonitorRuns =
+	//
+	// v1.21.15: the SAMPLING now runs on every node. A clearnet node falls back
+	// to the federated median when every clearnet price source is down (the
+	// owner's rule: when clearnet does not answer, use the hidden sources), and
+	// that median needs these samples. The switch keeps deciding the ALERT on a
+	// clearnet node, as before.
+	const peerMonitorAlerts =
 		config.priceFeedPeerMonitorEnabled || config.blurtRpcEndpoints.length === 0;
-	if (peerMonitorRuns && multiAssetSources.size > 0) {
+	if (multiAssetSources.size > 0) {
 		for (const [asset, source] of multiAssetSources) {
 			const stop = startPeerPriceMonitor(
 				{
@@ -495,7 +501,8 @@ async function main(): Promise<void> {
 					denominationFiat: config.priceFeedDenominationFiat,
 					// Hidden-only node → sample peers over every hidden address
 					// they published (I2P, Tor, Lokinet), never their clearnet origin.
-					hiddenOnly: config.blurtRpcEndpoints.length === 0
+					hiddenOnly: config.blurtRpcEndpoints.length === 0,
+					alerts: peerMonitorAlerts
 				},
 				config.priceFeedPeerSampleIntervalMinutes,
 				(result) => peerMonitorResults.set(asset, result)

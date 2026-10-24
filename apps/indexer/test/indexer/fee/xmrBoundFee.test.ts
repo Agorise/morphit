@@ -51,7 +51,7 @@ function claim(o: Partial<FeeClaim> = {}): FeeClaim {
 }
 
 function explorer(
-	tx: { payment_id8?: string; extra?: string; status?: string },
+	tx: { payment_id8?: string; extra?: string; status?: string; http404?: boolean },
 	amount = 1_000_000_000
 ) {
 	const urls: string[] = [];
@@ -76,6 +76,8 @@ function explorer(
 			);
 		}
 		if (url.includes(`/api/transaction/${TXID}`)) {
+			// A route this explorer does not serve (or a page in front of it).
+			if (tx.http404 === true) return new Response('<html>404 Not Found</html>', { status: 404 });
 			return new Response(
 				JSON.stringify({
 					status: tx.status ?? 'success',
@@ -148,6 +150,11 @@ describe('bound XMR fee verification', () => {
 			cfg,
 			explorer({ payment_id8: ENC, extra: '01' + 'aa'.repeat(32) }).f
 		);
+		expect((await v.verify(claim())).kind).toBe('pending_external');
+	});
+
+	it('a 404 for the transaction is no verdict: not "not found", so a quorum of them does not reject (v1.21.15)', async () => {
+		const v = new MoneroProofFeeVerifier(cfg, explorer({ http404: true }).f);
 		expect((await v.verify(claim())).kind).toBe('pending_external');
 	});
 

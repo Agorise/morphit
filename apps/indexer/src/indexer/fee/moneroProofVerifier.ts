@@ -29,8 +29,8 @@
  * count toward MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES alike.
  *
  * When the quorum cannot be met (v1.20.2). Two agreeing sources are asked
- * for, out of the tier's configured ones (fee/tieredFeeVerifier.ts: the two
- * default onion explorers first, then all eight), fastest first. If only
+ * for, out of the tier's configured ones (fee/tieredFeeVerifier.ts: the
+ * default onion and I2P explorers first, then all nine), fastest first. If only
  * ONE source can be reached for a long time, the payer is not left waiting
  * for days: once the order has waited `loneAnswerAfterMs` (2 h) its answer
  * alone is accepted — but only if the payment is at least
@@ -43,8 +43,8 @@
  * Bound fees (MK-H2): the amount is proven at the pinned PRIMARY address and
  * the encrypted payment ID must decrypt, with the same r, to the order's ID.
  *
- * Defaults: config/xmrExplorers.ts (two onion xmrblocks explorers, then the
- * clearnet fallback). See docs/OPERATIONS.md §40.4.
+ * Defaults: config/xmrExplorers.ts (two onion xmrblocks explorers and one on
+ * I2P, then the clearnet fallback). See docs/OPERATIONS.md §40.4.
  *
  * Privacy: the txid and r (both already public in the order op) go to each
  * explorer over Tor (an onion; the network encrypts end to end, on a fresh
@@ -118,7 +118,9 @@ export const DEFAULT_MONERO_PROOF_VERIFIER_CONFIG: Omit<
  *  same `monero-block-explorer` reference codebase use the same
  *  JSON shape. */
 interface ExplorerProofResponse {
-	readonly status: 'success' | 'error';
+	/** 'fail': the explorer's own "Cant find tx hash" (page.h json_outputs
+	 *  starts every answer as fail); 'error': a bad request or proof. */
+	readonly status: 'success' | 'error' | 'fail';
 	readonly data?: {
 		readonly address: string;
 		readonly tx_hash: string;
@@ -691,7 +693,11 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				url,
 				explorerInit({ method: 'GET', accept: 'application/json' }, ac.signal)
 			);
-			if (res.status === 404) return { kind: 'data_not_found' };
+			// (v1.21.15 review) The explorer software (onion-monero-blockchain-
+			// explorer) never answers 404 for a transaction — an unknown one is a
+			// JSON error below. A 404 is a route it does not serve (its JSON API
+			// off) or a page in front of it: no verdict on the transaction.
+			if (res.status === 404) return { kind: 'data_malformed' };
 			if (!res.ok) return { kind: 'transport_failure' };
 			let body: unknown;
 			try {
@@ -759,8 +765,12 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				explorerInit({ method: 'GET', accept: 'application/json' }, ac.signal)
 			);
 			if (res.status === 404) {
-				log.warn('explorer_tx_not_found', { explorer: baseUrl, txid });
-				return { kind: 'data_not_found' };
+				// (v1.21.15 review) Not "no such transaction": this explorer
+				// software answers an unknown transaction or a bad proof with a JSON
+				// error (below); a 404 is a route it does not serve (its JSON API
+				// off) or a page in front of it — no verdict on the payment.
+				log.warn('explorer_404_without_not_found', { explorer: baseUrl, txid });
+				return { kind: 'data_malformed' };
 			}
 			if (res.status >= 500) {
 				log.warn('explorer_5xx', {
@@ -865,7 +875,9 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 function isExplorerProofResponse(b: unknown): b is ExplorerProofResponse {
 	if (typeof b !== 'object' || b === null) return false;
 	const obj = b as Record<string, unknown>;
-	if (obj.status !== 'success' && obj.status !== 'error') return false;
+	// (v1.21.15 review) 'fail' too: it is how the explorer software answers a
+	// transaction it cannot find (page.h json_outputs: "Cant find tx hash").
+	if (obj.status !== 'success' && obj.status !== 'error' && obj.status !== 'fail') return false;
 	if (obj.data !== undefined) {
 		if (typeof obj.data !== 'object' || obj.data === null) return false;
 		const data = obj.data as Record<string, unknown>;

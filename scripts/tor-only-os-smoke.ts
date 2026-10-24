@@ -40,6 +40,7 @@ import { createHash } from 'node:crypto';
 const ROOT = resolve(import.meta.dirname, '..');
 const OS_SCRIPT = join(ROOT, 'ops', 'tor-only', 'morphit-tor-only-os.sh');
 const TIME_SCRIPT = join(ROOT, 'ops', 'tor-only', 'morphit-tor-timesync.sh');
+const FALLBACK_SCRIPT = join(ROOT, 'ops', 'tor-only', 'morphit-clock-fallback.sh');
 const REPO_NAME = 'repo.morphit-smoke.invalid';
 
 let pass = 0;
@@ -641,12 +642,18 @@ async function main(): Promise<void> {
 	}
 
 	// ── 6. the Tor time check ──
-	const time = (mode: string, extra: NodeJS.ProcessEnv = {}, target = '-') => {
+	const time = (
+		mode: string,
+		extra: NodeJS.ProcessEnv = {},
+		target = '-',
+		args: readonly string[] = ['--check'],
+		script = TIME_SCRIPT
+	) => {
 		const socksPort = freePort();
 		const log = join(work, `socks-${socksPort}.log`);
 		startNode(SOCKS_JS, [String(socksPort), log, mode, target]);
 		waitPort(socksPort);
-		const x = spawnSync('sh', [TIME_SCRIPT, '--check'], {
+		const x = spawnSync('sh', [script, ...args], {
 			encoding: 'utf8',
 			timeout: 120_000,
 			env: {
@@ -770,6 +777,113 @@ async function main(): Promise<void> {
 			t2.status === 0 && /result=would-step/.test(t2.line),
 			t2.out
 		);
+	}
+	{
+		// v1.21.15: the clock FALLBACK on a node that keeps clearnet NTP.
+		const bin = join(work, 'ntpbin');
+		mkdirSync(bin, { recursive: true });
+		const answer = join(work, 'ntp-synced.txt');
+		writeFileSync(
+			join(bin, 'timedatectl'),
+			`#!/bin/sh\n[ "$1 $2 $3" = "show -p NTPSynchronized" ] && [ "$4" = "--value" ] && cat "${answer}"\n`
+		);
+		chmodSync(join(bin, 'timedatectl'), 0o755);
+		const env = { PATH: `${bin}:${process.env.PATH}` };
+		writeFileSync(answer, 'yes\n');
+		const t = time('date:120', env, '-', ['--check'], FALLBACK_SCRIPT);
+		check(
+			'clock fallback: while NTP keeps the clock synchronised it does nothing — no onion source is asked (ntp-synced, exit 0)',
+			t.status === 0 && /result=ntp-synced/.test(t.line) && t.log.length === 0,
+			t.out
+		);
+		writeFileSync(answer, 'no\n');
+		const t2 = time('date:120', env, '-', ['--check'], FALLBACK_SCRIPT);
+		check(
+			'clock fallback: when NTP cannot keep it, the onion sources set it (would-step, all six asked over Tor)',
+			t2.status === 0 && /result=would-step answered=6/.test(t2.line) && t2.log.length === 6,
+			t2.out
+		);
+		// A node downgraded to a release whose time check knows only --check:
+		// the fallback script stays and still works (it passes no new option).
+		const old = join(work, 'old-release');
+		mkdirSync(old, { recursive: true });
+		writeFileSync(
+			join(old, 'morphit-tor-timesync.sh'),
+			readFileSync(TIME_SCRIPT, 'utf8').replace(
+				/\nCHECK_ONLY=no\n/,
+				'\nCHECK_ONLY=no\nfor a in "$@"; do [ "$a" = --check ] || { echo "usage" >&2; exit 2; }; done\n'
+			)
+		);
+		writeFileSync(join(old, 'morphit-clock-fallback.sh'), readFileSync(FALLBACK_SCRIPT, 'utf8'));
+		const t4 = time('date:120', env, '-', ['--check'], join(old, 'morphit-clock-fallback.sh'));
+		check(
+			'clock fallback: runs the time check with only the options every release knows (a downgraded time check still works)',
+			t4.status === 0 && /result=would-step answered=6/.test(t4.line),
+			t4.out
+		);
+		const t3 = time('date:0', {}, '-', ['--bogus']);
+		check('time: an unknown option is a usage error (exit 2)', t3.status === 2, t3.out);
+		const t5 = time('date:0', env, '-', ['--bogus'], FALLBACK_SCRIPT);
+		check(
+			'clock fallback: an unknown option is a usage error (exit 2), and no source is asked',
+			t5.status === 2 && t5.log.length === 0,
+			t5.out
+		);
+	}
+	{
+		// The Ansible side of the clock fallback (the heal is unit-tested in
+		// apps/ops-cli/test/clockFallbackHeal.test.ts).
+		const tasks = join(ROOT, 'ops', 'ansible', 'roles', 'tor', 'tasks');
+		const mainYml = readFileSync(join(tasks, 'main.yml'), 'utf8');
+		const torOnlyYml = readFileSync(join(tasks, 'tor-only-os.yml'), 'utf8');
+		const fallbackInstall =
+			/- name: Clock fallback — install its script[\s\S]*?(?=\n- name:)/.exec(mainYml)?.[0] ?? '';
+		check(
+			'Ansible: a clearnet node gets both scripts (the fallback runs the time check beside it)',
+			/- morphit-tor-timesync\.sh/.test(fallbackInstall) &&
+				/- morphit-clock-fallback\.sh/.test(fallbackInstall) &&
+				/when: not \(morphit_tor_only/.test(fallbackInstall),
+			fallbackInstall
+		);
+		const stop = /name: morphit-clock-fallback\.timer\n\s+state: stopped\n\s+enabled: false/.test(
+			torOnlyYml
+		);
+		const rm =
+			/path: "\/etc\/systemd\/system\/\{\{ item \}\}"\n\s+state: absent\n\s+loop:\n\s+- morphit-clock-fallback\.service\n\s+- morphit-clock-fallback\.timer/.test(
+				torOnlyYml
+			);
+		check(
+			'Ansible: switching a node to tor-only stops and removes the clearnet-node clock fallback',
+			stop &&
+				rm &&
+				torOnlyYml.indexOf('morphit-clock-fallback.timer') <
+					torOnlyYml.indexOf('run the Tor time check every 6 hours'),
+			`stop=${stop} rm=${rm}`
+		);
+	}
+	{
+		// One run at a time: while one holds the lock, a second changes nothing.
+		const hasFlock = spawnSync('sh', ['-c', 'command -v flock']).status === 0;
+		if (hasFlock) {
+			const holder = spawn('flock', ['-o', TIME_SCRIPT, 'sleep', '30'], { stdio: 'ignore' });
+			children.push(holder);
+			spawnSync('sleep', ['0.5']);
+			const t = time('date:120');
+			holder.kill();
+			check(
+				'time: a second run while one is going reports busy (exit 1) and asks no source',
+				t.status === 1 && /result=busy/.test(t.line) && t.log.length === 0,
+				t.out
+			);
+			const t2 = time('date:120');
+			check(
+				'time: once the first run ended, the next one runs',
+				t2.status === 0 && /result=would-step/.test(t2.line),
+				t2.out
+			);
+		} else {
+			check('time: flock is installed here (needed for the one-run-at-a-time check)', false);
+		}
 	}
 }
 

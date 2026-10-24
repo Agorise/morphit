@@ -67,6 +67,104 @@ export async function fetchBtcHeadWithFailover(
 }
 
 /**
+ * Ask every source at once and take the FIRST valid answer — the fastest
+ * hidden explorer (v1.21.15). With `agree` > 1, the first answer that many
+ * sources gave (same height AND hash), so one lying explorer cannot choose
+ * what the canary signs; its source is the fastest of those that agreed. Null
+ * when every source failed or no answer reached `agree`. `fetchOne` is
+ * injected (no network in tests).
+ */
+export async function fetchBtcHeadFastest(
+	sources: readonly CanaryBtcSource[],
+	fetchOne: (source: CanaryBtcSource) => Promise<BtcHead | null>,
+	agree = 1
+): Promise<{ head: BtcHead; source: CanaryBtcSource } | null> {
+	if (sources.length === 0) return null;
+	return new Promise((resolve) => {
+		let pending = sources.length;
+		let done = false;
+		const seen = new Map<string, { count: number; source: CanaryBtcSource }>();
+		for (const source of sources) {
+			fetchOne(source)
+				.catch(() => null)
+				.then((head) => {
+					pending--;
+					if (done) return;
+					if (head) {
+						const key = `${head.height}:${head.hash}`;
+						const entry = seen.get(key) ?? { count: 0, source };
+						entry.count++;
+						seen.set(key, entry);
+						if (entry.count >= agree) {
+							done = true;
+							resolve({ head, source: entry.source });
+							return;
+						}
+					}
+					if (pending === 0) {
+						done = true;
+						resolve(null);
+					}
+				});
+		}
+	});
+}
+
+/** How many hidden explorers must give the same head before the canary signs
+ *  it (v1.21.15); fewer when the list itself is shorter. */
+export const CANARY_BTC_HIDDEN_AGREE = 2;
+
+/** One step of the canary's Bitcoin fetch: walk sources in order, or race
+ *  them and take the fastest. */
+export interface CanaryBtcPhase {
+	readonly mode: 'walk' | 'race';
+	readonly sources: readonly CanaryBtcSource[];
+}
+
+/**
+ * The order the canary asks for the Bitcoin head (v1.21.15):
+ *   - an operator override (MORPHIT_CANARY_BTC_EXPLORER): that one only;
+ *   - a Tor-only node: the hidden explorers first, all at once (the first
+ *     head two of them agree on wins), then the clearnet ones through Tor, in
+ *     order;
+ *   - a clearnet node: the clearnet ones in order, and only when every one of
+ *     them failed, the hidden explorers all at once (two must agree) through
+ *     the local Tor / I2P proxy.
+ */
+export function planCanaryBtcPhases(opts: {
+	readonly override: string | undefined;
+	readonly torOnly: boolean;
+	readonly clearnet: readonly CanaryBtcSource[];
+	readonly hidden: readonly CanaryBtcSource[];
+}): CanaryBtcPhase[] {
+	const pinned = resolveCanaryBtcSources(opts.override, opts.clearnet);
+	if (opts.override?.trim()) return [{ mode: 'walk', sources: pinned }];
+	const clearnet: CanaryBtcPhase = { mode: 'walk', sources: [...opts.clearnet] };
+	const hidden: CanaryBtcPhase = { mode: 'race', sources: [...opts.hidden] };
+	const phases = opts.torOnly ? [hidden, clearnet] : [clearnet, hidden];
+	return phases.filter((p) => p.sources.length > 0);
+}
+
+/** Run the phases in order; the first phase that yields a head wins. */
+export async function fetchBtcHeadPhased(
+	phases: readonly CanaryBtcPhase[],
+	fetchOne: (source: CanaryBtcSource) => Promise<BtcHead | null>
+): Promise<{ head: BtcHead; source: CanaryBtcSource } | null> {
+	for (const phase of phases) {
+		const got =
+			phase.mode === 'race'
+				? await fetchBtcHeadFastest(
+						phase.sources,
+						fetchOne,
+						Math.min(CANARY_BTC_HIDDEN_AGREE, phase.sources.length)
+					)
+				: await fetchBtcHeadWithFailover(phase.sources, fetchOne);
+		if (got) return got;
+	}
+	return null;
+}
+
+/**
  * Validate a raw (height, hash) pair into a BtcHead, or null if either is
  * missing/malformed. The shared shape guard behind every provider adapter — a
  * source that answers 200 with junk (an HTML error page, a truncated hash) is
@@ -79,6 +177,10 @@ export function parseBtcTip(heightRaw: string, hashRaw: string): BtcHead | null 
 	const height = Number(h);
 	if (!Number.isFinite(height) || height <= 0) return null;
 	if (!/^[0-9a-f]{64}$/.test(hash)) return null;
+	// v1.21.15: a Bitcoin block hash shows its proof of work — every block for
+	// years starts with 19+ zero hex digits. Fewer than 16 is not a recent
+	// block's hash (it would take about 2^64 tries to make one that passes).
+	if (!hash.startsWith('0'.repeat(16))) return null;
 	return { height, hash };
 }
 

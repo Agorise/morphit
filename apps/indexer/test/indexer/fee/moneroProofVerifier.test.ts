@@ -327,7 +327,27 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 		if (r.kind === 'rejected') expect(r.reason).toMatch(/^tx_not_found/);
 	});
 
-	it('a quorum of explorers answering HTTP 404 is a definitive rejection (tx_not_found)', async () => {
+	// v1.21.15 review: the explorer software never answers 404 for a
+	// transaction (an unknown one is the JSON error above); a 404 is its JSON
+	// API switched off, or a page in front of it — e.g. an I2P/onion explorer
+	// whose API is not on. A quorum of those must not reject a paid fee.
+	it('a quorum of explorers answering the software\'s own "Cant find tx hash" (status fail) is a rejection (v1.21.15)', async () => {
+		// onion-monero-blockchain-explorer page.h json_outputs: every answer
+		// starts as {status: "fail", data: {}}; an unknown txid returns it with
+		// data.title "Cant find tx hash: <txid>".
+		const v = new MoneroProofFeeVerifier(
+			baseConfig({
+				explorerUrls: ['https://xmrchain.net', 'https://explorer-d.example'],
+				minSuccessfulResponses: 2
+			}),
+			mockFetchJson({ status: 'fail', data: { title: `Cant find tx hash: ${'a'.repeat(64)}` } })
+		);
+		const r = await v.verify(claim());
+		expect(r.kind).toBe('rejected');
+		if (r.kind === 'rejected') expect(r.reason).toMatch(/^tx_not_found/);
+	});
+
+	it('a quorum of explorers answering HTTP 404 is NOT a rejection (no verdict on the payment)', async () => {
 		const v = new MoneroProofFeeVerifier(
 			baseConfig({
 				explorerUrls: ['https://xmrchain.net', 'https://explorer-d.example'],
@@ -336,8 +356,7 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 			mockFetchJson({}, 404)
 		);
 		const r = await v.verify(claim());
-		expect(r.kind).toBe('rejected');
-		if (r.kind === 'rejected') expect(r.reason).toMatch(/^tx_not_found/);
+		expect(r.kind).toBe('pending_external');
 	});
 
 	it('not-found below the quorum stays pending (one says no, the other is unreachable)', async () => {

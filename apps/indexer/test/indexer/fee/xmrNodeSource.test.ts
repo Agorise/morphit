@@ -171,9 +171,10 @@ describe('the node source kind', () => {
 		expect(parseXmrExplorer('node+https://u:p@node.example')).toBeNull();
 		expect(parseXmrExplorer('node+')).toBeNull();
 	});
-	it('the default list has two onion explorers, the three clearnet explorers and three nodes, all valid', () => {
-		expect(DEFAULT_XMR_EXPLORERS).toHaveLength(8);
+	it('the default list has two onion explorers, one I2P explorer, the three clearnet explorers and three nodes, all valid', () => {
+		expect(DEFAULT_XMR_EXPLORERS).toHaveLength(9);
 		expect(DEFAULT_XMR_EXPLORERS.map((u) => parseXmrExplorer(u)?.kind)).toEqual([
+			'txprove',
 			'txprove',
 			'txprove',
 			'txprove',

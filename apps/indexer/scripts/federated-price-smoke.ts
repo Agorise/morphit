@@ -133,7 +133,12 @@ const fakeDb = (rows: Array<{ observed_price: string }>): any => ({
 {
 	const fs = await import('node:fs');
 	const main = fs.readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-	ok('main.ts starts the peer monitor on every hidden-only node', /config\.priceFeedPeerMonitorEnabled \|\| config\.blurtRpcEndpoints\.length === 0/.test(main));
+	// v1.21.15: the sampling runs on EVERY node (a clearnet node falls back to the
+	// federated median when its clearnet price sources are down); the switch
+	// decides only the alert there, and a hidden-only node always alerts.
+	const block = main.slice(main.indexOf('const peerMonitorAlerts'), main.indexOf('const disagreementMonitors'));
+	ok('main.ts starts the peer monitor on every node (no switch around the start)', /if \(multiAssetSources\.size > 0\) \{\s*for \(const \[asset, source\] of multiAssetSources\) \{\s*const stop = startPeerPriceMonitor\(/.test(block));
+	ok('main.ts: the alert follows the switch, and always on a hidden-only node', /const peerMonitorAlerts =\s*config\.priceFeedPeerMonitorEnabled \|\| config\.blurtRpcEndpoints\.length === 0;/.test(block) && /alerts: peerMonitorAlerts/.test(block));
 }
 
 

@@ -1220,16 +1220,16 @@ export async function stepRpcEndpoints(
 
 // ─── Defaults for the explorer-config steps ──────────────────────
 
-/** Default BTC fee-verifier explorers — Esplora API bases: four onion
- *  explorers (asked first, over Tor), then blockstream.info and
- *  mempool.space as the clearnet fallback. One list for the wizard and the
+/** Default BTC fee-verifier explorers — Esplora API bases: five onion
+ *  explorers (asked first, over Tor), one on I2P (through i2pd), then
+ *  blockstream.info and mempool.space as the clearnet fallback. One list for the wizard and the
  *  indexer's config default (@morphit/operator-config, feeSources.ts). */
 export const DEFAULT_BTC_FEE_EXPLORERS: readonly string[] = OPERATOR_DEFAULT_BTC_FEE_EXPLORERS;
 
 /** Default XMR fee-verifier explorers — the indexer's own list
  *  (apps/indexer/src/config/xmrExplorers.ts, from @morphit/operator-config):
- *  two onion-monero-blockchain-explorer instances on Tor (asked first),
- *  then the clearnet fallback — xmrchain.net and moneroexplorer.org
+ *  two onion-monero-blockchain-explorer instances on Tor (asked first), one
+ *  on I2P (xmr.mx, through i2pd), then the clearnet fallback — xmrchain.net and moneroexplorer.org
  *  (txprove), moneroblocks.info (`raw-tx+`, checked by the indexer itself)
  *  and three public Monero nodes (`node+`). One source of truth. */
 export const DEFAULT_XMR_FEE_EXPLORERS: readonly string[] = INDEXER_DEFAULT_XMR_EXPLORERS;
@@ -1497,11 +1497,13 @@ export async function stepFeeExplorers(): Promise<FeeExplorersResult> {
 			'Defaults — onion explorers first, asked over Tor (no\n' +
 			'third-party clearnet needed); the clearnet ones only as a\n' +
 			'fallback, and never on a zero-clearnet node:\n' +
-			'  • BTC: four onion Esplora explorers (mempool.space,\n' +
-			'    mempool emzy, mempool runbtc, Blockstream), then\n' +
+			'  • BTC: five onion Esplora explorers (mempool.space,\n' +
+			'    mempool emzy, mempool runbtc, Blockstream,\n' +
+			'    Foundation) and runbtc on I2P, then\n' +
 			'    blockstream.info + mempool.space\n' +
 			'  • XMR: two onion xmrblocks explorers (runbtc,\n' +
-			'    suddenwhipvapor), then xmrchain.net +\n' +
+			'    suddenwhipvapor) and xmr.mx on I2P, then\n' +
+			'    xmrchain.net +\n' +
 			'    moneroexplorer.org, moneroblocks.info (raw\n' +
 			'    transactions, checked by your indexer itself:\n' +
 			'    raw-tx+https://…) and three public Monero nodes\n' +
@@ -1645,17 +1647,18 @@ export interface ChatLinkExplorersResult {
 	};
 }
 
-/** Validate a chat-link URL template.  Must be https://, must
- *  contain `{txid}` somewhere, must parse as a URL after txid
- *  substitution.  Returns the template on success, an error
- *  message on failure. */
+/** Validate a chat-link URL template.  Must be https:// (or http:// to a
+ *  Tor v3 onion or an I2P host — v1.21.15, what a hidden site links to),
+ *  must contain `{txid}` somewhere, must parse as a URL after txid
+ *  substitution.  Returns the template on success, an error message on
+ *  failure. Same rule as the indexer's and the web app's validators. */
 export function parseChatLinkTemplate(raw: string): string | string {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) {
 		return 'Template is required.';
 	}
-	if (!trimmed.startsWith('https://')) {
-		return 'Template must start with https://.';
+	if (!trimmed.startsWith('https://') && !trimmed.startsWith('http://')) {
+		return 'Template must start with https:// (or http:// for a .onion / .i2p explorer).';
 	}
 	if (!trimmed.includes('{txid}')) {
 		return "Template must contain the placeholder '{txid}'.";
@@ -1664,16 +1667,26 @@ export function parseChatLinkTemplate(raw: string): string | string {
 	const filled = trimmed.replace(/\{txid\}/g, sampleTxid);
 	try {
 		const parsed = new URL(filled);
-		if (parsed.protocol !== 'https:') {
-			return 'Template must use https://.';
-		}
 		if (parsed.username !== '' || parsed.password !== '') {
 			return 'Template must not include user:pass@.';
+		}
+		const hidden =
+			/^[a-z2-7]{56}\.onion$/.test(parsed.hostname) ||
+			/^(?:[a-z0-9-]+\.)+i2p$/.test(parsed.hostname);
+		if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && hidden)) {
+			return 'Template must use https:// (http:// only for a Tor v3 .onion or an .i2p host).';
 		}
 	} catch {
 		return 'Template does not parse as a URL after {txid} substitution.';
 	}
 	return trimmed;
+}
+
+/** Did parseChatLinkTemplate accept `raw`? It returns the trimmed template
+ *  itself on success (https://, or http:// to a .onion / .i2p host since
+ *  v1.21.15) and an error sentence otherwise. PURE. */
+export function chatLinkTemplateAccepted(raw: string, result: string): boolean {
+	return result === raw.trim() && result.length > 0;
 }
 
 export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> {
@@ -1704,7 +1717,15 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'well-known privacy-respecting explorers.\n' +
 			'\n' +
 			'Format: an https:// URL template containing the placeholder\n' +
-			'{txid}, which Morphit substitutes at render time.\n' +
+			'{txid}, which Morphit substitutes at render time\n' +
+			'(http:// is accepted only for a .onion or .i2p explorer).\n' +
+			'\n' +
+			'Your .onion / .i2p / .loki addresses never show these: a page\n' +
+			'opened there links only to Tor and I2P explorers built into\n' +
+			'Morphit (or to yours: a .onion one on every hidden address,\n' +
+			'an .i2p one on your .i2p address), and shows no link for a\n' +
+			'coin that has none. On your clearnet site a .onion / .i2p\n' +
+			'URL of yours is skipped (a normal browser cannot open it).\n' +
 			'\n' +
 			'Single-network assets (one URL each):\n' +
 			'  • BTC, XMR, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL,\n' +
@@ -1968,7 +1989,7 @@ async function editChatLinkUrl(label: string, defaultUrl: string): Promise<strin
 		}
 		const raw = await ask(`${label}`, current);
 		const result = parseChatLinkTemplate(raw);
-		if (result.startsWith('https://')) {
+		if (chatLinkTemplateAccepted(raw, result)) {
 			current = result;
 			console.log('  ↻ updated, re-checking...\n');
 		} else {

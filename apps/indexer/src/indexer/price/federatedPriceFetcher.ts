@@ -130,8 +130,9 @@ export interface FederatedFetcherDeps {
 	/** Minimum total samples (peers + self) before a median is trusted. */
 	readonly minObservations: number;
 	/** The price the chain-pinned fee amount implies
-	 *  (USD only). The median is clamped to it ± FEE_PRICE_TOLERANCE. Absent or
-	 *  null → unclamped. */
+	 *  (USD only). The median is clamped to it ± FEE_PRICE_TOLERANCE. Absent
+	 *  (non-USD, no database) → unclamped; given but yielding no price → no
+	 *  median at all (fail closed). */
 	readonly pinnedPrice?: () => Promise<number | null>;
 }
 
@@ -167,8 +168,14 @@ export function createFederatedFetcher(deps: FederatedFetcherDeps): PriceFetch {
 			peerSamples: peers.length,
 			median: med !== null
 		});
-		// bound it by the chain pin.
-		const pinned = deps.pinnedPrice ? await deps.pinnedPrice().catch(() => null) : null;
+		// Bound it by the chain pin. Where a bound is meant to apply (USD, with
+		// a database) and none can be had — no pinned fee for this asset, or the
+		// read failed — the median is NOT used (v1.21.15 review, fail closed):
+		// unbounded, sybil peers could set it to anything; the next tier
+		// decides instead.
+		if (!deps.pinnedPrice) return med;
+		const pinned = await deps.pinnedPrice().catch(() => null);
+		if (pinned === null || !Number.isFinite(pinned) || pinned <= 0) return null;
 		return clampToPinned(med, pinned);
 	};
 }

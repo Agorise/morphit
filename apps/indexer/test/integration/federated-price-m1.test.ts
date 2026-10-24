@@ -50,7 +50,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				[origin, price, minutesAgo]
 			);
 		}
-		function fetcher(pinned: number | null = PINNED) {
+		function fetcher(pinned: number | null | 'none' = PINNED) {
 			return createFederatedFetcher({
 				db: fx.db,
 				asset: 'BLURT',
@@ -58,7 +58,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				ownNative: async () => 0.0021,
 				freshnessMinutes: 240,
 				minObservations: 3,
-				pinnedPrice: async () => pinned
+				...(pinned === 'none' ? {} : { pinnedPrice: async () => pinned })
 			});
 		}
 
@@ -116,12 +116,20 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			expect(low!).toBeGreaterThanOrEqual(PINNED * (1 - FEE_PRICE_TOLERANCE) - 1e-12);
 		});
 
-		it('with no pinned price available the median is returned unclamped (non-USD / no pin)', async () => {
+		it('with no bound meant to apply (non-USD, no database) the median is returned unclamped', async () => {
 			await peer('http://h1.example', 'h1');
 			await peer('http://h2.example', 'h2');
 			await observe('http://h1.example', 0.0022);
 			await observe('http://h2.example', 0.002);
-			expect(await fetcher(null)()).toBeCloseTo(0.0021, 8);
+			expect(await fetcher('none')()).toBeCloseTo(0.0021, 8);
+		});
+
+		it('a bound meant to apply but not available (no pinned fee, read failed): no median at all — fail closed (v1.21.15)', async () => {
+			await peer('http://h1.example', 'h1');
+			await peer('http://h2.example', 'h2');
+			await observe('http://h1.example', 0.0022);
+			await observe('http://h2.example', 0.002);
+			expect(await fetcher(null)()).toBeNull();
 		});
 	}
 );

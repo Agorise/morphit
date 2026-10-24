@@ -49,7 +49,11 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseEnv } from 'node:util';
-import { DEFAULT_BTC_CLEARNET_EXPLORERS } from './feeSources.js';
+import {
+	DEFAULT_BTC_CLEARNET_EXPLORERS,
+	DEFAULT_BTC_I2P_EXPLORERS,
+	DEFAULT_BTC_ONION_EXPLORERS
+} from './feeSources.js';
 
 /**
  * Morphit genesis block — the Blurt block in which the network's
@@ -253,6 +257,20 @@ export const DEFAULT_CANARY_BTC_SOURCES: readonly CanaryBtcSource[] = [
 	{ kind: 'blockchair', url: 'https://api.blockchair.com/bitcoin/stats', label: 'blockchair.com' },
 	{ kind: 'blockcypher', url: 'https://api.blockcypher.com/v1/btc/main', label: 'blockcypher.com' }
 ];
+
+/**
+ * v1.21.15 — the warrant canary's HIDDEN Bitcoin sources: the onion and I2P
+ * Esplora APIs the fee verifier already uses (./feeSources.ts, one source of
+ * truth).
+ * fetch-btc-head.ts asks them all at once and takes the fastest valid answer:
+ * FIRST on a Tor-only node, and on a clearnet node when every clearnet source
+ * above failed. They are only ever reached through the local Tor SOCKS proxy
+ * (an `.i2p` one through i2pd), never directly.
+ */
+export const DEFAULT_CANARY_BTC_HIDDEN_SOURCES: readonly CanaryBtcSource[] = [
+	...DEFAULT_BTC_ONION_EXPLORERS,
+	...DEFAULT_BTC_I2P_EXPLORERS
+].map((url): CanaryBtcSource => ({ kind: 'esplora', url, label: new URL(url).host }));
 
 /** Inline sanitize for any string this package prints to the
  *  operator's terminal at boot time.  Strips C0/C1/DEL + all

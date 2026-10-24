@@ -78,6 +78,12 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		// display tests have realistic bases to live-scale.
 		btcFeeSatoshis: FEE_FALLBACK.satoshis,
 		xmrFeePiconero: FEE_FALLBACK.piconero,
+		// The fee addresses (the real config always has them — the canonical
+		// treasury by default). Empty here: BTC/XMR fees off unless a test sets
+		// one. Without them the chain-pin read threw, and the federated price
+		// — which now fails closed without its bound (v1.21.15) — had none.
+		btcFeeAddress: '',
+		xmrFeeAddress: '',
 		// empty by default, meaning every canonical
 		// registry asset is enabled.  Tests that exercise the
 		// instance-wide disable gate override with e.g.

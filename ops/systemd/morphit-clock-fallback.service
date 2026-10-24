@@ -1,0 +1,49 @@
+[Unit]
+Description=Morphit clock fallback — when NTP cannot keep the clock, set it from onion Date headers over Tor
+Documentation=https://git.agorise.net/agorise/morphit
+After=tor.service
+Wants=tor.service
+
+[Service]
+Type=oneshot
+# v1.21.15. Installed on nodes that KEEP clearnet NTP (a tor-only node has
+# morphit-tor-timesync.timer instead), by the Ansible tor role and by
+# `morphit-ops upgrade`. While the NTP client reports the clock synchronised it
+# does nothing (morphit-clock-fallback.sh asks timedated first); only when NTP
+# cannot keep the clock (UDP 123 blocked, the pool unreachable) does it run the
+# Tor time check, morphit-tor-timesync.sh — the same consensus rule as on a
+# tor-only node. Root because stepping the clock needs CAP_SYS_TIME; both
+# scripts are root-owned copies in /usr/local/lib/morphit.
+# It talks only to Tor's SocksPort on loopback (and to timedated over D-Bus).
+# Exit 1 ("no consensus right now") is a normal outcome, not a failure.
+User=root
+Group=root
+EnvironmentFile=-/etc/morphit/tor-timesync.env
+ExecStart=/usr/local/lib/morphit/morphit-clock-fallback.sh
+SuccessExitStatus=0 1
+TimeoutStartSec=300
+
+# ─── Hardening ─────────────────────────────────────────────────
+# NOT ProtectClock: setting the clock is this unit's job.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+LimitCORE=0
+# Loopback TCP to Tor only (curl needs AF_INET; AF_UNIX for logging).
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=localhost
+CapabilityBoundingSet=CAP_SYS_TIME
+# hwclock --systohc records its drift in /etc/adjtime (when the box has one).
+ReadWritePaths=-/etc/adjtime
+
+[Install]
+WantedBy=multi-user.target

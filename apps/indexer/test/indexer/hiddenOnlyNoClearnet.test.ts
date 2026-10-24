@@ -23,7 +23,7 @@
  * front of.
  */
 
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import net from 'node:net';
 import type pg from 'pg';
 import type { Database } from '$db/pool';
@@ -41,6 +41,7 @@ import {
 import {
 	peerReceiptBases,
 	runPeerPriceSampleCycle,
+	startPeerPriceMonitor,
 	_resetPeerPriceMonitorState
 } from '$indexer/price/peerPriceMonitor';
 import type { HiddenServiceProxyConfig } from '@morphit/hidden-transport';
@@ -243,10 +244,29 @@ describe('F31 — which addresses a price sample tries', () => {
 		expect(peerReceiptBases('https://x.example', alt, true)).toEqual([want]);
 	});
 
-	it('clearnet node: the peer’s origin, alone and unchanged', () => {
+	it('clearnet node: the peer’s origin first, then its I2P and Tor addresses — never Lokinet (v1.21.15)', () => {
 		expect(peerReceiptBases('https://x.example', { tor: ONION }, false)).toEqual([
-			'https://x.example'
+			'https://x.example',
+			`http://${ONION}`
 		]);
+		expect(
+			peerReceiptBases(
+				'https://x.example',
+				{ tor: ONION, i2p_b32: B32, i2p_name: I2P_NAME, lokinet: LOKI },
+				false
+			)
+		).toEqual(['https://x.example', `http://${B32}`, `http://${I2P_NAME}`, `http://${ONION}`]);
+		expect(peerReceiptBases('https://x.example', null, false)).toEqual(['https://x.example']);
+	});
+
+	it('clearnet node, a peer whose registered origin is itself a hidden name: a Tor / I2P one is kept, a .loki or malformed one is dropped (v1.21.15)', () => {
+		expect(peerReceiptBases(`https://${ONION}`, { tor: ONION }, false)).toEqual([
+			`https://${ONION}`,
+			`http://${ONION}`
+		]);
+		expect(peerReceiptBases(`https://${LOKI}`, { tor: ONION }, false)).toEqual([`http://${ONION}`]);
+		expect(peerReceiptBases('https://short.onion', null, false)).toEqual([]);
+		expect(peerReceiptBases('https://short.onion.', null, false)).toEqual([]);
 	});
 
 	it('hidden-only and nothing published: nothing — never the clearnet origin', () => {
@@ -358,6 +378,152 @@ describe('F31 — a hidden-only node actually collects peer prices', () => {
 		});
 		expect(asked, 'I2P first, then Tor').toEqual([B32, ONION]);
 		expect(inserted.length, 'a peer on two networks must not weigh double').toBe(1);
+	});
+
+	it('a clearnet node whose peer’s web address gives no receipt asks its hidden addresses, with the hidden budget (v1.21.15)', async () => {
+		const { db, inserted } = priceDb([
+			{ origin: 'https://both.example', reg_alt_networks: { tor: ONION, lokinet: LOKI } }
+		]);
+		const clearAsked: string[] = [];
+		const hiddenAsked: Array<[string, number]> = [];
+		const result = await runPeerPriceSampleCycle({
+			db,
+			priceSource,
+			asset: 'BLURT',
+			denominationFiat: 'USD',
+			minObservations: 1,
+			clearnetFetch: async <T>(url: string): Promise<T> => {
+				clearAsked.push(new URL(url).host);
+				throw new Error('connect ETIMEDOUT');
+			},
+			hiddenFetch: async <T>(url: string, timeoutMs: number): Promise<T> => {
+				hiddenAsked.push([new URL(url).host, timeoutMs]);
+				return receipt(0.004) as T;
+			}
+		});
+		expect(clearAsked).toEqual(['both.example']);
+		expect(
+			hiddenAsked.map((a) => a[0]),
+			'Tor, never the .loki name'
+		).toEqual([ONION]);
+		expect(hiddenAsked[0]?.[1]).toBeGreaterThanOrEqual(60_000);
+		expect(result.observationsRecorded).toBe(1);
+		expect(
+			inserted.map((p) => p[0]),
+			'recorded under the peer’s origin'
+		).toEqual(['https://both.example']);
+	});
+
+	it('a clearnet node never hands a hidden-name origin to the clearnet transport — it goes through Tor (v1.21.15)', async () => {
+		const { db } = priceDb([
+			{ origin: `https://${ONION}`, reg_alt_networks: null },
+			{ origin: `https://${LOKI}`, reg_alt_networks: null }
+		]);
+		const clearAsked: string[] = [];
+		const hiddenAsked: string[] = [];
+		const result = await runPeerPriceSampleCycle({
+			db,
+			priceSource,
+			asset: 'BLURT',
+			denominationFiat: 'USD',
+			minObservations: 1,
+			clearnetFetch: async <T>(url: string): Promise<T> => {
+				clearAsked.push(new URL(url).host);
+				return receipt(0.004) as T;
+			},
+			hiddenFetch: async <T>(url: string): Promise<T> => {
+				hiddenAsked.push(new URL(url).host);
+				return receipt(0.004) as T;
+			}
+		});
+		expect(clearAsked).toEqual([]);
+		expect(hiddenAsked).toEqual([ONION]);
+		expect(result.observationsRecorded).toBe(1);
+	});
+
+	it('a clearnet node whose peer’s web address answers asks nothing else', async () => {
+		const { db } = priceDb([{ origin: 'https://both.example', reg_alt_networks: { tor: ONION } }]);
+		let hidden = 0;
+		await runPeerPriceSampleCycle({
+			db,
+			priceSource,
+			asset: 'BLURT',
+			denominationFiat: 'USD',
+			minObservations: 1,
+			clearnetFetch: async <T>(): Promise<T> => receipt(0.004) as T,
+			hiddenFetch: async <T>(): Promise<T> => {
+				hidden++;
+				return receipt(0.004) as T;
+			}
+		});
+		expect(hidden).toBe(0);
+	});
+
+	it('a MORPHIT_HIDDEN_RPC_TIMEOUT_MS that is not a number gives the 60 s budget, never NaN (v1.21.15)', async () => {
+		hiddenOnly();
+		const was = process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS;
+		process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS = '60s';
+		try {
+			const { db } = priceDb([FOUR_PEERS[0]!]);
+			const budgets: number[] = [];
+			await runPeerPriceSampleCycle({
+				db,
+				priceSource,
+				asset: 'BLURT',
+				denominationFiat: 'USD',
+				hiddenOnly: true,
+				hiddenFetch: async <T>(_url: string, timeoutMs: number): Promise<T> => {
+					budgets.push(timeoutMs);
+					return receipt(0.004) as T;
+				}
+			});
+			expect(budgets).toEqual([60_000]);
+		} finally {
+			if (was === undefined) delete process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS;
+			else process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS = was;
+		}
+	});
+
+	it('a sample cycle still running when the next is due is not started twice (v1.21.15)', async () => {
+		const { db } = priceDb([FOUR_PEERS[0]!]);
+		let inFlight = 0;
+		let most = 0;
+		let started = 0;
+		let release: () => void = () => {};
+		const gate = new Promise<void>((r) => (release = r));
+		vi.useFakeTimers();
+		const stop = startPeerPriceMonitor(
+			{
+				db,
+				priceSource,
+				asset: 'BLURT',
+				denominationFiat: 'USD',
+				hiddenOnly: true,
+				hiddenFetch: async <T>(): Promise<T> => {
+					started++;
+					inFlight++;
+					most = Math.max(most, inFlight);
+					await gate;
+					inFlight--;
+					return receipt(0.004) as T;
+				}
+			},
+			0.0005 // every 30 ms
+		);
+		try {
+			// Six intervals pass while the first cycle is still waiting.
+			await vi.advanceTimersByTimeAsync(200);
+			expect(started).toBe(1);
+			expect(most).toBe(1);
+			release();
+			await vi.advanceTimersByTimeAsync(100);
+			expect(started).toBeGreaterThan(1);
+			expect(most).toBe(1);
+		} finally {
+			stop();
+			release();
+			vi.useRealTimers();
+		}
 	});
 
 	it('hands the hidden transport the hidden budget, not the clearnet one', async () => {

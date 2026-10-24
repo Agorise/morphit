@@ -38,7 +38,9 @@ import tls from 'node:tls';
 import { isIP } from 'node:net';
 import type net from 'node:net';
 import { Agent, setGlobalDispatcher } from 'undici';
-import { makeSocks5Connector, parseHostPort } from '@morphit/hidden-transport';
+import { hiddenNetworkOf, makeSocks5Connector, parseHostPort } from '@morphit/hidden-transport';
+import { buildHiddenSubDispatchers } from '@morphit/hidden-transport/router';
+import type { Dispatcher } from 'undici';
 
 export {
 	socks5Greeting,
@@ -72,6 +74,47 @@ export function installTorDispatcherIfTorOnly(env: NodeJS.ProcessEnv = process.e
 		new Agent({ connect: makeCanaryTorConnector(host, port) as any })
 	);
 	return `tor-only (SOCKS ${host}:${port})`;
+}
+
+/**
+ * v1.21.15 — the ONLY way the canary reaches a hidden (.onion / .i2p) source:
+ * through the local Tor SOCKS proxy (MORPHIT_CANARY_TOR_SOCKS, default
+ * 127.0.0.1:9050) or i2pd (MORPHIT_CANARY_I2P_HTTP_PROXY, default
+ * 127.0.0.1:4444), on a clearnet node as well as a Tor-only one. Null for a
+ * clearnet URL (the caller uses the normal route), and null for a hidden URL
+ * whose proxy is switched off (empty) or whose network has no proxy (.loki):
+ * the caller then SKIPS that source — dialling it directly would hand the
+ * name to the system resolver. Built once per process, on first use.
+ */
+/** Is `url`'s host under .onion / .i2p / .loki — also a malformed one (not a
+ *  v3 address, a trailing dot)? Such a host is NEVER dialled directly: when
+ *  canaryHiddenDispatcherFor gives no proxy for it, the caller skips it.
+ *  (v1.21.15 review) PURE. */
+export function canaryHostLooksHidden(url: string): boolean {
+	try {
+		const h = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+		return /\.(onion|i2p|loki)$/.test(h);
+	} catch {
+		return false;
+	}
+}
+
+const canaryHiddenAgents = new Map<string, { tor?: Dispatcher; i2p?: Dispatcher }>();
+export function canaryHiddenDispatcherFor(
+	url: string,
+	env: NodeJS.ProcessEnv = process.env
+): Dispatcher | null {
+	const net = hiddenNetworkOf(url);
+	if (net !== 'tor' && net !== 'i2p') return null;
+	const torSocks = (env.MORPHIT_CANARY_TOR_SOCKS ?? '127.0.0.1:9050').trim();
+	const i2pHttpProxy = (env.MORPHIT_CANARY_I2P_HTTP_PROXY ?? '127.0.0.1:4444').trim();
+	const key = `${torSocks}|${i2pHttpProxy}`;
+	let agents = canaryHiddenAgents.get(key);
+	if (agents === undefined) {
+		agents = buildHiddenSubDispatchers({ torSocks, i2pHttpProxy });
+		canaryHiddenAgents.set(key, agents);
+	}
+	return agents[net] ?? null;
 }
 
 type ConnectOpts = {

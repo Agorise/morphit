@@ -785,11 +785,25 @@ ok(
 	'the RPC timeout depends on the transport, not a flat value',
 	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(rpcClient)
 );
-ok('…clearnet keeps its short timeout', /hiddenNet === null \? 10_000/.test(rpcClient));
+ok('…clearnet keeps its short timeout', /hiddenNet === null\s*\?\s*10_000/.test(rpcClient));
 ok(
 	'…hidden transports get far longer, and it is tunable',
 	/MORPHIT_HIDDEN_RPC_TIMEOUT_MS \?\? 60_000/.test(rpcClient)
 );
+// v1.21.15: a setting that is not a number must not become NaN (an instant
+// timeout on every hidden call) — in both chain clients and the price monitor.
+for (const [name, body] of [
+	['indexer chain client', rpcClient],
+	['relay chain client', read('apps/relay/src/blurt/client.ts')],
+	['peer price monitor', read('apps/indexer/src/indexer/price/peerPriceMonitor.ts')]
+] as const) {
+	ok(
+		`${name}: MORPHIT_HIDDEN_RPC_TIMEOUT_MS that is not a positive number falls back to 60 s`,
+		/Number\.isFinite\(hiddenEnv\) && hiddenEnv > 0 \? hiddenEnv : 60_000/.test(
+			body.replace(/\s+/g, ' ')
+		)
+	);
+}
 
 // FIVE layers of the same flat-timeout mistake were found in one session. Each
 // fix was real and each hid the next, so guard EVERY layer — when one is fixed,
@@ -800,9 +814,17 @@ ok(
 );
 ok(
 	'layer 5: peer PRICE fetches get the hidden floor — a zero-clearnet node otherwise silently collects NO peer observations and loses its price cross-check',
-	/hiddenOnly\n\t\t\? Math\.max\(fetchTimeoutMsRaw/.test(
+	// v1.21.15: the floor is computed once (hiddenTimeoutMs) and used for EVERY
+	// hidden address — a hidden-only node's, and a clearnet node's fallback.
+	/const hiddenTimeoutMs = Math\.max\(\s*fetchTimeoutMsRaw,/.test(
 		read('apps/indexer/src/indexer/price/peerPriceMonitor.ts')
-	)
+	) &&
+		/const fetchTimeoutMs = hiddenOnly \? hiddenTimeoutMs : fetchTimeoutMsRaw;/.test(
+			read('apps/indexer/src/indexer/price/peerPriceMonitor.ts')
+		) &&
+		/fetchPeerReceipt\(base, asset, denominationFiat, hiddenTimeoutMs, hiddenFetch\)/.test(
+			read('apps/indexer/src/indexer/price/peerPriceMonitor.ts')
+		)
 );
 ok(
 	'…and a clearnet node keeps the short peer timeout',
@@ -816,7 +838,10 @@ ok(
 	'the RELAY client is transport-aware too (its config allows hidden endpoints)',
 	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(relayClient)
 );
-ok('…and keeps the short budget for clearnet', /hiddenNet === null \? 10_000/.test(relayClient));
+ok(
+	'…and keeps the short budget for clearnet',
+	/hiddenNet === null\s*\?\s*10_000/.test(relayClient)
+);
 ok(
 	'seeder COMPARES config against router and names the mismatch',
 	/CONFIG\/ROUTER MISMATCH/.test(seed)

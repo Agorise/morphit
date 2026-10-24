@@ -54,7 +54,7 @@ import { fastNotifyBudgetSize } from '$indexer/fastNotifyBudget';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.21.14';
+export const INDEXER_VERSION = '1.21.15';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -458,8 +458,10 @@ export function healthRoute(
 								// peer-comparison cycle for BLURT: how many peers
 								// were queried, the peer median vs our own price,
 								// the deviation, and whether an alert fired.  null
-								// until the first cycle runs (or when the peer
-								// monitor is disabled).  Together with drift (B)
+								// until the first cycle runs. Every node samples
+								// (v1.21.15); `alert` can fire only where alerts are
+								// on (MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED, or a
+								// hidden-only node).  Together with drift (B)
 								// and disagreement (C) above, all three price-
 								// manipulation defenses are now visible here —
 								// finally making good on the schema comment.

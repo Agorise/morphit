@@ -1,0 +1,18 @@
+[Unit]
+Description=Morphit clock fallback timer — every 6 hours (nodes that keep clearnet NTP)
+Documentation=https://git.agorise.net/agorise/morphit
+# No Requires=: that would start the service the moment the timer starts (at
+# boot), before NTP had its chance; Unit= below is all the timer needs.
+
+[Timer]
+# After boot (NTP gets the first chance; Tor needs a few minutes to build
+# circuits), then every 6 hours. While NTP keeps the clock, a run only asks
+# timedated and ends.
+OnBootSec=30min
+OnUnitActiveSec=6h
+RandomizedDelaySec=15min
+Persistent=true
+Unit=morphit-clock-fallback.service
+
+[Install]
+WantedBy=timers.target

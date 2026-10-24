@@ -18,6 +18,7 @@ import {
 } from '@morphit/operator-config/fee-sources';
 import { hiddenServiceProxyConfigFromEnv, type HiddenServiceProxyConfig } from '@morphit/hidden-transport';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
+import { isValidChatLinkTemplate } from './chatLinkTemplate';
 
 /** Blurt account-name shape — the project-canonical regex:
  *  3–16 chars, lowercase, leading letter, `[a-z0-9.-]` interior, ending
@@ -57,28 +58,6 @@ const PLACEHOLDER_DB_PASSWORDS = [
 	'password',
 	'postgres'
 ] as const;
-
-/** Validate a chat-link URL template.  Must start
- *  with https://, contain literal `{txid}`, and parse as a
- *  URL after substitution with a placeholder txid.  Mirrors
- *  the ops-cli wizard's parseChatLinkTemplate so the
- *  validation reasoning is identical at config-write time
- *  and config-load time. */
-function isValidChatLinkTemplate(s: string): boolean {
-	if (!s.startsWith('https://')) return false;
-	if (!s.includes('{txid}')) return false;
-	const sampleTxid =
-		'0000000000000000000000000000000000000000000000000000000000000000';
-	const filled = s.replace(/\{txid\}/g, sampleTxid);
-	try {
-		const parsed = new URL(filled);
-		if (parsed.protocol !== 'https:') return false;
-		if (parsed.username !== '' || parsed.password !== '') return false;
-		return true;
-	} catch {
-		return false;
-	}
-}
 
 /** Trimmed, unambiguous config consumed by the rest of the service. */
 export interface Config {
@@ -417,11 +396,12 @@ export interface Config {
 	 *  price; sustained disagreement >25% for >4 hours fires an
 	 *  alert.  See ADR-0041 for the full design.
 	 *
-	 *  Default: false (opt-in).  Disabled instances skip the
-	 *  monitor entirely — no peer queries, no DB writes, no
-	 *  comparison.  An operator turns this on once their instance
-	 *  is federated with at least 3 reachable peers (the minimum
-	 *  for meaningful median computation). */
+	 *  Default: false (opt-in) — and since v1.21.15 it decides the ALERT
+	 *  only: every node samples its peers (the samples are the clearnet
+	 *  node's federated fallback price, and a hidden-only node's primary
+	 *  price, where the alert is always on). An operator turns this on
+	 *  once their instance is federated with at least 3 reachable peers
+	 *  (the minimum for meaningful median computation). */
 	readonly priceFeedPeerMonitorEnabled: boolean;
 
 	/** How often to sample peers (minutes).  Default 30. */
@@ -1246,9 +1226,9 @@ const envSchema = z.object({
 		)
 		.default('USD'),
 	// Defense F — cross-instance peer disagreement detector.
-	// Opt-in (default false).  When enabled, the indexer queries
-	// peer instances' price-receipt endpoint and alerts on
-	// sustained median-vs-self disagreement.  See ADR-0041.
+	// The ALERT is opt-in (default false): when enabled, sustained
+	// median-vs-self disagreement alerts. The sampling of peer instances'
+	// price-receipt endpoint runs on every node (v1.21.15).  See ADR-0041.
 	MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED: z
 		.string()
 		.transform((s) => s === 'true')
@@ -1286,8 +1266,9 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_BTC_FEE_ADDRESS: z.string().default(CANONICAL_TREASURY.btc),
 	MORPHIT_INDEXER_BTC_FEE_SATOSHIS: z.coerce.number().int().min(0).default(416),
 	// Esplora API bases. Default (@morphit/operator-config, feeSources.ts):
-	// four onion explorers, asked first over Tor, then blockstream.info and
-	// mempool.space as the clearnet fallback (never on a zero-clearnet node).
+	// the onion explorers (asked first, over Tor), then the I2P one (through
+	// i2pd), then blockstream.info and mempool.space as the clearnet fallback
+	// (never on a zero-clearnet node).
 	MORPHIT_INDEXER_BTC_EXPLORER_URLS: z
 		.string()
 		.default(DEFAULT_BTC_FEE_EXPLORERS.join(','))
@@ -1329,9 +1310,9 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_XMR_EXPLORER_URLS: z
 		.string()
 		.default(
-			// Two onion xmrblocks explorers first (over Tor), then the clearnet
-			// fallback: two txprove explorers, the raw-tx moneroblocks.info and
-			// three public nodes. See config/xmrExplorers.ts and
+			// Two onion xmrblocks explorers first (over Tor), then one on I2P
+			// (through i2pd), then the clearnet fallback: two txprove explorers,
+			// the raw-tx moneroblocks.info and three public nodes. See config/xmrExplorers.ts and
 			// docs/OPERATIONS.md §40.4.
 			DEFAULT_XMR_EXPLORERS.join(',')
 		)
@@ -1502,7 +1483,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_XMR_CHAT_LINK_URL: z
 		.string()
@@ -1510,7 +1491,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// BCH chat-link explorer URL.  Same shape
 	// contract as BTC/XMR; when unset, frontend falls back to the
@@ -1521,7 +1502,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// LTC chat-link explorer URL.  Same shape
 	// contract as BTC/XMR/BCH; when unset, frontend falls back to
@@ -1532,7 +1513,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// DASH chat-link explorer URL.  Same shape
 	// contract as BTC/XMR/BCH/LTC; when unset, frontend falls
@@ -1543,7 +1524,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// DOGE chat-link explorer URL.  Same shape
 	// contract as BTC/XMR/BCH/LTC/DASH; when unset, frontend
@@ -1554,7 +1535,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// ZEC chat-link explorer URL override.
 	// Single-network like BTC/XMR/BCH/LTC/DASH/DOGE.  When unset,
@@ -1565,7 +1546,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// ARRR (Pirate Chain) chat-link explorer URL
 	// override.  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE/ZEC.
@@ -1577,7 +1558,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// DCR (Decred) chat-link explorer URL
 	// override.  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE/
@@ -1589,7 +1570,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// SOL (Solana) chat-link explorer URL
 	// override.  Single-network like all the other tradable
@@ -1601,7 +1582,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// ETH (Ethereum) chat-link explorer URL
 	// override.  Single-network like all the other tradable
@@ -1613,7 +1594,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// XRP (Ripple) chat-link explorer URL
 	// override.  Single-network XRPL mainnet.  When unset,
@@ -1624,7 +1605,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// USDT per-network chat-link explorer URLs.
 	// DD-11 closure: these were missing since an earlier release so the
@@ -1637,7 +1618,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_USDT_TRC20_CHAT_LINK_URL: z
 		.string()
@@ -1645,7 +1626,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_USDT_SPL_CHAT_LINK_URL: z
 		.string()
@@ -1653,7 +1634,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_USDT_BEP20_CHAT_LINK_URL: z
 		.string()
@@ -1661,7 +1642,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// USDC per-network chat-link explorer URLs.
 	// DD-10 closure.  4 networks: erc20, spl, base, polygon.
@@ -1673,7 +1654,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_USDC_SPL_CHAT_LINK_URL: z
 		.string()
@@ -1681,7 +1662,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_USDC_BASE_CHAT_LINK_URL: z
 		.string()
@@ -1689,7 +1670,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL: z
 		.string()
@@ -1697,7 +1678,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// DAI per-network chat-link explorer URLs.
 	// 4 networks: ERC-20 (Ethereum), Polygon, Base, Arbitrum.
@@ -1709,7 +1690,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_DAI_POLYGON_CHAT_LINK_URL: z
 		.string()
@@ -1717,7 +1698,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_DAI_BASE_CHAT_LINK_URL: z
 		.string()
@@ -1725,7 +1706,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	MORPHIT_FRONTEND_DAI_ARBITRUM_CHAT_LINK_URL: z
 		.string()
@@ -1733,7 +1714,7 @@ const envSchema = z.object({
 		.optional()
 		.refine(
 			(s) => s === undefined || isValidChatLinkTemplate(s),
-			'must be https://, contain {txid}, and parse as URL'
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// Backlog item 5 — operator earnings pipeline.
 	// Charset matches the operator-register handler's TAG_PATTERN
@@ -1818,7 +1799,7 @@ export function resolveBtcQuorum(
 		note:
 			`[config] MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} BTC explorer(s) configured, ` +
 			`so a Bitcoin fee is accepted on ${value} explorer's word. Add a second explorer to ` +
-			`MORPHIT_INDEXER_BTC_EXPLORER_URLS (the default list has six) to require two to agree.`
+			`MORPHIT_INDEXER_BTC_EXPLORER_URLS (the default list has ${DEFAULT_BTC_FEE_EXPLORERS.length}) to require two to agree.`
 	};
 }
 
@@ -1844,7 +1825,7 @@ export function resolveXmrQuorum(
 		note:
 			`[config] MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} XMR explorer(s) configured, ` +
 			`so a Monero fee is accepted on ${value} explorer's word. Add a second explorer to ` +
-			`MORPHIT_INDEXER_XMR_EXPLORER_URLS (the default list has eight) to require two to agree.`
+			`MORPHIT_INDEXER_XMR_EXPLORER_URLS (the default list has ${DEFAULT_XMR_EXPLORERS.length}) to require two to agree.`
 	};
 }
 

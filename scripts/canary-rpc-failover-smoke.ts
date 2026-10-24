@@ -17,6 +17,10 @@
  *      (not a hand-copied one) and runs it through the failover walk, and
  *      generate.sh calls that CLI instead of a single pinned curl. These
  *      are the checks that bite if someone reintroduces the single-node bug.
+ *
+ *   v1.21.15: a Tor-only node asks its onion nodes all at once (the fastest
+ *   valid head wins); a clearnet node whose every clearnet node failed asks
+ *   the hidden nodes all at once, through Tor / i2pd only.
  */
 
 import { readFileSync } from 'node:fs';
@@ -25,11 +29,15 @@ import { fileURLToPath } from 'node:url';
 
 import {
 	type BlurtHead,
+	fetchBlurtHeadFastest,
+	fetchBlurtHeadPhased,
 	fetchBlurtHeadWithFailover,
 	parseHead,
+	planCanaryBlurtPhases,
 	resolveCanaryNodes,
 	canaryDefaultNodes
 } from './canary/blurtHeadFailover.js';
+import { readTextCapped } from './canary/readCapped.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -155,6 +163,73 @@ async function run(): Promise<void> {
 		);
 	}
 
+	// ─── v1.21.15: phases — race the hidden nodes ─────────────────
+	{
+		const clear = ['https://c1.example', 'https://c2.example'];
+		const hid = ['http://aaa.onion', 'http://aaa.b32.i2p', 'http://bbb.onion'];
+		const tor = planCanaryBlurtPhases({
+			override: 'http://own.onion',
+			torOnly: true,
+			clearnet: clear,
+			hidden: hid
+		});
+		check(
+			'tor-only: the override first (all at once), then the other default onions all at once — never clearnet',
+			tor.length === 2 &&
+				tor[0]?.mode === 'race' &&
+				tor[0].nodes.join(',') === 'http://own.onion' &&
+				tor[1]?.mode === 'race' &&
+				tor[1].nodes.join(',') === 'http://aaa.onion,http://bbb.onion'
+		);
+		const cl = planCanaryBlurtPhases({
+			override: 'http://aaa.onion',
+			torOnly: false,
+			clearnet: clear,
+			hidden: hid
+		});
+		check(
+			'clearnet: override + clearnet in order, then the remaining hidden nodes (onion and I2P) all at once',
+			cl.length === 2 &&
+				cl[0]?.mode === 'walk' &&
+				cl[0].nodes.join(',') === 'http://aaa.onion,https://c1.example,https://c2.example' &&
+				cl[1]?.mode === 'race' &&
+				cl[1].nodes.join(',') === 'http://aaa.b32.i2p,http://bbb.onion'
+		);
+		const asked: string[] = [];
+		const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+		const got = await fetchBlurtHeadPhased(
+			planCanaryBlurtPhases({ override: undefined, torOnly: false, clearnet: clear, hidden: hid }),
+			async (url) => {
+				asked.push(url);
+				if (url.startsWith('https://')) return null;
+				await delay(url === 'http://bbb.onion' ? 20 : 300);
+				return GOOD;
+			}
+		);
+		check(
+			'clearnet all failed: the hidden nodes are asked together and the fastest answers',
+			got?.url === 'http://bbb.onion' &&
+				asked.slice(0, 2).join(',') === clear.join(',') &&
+				asked.length === 5
+		);
+		asked.length = 0;
+		await fetchBlurtHeadPhased(
+			planCanaryBlurtPhases({ override: undefined, torOnly: false, clearnet: clear, hidden: hid }),
+			async (url) => {
+				asked.push(url);
+				return GOOD;
+			}
+		);
+		check('clearnet answers: no hidden node is asked', asked.join(',') === 'https://c1.example');
+		check(
+			'race: null when every node fails; a throwing node is just a miss',
+			(await fetchBlurtHeadFastest(['a', 'b'], async (u) => {
+				if (u === 'a') throw new Error('boom');
+				return null;
+			})) === null && (await fetchBlurtHeadFastest([], async () => GOOD)) === null
+		);
+	}
+
 	// ─── parseHead shape guard ───────────────────────────────────
 	check('parseHead accepts a well-formed result', parseHead(GOOD) !== null);
 	check(
@@ -165,6 +240,71 @@ async function run(): Promise<void> {
 			parseHead({ head_block_number: 5, head_block_id: '', time: 't' }) === null &&
 			parseHead({ head_block_number: '5', head_block_id: 'x', time: 't' }) === null
 	);
+	// v1.21.15: the head goes into a signed canary — its id must be a Blurt
+	// block id that carries this height, its time the chain's format.
+	check(
+		'parseHead rejects a block id that is not 40 hex digits',
+		parseHead({ ...GOOD, head_block_id: `${GOOD.head_block_id}00` }) === null &&
+			parseHead({ ...GOOD, head_block_id: GOOD.head_block_id.toUpperCase() }) === null &&
+			parseHead({ ...GOOD, head_block_id: '00bc614e\n000000000000000000000000000dead' }) === null
+	);
+	check(
+		'parseHead rejects a block id whose first 8 hex digits are not the height',
+		parseHead({ ...GOOD, head_block_number: GOOD.head_block_number + 1 }) === null
+	);
+	check(
+		'parseHead rejects a height that is not a safe whole number',
+		parseHead({ ...GOOD, head_block_number: 12_345_678.5 }) === null &&
+			parseHead({ ...GOOD, head_block_number: 2 ** 60 }) === null
+	);
+	check(
+		'parseHead rejects a time not in the chain format (no zone, whole seconds)',
+		parseHead({ ...GOOD, time: '2026-07-11T01:00:00Z' }) === null &&
+			parseHead({ ...GOOD, time: 'yesterday' }) === null &&
+			parseHead({ ...GOOD, time: '2026-07-11T01:00:00\t1' }) === null
+	);
+
+	// ─── answers are read up to 64 KB (v1.21.15) ─────────────────
+	{
+		const stream = (bytes: number, chunk = 4096): ReadableStream<Uint8Array> => {
+			let left = bytes;
+			return new ReadableStream({
+				pull(ctrl) {
+					if (left <= 0) return ctrl.close();
+					const n = Math.min(chunk, left);
+					left -= n;
+					ctrl.enqueue(new Uint8Array(n).fill(0x61));
+				}
+			});
+		};
+		check(
+			'an answer up to 64 KB is read whole',
+			(await readTextCapped(new Response(stream(64 * 1024))))?.length === 64 * 1024 &&
+				(await readTextCapped(new Response('{"result":1}'))) === '{"result":1}'
+		);
+		check(
+			'an answer that keeps streaming past 64 KB is cut off and not used',
+			(await readTextCapped(new Response(stream(64 * 1024 + 1)))) === null &&
+				(await readTextCapped(new Response(stream(10 * 1024 * 1024)))) === null
+		);
+		check(
+			'an answer that says it is larger than 64 KB is not read at all',
+			(await readTextCapped(
+				new Response(stream(10), { headers: { 'content-length': String(64 * 1024 + 1) } })
+			)) === null
+		);
+		const blurtCli = readFileSync(join(REPO, 'scripts/canary/fetch-blurt-head.ts'), 'utf8');
+		const btcCli = readFileSync(join(REPO, 'scripts/canary/fetch-btc-head.ts'), 'utf8');
+		check(
+			'both head fetchers read every answer through the 64 KB cap (never resp.json() / resp.text())',
+			/readTextCapped\(resp\)/.test(blurtCli) &&
+				!/\.(json|text)\(\)/.test(blurtCli) &&
+				/readTextCapped\(heightResp\)/.test(btcCli) &&
+				/readTextCapped\(hashResp\)/.test(btcCli) &&
+				/readTextCapped\(resp\)/.test(btcCli) &&
+				!/\.(json|text)\(\)/.test(btcCli)
+		);
+	}
 
 	// ─── B. WIRING — CLI + generate.sh ───────────────────────────
 	const cli = readFileSync(join(REPO, 'scripts/canary/fetch-blurt-head.ts'), 'utf8');
@@ -181,8 +321,17 @@ async function run(): Promise<void> {
 		!/https?:\/\/[a-z0-9.-]*blurt[a-z0-9.-]*/i.test(cli)
 	);
 	check(
-		'CLI runs the fetch through the failover walk',
-		cli.includes('fetchBlurtHeadWithFailover(')
+		'CLI runs the fetch through the phase plan (walk / race)',
+		cli.includes('fetchBlurtHeadPhased(') &&
+			/planCanaryBlurtPhases\(\{[^}]*torOnly: canaryIsTorOnly\(\)[^}]*hidden: DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS/.test(
+				cli
+			)
+	);
+	check(
+		'CLI: a hidden node goes through Tor / i2pd only — skipped with no proxy, the dispatcher on the fetch',
+		/if \(isHidden && dispatcher === null\) \{/.test(cli) &&
+			(cli.match(/\bfetch\(/g)?.length ?? 0) === 1 &&
+			/\bfetch\(url, \{\s*\.\.\.via,/.test(cli)
 	);
 	check(
 		'generate.sh invokes the failover helper via tsx (real call, not a comment)',

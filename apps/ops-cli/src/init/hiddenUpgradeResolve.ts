@@ -309,9 +309,13 @@ export async function tryResolveHiddenUpgrade(
 			readonly now?: () => number;
 			readonly sleep?: (ms: number) => Promise<void>;
 		};
+		/** v1.21.15: a CLEARNET node whose every release source (the code host
+		 *  and its mirrors) failed asks the federation over Tor/I2P too — the
+		 *  same verified path, without the hidden-only gate. */
+		fallback?: boolean;
 	}
 ): Promise<HiddenUpgradeResolution | null> {
-	if (!(await isHiddenOnly(opts))) return null;
+	if (opts.fallback !== true && !(await isHiddenOnly(opts))) return null;
 	// every answer below comes from ONE authenticated
 	// listener — the indexer's own process, found at its configured address.
 	const base = locateLocalIndexer(opts);
@@ -319,8 +323,11 @@ export async function tryResolveHiddenUpgrade(
 	const started = clockNow();
 
 	opts.onProgress?.(
-		'This server uses no clearnet (zero clearnet): it gets the release from the other Morphit ' +
-			"instances over Tor and I2P, and checks it against @morphit's signed record. This can take a few minutes."
+		opts.fallback === true
+			? 'No release source answered over clearnet, so this server gets the release from the other Morphit ' +
+					"instances over Tor and I2P, and checks it against @morphit's signed record. This can take a few minutes."
+			: 'This server uses no clearnet (zero clearnet): it gets the release from the other Morphit ' +
+					"instances over Tor and I2P, and checks it against @morphit's signed record. This can take a few minutes."
 	);
 
 	// 1. Target. The local indexer says which version is current; the hashes and
@@ -528,7 +535,9 @@ export async function tryResolveHiddenUpgrade(
 	opts.onProgress?.(
 		`✓ Got v${version} from ${winner !== undefined ? `${winner}, ` : ''}${hiddenGatewayLabel(result.peer)} after ` +
 			`${formatDuration(clockNow() - started)}: it matches the signed SHA-256 — applying ` +
-			'(zero clearnet, no git.agorise.net / mirrors touched)'
+			(opts.fallback === true
+				? '(over Tor/I2P)'
+				: '(zero clearnet, no git.agorise.net / mirrors touched)')
 	);
 	return { tarballPath, version, servedBy: result.peer, anchor };
 }

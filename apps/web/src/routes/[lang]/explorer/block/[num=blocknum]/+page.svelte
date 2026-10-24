@@ -103,14 +103,17 @@
 			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 				{$_('explorer.block.not_found_body', { values: { block: blockNumber } })}
 			</p>
-			<a
-				href={blurtWalletExplorerFallbackUrl('block', blockNumber)}
-				target="_blank"
-				rel="noopener noreferrer"
-				class="mt-3 inline-block text-sm font-semibold underline-offset-2 hover:underline"
-			>
-				{$_('explorer.block.try_fallback')} ↗
-			</a>
+			{#if blurtWalletExplorerFallbackUrl('block', blockNumber)}
+				{@const fallbackUrl = blurtWalletExplorerFallbackUrl('block', blockNumber)}
+				<a
+					href={fallbackUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="mt-3 inline-block text-sm font-semibold underline-offset-2 hover:underline"
+				>
+					{$_('explorer.block.try_fallback')} ↗
+				</a>
+			{/if}
 		</div>
 	{:else if status === 'error'}
 		<div class="card">

@@ -1,6 +1,7 @@
 #!/bin/sh
 # morphit-tor-timesync.sh — keep a TOR-ONLY node's clock right with no clearnet
-# NTP. (v1.20.0, C13)
+# NTP. (v1.20.0, C13) Also the clock fallback of a node that keeps clearnet NTP,
+# run by morphit-clock-fallback.sh only when NTP cannot keep the clock. (v1.21.15)
 #
 # WHY NOT NTP. NTP is UDP, and Tor carries only TCP, so NTP cannot go over Tor;
 # chrony on a tor-only node therefore polled public pools straight from the
@@ -32,8 +33,12 @@
 #
 # Usage:  morphit-tor-timesync.sh [--check]
 #   --check   measure and report only; never change the clock.
+# (A node that keeps clearnet NTP runs this through morphit-clock-fallback.sh,
+# which first asks whether NTP keeps the clock. v1.21.15)
+# One run at a time: a second run while one is going (the timer and a manual
+# run) reports result=busy and changes nothing.
 # The last line is machine-readable:
-#   MORPHIT_TOR_TIME result=<in-tolerance|stepped|would-step|few-answers|disagree|too-far|tor-starting|step-failed>
+#   MORPHIT_TOR_TIME result=<in-tolerance|stepped|would-step|few-answers|disagree|too-far|tor-starting|step-failed|busy>
 #     answered=<n> agreed=<n> offset=<seconds> sources=<host,host,...>
 # Exit status: 0 when a consensus was reached (whether or not the clock moved),
 # 1 when it was not (nothing was changed), 2 on a usage/config error.
@@ -62,11 +67,24 @@ tor_bootstrapped() {
 }
 
 CHECK_ONLY=no
-case "${1:-}" in
-	--check) CHECK_ONLY=yes ;;
-	'') : ;;
-	*) echo "usage: morphit-tor-timesync.sh [--check]" >&2; exit 2 ;;
-esac
+for arg in "$@"; do
+	case "$arg" in
+		--check) CHECK_ONLY=yes ;;
+		*) echo "usage: morphit-tor-timesync.sh [--check]" >&2; exit 2 ;;
+	esac
+done
+
+# One run at a time (v1.21.15): two runs measuring and stepping at once would
+# each correct the same offset. The lock is this script file itself, held for
+# the whole run; it needs no writable directory.
+if command -v flock >/dev/null 2>&1; then
+	exec 9<"$0"
+	if ! flock -n 9; then
+		log "another time check is running; this one changes nothing."
+		echo "MORPHIT_TOR_TIME result=busy answered=0 agreed=0 offset=0 sources="
+		exit 1
+	fi
+fi
 
 # Tor's SocksPort: explicit setting, else the indexer's own, else Tor's default.
 if [ -z "${MORPHIT_TOR_SOCKS:-}" ] && [ -r "${MORPHIT_INDEXER_ENV:-/etc/morphit/indexer.env}" ]; then

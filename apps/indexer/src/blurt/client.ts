@@ -247,8 +247,15 @@ function clientFor(url: string): Client {
 		// service survived on warm tunnels and continuous retries, which is exactly
 		// why this looked like a script bug rather than a timeout.
 		const hiddenNet = hiddenHostNetworkOf(new URL(url).hostname);
+		// v1.21.15: a value that is not a positive number ("60s", empty) falls
+		// back to 60 s — as NaN, every hidden call would time out at once.
+		const hiddenEnv = Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
 		const timeoutMs =
-			hiddenNet === null ? 10_000 : Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
+			hiddenNet === null
+				? 10_000
+				: Number.isFinite(hiddenEnv) && hiddenEnv > 0
+					? hiddenEnv
+					: 60_000;
 		// Guarded: dblurt followed redirects and read
 		// replies whole, so a directory-listed node could bounce our POST to our
 		// own loopback or stream memory into us. See rpcFetch.ts.

@@ -122,14 +122,17 @@
 			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
 				{$_('explorer.tx.not_found_body')}
 			</p>
-			<a
-				href={blurtWalletExplorerFallbackUrl('tx', trxId)}
-				target="_blank"
-				rel="noopener noreferrer"
-				class="mt-3 inline-block text-sm font-semibold underline-offset-2 hover:underline"
-			>
-				{$_('explorer.tx.try_fallback')} ↗
-			</a>
+			{#if blurtWalletExplorerFallbackUrl('tx', trxId)}
+				{@const fallbackUrl = blurtWalletExplorerFallbackUrl('tx', trxId)}
+				<a
+					href={fallbackUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="mt-3 inline-block text-sm font-semibold underline-offset-2 hover:underline"
+				>
+					{$_('explorer.tx.try_fallback')} ↗
+				</a>
+			{/if}
 		</div>
 	{:else if status === 'error'}
 		<div class="card">

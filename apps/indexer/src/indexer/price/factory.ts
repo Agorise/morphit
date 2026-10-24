@@ -427,6 +427,42 @@ export function createAssetPriceSource(
 		fallbackUpstreams.push({ name: 'morphit_native', fetch: nativeFetch });
 	}
 
+	// The FEDERATION's price: a median of peers' morphit_native receipts
+	// (sampled into price_peer_observations by peerPriceMonitor) and this
+	// node's own native price, bounded by the chain pin.
+	// the chain-pinned fee amount (chain-pin > env,
+	// the SAME resolution the order handler enforces) implies a USD price;
+	// the federated median is clamped to it ± FEE_PRICE_TOLERANCE so K+1
+	// free sybil peers cannot move this node's fee quote outside
+	// the band the indexer accepts. USD only (the pin is USD-targeted).
+	const treasury =
+		db && isUsd
+			? new TreasurySource(db, {
+					btcAddress: config.btcFeeAddress,
+					btcSatoshis: config.btcFeeSatoshis,
+					xmrAddress: config.xmrFeeAddress,
+					xmrPiconero: config.xmrFeePiconero.toString(),
+					blurtBase: config.feeBaseBlurt
+				})
+			: null;
+	const federated = createFederatedFetcher({
+		db,
+		asset: options.asset,
+		denominationFiat: config.priceFeedDenominationFiat,
+		ownNative: nativeFetch,
+		freshnessMinutes: 240,
+		minObservations: 3,
+		pinnedPrice: treasury
+			? async () => {
+					const t = await treasury.current();
+					return pinnedFeeImpliedUsdPrice(options.asset, {
+						blurtBase: t.blurt?.base ?? null,
+						btcSatoshis: t.btc?.satoshis ?? null,
+						xmrPiconero: t.xmr?.piconero ?? null
+					});
+				}
+			: undefined
+	});
 	// ── HIDDEN-ONLY (v1.15.x stage 2) ────────────────────────────────────────
 	// When the clearnet RPC pool is empty this node is hidden-only; stage-1's
 	// dispatcher would fail-close a clearnet price fetch anyway. So price over
@@ -436,39 +472,6 @@ export function createAssetPriceSource(
 	// peerPriceMonitor) + this node's own native price. Clearnet CEX/aggregator
 	// upstreams are dropped entirely; the static floor is the last resort.
 	if (config.blurtRpcEndpoints.length === 0) {
-		// the chain-pinned fee amount (chain-pin > env,
-		// the SAME resolution the order handler enforces) implies a USD price;
-		// the federated median is clamped to it ± FEE_PRICE_TOLERANCE so K+1
-		// free sybil peers cannot move a hidden-only node's fee quote outside
-		// the band the indexer accepts. USD only (the pin is USD-targeted).
-		const treasury =
-			db && isUsd
-				? new TreasurySource(db, {
-						btcAddress: config.btcFeeAddress,
-						btcSatoshis: config.btcFeeSatoshis,
-						xmrAddress: config.xmrFeeAddress,
-						xmrPiconero: config.xmrFeePiconero.toString(),
-						blurtBase: config.feeBaseBlurt
-					})
-				: null;
-		const federated = createFederatedFetcher({
-			db,
-			asset: options.asset,
-			denominationFiat: config.priceFeedDenominationFiat,
-			ownNative: nativeFetch,
-			freshnessMinutes: 240,
-			minObservations: 3,
-			pinnedPrice: treasury
-				? async () => {
-						const t = await treasury.current();
-						return pinnedFeeImpliedUsdPrice(options.asset, {
-							blurtBase: t.blurt?.base ?? null,
-							btcSatoshis: t.btc?.satoshis ?? null,
-							xmrPiconero: t.xmr?.piconero ?? null
-						});
-					}
-				: undefined
-		});
 		const hidden = new CompositeCachedPriceSource({
 			upstreams: [],
 			// BTC/XMR: the onion pricenodes first; then (and for BLURT) the
@@ -493,7 +496,15 @@ export function createAssetPriceSource(
 	const source = new CompositeCachedPriceSource({
 		upstreams,
 		primaryUpstreams,
-		fallbackUpstreams,
+		// v1.21.15: when every clearnet source above is down, the federation
+		// (peers reached over Tor/I2P when their web address does not answer)
+		// comes before this node's own native price alone — only where the
+		// chain pin bounds it (USD, with a database), so sybil peers cannot move
+		// a clearnet node's price outside the fee band.
+		fallbackUpstreams:
+			treasury !== null
+				? [{ name: 'federated', fetch: federated }, ...fallbackUpstreams]
+				: fallbackUpstreams,
 		...(pricenodes !== null ? { deferExternal: () => pricenodes.awaitingFirstRound() } : {}),
 		outlierTolerance: config.priceOutlierTolerance,
 		plausibleMin: options.plausibleMin,

@@ -40,7 +40,8 @@ function explorerFetch(modes: Record<string, ExplorerMode>): typeof fetch {
 	return (async (url: string) => {
 		const txid = String(url).split('/tx/')[1] ?? '';
 		const m = modes[txid] ?? { kind: '404' };
-		if (m.kind === '404') return new Response('not found', { status: 404 });
+		// What Esplora's backend (electrs) answers for an unknown txid.
+		if (m.kind === '404') return new Response('Transaction not found', { status: 404 });
 		if (m.kind === '500') return new Response('down', { status: 503 });
 		return new Response(
 			JSON.stringify({
@@ -177,7 +178,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				},
 				(async () =>
 					n++ % 2 === 0
-						? new Response('nf', { status: 404 })
+						? new Response('Transaction not found', { status: 404 })
 						: new Response('down', { status: 503 })) as unknown as typeof fetch
 			);
 			await post('alice', 'sell-btc-mixed', txid, mixed);

@@ -28,6 +28,8 @@ import {
 	parseSocks5ConnectReply,
 	parseHostPort,
 	canaryIsTorOnly,
+	canaryHiddenDispatcherFor,
+	canaryHostLooksHidden,
 	installTorDispatcherIfTorOnly
 } from './canary/torSocksDispatcher.js';
 
@@ -92,8 +94,44 @@ const blurt = read('scripts/canary/fetch-blurt-head.ts');
 const btc = read('scripts/canary/fetch-btc-head.ts');
 check('fetch-blurt-head imports the tor dispatcher installer', /import \{[^}]*\binstallTorDispatcherIfTorOnly\b[^}]*\} from '\.\/torSocksDispatcher\.js'/.test(blurt));
 check('fetch-blurt-head calls installTorDispatcherIfTorOnly() in main', /installTorDispatcherIfTorOnly\(\)/.test(blurt));
-check('fetch-btc-head imports the tor dispatcher installer', /import \{ installTorDispatcherIfTorOnly \} from '\.\/torSocksDispatcher\.js'/.test(btc));
+check('fetch-btc-head imports the tor dispatcher installer', /import \{[^}]*\binstallTorDispatcherIfTorOnly\b[^}]*\} from '\.\/torSocksDispatcher\.js'/.test(btc));
 check('fetch-btc-head calls installTorDispatcherIfTorOnly() in main', /installTorDispatcherIfTorOnly\(\)/.test(btc));
+
+// ── v1.21.15: a hidden source only through Tor / i2pd ───────────────
+{
+	const onion = 'http://mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion/api';
+	const i2p = 'http://44naenfnp6foaegpmujdn4pmhtgo52tjkgs2d3ir2wo7d7mfbufq.b32.i2p/api';
+	const env = {} as NodeJS.ProcessEnv;
+	const viaTor = canaryHiddenDispatcherFor(onion, env);
+	const viaI2p = canaryHiddenDispatcherFor(i2p, env);
+	check('an onion source gets the Tor proxy dispatcher, an I2P one the i2pd one', viaTor !== null && viaI2p !== null && viaTor !== viaI2p);
+	check('a clearnet source gets none (normal route)', canaryHiddenDispatcherFor('https://mempool.space/api', env) === null);
+	check('a .loki source gets none (no proxy: the caller skips it)', canaryHiddenDispatcherFor('http://x.loki/api', env) === null);
+	check(
+		'with the Tor / I2P proxy switched off (empty), the hidden source gets none (skipped, never direct)',
+		canaryHiddenDispatcherFor(onion, { MORPHIT_CANARY_TOR_SOCKS: '' } as NodeJS.ProcessEnv) === null &&
+			canaryHiddenDispatcherFor(i2p, { MORPHIT_CANARY_I2P_HTTP_PROXY: ' ' } as NodeJS.ProcessEnv) === null
+	);
+}
+
+// ── v1.21.15 review: a malformed hidden name is never dialled directly ──
+check(
+	'a short or dotted .onion, an .i2p or a .loki host counts as hidden (and gets no proxy → skipped)',
+	['http://short.onion/api', 'http://x.onion./api', 'http://a.b32.i2p./api', 'http://n.loki/api'].every(
+		(u) => canaryHostLooksHidden(u)
+	) &&
+		canaryHiddenDispatcherFor('http://short.onion/api', {} as NodeJS.ProcessEnv) === null &&
+		!canaryHostLooksHidden('https://mempool.space/api')
+);
+for (const [name, text] of [
+	['fetch-btc-head', btc],
+	['fetch-blurt-head', blurt]
+] as const) {
+	check(
+		`${name}: a host that only LOOKS hidden is treated as hidden (skipped without a proxy, never dialled)`,
+		/hiddenNetworkOf\([^)]*\) \?\? \(canaryHostLooksHidden\([^)]*\) \? 'hidden' : null\)/.test(text)
+	);
+}
 
 // ── verdict ───────────────────────────────────────────────────────
 const total = pass + fails.length;

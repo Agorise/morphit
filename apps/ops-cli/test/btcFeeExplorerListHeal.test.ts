@@ -25,8 +25,13 @@ const ONION_BTC = [
 	'http://mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion/api',
 	'http://mempool4t6mypeemozyterviq3i5de4kpoua65r3qkn5i3kknu5l2cad.onion/api',
 	'http://runbtcx3wfygbq2wdde6qzjnpyrqn3gvbks7t5jdymmunxttdvvttpyd.onion/api',
-	'http://explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion/api'
+	'http://explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion/api',
+	// v1.21.15
+	'http://3pd56qzgyg7p4sk7rlcxrrsbx7nfucdckautxjqbre7uw7kr3ah53byd.onion/api',
+	'http://44naenfnp6foaegpmujdn4pmhtgo52tjkgs2d3ir2wo7d7mfbufq.b32.i2p/api'
 ];
+/** The hidden defaults a v1.21.0 – v1.21.14 upgrade already offered. */
+const OFFERED_BEFORE_V1_21_15 = ONION_BTC.slice(0, 4);
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -52,7 +57,7 @@ const btcLine = (text: string): string =>
 	text.split('\n').find((l) => l.startsWith('MORPHIT_INDEXER_BTC_EXPLORER_URLS='))!;
 
 describe('the Bitcoin fee-source heal', () => {
-	it('the default list is the four live onion explorers, then the two clearnet ones', () => {
+	it('the default list is the five live onion explorers and one I2P explorer, then the two clearnet ones', () => {
 		expect(DEFAULT_BTC_FEE_EXPLORERS).toEqual([...ONION_BTC, ...OLD_BTC]);
 	});
 
@@ -75,6 +80,22 @@ describe('the Bitcoin fee-source heal', () => {
 		expect(btcLine(readFileSync(file, 'utf8'))).toBe(
 			`MORPHIT_INDEXER_BTC_EXPLORER_URLS=${[own, ...ONION_BTC, ...OLD_BTC].join(',')}`
 		);
+	});
+
+	it('v1.21.15 on a node healed before: only the two new hidden explorers are added, once', () => {
+		const current = [...OLD_BTC, ...OFFERED_BEFORE_V1_21_15];
+		const { root, file } = box(env(`'${current.join(',')}'`));
+		const state = join(root, 'var/lib/morphit/fee-explorer-defaults.json');
+		mkdirSync(join(state, '..'), { recursive: true });
+		writeFileSync(
+			state,
+			JSON.stringify({ offered: OFFERED_BEFORE_V1_21_15.map((u) => u.toLowerCase()) })
+		);
+		expect(healBtcExplorerList(root)).toMatchObject({ kind: 'updated', added: ONION_BTC.slice(4) });
+		expect(btcLine(readFileSync(file, 'utf8'))).toBe(
+			`MORPHIT_INDEXER_BTC_EXPLORER_URLS='${[...current, ...ONION_BTC.slice(4)].join(',')}'`
+		);
+		expect(healBtcExplorerList(root)).toEqual({ kind: 'already' });
 	});
 
 	it('a default the operator removed after it was offered is not added again', () => {

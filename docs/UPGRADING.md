@@ -423,6 +423,13 @@ there first could have chosen what root installed.
 
 `upgrade` can fall back to mirrors if the primary is slow or down, set via
 `MORPHIT_RELEASE_MIRRORS` (e.g. `MORPHIT_RELEASE_MIRRORS=mirror.example,codeberg.org/agorise/morphit`).
+When the primary and every mirror fail to answer (v1.21.15), and @morphit's
+on-chain record names a newer release, `upgrade` gets that release from the
+other Morphit instances over Tor/I2P, as a zero-clearnet node always does, and
+installs it only if it matches the record's SHA-256. A tarball you dropped in
+the offline directory is used first when it is newer than what runs here (an
+older one left there does not stop this); `--check-only` and `--json` never
+fetch this way.
 Crucially, **a mirror is never trusted just because it served the bytes** —
 verifying a mirror's tarball against that same mirror's checksum proves
 nothing. Two integrity paths apply, in trust order:
