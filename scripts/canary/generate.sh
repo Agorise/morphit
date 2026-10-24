@@ -46,6 +46,8 @@
 #                                    RSS feeds asked through Tor when every
 #                                    clearnet feed fails (first on a tor-only
 #                                    node). Default: the BBC's onion feed.
+#   $MORPHIT_CANARY_ONION_NEWS_WAIT — OPTIONAL. Seconds the onion feeds get
+#                                    (1-600, default 60).
 #   $MORPHIT_CANARY_TOR_ONLY       — OPTIONAL. 1/0; unset, derived from a
 #                                    .onion / .i2p instance origin.
 #   $MORPHIT_CANARY_TOR_SOCKS      — OPTIONAL. Tor's SocksPort for every hidden
@@ -340,6 +342,14 @@ news_from_clearnet_feeds() {
 # Guardian's and the New York Times' timed out, ProPublica's onion was not
 # found).
 ONION_NEWS_RSS="${MORPHIT_CANARY_ONION_NEWS_RSS:-https://www.bbcnewsd73hkzno2ini43t4gblxvycyac5aw4gnv7t2rccijh7745uqd.onion/news/rss.xml}"
+# How long the onion feeds get, in seconds (MORPHIT_CANARY_ONION_NEWS_WAIT,
+# whole seconds 1-600; default 60 — an onion rendezvous alone can take tens of
+# seconds). After it, every fetch still running is stopped.
+ONION_NEWS_WAIT="${MORPHIT_CANARY_ONION_NEWS_WAIT:-60}"
+case "$ONION_NEWS_WAIT" in
+	'' | *[!0-9]* | 0*) ONION_NEWS_WAIT=60 ;;
+esac
+[ "$ONION_NEWS_WAIT" -le 600 ] || ONION_NEWS_WAIT=600
 news_from_onion_feeds() {
 	_dir="$(mktemp -d)"
 	_n=0
@@ -360,14 +370,14 @@ news_from_onion_feeds() {
 			_curl=''
 			trap 'if [ -n "$_curl" ]; then kill "$_curl" 2>/dev/null; wait "$_curl" 2>/dev/null; fi; exit 0' TERM
 			curl -fsSL --socks5-hostname "$CANARY_TOR_SOCKS" --proxy-user "morphit-news-$_n:x" \
-				--max-time 60 -A "$NEWS_UA" "$feed" >"$_dir/$_n.xml" 2>/dev/null &
+				--max-time "$ONION_NEWS_WAIT" -A "$NEWS_UA" "$feed" >"$_dir/$_n.xml" 2>/dev/null &
 			_curl=$!
 			wait "$_curl" || true
 			printf '%s\n' "$feed" >"$_dir/$_n.src"
 			: >"$_dir/$_n.done"
 		) &
 	done
-	_left=600 # 60 s in 0.1 s steps
+	_left=$((ONION_NEWS_WAIT * 10)) # in 0.1 s steps
 	_seen=' '
 	while [ "$_left" -gt 0 ]; do
 		# Counted BEFORE the scan: a feed that finishes during the scan is read
@@ -382,6 +392,9 @@ news_from_onion_feeds() {
 				NEWS_HEADLINE="$_h"
 				NEWS_WON_SRC="$(cat "$_dir/$_k.src")"
 				kill $(jobs -p) 2>/dev/null || true
+				# Wait for the stopped fetches to end, so each is reaped here, not left
+				# as a zombie for whatever adopts it once this script exits.
+				wait 2>/dev/null || true
 				rm -rf "$_dir"
 				return 0
 			fi
@@ -391,6 +404,7 @@ news_from_onion_feeds() {
 		_left=$((_left - 1))
 	done
 	kill $(jobs -p) 2>/dev/null || true
+	wait 2>/dev/null || true
 	rm -rf "$_dir"
 	return 1
 }

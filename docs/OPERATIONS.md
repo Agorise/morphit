@@ -8181,7 +8181,9 @@ The generator fetches three external resources when you run it
   if none gives a headline, onion news feeds (by default the BBC's;
   `MORPHIT_CANARY_ONION_NEWS_RSS`, space-separated `.onion` URLs, replaces the
   list) are asked all at once through the box's Tor proxy and the fastest
-  headline is used — never directly (v1.21.15).
+  headline is used — never directly (v1.21.15). They get 60 seconds
+  (`MORPHIT_CANARY_ONION_NEWS_WAIT`, 1-600); then every fetch still running is
+  stopped.
 
 On a Tor-only box (an `.onion` or `.b32.i2p` origin, or
 `MORPHIT_CANARY_TOR_ONLY=1`) all three go through the box's Tor SOCKS

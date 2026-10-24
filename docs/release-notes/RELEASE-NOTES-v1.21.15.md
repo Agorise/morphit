@@ -72,7 +72,8 @@ so explorers whose API was off or blocked could, together, reject a fee that was
   site".
 - **The canary** reads `MORPHIT_CANARY_TOR_SOCKS` (default `127.0.0.1:9050`) and the new
   `MORPHIT_CANARY_I2P_HTTP_PROXY` (default `127.0.0.1:4444`) for those hidden sources, and the new
-  `MORPHIT_CANARY_ONION_NEWS_RSS` (space-separated `.onion` feeds; default the BBC's) for the news line. Pinning
+  `MORPHIT_CANARY_ONION_NEWS_RSS` (space-separated `.onion` feeds; default the BBC's) and
+  `MORPHIT_CANARY_ONION_NEWS_WAIT` (seconds they get, default 60) for the news line. Pinning
   `MORPHIT_CANARY_BTC_EXPLORER` asks that explorer only. On a clearnet box without Tor the hidden sources fail at
   once and change nothing.
 - **`MORPHIT_HIDDEN_RPC_TIMEOUT_MS`** that is not a positive number now falls back to 60 seconds; before, it made

@@ -58,6 +58,9 @@ while [ $# -gt 0 ]; do
 	esac
 done
 echo "$url $socks" >> "${calls}"
+# Like a real curl closing its connection, it takes a moment to go once told
+# to stop — long enough that the script can finish first if nothing waits.
+trap 'sleep 0.5; exit 143' TERM
 echo "$$ $url" >> "${calls}.pids"
 echo "$PPID $url" >> "${calls}.pids"
 for i in 1 2 3 4 5; do
@@ -65,7 +68,7 @@ for i in 1 2 3 4 5; do
 	[ -n "$spec" ] || continue
 	IFS='|' read -r match delay title <<< "$spec"
 	case "$url" in *"$match"*)
-		sleep "$delay"
+		sleep "$delay" & wait $!
 		printf '<rss><channel><title>Feed</title><item><title>%s</title></item></channel></rss>' "$title"
 		exit 0 ;;
 	esac
@@ -240,6 +243,33 @@ const C = 'https://c234567890123456789012345678901234567890123456789012345.onion
 		'the slower feeds are stopped once one wins, and reaped (no curl left running, no zombie — even under a parent that never reaps)',
 		r.headline === 'A over Tor' &&
 			Date.now() - t0 < 20_000 &&
+			r.watch.length === 2 &&
+			lingering === '',
+		`${JSON.stringify(r)} lingering=${lingering}`
+	);
+}
+{
+	// Nothing answers in time: when the wait is over every onion fetch is
+	// stopped and reaped too, and the canary carries on without a headline.
+	const t0 = Date.now();
+	const r = run(
+		false,
+		{
+			MORPHIT_CANARY_ONION_NEWS_RSS: `${A} ${B}`,
+			MORPHIT_CANARY_ONION_NEWS_WAIT: '1',
+			FAKE_1: 'a2345678|30|A too slow',
+			FAKE_2: 'b2345678|30|B too slow',
+			WATCH_PIDS: `${calls}.pids`,
+			WATCH_URL: B
+		},
+		true
+	);
+	const lingering = r.watch.filter((w) => !w.endsWith(' gone')).join(', ');
+	check(
+		'no onion feed answers within MORPHIT_CANARY_ONION_NEWS_WAIT: no headline, and every fetch is stopped and reaped',
+		r.status === 0 &&
+			r.headline === '' &&
+			Date.now() - t0 < 15_000 &&
 			r.watch.length === 2 &&
 			lingering === '',
 		`${JSON.stringify(r)} lingering=${lingering}`
