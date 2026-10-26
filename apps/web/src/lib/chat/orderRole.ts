@@ -101,3 +101,66 @@ export function chatMoneyFlow(
 	const side = peerCryptoSide(cryptoSideOfOrder(order), orderIsMine);
 	return { payNow: side === 'buy', shareAddress: side === 'sell' };
 }
+
+/** An i18n key and its values, rendered by the caller with `$_`. */
+export interface LabelParts {
+	readonly key: string;
+	readonly values?: Record<string, string>;
+}
+
+/** The two money-flow buttons' labels, naming the coin the trade moves
+ *  (v1.21.16). The crypto SENDER's button says what it does — "Send BLURT",
+ *  "Send XMR" — instead of a bare "Pay now", and the crypto RECEIVER's says
+ *  what they share — "Share your XMR address", or for BLURT, which goes to an
+ *  account, "Share your Blurt account". A BARTER order settles in one of the
+ *  coins the seller accepts: when that is a single coin it is named the same
+ *  way; with several there is no one coin to name and the generic labels stay.
+ *  The ticker is shown upper-case. */
+export function chatMoneyFlowLabels(
+	order: { asset?: string; accepted_assets?: readonly string[] | null } | null
+): {
+	payNow: LabelParts;
+	payNowAria: LabelParts;
+	shareAddress: LabelParts;
+	shareAddressAria: LabelParts;
+} {
+	let asset = order?.asset;
+	if (asset !== undefined && isGoodsAsset(asset as AssetTicker)) {
+		const accepted = order?.accepted_assets ?? [];
+		asset = accepted.length === 1 ? accepted[0] : undefined;
+	}
+	if (asset === undefined || asset.length === 0 || isGoodsAsset(asset as AssetTicker)) {
+		return {
+			payNow: { key: 'chat.funds_sent.button' },
+			payNowAria: { key: 'chat.funds_sent.button_aria' },
+			shareAddress: { key: 'chat.address.share_button' },
+			shareAddressAria: { key: 'chat.address.share_button_aria' }
+		};
+	}
+	const values = { asset: asset.toUpperCase() };
+	const blurt = values.asset === 'BLURT';
+	return {
+		payNow: { key: 'chat.funds_sent.button_asset', values },
+		payNowAria: { key: 'chat.funds_sent.button_aria_asset', values },
+		shareAddress: blurt
+			? { key: 'chat.address.share_button_blurt' }
+			: { key: 'chat.address.share_button_asset', values },
+		shareAddressAria: blurt
+			? { key: 'chat.address.share_button_aria_blurt' }
+			: { key: 'chat.address.share_button_aria_asset', values }
+	};
+}
+
+/** The chat header's "regarding" label, from the reader's side (v1.21.16):
+ *  "Regarding my order" over my own order (its title then reads in the first
+ *  person, "I'm buying …"), "Regarding @alice's order" over the peer's (its
+ *  title then reads "Buying …"). Both people used to see the same "RE: I'm
+ *  buying …", which on the other side read as if they were the buyer. */
+export function chatOrderHeading(
+	orderIsMine: boolean,
+	owner: string
+): { label: LabelParts; voice: 'poster' | 'third' } {
+	return orderIsMine
+		? { label: { key: 'chat.header.re_mine' }, voice: 'poster' }
+		: { label: { key: 'chat.header.re_peer', values: { owner } }, voice: 'third' };
+}

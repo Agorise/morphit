@@ -319,7 +319,9 @@ const KNOWN_LIVE = [
 	'orderbook.order.range_open' in en ? 'nav.orderbook' : 'nav.orderbook', // placeholder-safe
 	'settings.hardware_key.error.timeout',
 	'assets.usdt.price_subline.live',
-	'order_title.buy_range'
+	'order_title.buy_range',
+	// v1.21.16 — the third-person family the chat header reads a peer's order in
+	'order_title_3p.sell_min'
 ];
 const selfTestFailures = KNOWN_LIVE.filter((k) => leaves.includes(k) && !referenced(k));
 

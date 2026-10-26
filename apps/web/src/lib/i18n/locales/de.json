@@ -513,8 +513,12 @@
 		"address": {
 			"share_button": "Krypto-Adresse teilen",
 			"share_button_aria": "Teile deine Krypto-Empfangsadresse",
+			"share_button_asset": "Deine {asset}-Adresse teilen",
+			"share_button_aria_asset": "Teile deine Empfangsadresse für {asset}",
+			"share_button_blurt": "Dein Blurt-Konto teilen",
+			"share_button_aria_blurt": "Teile das Blurt-Konto, auf dem du BLURT empfangen willst",
 			"modal_title": "Eine Empfangsadresse teilen",
-			"modal_subtitle": "Sende deine BTC- oder XMR-Empfangsadresse an deinen Handelspartner.",
+			"modal_subtitle": "Sende deinem Handelspartner die Adresse, an die er die Kryptowährung schicken soll.",
 			"address_label": "Empfangsadresse",
 			"address_placeholder_btc": "bc1q… oder 1… oder 3…",
 			"address_placeholder_xmr": "8… (empfohlen) oder 4…",
@@ -541,7 +545,7 @@
 			"qr_aria": "QR-Code für diese Adresse",
 			"subaddress_tip": "Tipp: Monero-Subadressen (beginnen mit 8) bieten bessere Privatsphäre.",
 			"subaddress_tip_modal": "Für bessere Privatsphäre über mehrere Trades teile eine Monero-Subadresse (beginnt mit 8) statt einer Standardadresse (4). Standardadressen verknüpfen jede empfangene Zahlung mit demselben View-Key.",
-			"pay_now": "Jetzt zahlen",
+			"pay_now": "BLURT senden",
 			"memo_label": "Zahlungs-Memo",
 			"memo_explain": "Der Käufer muss dieses Memo in seine BLURT-Überweisung einfügen, damit du die Zahlung diesem Handel zuordnen kannst.",
 			"memo_regenerate": "Neu generieren",
@@ -615,6 +619,8 @@
 		"funds_sent": {
 			"button": "Jetzt bezahlen",
 			"button_aria": "Für diesen Handel bezahlen",
+			"button_asset": "{asset} senden",
+			"button_aria_asset": "{asset} für diesen Handel senden",
 			"modal_title": "Deine Zahlung an @{peer} bestätigen",
 			"modal_subtitle": "@{peer} sieht den Betrag und die Transaktions-ID, die du unten eingibst.",
 			"locked_method_label": "Zahlung mit {asset}",
@@ -767,7 +773,8 @@
 		"message_button_label_named": "Nachricht an @{account}",
 		"header": {
 			"chatting_with": "Chat mit",
-			"re": "Betr."
+			"re_mine": "Betrifft meine Order:",
+			"re_peer": "Betrifft die Order von @{owner}:"
 		},
 		"export": {
 			"menu_label": "Chat exportieren",
@@ -1227,11 +1234,11 @@
 			},
 			"how_to_buy": {
 				"q": "Wie kaufe ich Krypto?",
-				"a": "1. Öffne das Orderbuch und filtere es nach dem gewünschten Coin.\n2. Wähle einen Verkäufer mit guter Reputation, öffne seine Order und tippe auf **Nachricht**.\n3. Einigt euch im Chat auf Menge, Preis und Zahlungsweg — Bargeld, eine Zahlungs-App, Waren, was ihr beide akzeptiert.\n4. Tippe auf **Krypto-Adresse teilen**, um dem Verkäufer deine Wallet-Adresse zu schicken.\n5. Bezahle den Verkäufer wie vereinbart. Sobald er deine Zahlung hat, sendet er die Krypto direkt an deine Wallet.\n6. Gebt euch gegenseitig eine Bewertung. Fertig!\n\n{brand} hält nie etwas dazwischen, also wähle Verkäufer sorgfältig und fang klein an."
+				"a": "1. Öffne das Orderbuch und filtere es nach dem gewünschten Coin.\n2. Wähle einen Verkäufer mit guter Reputation, öffne seine Order und tippe auf **Nachricht**.\n3. Einigt euch im Chat auf Menge, Preis und Zahlungsweg — Bargeld, eine Zahlungs-App, Waren, was ihr beide akzeptiert.\n4. Tippe auf **Deine XMR-Adresse teilen** (die Schaltfläche nennt den Coin, den du kaufst; bei BLURT heißt sie **Dein Blurt-Konto teilen**), um dem Verkäufer deine Wallet-Adresse zu schicken.\n5. Bezahle den Verkäufer wie vereinbart. Sobald er deine Zahlung hat, sendet er die Krypto direkt an deine Wallet.\n6. Gebt euch gegenseitig eine Bewertung. Fertig!\n\n{brand} hält nie etwas dazwischen, also wähle Verkäufer sorgfältig und fang klein an."
 			},
 			"how_to_sell": {
 				"q": "Wie verkaufe ich Krypto?",
-				"a": "1. Tippe auf Posten, wähle **Ich möchte VERKAUFEN** und dann den Coin — zum Beispiel Monero.\n2. Lege Wertspanne und Preis fest, hake die Zahlungsmethoden an, die du akzeptierst, und füge auf Wunsch deinen Standort hinzu.\n3. Wenn dir ein Käufer schreibt, einigt euch im Chat auf die Details.\n4. Sobald du seine Zahlung wirklich erhalten hast, sende die Krypto an die Adresse, die er im Chat teilt (die Schaltfläche **Jetzt zahlen** sendet sie oder erfasst die Zahlung).\n5. Hinterlasse eine ehrliche Bewertung — das hilft allen.\n\nDeine allererste Order muss ein Kauf von BLURT sein, und sie ist meist kostenlos (siehe „Ist meine erste Order wirklich kostenlos?“); danach kannst du Verkaufsorders einstellen. Das Einstellen kostet eine kleine Inseratsgebühr — siehe „Welche Gebühren fallen an?“."
+				"a": "1. Tippe auf Posten, wähle **Ich möchte VERKAUFEN** und dann den Coin — zum Beispiel Monero.\n2. Lege Wertspanne und Preis fest, hake die Zahlungsmethoden an, die du akzeptierst, und füge auf Wunsch deinen Standort hinzu.\n3. Wenn dir ein Käufer schreibt, einigt euch im Chat auf die Details.\n4. Sobald du seine Zahlung wirklich erhalten hast, sende die Krypto an die Adresse, die er im Chat teilt (die Schaltfläche **XMR senden** – sie nennt den Coin – sendet sie oder erfasst die Zahlung).\n5. Hinterlasse eine ehrliche Bewertung — das hilft allen.\n\nDeine allererste Order muss ein Kauf von BLURT sein, und sie ist meist kostenlos (siehe „Ist meine erste Order wirklich kostenlos?“); danach kannst du Verkaufsorders einstellen. Das Einstellen kostet eine kleine Inseratsgebühr — siehe „Welche Gebühren fallen an?“."
 			},
 			"fees": {
 				"q": "Welche Gebühren fallen an?",
@@ -1467,7 +1474,7 @@
 			},
 			"xmr_txid": {
 				"q": "Was ist eine Monero-TxID und wo finde ich sie?",
-				"a": "Eine Monero-Transaktions-ID (TxID, manchmal *Hash* genannt) ist ein 64-stelliger Code aus 0–9 und a–f, der eine Monero-Zahlung benennt. Um sie zu finden, öffne die Zahlung im Verlauf deiner Wallet: Die TxID ist der lange Code in den Details, meist mit einem Kopierknopf.\n\n**Wann {brand} danach fragt:** wenn du deinem Handelspartner sagst, dass du in Monero bezahlt hast (die Schaltfläche **Jetzt bezahlen** im Chat), und wenn du eine Inseratsgebühr in XMR zahlst (sofern diese Seite XMR-Gebühren annimmt). Bei einer Gebühr fügst du die TxID zusammen mit dem Transaktionsschlüssel der Zahlung ein, damit jede Morphit-Seite sie prüfen kann — siehe „Was ist der Monero-Transaktionsschlüssel und warum fragt {brand} danach?“.\n\n**Privatsphäre:** Eine TxID ist sowieso öffentlich — jeder kann sie in einem Block-Explorer nachschlagen — und sie zeigt weder, wer du bist, noch dein Guthaben. Aber sie wird mit deinem Inserat auf der Blurt-Chain gespeichert, was diese eine Gebührenzahlung mit deinem Konto verknüpft. Die Zahlung für deinen Trade selbst läuft von Person zu Person, außerhalb von Blurt. Wenn du ihre TxID im Chat teilst, wird sie in deinem verschlüsselten Chat übertragen, den nur du und dein Partner lesen könnt. Wenn du gar keine Monero-Verknüpfung willst, zahl die Gebühr in BLURT: Das ist voreingestellt und kostet nur die Hälfte."
+				"a": "Eine Monero-Transaktions-ID (TxID, manchmal *Hash* genannt) ist ein 64-stelliger Code aus 0–9 und a–f, der eine Monero-Zahlung benennt. Um sie zu finden, öffne die Zahlung im Verlauf deiner Wallet: Die TxID ist der lange Code in den Details, meist mit einem Kopierknopf.\n\n**Wann {brand} danach fragt:** wenn du deinem Handelspartner sagst, dass du in Monero bezahlt hast (die Schaltfläche **XMR senden** im Chat), und wenn du eine Inseratsgebühr in XMR zahlst (sofern diese Seite XMR-Gebühren annimmt). Bei einer Gebühr fügst du die TxID zusammen mit dem Transaktionsschlüssel der Zahlung ein, damit jede Morphit-Seite sie prüfen kann — siehe „Was ist der Monero-Transaktionsschlüssel und warum fragt {brand} danach?“.\n\n**Privatsphäre:** Eine TxID ist sowieso öffentlich — jeder kann sie in einem Block-Explorer nachschlagen — und sie zeigt weder, wer du bist, noch dein Guthaben. Aber sie wird mit deinem Inserat auf der Blurt-Chain gespeichert, was diese eine Gebührenzahlung mit deinem Konto verknüpft. Die Zahlung für deinen Trade selbst läuft von Person zu Person, außerhalb von Blurt. Wenn du ihre TxID im Chat teilst, wird sie in deinem verschlüsselten Chat übertragen, den nur du und dein Partner lesen könnt. Wenn du gar keine Monero-Verknüpfung willst, zahl die Gebühr in BLURT: Das ist voreingestellt und kostet nur die Hälfte."
 			},
 			"xmr_tx_proof": {
 				"q": "Was ist der Monero-Transaktionsschlüssel und warum fragt {brand} danach?",
@@ -4915,6 +4922,20 @@
 		"sell_exact": "Ich verkaufe {asset} im Wert von genau {amount} {fiat} für {settlement}",
 		"buy_barter_novalue": "Ich kaufe {asset} für {settlement}",
 		"sell_barter_novalue": "Ich verkaufe {asset} für {settlement}"
+	},
+	"order_title_3p": {
+		"buy_min": "Kauf von {asset} im Wert von mindestens {amount} {fiat} mit {settlement}",
+		"sell_min": "Verkauf von {asset} im Wert von mindestens {amount} {fiat} für {settlement}",
+		"buy_max": "Kauf von {asset} im Wert von bis zu {amount} {fiat} mit {settlement}",
+		"sell_max": "Verkauf von {asset} im Wert von bis zu {amount} {fiat} für {settlement}",
+		"buy_range": "Kauf von {asset} im Wert von {min}–{max} {fiat} mit {settlement}",
+		"sell_range": "Verkauf von {asset} im Wert von {min}–{max} {fiat} für {settlement}",
+		"buy_any": "Kauf einer beliebigen Menge {asset} mit {settlement}",
+		"sell_any": "Verkauf einer beliebigen Menge {asset} für {settlement}",
+		"buy_exact": "Kauf von {asset} im Wert von genau {amount} {fiat} mit {settlement}",
+		"sell_exact": "Verkauf von {asset} im Wert von genau {amount} {fiat} für {settlement}",
+		"buy_barter_novalue": "Kauf von {asset} für {settlement}",
+		"sell_barter_novalue": "Verkauf von {asset} für {settlement}"
 	},
 	"stats": {
 		"page_title": "Netzwerkstatistiken",

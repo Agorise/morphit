@@ -101,7 +101,7 @@ check(
 	/const showTrades = \$derived\(tradeCount > 0\);/.test(cluster),
 	'the rule moved INTO the shared component — same guarantee, one place'
 );
-check('cluster sits in the header, before the RE: order line', cv.indexOf('{#if peerReputation}') < cv.indexOf('{#if orderSummary}'));
+check('cluster sits in the header, before the RE: order line', cv.indexOf('{#if peerReputation}') < cv.indexOf('{#if orderSummaryForReader}'));
 
 console.log('');
 if (fail === 0) {

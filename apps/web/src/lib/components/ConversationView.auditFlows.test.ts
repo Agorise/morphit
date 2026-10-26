@@ -195,7 +195,7 @@ async function render(owner: string, side: 'buy' | 'sell', asset = 'XMR', failRe
 	});
 	await vi.waitFor(() => {
 		flushSync();
-		if (failReads === 0) expect(target.textContent).toContain('order_title.');
+		if (failReads === 0) expect(target.textContent).toMatch(/order_title(_3p)?\./);
 		expect(target.querySelector('textarea')).not.toBeNull();
 	});
 	const deps = ctl.deps as FakeDeps;
@@ -248,7 +248,7 @@ describe('W-H1: the thread reads the trade with ITS peer', () => {
 		});
 		const v = await render(PEER, 'sell');
 		expect(
-			v.target.querySelector('button[aria-label="chat.address.share_button_aria"]')
+			v.target.querySelector('button[aria-label^="chat.address.share_button_aria"]')
 		).not.toBeNull();
 		// This peer's own receipt: the row goes.
 		ts.recordFundsSent({
@@ -261,7 +261,7 @@ describe('W-H1: the thread reads the trade with ITS peer', () => {
 		});
 		v.flushSync();
 		expect(
-			v.target.querySelector('button[aria-label="chat.address.share_button_aria"]')
+			v.target.querySelector('button[aria-label^="chat.address.share_button_aria"]')
 		).toBeNull();
 	});
 });
@@ -303,12 +303,12 @@ describe('C-L3: whose order it is, read again until known; money actions closed 
 		});
 		const v = await render(PEER, 'buy', 'BLURT', 1);
 		await v.push([{ text: await pay() }]);
-		expect(v.target.textContent).not.toContain('order_title.');
+		expect(v.target.textContent).not.toMatch(/order_title(_3p)?\./);
 		expect(payNow(v)).toBeUndefined();
 		// Read again (after the first back-off): the owner is known, and the
 		// payment already made hides Pay now.
 		await backOff(v);
-		expect(v.target.textContent).toContain('order_title.');
+		expect(v.target.textContent).toMatch(/order_title(_3p)?\./);
 		expect(payNow(v)).toBeUndefined();
 	});
 
@@ -335,9 +335,10 @@ describe('W-L5: a failed send keeps the modal open and says so', () => {
 		const ts = await import('$lib/trades/tradeStatus');
 		ts.clearAllTradeStates();
 		ctl.outcome = ok ? { ok: true } : { ok: false, error: 'broadcast_err:insufficient_funds' };
-		const v = await render(PEER, 'sell');
+		// A BTC order: the address modal offers only the order's coin (v1.21.16).
+		const v = await render(PEER, 'sell', 'BTC');
 		v.target
-			.querySelector<HTMLButtonElement>('button[aria-label="chat.address.share_button_aria"]')!
+			.querySelector<HTMLButtonElement>('button[aria-label^="chat.address.share_button_aria"]')!
 			.click();
 		v.flushSync();
 		const input = v.target.querySelector(
@@ -356,6 +357,22 @@ describe('W-L5: a failed send keeps the modal open and says so', () => {
 		expect(ctl.sent).toHaveLength(1);
 		expect(v.target.querySelector('[aria-labelledby="address-share-heading"]')).not.toBeNull();
 		expect(v.target.textContent).toContain('chat.address.send_failed');
+	});
+
+	it('an XMR order: the modal asks for an XMR address, not another coin’s', async () => {
+		const ts = await import('$lib/trades/tradeStatus');
+		ts.clearAllTradeStates();
+		const v = await render(PEER, 'sell', 'XMR');
+		v.target
+			.querySelector<HTMLButtonElement>('button[aria-label^="chat.address.share_button_aria"]')!
+			.click();
+		v.flushSync();
+		const placeholders = [...v.target.querySelectorAll('input[placeholder]')].map((i) =>
+			i.getAttribute('placeholder')
+		);
+		expect(placeholders).toContain('chat.address.address_placeholder_xmr');
+		expect(placeholders).not.toContain('chat.address.address_placeholder_btc');
+		v.destroy();
 	});
 
 	it('the node took it: the modal closes', async () => {

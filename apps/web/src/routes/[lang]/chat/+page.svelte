@@ -42,6 +42,7 @@
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import { formatDayMonthTime } from '$i18n/formatters';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
+	import { chatOrderHeading } from '$lib/chat/orderRole';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { loadRecentPeers } from '$lib/chat/recentPeers';
 	import { readState, mergeRemoteReadState } from '$lib/chat/readState';
@@ -1056,11 +1057,17 @@
 										     permlink we have; the conversation view streams the message). -->
 											<span class="min-w-0 truncate" aria-hidden="true">…</span>
 										{:else if convo.order}
+											<!-- v1.21.16: read from this side — my own order in the first
+											     person ("I'm buying …"), the peer's as "Buying …", the same
+											     voice as the conversation's own "Regarding …" line. -->
 											{@const parts = orderTitleParts(
 												convo.order,
 												undefined,
 												$_('order_title.goods_services'),
-												{ locale: currentLang }
+												{
+													locale: currentLang,
+													voice: chatOrderHeading(convo.order.account === me, convo.order.account).voice
+												}
 											)}
 											{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
 											<span class="min-w-0 truncate">{orderTitle}</span>

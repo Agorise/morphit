@@ -20,7 +20,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { chatMoneyFlow, cryptoSideOfOrder, orderCanShip, peerCryptoSide } from './orderRole';
+import {
+	chatMoneyFlow,
+	chatMoneyFlowLabels,
+	chatOrderHeading,
+	cryptoSideOfOrder,
+	orderCanShip,
+	peerCryptoSide
+} from './orderRole';
 
 describe('peerCryptoSide', () => {
 	it("uses the owner's side as-is for the peer's order", () => {
@@ -169,5 +176,71 @@ describe('orderCanShip', () => {
 	});
 	it('is false with no order', () => {
 		expect(orderCanShip(null)).toBe(false);
+	});
+});
+
+describe('chatMoneyFlowLabels (v1.21.16): the buttons name the coin', () => {
+	it('BLURT: “Send BLURT”, and the receiver shares a Blurt ACCOUNT, not an address', () => {
+		expect(chatMoneyFlowLabels({ asset: 'BLURT' })).toEqual({
+			payNow: { key: 'chat.funds_sent.button_asset', values: { asset: 'BLURT' } },
+			payNowAria: { key: 'chat.funds_sent.button_aria_asset', values: { asset: 'BLURT' } },
+			shareAddress: { key: 'chat.address.share_button_blurt' },
+			shareAddressAria: { key: 'chat.address.share_button_aria_blurt' }
+		});
+	});
+	it('another coin: “Send XMR” / “Share your XMR address”', () => {
+		expect(chatMoneyFlowLabels({ asset: 'XMR' })).toEqual({
+			payNow: { key: 'chat.funds_sent.button_asset', values: { asset: 'XMR' } },
+			payNowAria: { key: 'chat.funds_sent.button_aria_asset', values: { asset: 'XMR' } },
+			shareAddress: { key: 'chat.address.share_button_asset', values: { asset: 'XMR' } },
+			shareAddressAria: { key: 'chat.address.share_button_aria_asset', values: { asset: 'XMR' } }
+		});
+	});
+	it('the ticker is shown upper-case whatever case it arrives in', () => {
+		expect(chatMoneyFlowLabels({ asset: 'btc' }).payNow.values).toEqual({ asset: 'BTC' });
+		expect(chatMoneyFlowLabels({ asset: 'blurt' }).shareAddress.key).toBe(
+			'chat.address.share_button_blurt'
+		);
+	});
+	it('a barter order that accepts ONE coin names it', () => {
+		expect(chatMoneyFlowLabels({ asset: 'BARTER', accepted_assets: ['XMR'] }).payNow).toEqual({
+			key: 'chat.funds_sent.button_asset',
+			values: { asset: 'XMR' }
+		});
+		expect(
+			chatMoneyFlowLabels({ asset: 'BARTER', accepted_assets: ['BLURT'] }).shareAddress
+		).toEqual({ key: 'chat.address.share_button_blurt' });
+	});
+	it('a barter order (several coins), no asset or no order: the generic labels', () => {
+		const generic = {
+			payNow: { key: 'chat.funds_sent.button' },
+			payNowAria: { key: 'chat.funds_sent.button_aria' },
+			shareAddress: { key: 'chat.address.share_button' },
+			shareAddressAria: { key: 'chat.address.share_button_aria' }
+		};
+		expect(chatMoneyFlowLabels({ asset: 'BARTER' })).toEqual(generic);
+		expect(chatMoneyFlowLabels({ asset: 'BARTER', accepted_assets: ['XMR', 'BLURT'] })).toEqual(
+			generic
+		);
+		expect(chatMoneyFlowLabels({ asset: 'BARTER', accepted_assets: [] })).toEqual(generic);
+		expect(chatMoneyFlowLabels({ asset: 'BARTER', accepted_assets: null })).toEqual(generic);
+		expect(chatMoneyFlowLabels({ asset: '' })).toEqual(generic);
+		expect(chatMoneyFlowLabels({})).toEqual(generic);
+		expect(chatMoneyFlowLabels(null)).toEqual(generic);
+	});
+});
+
+describe('chatOrderHeading (v1.21.16): “Regarding …” from the reader’s side', () => {
+	it('my own order: “Regarding my order”, the title in the first person', () => {
+		expect(chatOrderHeading(true, 'alice')).toEqual({
+			label: { key: 'chat.header.re_mine' },
+			voice: 'poster'
+		});
+	});
+	it('the peer’s order: “Regarding @bob’s order”, the title in the third person', () => {
+		expect(chatOrderHeading(false, 'bob')).toEqual({
+			label: { key: 'chat.header.re_peer', values: { owner: 'bob' } },
+			voice: 'third'
+		});
 	});
 });

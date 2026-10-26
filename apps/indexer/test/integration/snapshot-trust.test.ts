@@ -989,7 +989,9 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				when: (out: string) => boolean,
 				afterMs: number,
 				/** Sent to the whole process group (a closed terminal) instead. */
-				toGroup: NodeJS.Signals | null = null
+				toGroup: NodeJS.Signals | null = null,
+				/** Done instead of sending a signal to tsx or its group. */
+				act: (() => void) | null = null
 			): Promise<{ code: number | null; out: string; tmpLeft: string[]; marker: boolean }> {
 				const tmp = mkdtempSync(join(work, 'tmp-'));
 				const marker = join(work, `marker-${randomBytes(3).toString('hex')}`);
@@ -1024,7 +1026,8 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 					if (!sent && when(out)) {
 						sent = true;
 						setTimeout(() => {
-							if (toGroup === null) p.kill('SIGINT');
+							if (act !== null) act();
+							else if (toGroup === null) p.kill('SIGINT');
 							else process.kill(-p.pid!, toGroup);
 						}, afterMs);
 					}
@@ -1144,6 +1147,72 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 						gateway.url = saved;
 					}
 				}, 120_000);
+
+			// v1.21.16 — a SIGTERM to the whole group reaches curl and the script
+			// together, and which end the script sees first is down to timing:
+			// when curl's came first, the run said "every source failed" (exit 1)
+			// and went on to the next source (seen once in a full battery). Stopping
+			// curl ALONE forces that order every time: it must still be a stop.
+			it('the download stopped from outside (curl alone gets SIGTERM): a stop, exit 143, nothing changed', async () => {
+				await freshDst();
+				const t = tarball(work, baseTar, (s) => s);
+				const view = publish(OFFICIAL, payloadFor(t), 8_000_008);
+				const a = await chainStub('127.0.0.1', view);
+				const b = await chainStub('localhost', view);
+				servers.push(a, b);
+				const whole = readFileSync(t.tar);
+				const slow = http.createServer((_req, res) => {
+					res.writeHead(200, { 'content-length': String(whole.length) });
+					res.write(whole.subarray(0, Math.floor(whole.length / 2)));
+				});
+				await new Promise<void>((ok) => slow.listen(0, '127.0.0.1', () => ok()));
+				const url = `http://127.0.0.1:${(slow.address() as { port: number }).port}`;
+				servers.push({
+					url,
+					hits: 0,
+					close: () =>
+						new Promise<void>((ok) => {
+							slow.closeAllConnections?.();
+							slow.close(() => ok());
+						})
+				});
+				/** SIGTERM to the curl that is downloading from `url`, and nothing else. */
+				let stoppedCurls = 0;
+				const stopCurl = (): void => {
+					for (const pid of readdirSync('/proc').filter((n) => /^\d+$/.test(n))) {
+						let argv: string[];
+						try {
+							argv = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0');
+						} catch {
+							continue;
+						}
+						if (argv[0]?.endsWith('curl') && argv.some((x) => x.startsWith(`${url}/`))) {
+							process.kill(Number(pid), 'SIGTERM');
+							stoppedCurls++;
+						}
+					}
+				};
+				const saved = gateway.url;
+				gateway.url = url;
+				try {
+					const r = await bootstrapCtrlC(
+						[a, b],
+						(o) => /fetching from/i.test(o),
+						1500,
+						null,
+						stopCurl
+					);
+					expect(stoppedCurls, 'the downloading curl was found and stopped').toBe(1);
+					expect(r.code, r.out).toBe(143);
+					expect(r.out).toMatch(/stopped\. Nothing was changed/);
+					expect(r.out).not.toMatch(/every source failed/);
+					expect(await dstIntact()).toBe(true);
+					expect(r.marker).toBe(false);
+					expect(r.tmpLeft).toEqual([]);
+				} finally {
+					gateway.url = saved;
+				}
+			}, 120_000);
 
 			it('the spot-check itself calls an empty ops log inconclusive (exit 2), never verified (rv2-6)', async () => {
 				const a = await chainStub('127.0.0.1', { history: [], blocks: {} });

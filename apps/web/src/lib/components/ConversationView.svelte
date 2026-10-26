@@ -83,7 +83,12 @@
 		getReputationReceipt,
 		getFeedbackGiven
 	} from '$lib/indexer/client';
-	import { chatMoneyFlow, orderCanShip as orderShipsPhysicalItem } from '$lib/chat/orderRole';
+	import {
+		chatMoneyFlow,
+		chatMoneyFlowLabels,
+		chatOrderHeading,
+		orderCanShip as orderShipsPhysicalItem
+	} from '$lib/chat/orderRole';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -765,12 +770,14 @@
 			for (const m of whole) {
 				if (m.orderPermlink !== thread) {
 					thread = m.orderPermlink;
+					// This chat's own order reads as in the header, from the
+					// exporter's side ("Regarding @alice's order: Buying …"; v1.21.16).
 					const about =
 						thread === null
 							? t('chat.export.no_order_thread')
-							: t('chat.export.regarding', {
-									summary: thread === orderPermlink && orderSummary ? orderSummary : thread
-								});
+							: thread === orderPermlink && orderSummaryForReader
+								? `${t(orderHeading.label.key, orderHeading.label.values)} ${orderSummaryForReader}`
+								: t('chat.export.regarding', { summary: thread });
 					para(about, 9, { style: 'bold', color: 60, gap: 6 });
 				}
 				const when = m.createdAt ? formatDayMonthTime(m.createdAt.toISOString()) : '';
@@ -1619,7 +1626,16 @@
 		}
 	});
 
-	const orderSummary = $derived.by(() => {
+	/** The header's "regarding" label and the voice its title reads in, from
+	 *  this reader's side: my order → "Regarding my order: I'm buying …"; the
+	 *  peer's → "Regarding @peer's order: Buying …" (v1.21.16). */
+	const orderHeading = $derived(chatOrderHeading(orderIsMine, orderOwner ?? peer));
+
+	/** The order's title as the reader should see it (see orderHeading), in the
+	 *  header and at the head of this order's messages in the exported PDF. The
+	 *  poster's own first-person sentence is no longer shown to the other party
+	 *  anywhere in the chat (v1.21.16). */
+	const orderSummaryForReader = $derived.by(() => {
 		if (!orderRecord) return '';
 		const parts = orderTitleParts(
 			{
@@ -1633,7 +1649,7 @@
 			},
 			undefined,
 			orderRecord.specific_barter_title || ($_('order_title.goods_services') as string),
-			{ locale: currentLang }
+			{ locale: currentLang, voice: orderHeading.voice }
 		);
 		return $_(parts.key, { values: parts.values }) as string;
 	});
@@ -1656,6 +1672,14 @@
 	// Both crypto buttons come from the one tested pure helper (chatMoneyFlow):
 	// no live order ⇒ both false; a live order ⇒ exactly one true.
 	const cryptoButtons = $derived(chatMoneyFlow(orderRecord, orderIsMine));
+	/** Their labels name the coin: "Send BLURT", "Share your XMR address"
+	 *  (v1.21.16; a barter order keeps the generic ones). */
+	const moneyFlowLabels = $derived(chatMoneyFlowLabels(orderRecord));
+	/** The order's coin as a chat asset (lower-case), or null for a barter
+	 *  order / no order. Restricts "Share your … address" to that coin. */
+	const orderChatAsset = $derived(
+		orderRecord && !isGoodsAsset(orderRecord.asset) ? chatAssetFromTicker(orderRecord.asset) : null
+	);
 
 	/** once a payment has been SENT for this order (this
 	 *  thread's trade reached 'paid' or beyond), neither the "Pay now" (sender)
@@ -1752,6 +1776,16 @@
 		}
 		return out;
 	});
+
+	/** whether the toolbar's "Send …" button pays in BLURT, which the app sends
+	 *  itself (PayBlurtModal) instead of recording an outside payment: a BLURT
+	 *  order, or a barter order whose only accepted coin is BLURT (v1.21.16 —
+	 *  that button now reads "Send BLURT", so it must send BLURT, as the
+	 *  "Send BLURT" on a shared Blurt account already does). */
+	const payNowSendsBlurt = $derived(
+		composerPayNowAsset === 'blurt' ||
+			(barterAcceptedMethods?.length === 1 && barterAcceptedMethods[0] === 'blurt')
+	);
 
 	// ─── Pay-now amount pre-fill ──────────────────────────
 	// Seed the "Pay now" modal with the crypto amount equal to the order's fiat
@@ -2167,14 +2201,25 @@
 				     the kebab keeps its top level with the display name (the reason the
 				     row is `items-start`).  Whole line is still the tap target; the label
 				     stays put while the summary truncates; full text in the hover title. -->
-				{#if orderSummary}
+				{#if orderSummaryForReader}
 					<a
 						href={lp(`/@${orderOwner ?? peer}/${orderPermlink}`)}
-						class="mt-0.5 flex min-w-0 items-baseline gap-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline dark:text-ink-400"
-						title={orderSummary}
+						data-testid="chat-order-ref"
+						class="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline sm:flex-nowrap dark:text-ink-400"
+						title={`${$_(orderHeading.label.key, { values: orderHeading.label.values })} ${orderSummaryForReader}`}
 					>
-						<span class="flex-none font-medium">{$_('chat.header.re')}:</span>
-						<span class="truncate">{orderSummary}</span>
+						<!-- v1.21.16: on a phone the title gets a line of its own under
+						     "Regarding …: (Live)" (order-last, full width), so the longer
+						     label does not leave it a few characters; from `sm` up all
+						     three share one line, the title truncating in the middle. -->
+						<!-- The label carries its own colon (French " :", Chinese "："). On a
+						     phone it may wrap (a long @handle), never push the page sideways. -->
+						<span class="min-w-0 break-words font-medium sm:flex-none"
+							>{$_(orderHeading.label.key, { values: orderHeading.label.values })}</span
+						>
+						<span class="order-last w-full truncate sm:order-none sm:w-auto"
+							>{orderSummaryForReader}</span
+						>
 						{#if orderStatusLabel}
 							<!-- Status last and `flex-none`: the title truncates, the status
 							     never does. A trader deciding whether to keep negotiating
@@ -2395,63 +2440,69 @@
 				<div
 					class="flex-none border-t border-ink-200 bg-emerald-50/30 px-4 py-2 dark:border-ink-800 dark:bg-morphit-emerald/[0.05]"
 				>
+					<!-- v1.21.16: on a phone the buttons stack, full width, at a
+					     finger-sized height; from `sm` up they sit side by side. -->
 					<div
-						class="mx-auto flex max-w-2xl flex-wrap items-center justify-center gap-2"
+						class="mx-auto flex max-w-2xl flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center"
 					>
-					<!-- "Share address" shares MY crypto receiving
-					     address, so it's only relevant when I'm the one RECEIVING
-					     the crypto (the peer is selling the asset). Hidden when
-					     I'm the sender, and hidden entirely when there's no live
-					     order (unsolicited / non-live chats). -->
-					{#if showShareAddressButton}
-						<button
-							type="button"
-							class="rounded-lg border border-morphit-teal/40 px-3 py-1.5 text-xs font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
-							onclick={() => (showAddressShareModal = true)}
-							aria-label={$_('chat.address.share_button_aria') as string}
-						>
-							{$_('chat.address.share_button')}
-						</button>
-					{/if}
-					<!-- the funds-sent / "Pay now" button initiates
-					     (or records) MY crypto payment, so it's only relevant when
-					     I'm the one SENDING the crypto (the peer is buying the
-					     asset). Hidden when I'm the receiver, and hidden entirely
-					     when there's no live order. ([7] reflows the click
-					     below.) -->
-					{#if showPayNowButton}
-						<button
-							type="button"
-							class="rounded-lg border border-morphit-teal/40 px-3 py-1.5 text-xs font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
-							onclick={() => {
-								// composer "Pay now". Clear any stale
-								// pill context first. BLURT is sent by the app
-								// itself (broadcast, no manual txid), so route it to
-								// PayBlurtModal with a validated in-modal amount;
-								// every other asset records an external payment
-								// (amount + txid) via FundsSentModal, with the asset
-								// locked to the order's asset.
-								markSentArgs = null;
-								if (composerPayNowAsset === 'blurt') {
-									payBlurtArgs = {
-										recipient: peer,
-										// pre-fill the order's fiat-minimum
-										// equivalent in BLURT (0 when uncomputable);
-										// the field stays editable.
-										amount: payPrefillAmount ?? 0,
-										memo: '',
-										orderPermlink: orderPermlink ?? undefined,
-										amountEditable: true
-									};
-								} else {
-									showFundsSentModal = true;
-								}
-							}}
-							aria-label={$_('chat.funds_sent.button_aria') as string}
-						>
-							{$_('chat.funds_sent.button')}
-						</button>
-					{/if}
+						<!-- "Share address" shares MY crypto receiving
+						     address, so it's only relevant when I'm the one RECEIVING
+						     the crypto (the peer is selling the asset). Hidden when
+						     I'm the sender, and hidden entirely when there's no live
+						     order (unsolicited / non-live chats). -->
+						{#if showShareAddressButton}
+							<button
+								type="button"
+								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
+								onclick={() => (showAddressShareModal = true)}
+								aria-label={$_(moneyFlowLabels.shareAddressAria.key, {
+									values: moneyFlowLabels.shareAddressAria.values
+								}) as string}
+							>
+								{$_(moneyFlowLabels.shareAddress.key, { values: moneyFlowLabels.shareAddress.values })}
+							</button>
+						{/if}
+						<!-- the funds-sent / "Pay now" button initiates
+						     (or records) MY crypto payment, so it's only relevant when
+						     I'm the one SENDING the crypto (the peer is buying the
+						     asset). Hidden when I'm the receiver, and hidden entirely
+						     when there's no live order. ([7] reflows the click
+						     below.) -->
+						{#if showPayNowButton}
+							<button
+								type="button"
+								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
+								onclick={() => {
+									// composer "Pay now". Clear any stale
+									// pill context first. BLURT is sent by the app
+									// itself (broadcast, no manual txid), so route it to
+									// PayBlurtModal with a validated in-modal amount;
+									// every other asset records an external payment
+									// (amount + txid) via FundsSentModal, with the asset
+									// locked to the order's asset.
+									markSentArgs = null;
+									if (payNowSendsBlurt) {
+										payBlurtArgs = {
+											recipient: peer,
+											// pre-fill the order's fiat-minimum
+											// equivalent in BLURT (0 when uncomputable);
+											// the field stays editable.
+											amount: payPrefillAmount ?? 0,
+											memo: '',
+											orderPermlink: orderPermlink ?? undefined,
+											amountEditable: true
+										};
+									} else {
+										showFundsSentModal = true;
+									}
+								}}
+								aria-label={$_(moneyFlowLabels.payNowAria.key, {
+									values: moneyFlowLabels.payNowAria.values
+								}) as string}
+							>
+								{$_(moneyFlowLabels.payNow.key, { values: moneyFlowLabels.payNow.values })}
+							</button>
+						{/if}
 						<!-- physical-shipment +
 						     mailing-address controls, shown only for a shippable trade
 						     (barter / precious metals / cash-by-mail) and split by
@@ -2462,7 +2513,7 @@
 						{#if showShareMailingButton}
 							<button
 								type="button"
-								class="rounded-lg border border-morphit-teal/40 px-3 py-1.5 text-xs font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
+								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
 								onclick={() => (showMailingAddressModal = true)}
 								aria-label={$_('chat.mailing_address.button_aria') as string}
 							>
@@ -2472,7 +2523,7 @@
 						{#if showRecordShipmentButton}
 							<button
 								type="button"
-								class="rounded-lg border border-morphit-teal/40 px-3 py-1.5 text-xs font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
+								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
 								onclick={() => (showShipmentModal = true)}
 								aria-label={$_('chat.shipment.button_aria') as string}
 							>
@@ -2531,7 +2582,7 @@
 {#if showAddressShareModal}
 	<AddressShareModal
 		{orderPermlink}
-		allowedMethods={barterAcceptedMethods}
+		allowedMethods={barterAcceptedMethods ?? (orderChatAsset ? [orderChatAsset] : undefined)}
 		onShare={handleAddressShare}
 		onCancel={() => (showAddressShareModal = false)}
 	/>

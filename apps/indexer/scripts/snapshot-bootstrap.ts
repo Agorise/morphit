@@ -130,6 +130,22 @@ let interruptedAfterRestore = false;
  *  before the restore stops it with this process. */
 let currentChild: ChildProcess | null = null;
 
+/** Children this process stopped itself (a time limit, a download past the
+ *  signed size, a stop it passes on), told apart from one stopped from outside. */
+const killedHere = new WeakSet<ChildProcess>();
+function killChild(child: ChildProcess | null, sig: NodeJS.Signals): void {
+	if (child === null) return;
+	killedHere.add(child);
+	child.kill(sig);
+}
+
+/** The exit code a stop by each signal ends this run with. */
+const STOP_CODES: Partial<Record<NodeJS.Signals, number>> = {
+	SIGINT: EXIT_STOPPED,
+	SIGHUP: 129,
+	SIGTERM: 143
+};
+
 interface ChildResult {
 	status: number | null;
 	signal: NodeJS.Signals | null;
@@ -186,16 +202,41 @@ function runChild(
 			child.stdin?.end(opts.input);
 		}
 		const timer =
-			opts.timeoutMs !== undefined ? setTimeout(() => child.kill('SIGTERM'), opts.timeoutMs) : null;
+			opts.timeoutMs !== undefined
+				? setTimeout(() => killChild(child, 'SIGTERM'), opts.timeoutMs)
+				: null;
 		child.on('error', (e) => {
 			error = e as NodeJS.ErrnoException;
 		});
 		child.on('close', (status, signal) => {
 			if (timer !== null) clearTimeout(timer);
 			if (currentChild === child) currentChild = null;
+			// A stop that reached the child from outside — Ctrl+C, a closed
+			// terminal, or a SIGTERM sent to the whole process group — is a
+			// stop of this run too (v1.21.16). The signal reaches this process
+			// as well, but which is seen first is down to timing: when the
+			// child's end came first, a stopped download read as "every source
+			// failed" (exit 1) instead of "stopped, nothing changed" (143), and
+			// the next source was tried. Once the restore has started it is only
+			// noted, exactly as the signal handler does.
+			const stopCode = signal !== null ? STOP_CODES[signal] : undefined;
+			if (stopCode !== undefined && !killedHere.has(child)) {
+				if (restoreStarted) interruptedAfterRestore = true;
+				else stopNow(stopCode);
+			}
 			resolve({ status, signal, stderr, error });
 		});
 	});
+}
+
+/** Stop before the restore: nothing in the database has changed. */
+function stopNow(code: number): never {
+	try {
+		process.stderr.write('\nsnapshot-bootstrap: stopped. Nothing was changed.\n');
+	} catch {
+		/* the terminal may be gone */
+	}
+	process.exit(code);
 }
 
 /** Where the caller (fast-sync) learns that the restore started, even if this
@@ -360,7 +401,7 @@ async function download(
 		}
 		if (size > maxBytes && !tooBig) {
 			tooBig = true;
-			currentChild?.kill('SIGTERM');
+			killChild(currentChild, 'SIGTERM');
 		}
 	}, 250);
 	try {
@@ -654,13 +695,8 @@ async function main(): Promise<void> {
 				interruptedAfterRestore = true;
 				return;
 			}
-			currentChild?.kill(sig);
-			try {
-				process.stderr.write('\nsnapshot-bootstrap: stopped. Nothing was changed.\n');
-			} catch {
-				/* the terminal may be gone */
-			}
-			process.exit(code);
+			killChild(currentChild, sig);
+			stopNow(code);
 		});
 	};
 	stopOn('SIGINT', EXIT_STOPPED);

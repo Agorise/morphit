@@ -232,7 +232,7 @@ anyone holding the recipient's public key could have written one.
    same browser cannot remove it. After you
    accept a partner's new key, messages made with their OLD key stay
    readable as history but are marked unverified and never move a
-   trade (no "Pay now", no payment check, no trade state).
+   trade (no "Send …" button, no payment check, no trade state).
 
 7. **Safety number.** "Verify peer" shows 60 digits in 12 groups of
    5. Each person's 30 digits are computed from that person's own

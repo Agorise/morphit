@@ -49,7 +49,15 @@ const check = (name: string, ok: boolean, detail?: string): void => {
 /** Index of the first occurrence, or Infinity. Used to assert ORDER. */
 const at = (needle: string): number => {
 	const i = code.indexOf(needle);
-	return i === -1 ? Number.POSITIVE_INFINITY : i;
+	// v1.21.16 — NaN, not +Infinity, for a landmark that is gone: every ordering
+	// check with it then FAILS instead of passing blind (`x < Infinity` held for
+	// two checks keyed on 'chat.header.re' once that key moved into a helper).
+	return i === -1 ? Number.NaN : i;
+};
+/** Index of the LAST occurrence, or NaN. */
+const atLast = (needle: string): number => {
+	const i = code.lastIndexOf(needle);
+	return i === -1 ? Number.NaN : i;
 };
 
 // ─── the identity cluster ────────────────────────────────────────────
@@ -68,11 +76,20 @@ check(
 );
 check('the sprout sits at the end of the display-name line', at('peerLabelProps.displayName') < at('<NewTraderChip />'));
 check('line 2 carries the truncated posting key', /truncatePublicKey\(peerPostingKey\)/.test(code));
-check('line 2 carries the trade count', at('truncatePublicKey(peerPostingKey)') < at('orderbook.card.trades_only'));
+// v1.21.16 — the trade count moved INTO <TradeRepCluster> in v1.7.5, so its
+// old landmark `orderbook.card.trades_only` is gone from this file and this
+// check had been passing blind. The cluster (count + score) is the landmark now:
+// its second copy (`hidden sm:inline-flex`, the wide-screen one) follows the key
+// on line 2; the first (`sm:hidden`) sits on line 1 for phones.
+check(
+	'line 2 carries the trade count',
+	at('truncatePublicKey(peerPostingKey)') < atLast('<TradeRepCluster') &&
+		at('<TradeRepCluster') < at('truncatePublicKey(peerPostingKey)')
+);
 check('the sprout is on line 1, ABOVE the key/trades line', at('<NewTraderChip />') < at('truncatePublicKey(peerPostingKey)'));
 check(
 	'line 3 is the RE: order link, below all of it',
-	at('<TradeRepCluster') < at('chat.header.re'),
+	atLast('<TradeRepCluster') < at('data-testid="chat-order-ref"'),
 	// v1.7.5 — was proxied by `orderbook.card.trades_only`, which moved INTO
 	// TradeRepCluster and no longer appears here. The REQUIREMENT (RE: comes
 	// last) is unchanged; only the landmark moved.
@@ -142,7 +159,7 @@ check('the kebab is the last item of the identity ROW (top-aligned with the name
 // new direction keeps the old structure from creeping back.
 check(
 	'the RE: line sits AFTER the identity row, so it spans the full header width',
-	at('chat.header.re') > at('bind:this={overflowTriggerEl}'),
+	at('data-testid="chat-order-ref"') > at('bind:this={overflowTriggerEl}'),
 	'inside the row it shares width with the flex-none kebab and truncates early'
 );
 check('the old right-hand column wrapper is gone', !/flex flex-none flex-col items-end/.test(code));
@@ -151,9 +168,9 @@ check('the old right-hand column wrapper is gone', !/flex flex-none flex-col ite
 const menu = code.slice(code.indexOf('role="menu"'));
 const m = (needle: string): number => {
 	const i = menu.indexOf(needle);
-	return i === -1 ? Number.POSITIVE_INFINITY : i;
+	return i === -1 ? Number.NaN : i; // missing → every ordering check fails
 };
-check('LIVE is inside the menu', m("chat.live") < Number.POSITIVE_INFINITY);
+check('LIVE is inside the menu', Number.isFinite(m("chat.live")));
 check('there is exactly ONE animated pip left in the file', (code.match(/animate-ping/g) ?? []).length === 1);
 check('LIVE sits above a hairline divider', m("chat.live") < m('border-t border-ink-200'));
 check('divider → Chat Security', m('border-t border-ink-200') < m('chat.security.menu_label'));

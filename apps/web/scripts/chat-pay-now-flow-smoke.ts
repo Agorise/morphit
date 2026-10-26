@@ -86,7 +86,12 @@ const SCENARIOS: readonly Scenario[] = [
 		name: '2 — composer Pay-now routes BLURT → PayBlurtModal (editable amount), else → FundsSentModal',
 		file: CONV,
 		mustHave: [
-			"if (composerPayNowAsset === 'blurt') {",
+			// v1.21.16 — also a barter order whose only accepted coin is BLURT (its
+			// button reads "Send BLURT", so it must send BLURT from the app).
+			'const payNowSendsBlurt = $derived(',
+			"composerPayNowAsset === 'blurt' ||",
+			"(barterAcceptedMethods?.length === 1 && barterAcceptedMethods[0] === 'blurt')",
+			'if (payNowSendsBlurt) {',
 			'recipient: peer',
 			'amountEditable: true',
 			'} else {',

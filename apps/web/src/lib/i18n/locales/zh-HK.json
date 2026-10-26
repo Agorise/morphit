@@ -513,8 +513,12 @@
 		"address": {
 			"share_button": "分享加密地址",
 			"share_button_aria": "分享你的加密收款地址",
+			"share_button_asset": "分享你的 {asset} 地址",
+			"share_button_aria_asset": "分享你想接收 {asset} 的地址",
+			"share_button_blurt": "分享你的 Blurt 帳戶",
+			"share_button_aria_blurt": "分享你想接收 BLURT 的 Blurt 帳戶",
 			"modal_title": "共享一個收款地址",
-			"modal_subtitle": "將您的 BTC 或 XMR 收款地址發送給您的交易夥伴。",
+			"modal_subtitle": "將您想接收這筆加密貨幣的地址發送給您的交易夥伴。",
 			"address_label": "收款地址",
 			"address_placeholder_btc": "bc1q… 或 1… 或 3…",
 			"address_placeholder_xmr": "8… (建議) 或 4…",
@@ -541,7 +545,7 @@
 			"qr_aria": "此地址的二維碼",
 			"subaddress_tip": "提示:門羅幣子地址(以 8 開頭)能提供更好的私隱保護。",
 			"subaddress_tip_modal": "為了在多筆交易之間獲得更好的私隱保護,請分享門羅幣子地址(以 8 開頭)而非標準地址(4)。標準地址會將每筆收到的付款關聯到相同的查看密鑰。",
-			"pay_now": "立即支付",
+			"pay_now": "發送 BLURT",
 			"memo_label": "付款備註",
 			"memo_explain": "買家必須在其 BLURT 轉賬中包含此備註,以便您將付款與此次交易匹配。",
 			"memo_regenerate": "重新生成",
@@ -615,6 +619,8 @@
 		"funds_sent": {
 			"button": "立即付款",
 			"button_aria": "為此交易付款",
+			"button_asset": "發送 {asset}",
+			"button_aria_asset": "為此交易發送 {asset}",
 			"modal_title": "確認你向 @{peer} 嘅付款",
 			"modal_subtitle": "@{peer} 會看到你喺下面輸入嘅金額同交易 ID。",
 			"locked_method_label": "使用 {asset} 付款",
@@ -767,7 +773,8 @@
 		"message_button_label_named": "向 @{account} 傳訊息",
 		"header": {
 			"chatting_with": "聊天對象",
-			"re": "關於"
+			"re_mine": "關於我嘅訂單：",
+			"re_peer": "關於 @{owner} 嘅訂單："
 		},
 		"export": {
 			"menu_label": "匯出聊天",
@@ -1227,11 +1234,11 @@
 			},
 			"how_to_buy": {
 				"q": "點樣買加密貨幣?",
-				"a": "1. 打開訂單簿，按你想要嘅幣篩選。\n2. 揀一個信譽好嘅賣家，打開佢張單，撳 **訊息**。\n3. 喺聊天入面，傾好金額、價錢同你點樣付款——現金、支付 app、貨品，你哋雙方接受嘅都得。\n4. 撳 **分享加密地址**，將你嘅錢包地址發畀賣家。\n5. 按約定俾錢賣家。佢一收到你嘅付款，就會將加密貨幣直接發去你嘅錢包。\n6. 互相留低評價。完成！\n\n{brand} 中間從來唔會代為保管任何嘢，所以要小心揀賣家，由細額開始。"
+				"a": "1. 打開訂單簿，按你想要嘅幣篩選。\n2. 揀一個信譽好嘅賣家，打開佢張單，撳 **訊息**。\n3. 喺聊天入面，傾好金額、價錢同你點樣付款——現金、支付 app、貨品，你哋雙方接受嘅都得。\n4. 撳 **分享你的 XMR 地址**（個掣會寫住你買嘅幣；買 BLURT 嗰陣係 **分享你的 Blurt 帳戶**），將你嘅錢包地址發畀賣家。\n5. 按約定俾錢賣家。佢一收到你嘅付款，就會將加密貨幣直接發去你嘅錢包。\n6. 互相留低評價。完成！\n\n{brand} 中間從來唔會代為保管任何嘢，所以要小心揀賣家，由細額開始。"
 			},
 			"how_to_sell": {
 				"q": "怎樣賣加密貨幣？",
-				"a": "1. 撳「發布」，揀 **我想賣**，再揀幣——例如 Monero。\n2. 設定金額範圍同價錢，剔選你接受嘅付款方式，亦可以加埋你嘅所在地。\n3. 有買家發訊息畀你，就喺聊天入面傾好細節。\n4. 你真係收到對方付款之後，先將加密貨幣發去佢喺聊天入面分享嘅地址（**立即支付** 掣會幫你發送或者記錄）。\n5. 留低誠實嘅評價——對大家都有幫助。\n\n你嘅第一張單一定要係買入 BLURT，而且通常係免費（見「我嘅第一張單真係免費咩?」）；之後你就可以出賣單。出單要俾一小筆掛單費——見「費用係幾多?」。"
+				"a": "1. 撳「發布」，揀 **我想賣**，再揀幣——例如 Monero。\n2. 設定金額範圍同價錢，剔選你接受嘅付款方式，亦可以加埋你嘅所在地。\n3. 有買家發訊息畀你，就喺聊天入面傾好細節。\n4. 你真係收到對方付款之後，先將加密貨幣發去佢喺聊天入面分享嘅地址（寫住幣名嘅 **發送 XMR** 掣會幫你發送或者記錄）。\n5. 留低誠實嘅評價——對大家都有幫助。\n\n你嘅第一張單一定要係買入 BLURT，而且通常係免費（見「我嘅第一張單真係免費咩?」）；之後你就可以出賣單。出單要俾一小筆掛單費——見「費用係幾多?」。"
 			},
 			"fees": {
 				"q": "費用係幾多?",
@@ -1467,7 +1474,7 @@
 			},
 			"xmr_txid": {
 				"q": "什麼是 Monero TxID,在哪裡找到?",
-				"a": "Monero 交易 ID（TxID，有時叫做 *hash*）係一個 64 字元嘅代碼，用 0–9 同 a–f 組成，代表一筆 Monero 付款。要搵佢，就喺你錢包嘅歷史紀錄打開嗰筆付款：TxID 就係詳情入面嗰串長代碼，通常有個複製掣。\n\n**{brand} 幾時會要佢：** 當你話俾交易對手知你已經用 Monero 俾咗錢（聊天入面嘅 **立即付款** 掣），同埋當你用 XMR 俾掛單費嘅時候（如果本網站收 XMR 費用）。如果係費用，你要將 TxID 連同嗰筆付款嘅交易密鑰一齊貼上，等每個 Morphit 網站都可以核實佢——見「乜嘢係 Monero 交易密鑰？{brand} 點解要佢？」。\n\n**私隱：** TxID 本身就係公開嘅——任何人都可以喺區塊瀏覽器查到——而且佢唔會顯示你係邊個或者你嘅餘額。但佢會同你嘅掛單一齊儲存喺 Blurt 鏈上，將嗰一筆費用付款同你嘅帳戶連繫埋一齊。你嘅交易付款本身係人對人進行，唔經 Blurt。如果你喺聊天分享佢嘅 TxID，佢會經你嘅加密聊天傳送，只有你同你嘅交易對手讀到。想完全冇 Monero 關聯，就用 BLURT 俾費用：呢個係預設選項，而且只係一半價錢。"
+				"a": "Monero 交易 ID（TxID，有時叫做 *hash*）係一個 64 字元嘅代碼，用 0–9 同 a–f 組成，代表一筆 Monero 付款。要搵佢，就喺你錢包嘅歷史紀錄打開嗰筆付款：TxID 就係詳情入面嗰串長代碼，通常有個複製掣。\n\n**{brand} 幾時會要佢：** 當你話俾交易對手知你已經用 Monero 俾咗錢（聊天入面嘅 **發送 XMR** 掣），同埋當你用 XMR 俾掛單費嘅時候（如果本網站收 XMR 費用）。如果係費用，你要將 TxID 連同嗰筆付款嘅交易密鑰一齊貼上，等每個 Morphit 網站都可以核實佢——見「乜嘢係 Monero 交易密鑰？{brand} 點解要佢？」。\n\n**私隱：** TxID 本身就係公開嘅——任何人都可以喺區塊瀏覽器查到——而且佢唔會顯示你係邊個或者你嘅餘額。但佢會同你嘅掛單一齊儲存喺 Blurt 鏈上，將嗰一筆費用付款同你嘅帳戶連繫埋一齊。你嘅交易付款本身係人對人進行，唔經 Blurt。如果你喺聊天分享佢嘅 TxID，佢會經你嘅加密聊天傳送，只有你同你嘅交易對手讀到。想完全冇 Monero 關聯，就用 BLURT 俾費用：呢個係預設選項，而且只係一半價錢。"
 			},
 			"xmr_tx_proof": {
 				"q": "乜嘢係 Monero 交易密鑰？{brand} 點解要佢？",
@@ -4915,6 +4922,20 @@
 		"sell_exact": "我賣正好 {amount} {fiat} 嘅 {asset} 換 {settlement}",
 		"buy_barter_novalue": "我用 {settlement} 買 {asset}",
 		"sell_barter_novalue": "我賣 {asset} 換 {settlement}"
+	},
+	"order_title_3p": {
+		"buy_min": "用 {settlement} 買至少 {amount} {fiat} 嘅 {asset}",
+		"sell_min": "賣至少 {amount} {fiat} 嘅 {asset} 換 {settlement}",
+		"buy_max": "用 {settlement} 買最多 {amount} {fiat} 嘅 {asset}",
+		"sell_max": "賣最多 {amount} {fiat} 嘅 {asset} 換 {settlement}",
+		"buy_range": "用 {settlement} 買 {min}–{max} {fiat} 嘅 {asset}",
+		"sell_range": "賣 {min}–{max} {fiat} 嘅 {asset} 換 {settlement}",
+		"buy_any": "用 {settlement} 買任意數量嘅 {asset}",
+		"sell_any": "賣任意數量嘅 {asset} 換 {settlement}",
+		"buy_exact": "用 {settlement} 買正好 {amount} {fiat} 嘅 {asset}",
+		"sell_exact": "賣正好 {amount} {fiat} 嘅 {asset} 換 {settlement}",
+		"buy_barter_novalue": "用 {settlement} 買 {asset}",
+		"sell_barter_novalue": "賣 {asset} 換 {settlement}"
 	},
 	"stats": {
 		"page_title": "網絡統計",

@@ -93,9 +93,14 @@ check('all 10 locales have password_hint + the 3 new error keys', parityOk);
 
 // composer action buttons centered (ConversationView) — #4 + #19 overlap
 const conv = readFileSync(join(WEB, 'src', 'lib', 'components', 'ConversationView.svelte'), 'utf8');
+// v1.21.16: on a phone the row stacks its buttons full width (so they are
+// centred by filling the row); from `sm` up they sit side by side, centred.
+const actionRow = (/class="(mx-auto flex max-w-2xl [^"]*)"/.exec(conv)?.[1] ?? '').split(/\s+/);
 check(
 	'composer action buttons are centered at all widths (no sm:justify-end grid)',
-	/flex max-w-2xl flex-wrap items-center justify-center gap-2/.test(conv)
+	actionRow.includes('items-stretch') &&
+		actionRow.includes('sm:justify-center') &&
+		!actionRow.some((t) => /justify-(end|start|between)$/.test(t))
 );
 
 console.log('');

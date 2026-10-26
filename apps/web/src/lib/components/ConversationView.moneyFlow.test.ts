@@ -12,7 +12,11 @@
  * also pins when the row goes away (a finished order, a payment receipt on
  * either side, a locked session) and that a shared address alone does not.
  *
- * Buttons are told apart by their aria-label i18n keys (`_` is the identity).
+ * Buttons are told apart by their aria-label i18n keys (`_` is the identity,
+ * with the values appended), matched by prefix: a crypto order's buttons carry
+ * the coin-named keys (`…_aria_asset`, `…_aria_blurt`), a barter order's the
+ * generic ones. The labels themselves, and the RE: line read from the reader's
+ * side, are pinned in the last block.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { readable } from 'svelte/store';
@@ -30,7 +34,11 @@ vi.mock('$app/stores', () => ({
 }));
 vi.mock('svelte-i18n', async (orig) => ({
 	...((await orig()) as object),
-	_: readable((k: string) => k),
+	// The identity, plus the values when there are any, so a coin-named label
+	// ("Send {asset}") shows which coin it was given.
+	_: readable((k: string, o?: { values?: Record<string, unknown> }) =>
+		o?.values ? `${k}${JSON.stringify(o.values)}` : k
+	),
 	locale: readable('en')
 }));
 /** Whether the session is unlocked when the view mounts (read at subscribe). */
@@ -93,6 +101,14 @@ const BUTTONS = {
 	recordShipment: 'chat.shipment.button_aria'
 } as const;
 type Row = Record<keyof typeof BUTTONS, boolean>;
+/** What the last renderRow showed: each present button's text and aria-label,
+ *  and the RE: line's text. */
+let lastRender: {
+	labels: Partial<Record<keyof typeof BUTTONS, { text: string; aria: string | null }>>;
+	re: string;
+	/** which payment window the "Send …" click opened (when clicked) */
+	dialog: 'pay-blurt' | 'funds-sent' | null;
+} = { labels: {}, re: '', dialog: null };
 
 afterEach(() => {
 	document.body.innerHTML = '';
@@ -135,6 +151,8 @@ async function renderRow(
 		/** a crypto address shared for this order (the step before paying) */
 		addressShared?: 'outgoing' | 'incoming';
 		locked?: boolean;
+		/** click the "Send …" button and record which payment window opened */
+		clickPayNow?: boolean;
 	} = {}
 ): Promise<Row> {
 	served = { owner, item: { ...item, account: owner } };
@@ -175,16 +193,35 @@ async function renderRow(
 	// order summary) and the composer show once both have landed.
 	await vi.waitFor(() => {
 		flushSync();
-		expect(target.textContent).toContain('order_title.');
+		expect(target.textContent).toMatch(/order_title(_3p)?\./);
 		expect(target.querySelector('textarea')).not.toBeNull();
 	});
 	flushSync();
-	const row = Object.fromEntries(
-		Object.entries(BUTTONS).map(([k, aria]) => [
-			k,
-			target.querySelector(`button[aria-label="${aria}"]`) !== null
-		])
-	) as Row;
+	const buttons = Object.entries(BUTTONS).map(
+		([k, aria]) =>
+			[k, target.querySelector<HTMLButtonElement>(`button[aria-label^="${aria}"]`)] as const
+	);
+	const row = Object.fromEntries(buttons.map(([k, b]) => [k, b !== null])) as Row;
+	let dialog: 'pay-blurt' | 'funds-sent' | null = null;
+	if (opts.clickPayNow) {
+		buttons.find(([k]) => k === 'payNow')?.[1]?.click();
+		flushSync();
+		dialog = target.querySelector('[aria-labelledby="pay-blurt-heading"]')
+			? 'pay-blurt'
+			: target.querySelector('[aria-labelledby="funds-sent-heading"]')
+				? 'funds-sent'
+				: null;
+	}
+	const reLink = target.querySelector<HTMLElement>('[data-testid="chat-order-ref"]');
+	lastRender = {
+		labels: Object.fromEntries(
+			buttons.flatMap(([k, b]) =>
+				b ? [[k, { text: (b.textContent ?? '').trim(), aria: b.getAttribute('aria-label') }]] : []
+			)
+		),
+		re: (reLink?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+		dialog
+	};
 	unmount(app);
 	return row;
 }
@@ -262,5 +299,98 @@ describe('ConversationView money-flow row on a crypto order (unchanged)', () => 
 	it('my XMR buy paid by mail: I receive crypto and mail the cash — Share crypto address + Record shipment', async () => {
 		const o = orderItem({ side: 'buy', asset: 'XMR', payment_methods: ['cash_by_mail'] });
 		expect(await renderRow(ME, o)).toEqual(goodsSeller);
+	});
+});
+
+describe('the row names the coin; the RE: line reads from the reader’s side (v1.21.16)', () => {
+	it("peer buys BLURT: my button is “Send BLURT”, the RE: line is “Regarding @bob's order: Buying …”", async () => {
+		const o = orderItem({ side: 'buy', asset: 'BLURT', payment_methods: ['bank_transfer'] });
+		expect(await renderRow(PEER, o)).toEqual({ ...none, payNow: true });
+		expect(lastRender.labels.payNow).toEqual({
+			text: 'chat.funds_sent.button_asset{"asset":"BLURT"}',
+			aria: 'chat.funds_sent.button_aria_asset{"asset":"BLURT"}'
+		});
+		expect(lastRender.re).toMatch(
+			/^chat\.header\.re_peer\{"owner":"bob"\} order_title_3p\.buy_range/
+		);
+	});
+	it('peer sells BLURT: my button shares my Blurt account', async () => {
+		const o = orderItem({ side: 'sell', asset: 'BLURT', payment_methods: ['bank_transfer'] });
+		expect(await renderRow(PEER, o)).toEqual({ ...none, shareAddress: true });
+		expect(lastRender.labels.shareAddress).toEqual({
+			text: 'chat.address.share_button_blurt',
+			aria: 'chat.address.share_button_aria_blurt'
+		});
+	});
+	it('peer sells XMR: my button shares my XMR address', async () => {
+		const o = orderItem({ side: 'sell', asset: 'XMR', payment_methods: ['paypal'] });
+		await renderRow(PEER, o);
+		expect(lastRender.labels.shareAddress).toEqual({
+			text: 'chat.address.share_button_asset{"asset":"XMR"}',
+			aria: 'chat.address.share_button_aria_asset{"asset":"XMR"}'
+		});
+	});
+	it('my own BLURT buy: the peer sends, I share my Blurt account; the RE: line is “Regarding my order: I’m buying …”', async () => {
+		const o = orderItem({ side: 'buy', asset: 'BLURT', payment_methods: ['bank_transfer'] });
+		expect(await renderRow(ME, o)).toEqual({ ...none, shareAddress: true });
+		expect(lastRender.labels.shareAddress?.text).toBe('chat.address.share_button_blurt');
+		expect(lastRender.re).toMatch(/^chat\.header\.re_mine order_title\.buy_range/);
+	});
+	it('a barter order that accepts one coin names it', async () => {
+		const o = orderItem({
+			side: 'sell',
+			asset: 'BARTER',
+			payment_methods: ['pay_xmr'],
+			accepted_assets: ['XMR']
+		});
+		expect(await renderRow(PEER, o)).toEqual(goodsBuyer);
+		expect(lastRender.labels.payNow?.text).toBe('chat.funds_sent.button_asset{"asset":"XMR"}');
+	});
+	it('“Send BLURT” sends BLURT from the app: a BLURT order and a barter order paid only in BLURT', async () => {
+		const blurtOrder = orderItem({
+			side: 'buy',
+			asset: 'BLURT',
+			payment_methods: ['bank_transfer']
+		});
+		await renderRow(PEER, blurtOrder, { clickPayNow: true });
+		expect(lastRender.dialog).toBe('pay-blurt');
+		const blurtBarter = orderItem({
+			side: 'sell',
+			asset: 'BARTER',
+			payment_methods: ['pay_blurt'],
+			accepted_assets: ['BLURT']
+		});
+		await renderRow(PEER, blurtBarter, { clickPayNow: true });
+		expect(lastRender.labels.payNow?.text).toBe('chat.funds_sent.button_asset{"asset":"BLURT"}');
+		expect(lastRender.dialog).toBe('pay-blurt');
+	});
+	it('“Send XMR” records an outside payment (XMR order, or a barter order paid only in XMR)', async () => {
+		await renderRow(PEER, orderItem({ side: 'buy', asset: 'XMR', payment_methods: ['paypal'] }), {
+			clickPayNow: true
+		});
+		expect(lastRender.dialog).toBe('funds-sent');
+		await renderRow(
+			PEER,
+			orderItem({
+				side: 'sell',
+				asset: 'BARTER',
+				payment_methods: ['pay_xmr'],
+				accepted_assets: ['XMR']
+			}),
+			{ clickPayNow: true }
+		);
+		expect(lastRender.dialog).toBe('funds-sent');
+	});
+	it('a barter order (any of several coins) keeps the generic labels', async () => {
+		await renderRow(PEER, barter('sell'));
+		expect(lastRender.labels.payNow).toEqual({
+			text: 'chat.funds_sent.button',
+			aria: 'chat.funds_sent.button_aria'
+		});
+		await renderRow(ME, barter('sell'));
+		expect(lastRender.labels.shareAddress).toEqual({
+			text: 'chat.address.share_button',
+			aria: 'chat.address.share_button_aria'
+		});
 	});
 });

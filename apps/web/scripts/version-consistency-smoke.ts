@@ -272,6 +272,49 @@ function main(): void {
 		});
 	}
 
+	// v1.21.16 — an EXACT pin on one of our own packages (apps/ops-cli pins
+	// "@morphit/release-schema": "<version>") moves with the version too. The
+	// v1.21.16 bump missed it and only `npm ci` noticed (E404: the old version
+	// is not on the public registry). Same rule for the lockfile's copy.
+	const isExact = (v: unknown): v is string => typeof v === 'string' && /^\d/.test(v);
+	const rootWs = (
+		JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as {
+			workspaces: string[];
+		}
+	).workspaces;
+	const lock = JSON.parse(readFileSync(join(REPO, 'package-lock.json'), 'utf8')) as {
+		packages: Record<string, Record<string, unknown>>;
+	};
+	for (const ws of ['', ...rootWs]) {
+		const sources: Array<[string, Record<string, unknown> | undefined]> = [];
+		const pkg = JSON.parse(
+			readFileSync(join(REPO, ws === '' ? 'package.json' : `${ws}/package.json`), 'utf8')
+		) as Record<string, Record<string, unknown> | undefined>;
+		const lockEntry = lock.packages[ws] as
+			| Record<string, Record<string, unknown> | undefined>
+			| undefined;
+		for (const field of [
+			'dependencies',
+			'devDependencies',
+			'peerDependencies',
+			'optionalDependencies'
+		]) {
+			sources.push([`${ws || '.'}/package.json ${field}`, pkg[field]]);
+			sources.push([`package-lock.json packages["${ws}"].${field}`, lockEntry?.[field]]);
+		}
+		for (const [where, deps] of sources) {
+			for (const [name, spec] of Object.entries(deps ?? {})) {
+				if (name.startsWith('@morphit/') && isExact(spec) && spec !== expected) {
+					mismatches.push({
+						label: `${where} → ${name}`,
+						got: spec,
+						remediation: `pin ${name} to '${expected}' in ${where} (or use "*")`
+					});
+				}
+			}
+		}
+	}
+
 	if (mismatches.length > 0) {
 		console.error(
 			`✗ version-consistency-smoke FAILED — expected '${expected}' (from root package.json), found:`

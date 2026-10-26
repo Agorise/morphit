@@ -614,6 +614,7 @@ SMOKES=(
 	"apps/web:chat-notification-wiring-smoke"
 	"apps/web:posting-active-upgrade-smoke"
 	"apps/web:chat-header-layout-smoke"
+	"apps/web:chat-toolbar-mobile-smoke"
 	"apps/web:account-binding-smoke"
 	"apps/web:eli5-release-blocks-smoke"
 	"apps/web:avatar-menu-portal-smoke"
