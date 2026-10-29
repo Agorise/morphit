@@ -625,6 +625,38 @@ describe('BitcoinExplorerFeeVerifier — minConfirmations > 1 depth check', () =
 		}
 	});
 
+	it('explorers disagreeing on the block: the LATEST block counts (the smallest depth)', async () => {
+		// v1.21.17: the depth took the LOWEST block height across explorers —
+		// the LARGEST depth — so one explorer claiming an older block made a
+		// 2-deep payment count as 1002 deep. Honest: block 800_000, tip
+		// 800_001 → depth 2 < 3. The other claims block 799_000.
+		const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+			const url = typeof input === 'string' ? input : input.toString();
+			if (url.includes('/blocks/tip/height')) return new Response('800001', { status: 200 });
+			const height = url.includes('mempool.space') ? 799_000 : 800_000;
+			return new Response(
+				JSON.stringify({
+					txid: VALID_TXID,
+					vout: [{ value: 2_500, scriptpubkey_address: FEE_ADDRESS }],
+					status: { confirmed: true, block_height: height }
+				}),
+				{ status: 200 }
+			);
+		}) as unknown as typeof fetch;
+		const verifier = new BitcoinExplorerFeeVerifier(
+			baseConfig({
+				explorerUrls: ['https://blockstream.info/api', 'https://mempool.space/api'],
+				minConfirmations: 3,
+				// both must answer (and agree on the amount), so both heights count
+				minSuccessfulResponses: 2
+			}),
+			fetchImpl
+		);
+		const result = await verifier.verify(claim());
+		expect(result.kind).toBe('pending_external');
+		if (result.kind === 'pending_external') expect(result.reason).toMatch(/depth 2 /);
+	});
+
 	it('tip-height endpoint 5xx → pending_external (retry later)', async () => {
 		const fetchImpl = mockFetchTxAndTip(
 			{

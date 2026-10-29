@@ -5,7 +5,12 @@
  * send open forever.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ACCOUNT_KEYS_TIMEOUT_MS, fetchAccountKeys } from './accountKeys';
+import {
+	ACCOUNT_KEYS_REUSE_MS,
+	ACCOUNT_KEYS_TIMEOUT_MS,
+	fetchAccountKeys,
+	fetchAccountKeysForSigning
+} from './accountKeys';
 
 const ORIGIN = 'https://example.test';
 const body = {
@@ -67,7 +72,7 @@ describe('fetchAccountKeys', () => {
 		expect(await settled).toBe('rejected');
 	});
 
-	it('overlapping lookups of one account share one request; a later one asks again', async () => {
+	it('overlapping lookups of one account share one request; a later one is reused, then asked again', async () => {
 		const resolvers: Array<(r: Response) => void> = [];
 		const f = vi.fn(() => new Promise<Response>((r) => resolvers.push(r)));
 		const a = fetchAccountKeys(ORIGIN, 'bob', f as never);
@@ -79,7 +84,68 @@ describe('fetchAccountKeys', () => {
 		expect(await a).toBe(await b);
 		const g = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
 		await fetchAccountKeys(ORIGIN, 'bob', g as never);
+		// Posting an order reads the keys twice within seconds (the active-key
+		// window, then the broadcast): the second read is the first's answer.
+		vi.advanceTimersByTime(ACCOUNT_KEYS_REUSE_MS - 1);
+		await fetchAccountKeys(ORIGIN, 'bob', g as never);
+		expect(g).toHaveBeenCalledTimes(1);
+		vi.advanceTimersByTime(1);
 		await fetchAccountKeys(ORIGIN, 'bob', g as never);
 		expect(g).toHaveBeenCalledTimes(2);
+	});
+
+	it('"no such account" is not kept: the next lookup asks again', async () => {
+		const g = vi.fn(async () => new Response('{}', { status: 404 }));
+		expect(await fetchAccountKeys(ORIGIN, 'nobody', g as never)).toBeNull();
+		expect(await fetchAccountKeys(ORIGIN, 'nobody', g as never)).toBeNull();
+		expect(g).toHaveBeenCalledTimes(2);
+	});
+
+	it('a failed lookup is not kept either', async () => {
+		let n = 0;
+		const g = vi.fn(async () =>
+			++n === 1
+				? new Response('{}', { status: 502 })
+				: new Response(JSON.stringify(body), { status: 200 })
+		);
+		await expect(fetchAccountKeys(ORIGIN, 'eve', g as never)).rejects.toThrow(/502/);
+		expect((await fetchAccountKeys(ORIGIN, 'eve', g as never))?.memo_key).toBe('BLTm');
+	});
+});
+
+describe('fetchAccountKeysForSigning (posting an order, unlocking the active key)', () => {
+	it('asks once more after a 502 before failing', async () => {
+		let n = 0;
+		const g = vi.fn(async () =>
+			++n === 1
+				? new Response('{}', { status: 502 })
+				: new Response(JSON.stringify(body), { status: 200 })
+		);
+		expect((await fetchAccountKeysForSigning(ORIGIN, 'fay', g as never))?.memo_key).toBe('BLTm');
+		expect(g).toHaveBeenCalledTimes(2);
+	});
+
+	it('asks once more after its own timeout', async () => {
+		let n = 0;
+		const g = vi.fn((_u: unknown, init?: RequestInit) =>
+			++n === 1
+				? new Promise<Response>((_, reject) =>
+						init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+					)
+				: Promise.resolve(new Response(JSON.stringify(body), { status: 200 }))
+		);
+		const p = fetchAccountKeysForSigning(ORIGIN, 'gus', g as never);
+		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_TIMEOUT_MS);
+		expect((await p)?.memo_key).toBe('BLTm');
+		expect(g).toHaveBeenCalledTimes(2);
+	});
+
+	it('gives up after the second failure, and does not retry "no such account"', async () => {
+		const bad = vi.fn(async () => new Response('{}', { status: 502 }));
+		await expect(fetchAccountKeysForSigning(ORIGIN, 'hal', bad as never)).rejects.toThrow(/502/);
+		expect(bad).toHaveBeenCalledTimes(2);
+		const none = vi.fn(async () => new Response('{}', { status: 404 }));
+		expect(await fetchAccountKeysForSigning(ORIGIN, 'ivy', none as never)).toBeNull();
+		expect(none).toHaveBeenCalledTimes(1);
 	});
 });

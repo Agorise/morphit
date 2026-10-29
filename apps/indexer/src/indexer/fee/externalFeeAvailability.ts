@@ -56,7 +56,7 @@ export function isHiddenOnlyNode(config: FeeConfig): boolean {
 
 /** True when the node must not touch clearnet: no clearnet RPC at all (the
  *  same rule as the process router's fail-closed policy). */
-function zeroClearnet(config: FeeConfig): boolean {
+function zeroClearnet(config: Pick<FeeConfig, 'blurtRpcEndpoints'>): boolean {
 	return config.blurtRpcEndpoints.length === 0;
 }
 
@@ -71,9 +71,22 @@ export function externalFeeAvailability(
 	method: ExternalFeeMethod
 ): ExternalFeeAvailability {
 	const address = method === 'btc' ? config.btcFeeAddress : config.xmrFeeAddress;
+	if (address.trim().length === 0) {
+		return { off: 'disabled_by_operator', explorerUrls: [], firstTierUrls: [] };
+	}
+	return explorerAvailability(config, method);
+}
+
+/** Which explorers this node may ask for `method`, whatever its fee address
+ *  says — the same tiers and the same zero-clearnet rule as the fee path. The
+ *  trade payment check (fee/paymentCheck.ts) uses this: an operator who turns
+ *  BTC fees off has not turned off looking up a trader's BTC payment. PURE. */
+export function explorerAvailability(
+	config: Omit<FeeConfig, 'btcFeeAddress' | 'xmrFeeAddress'>,
+	method: ExternalFeeMethod
+): ExternalFeeAvailability {
 	const all = method === 'btc' ? config.btcExplorerUrls : config.xmrExplorerUrls;
 	const none = { explorerUrls: [], firstTierUrls: [] };
-	if (address.trim().length === 0) return { off: 'disabled_by_operator', ...none };
 	if (all.length === 0) return { off: 'no_explorers', ...none };
 	const noClearnet = all.filter((u) => !isClearnetSource(urlOf(u)));
 	if (zeroClearnet(config)) {

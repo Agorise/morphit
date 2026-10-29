@@ -164,3 +164,11 @@ export function chatOrderHeading(
 		? { label: { key: 'chat.header.re_mine' }, voice: 'poster' }
 		: { label: { key: 'chat.header.re_peer', values: { owner } }, voice: 'third' };
 }
+
+/** The inbox card's line about its order (v1.21.17), from the reader's side:
+ *  her own order reads "Regarding my buy order of …" ('mine'); the other
+ *  person's, under that person's name, "Who is buying …" ('who'). No "RE:"
+ *  in front: the sentence says whose order it is. */
+export function inboxOrderVoice(orderIsMine: boolean): 'mine' | 'who' {
+	return orderIsMine ? 'mine' : 'who';
+}

@@ -115,6 +115,9 @@ interface OrderRow {
 	is_new_trader: boolean;
 	created_at: Date;
 	updated_at: Date;
+	/** v1.21.17: when a completed order was completed (block time). NULL on
+	 *  any other order. */
+	completed_at: Date | null;
 	/** updated_at to the microsecond, for the cursor (see orderbook.ts). */
 	updated_at_cursor: string;
 	expires_at: Date | null;
@@ -164,6 +167,8 @@ function rowToWire(r: OrderRow) {
 		created_at: r.created_at.toISOString(),
 		updated_at: r.updated_at.toISOString(),
 		expires_at: r.expires_at === null ? null : r.expires_at.toISOString(),
+		// v1.21.17: only on a completed order — when its trade was completed.
+		...(r.completed_at ? { completed_at: r.completed_at.toISOString() } : {}),
 		// v1.20.0 (MK-H2) — present only for per-order-address BTC fees. The
 		// browser derives the address itself from the chain-pinned xpub and
 		// this index, and refuses to show it unless the two match.
@@ -208,7 +213,7 @@ const ORDER_SELECT = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_curr
 			          SELECT 1 FROM suspicious_reciprocity sr
 			           WHERE sr.account_a = o.account OR sr.account_b = o.account
 			        ) AS reciprocity_flagged,
-			        o.created_at, o.updated_at, o.expires_at,
+			        o.created_at, o.updated_at, o.completed_at, o.expires_at,
 			        to_char(o.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_cursor,
 			        o.btc_fee_index, o.btc_fee_address, o.btc_fee_xpub, o.btc_fee_sats::text,
 			        o.btc_fee_received_sats::text, o.btc_fee_unconfirmed_sats::text
@@ -220,6 +225,55 @@ ${tradeCountJoin('o')}`;
  *  listings hidden here too. */
 const notBlocked = (opParam: string): string =>
 	`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')`;
+
+/** GET /v1/accounts/:account/trades — the account's completed trades, BOTH
+ *  sides (v1.21.17): orders it posted that were completed, and orders of
+ *  others completed naming it as the counterparty. A profile's "Trade
+ *  history" read only the first kind, so the seller who filled a buyer's
+ *  order had no history of it at all. Newest trade first (completed_at: the
+ *  completion's block time; updated_at also moves on a fee re-check, an
+ *  attestation or the partner named later). Under /v1/accounts, not
+ *  /v1/orders/:account/…, where it would hide an order whose permlink is
+ *  literally "trades". An account blocked on this instance has none here, as
+ *  on every other read; other blocked owners' orders are left out. At most
+ *  100, no paging. */
+const tradesQuerySchema = z
+	.object({
+		limit: z.coerce.number().int().min(1).max(MAX_LIMIT).optional()
+	})
+	// No paging: a `cursor` would be silently ignored, so it is refused.
+	.strict();
+
+export function accountTradesRoute(db: Database, operatorAccount: string): Hono {
+	const app = new Hono();
+	app.get('/:account/trades', async (c) => {
+		const account = c.req.param('account');
+		if (!isAccountName(account)) {
+			return c.json(errorBody('bad_request', 'invalid account name'), 400);
+		}
+		const parsed = tradesQuerySchema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+		if (!parsed.success) {
+			return c.json(
+				errorBody('bad_request', parsed.error.issues.map((i) => i.message).join('; ')),
+				400
+			);
+		}
+		const limit = parsed.data.limit ?? DEFAULT_LIMIT;
+		const result = await db.query<OrderRow>(
+			`${ORDER_SELECT}
+			 WHERE o.status = 'completed'
+			   AND (o.account = $1 OR o.completed_counterparty = $1)
+			   AND ${notBlocked('$3')}
+			   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob
+			                    WHERE ob.operator = $3 AND ob.blocked = $1 AND ob.state = 'blocked')
+			 ORDER BY o.completed_at DESC NULLS LAST, o.permlink ASC
+			 LIMIT $2`,
+			[account, limit, operatorAccount]
+		);
+		return c.json({ items: result.rows.map(rowToWire) });
+	});
+	return app;
+}
 
 export function ordersByAccountRoute(db: Database, operatorAccount: string): Hono {
 	const app = new Hono();

@@ -26,7 +26,8 @@ import {
 	chatOrderHeading,
 	cryptoSideOfOrder,
 	orderCanShip,
-	peerCryptoSide
+	peerCryptoSide,
+	inboxOrderVoice
 } from './orderRole';
 
 describe('peerCryptoSide', () => {
@@ -242,5 +243,12 @@ describe('chatOrderHeading (v1.21.16): “Regarding …” from the reader’s s
 			label: { key: 'chat.header.re_peer', values: { owner: 'bob' } },
 			voice: 'third'
 		});
+	});
+});
+
+describe('inboxOrderVoice', () => {
+	it('my own order reads "Regarding my …", the other person\u2019s "Who is …"', () => {
+		expect(inboxOrderVoice(true)).toBe('mine');
+		expect(inboxOrderVoice(false)).toBe('who');
 	});
 });

@@ -28,6 +28,7 @@ import { checkTreasuryXmrPrimaryInput } from './treasuryXmrPrimaryInput';
 import { xmrIntegratedAddress } from '@morphit/release-schema';
 import { moneroTxHash, scanRawTxForAddress } from '../indexer/fee/xmrRawTx';
 import { parseXmrExplorer } from '../config/xmrExplorers';
+import { explorerOperatorOf } from '@morphit/operator-config/fee-sources';
 
 export interface XmrFeeSelftestOptions {
 	readonly txid: string;
@@ -111,7 +112,9 @@ export async function runXmrUnboundFeeSelftest(
 			explorerUrls: o.explorers,
 			minConfirmations: 1,
 			requestTimeoutMs: 20_000,
-			minSuccessfulResponses: o.explorers.length
+			// Every explorer must agree — every OPERATOR: the verifier counts one
+			// operator's addresses as one answer (feeSources.ts explorerOperatorOf).
+			minSuccessfulResponses: new Set(o.explorers.map(explorerOperatorOf)).size
 		},
 		fetchImpl
 	);
@@ -317,7 +320,9 @@ export async function runXmrFeeSelftest(
 			explorerUrls: o.explorers,
 			minConfirmations: 1,
 			requestTimeoutMs: 20_000,
-			minSuccessfulResponses: o.explorers.length
+			// Every explorer must agree — every OPERATOR: the verifier counts one
+			// operator's addresses as one answer (feeSources.ts explorerOperatorOf).
+			minSuccessfulResponses: new Set(o.explorers.map(explorerOperatorOf)).size
 		},
 		fetchImpl
 	);

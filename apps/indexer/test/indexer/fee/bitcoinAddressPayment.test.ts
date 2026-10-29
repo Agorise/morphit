@@ -18,7 +18,9 @@ import {
 const ADDR = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
 const A = 'https://blockstream.info/api';
 const B = 'https://mempool.space/api';
-const C = 'http://explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion/api';
+// mempool.emzy.de's onion: a third OPERATOR. (Blockstream's onion would be A's
+// operator, and a quorum counts operators — feeSources.ts EXPLORER_OPERATORS.)
+const C = 'http://mempool4t6mypeemozyterviq3i5de4kpoua65r3qkn5i3kknu5l2cad.onion/api';
 
 function cfg(o: Partial<BitcoinExplorerFeeVerifierConfig> = {}): BitcoinExplorerFeeVerifierConfig {
 	return {

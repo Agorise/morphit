@@ -124,7 +124,12 @@ export const CHAIN_DERIVED_TABLES: readonly string[] = [
 	'stranger_fees',
 	'suspicious_reciprocity',
 	'trade_concentration',
-	'user_settings'
+	'user_settings',
+	// v70: the BLURT legs that prove a first-buy waiver trade (a review may
+	// cite one from the consensus activation time). Chain-derived like the
+	// reviews they admit; spot-checked against the chain after a restore
+	// (snapshotChainCheck.ts).
+	'waiver_trade_transfers'
 ];
 
 /** `pg_dump` arguments that keep local-only rows out of the dump. */

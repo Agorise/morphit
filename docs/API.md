@@ -105,6 +105,7 @@ Per-IP, per-minute, enforced by the indexer's middleware:
 |---|---|---|
 | `resource`  | 600 req/min  | Single-record lookups, fee quotes                 |
 | `list`      | 120 req/min  | Listings, search, history pagination, RSS, the federation directory `/v1/instances`, and CONNECTING to any SSE stream (`/v1/orderbook/stream`, `/v1/chat/:a/:b/stream`, `/v1/chat-activity/:account/stream`, `/v1/instances/stream`) |
+| `payment-check` | 30 req/min | `/v1/payment-check` only (its own bucket; not operator-tunable) |
 
 `/v1/health` and `/v1/instance` are not rate-limited (small
 responses, no per-request database scan).
@@ -522,6 +523,20 @@ All feedback received by `:account`.
   (`no_verified_counterparty`), so only older rows can show
   `false`.
 
+#### `GET /v1/accounts/:account/trades`
+
+Tier: `list`
+
+The account's finished trades on either side: completed orders it posted
+AND completed orders of others that name it as the counterparty
+(`completed_counterparty`), newest trade first (`completed_at`: the
+completion op's block time, which only a completed order carries; `updated_at`
+also moves on a fee re-check, an attestation or the partner named later),
+`{ "items": [ …the /v1/orderbook item shape… ] }`. `?limit=` (default 50,
+max 100); no paging (`cursor` is refused). An account this instance blocks
+has none; other blocked owners' orders are left out. The profile's "Trade
+history" reads this.
+
 #### `GET /v1/accounts/:account/feedback-given`
 
 Tier: `list`
@@ -564,6 +579,71 @@ different number from the rating counts. There is no bare
 `/v1/accounts/:account` route: the rating and review count come from
 `/feedback` above, and each `/v1/orderbook` item carries the poster's
 rating and completed trades.
+
+#### `GET /v1/feedback/status?reviewer=&subject=&order_permlink=`
+
+Tier: `resource`
+
+What this indexer did with one review — the `morphit_feedback_v1` op signed
+by `reviewer` about `subject` citing `order_permlink` (leave it out for a
+review that cites no order). Read from the indexer's own event log; never
+cached.
+
+```json
+{
+  "state": "refused",
+  "reason": "order_permlink_not_found_or_unverified",
+  "block_time": "2026-10-26T18:11:06.000Z",
+  "trx_id": "…",
+  "waiting_for_transfer": { "from": "dave", "to": "erin" },
+  "rating": 5,
+  "comment": null
+}
+```
+
+- `state: "indexed"` — the review was applied (a later re-send refused as
+  `duplicate_feedback` does not change that).
+- `state: "refused"` — every such review was refused; `reason` is the newest
+  refusal's slug (`order_permlink_not_found_or_unverified`: the order is not
+  a valid citation for this pair; `no_verified_counterparty`: no
+  substantiated two-way conversation; …).
+- `state: "unknown"` — not seen: not broadcast, or in a block this indexer
+  has not applied yet. `reason`, `block_time` and `trx_id` are absent.
+
+With `state: "refused"` only:
+
+- `resend_from` — when the same review sent again would now be accepted:
+  it was refused with `order_permlink_not_found_or_unverified`, the order
+  it cites now admits a review from this pair (a first-buy waiver order
+  under the rule in force from the consensus activation time — see below —
+  or a paid order, say one completed or verified since), and the pair still
+  has the substantiated conversation a review needs (not flagged for
+  reciprocity). The value is the time from which a resend counts: the
+  activation time (`"2026-11-01T00:00:00.000Z"`) for a review refused before
+  it, else the time of the answer. Absent otherwise.
+- `waiting_for_transfer` — `{ "from": <partner>, "to": <owner> }` when the
+  review was refused with `order_permlink_not_found_or_unverified`, cites a
+  first-buy waiver order completed naming this pair, the pair has the
+  conversation a review needs, and only the proving transfer is missing:
+  `from` has not yet sent `to` at least 50.000 BLURT in one transfer stamped
+  at or after the activation time. Once they do, the review can be sent
+  again. Never together with `resend_from`.
+- `rating` (1–5) and `comment` (a string, or `null` when the review had
+  none) — what the refused review said, each present only when it is
+  well-formed, so a form can be filled in again.
+
+A first-buy waiver order (`fee_method: waived_first_buy`) is a valid
+citation when the order was completed naming the other party and that party
+sent the order's owner at least 50.000 BLURT in one transfer, in a block
+stamped at or after the consensus activation time (2026-11-01T00:00:00Z) and
+no earlier than the one that posted the order (even earlier in that block),
+up to and including the review's block (even later in that block). A review
+in the very block that posted the order is refused. A transfer before the
+activation time never counts: an older trade counts once the partner sends
+the owner at least 50.000 BLURT again from then on. Such a review never pays
+the welcome bonus.
+
+`400 bad_request` for a malformed account name or permlink.
 
 ---
 
@@ -771,11 +851,23 @@ Current Blurt chain `account_creation_fee`.  Read from chain
 dynamic global properties, with a configured fallback.
 
 ```json
-{ "account_creation_fee_blurt": 100, "source": "chain" }
+{
+  "account_creation_fee_blurt": 100,
+  "operation_flat_fee_blurt": 0.05,
+  "bandwidth_kbytes_fee_blurt": 0.2,
+  "source": "chain"
+}
 ```
 
 `source` is `"chain"` if read from a live RPC, `"fallback"` if all
 RPCs are unreachable and we returned the configured default.
+
+`operation_flat_fee_blurt` and `bandwidth_kbytes_fee_blurt` (v1.21.17)
+are the network fee every transaction pays from liquid BLURT: one per
+operation plus one per kB of the signed transaction. Each is `null` when
+the chain could not be read (`source: "fallback"`, asked again within
+10 minutes) or when the node read gave more than 1 BLURT (a value that
+implausible is not used; browsers then use the chain's known rates).
 
 #### `GET /v1/release`
 
@@ -948,6 +1040,111 @@ the fee-recipient account.
 Public read so unauthenticated previews work — a sender about to
 write their first message to a stranger needs to know the fee
 before any signing happens.
+
+### Trade payments
+
+#### `GET /v1/payment-check`
+
+Tier: `payment-check`
+
+Has a trade's BTC or XMR payment reached the seller's address, with how
+much, and how deep? In a crypto-for-crypto trade the seller shares an
+address in the chat and the buyer records the payment there; the
+seller's screen polls this while the payment confirms. The browser asks
+only its own instance; the instance asks the block explorers it uses
+for BTC / XMR listing fees, in the same order and over the same
+transport (onion / I2P explorers first over Tor / I2P, clearnet ones
+only where clearnet is allowed and only when those cannot answer; a
+Tor/I2P-only node never asks a clearnet explorer).
+
+Query: `asset=btc|xmr`, `txid` (64 hex), `address` (a mainnet address of
+that asset, checksum checked), and for XMR only `tx_key` — the
+transaction key the wallet shows for the sent transaction, as shown: 64
+hex, or, when the transaction has additional keys (a subaddress among
+several destinations), the main key followed by one key per output, 64
+hex each (at most 17 keys: the main key and one per output, a transaction having at most 16). Required for XMR, refused for BTC;
+surrounding whitespace is ignored. The key is checked by this instance
+against the raw transaction, which the explorers are asked for by its
+txid alone: neither the key nor the address is ever sent anywhere
+(v1.21.17; a txprove explorer's tx-key proof would need both). Anything else, a parameter twice, or a malformed
+value → `400 bad_request` (the message never repeats the input).
+
+```json
+{
+  "asset":                  "btc",
+  "txid":                   "<the txid, lowercase>",
+  "status":                 "found",
+  "amount":                 "0.00025",
+  "confirmations":          1,
+  "tx_time":                "2026-10-26T11:50:00.000Z",
+  "required_confirmations": 3,
+  "checked_at":             "2026-10-26T12:00:00.000Z"
+}
+```
+
+- `status`: `found` — the explorers agree the transaction exists;
+  `not_found` — they positively answered "no such transaction" (for XMR
+  this includes an explorer refusing the key); `unavailable` — no agreed
+  answer (explorers down, disagreeing, or still being asked). An HTML or
+  captcha page is never taken as "not found".
+- `amount`: what the transaction pays to `address`, in coin units, as a
+  decimal string — `"0"` when nothing in it goes there (another address,
+  or an XMR key that proves nothing for it), and `"0"` for a BTC
+  transaction that spends from `address`: that is the address owner's
+  own spend, and its output back to the address is change, not a
+  payment. (XMR has no such case: an input does not show the address it
+  spends from, and the buyer cannot hold the key of the seller's own
+  transaction.) For XMR it is proven with the tx key, here. `null` unless
+  `found`.
+- `confirmations`: `0` = in the mempool; a lower bound, never more than
+  any agreeing explorer allows — BTC: 0 if any of them still has it in
+  the mempool, else from the latest block height they report and the
+  lowest tip height among them (1 when any of them gives no tip); XMR: the
+  least they report (a source that cannot tell earns no agreement and
+  another is asked). `null` unless `found`.
+- `tx_time`: the time (ISO) of the block that holds the transaction —
+  the earliest the agreeing explorers that have it in a block give (BTC
+  `status.block_time`; XMR the block timestamp), even when another still
+  has it in its mempool (then `confirmations` is 0) — but only when their
+  times agree: within 2 hours of each other, and none older than 2 hours
+  while another has it in its mempool. Otherwise `null` and
+  `tx_time_disputed: true` (one explorer's made-up time must not date a
+  payment; the seller is told it cannot be checked here). `null` too when
+  every agreeing explorer has it in the mempool or none gives a block time,
+  and unless `found`. The seller's screen refuses a payment mined before
+  the address was shared, and does not take a mined payment
+  (`confirmations` above 0) whose `tx_time` is `null` as seen. Absent from
+  instances before v1.21.17.
+- `checked_at`: when the explorers gave this answer. It can be older
+  than the request: an answer is reused for 30 s while confirming (10 min
+  once 3 deep, 30 s for `not_found`, 15 s for `unavailable`), a stale
+  one is served while it is re-checked, and a re-check that gets no
+  answer keeps the last verdict for up to 30 min.
+
+Agreement: the instance's BTC / XMR quorum
+(`MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES` /
+`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`, default 2), as for a
+listing fee, counted in distinct explorer operators: one operator's
+onion, I2P and clearnet addresses (runbtc's onion and I2P explorers,
+mempool.space's onion and clearnet site) are one answer. A set of
+explorers that holds fewer operators than the quorum never agrees —
+`unavailable`, never `found` or `not_found`. A rate-limited (429),
+failing (5xx), timed-out or unreachable explorer is no answer:
+`unavailable` unless enough others agree; `not_found` needs a quorum of
+explicit "no such transaction" answers and no explorer finding it. A
+request waits at most 5 s for a first answer, then
+answers `unavailable` while the explorers are still being asked — poll
+again. At most 8 explorer rounds run at once for new questions, plus 4
+more kept for questions asked before (a seller's next poll), and
+120 start per minute, instance-wide; one client has at most 2 rounds of its
+own running (4 for the one key that stands for every Tor/I2P visitor);
+every round is stopped after 90 s. Past any of these a new question is
+`unavailable`. The answer
+is `Cache-Control: no-store`; nothing about a request is logged or
+stored in the database.
+
+Display-only: it tells the seller what the explorers see. It is not a
+settlement guarantee — the seller decides when to release.
 
 ---
 

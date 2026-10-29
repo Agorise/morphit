@@ -123,4 +123,27 @@ describe('who and how much a verification counts for', () => {
 		await vi.waitFor(() => expect(getTradeState('sally', P)!.phase).toBe('paid_verified'));
 		expect((getTradeState('sally', P) as { amountConfirmed?: boolean }).amountConfirmed).toBe(true);
 	});
+
+	it('a crypto-for-crypto trade: the other side’s XMR address does not become the BLURT ask', async () => {
+		// Bob (buying XMR with BLURT) shares where to receive his XMR, asking
+		// 0.05 — that record replaces Sally's BLURT ask in the trade state.
+		recordAddressShared({
+			orderOwner: 'sally',
+			orderPermlink: P,
+			peer: 'bob',
+			method: 'xmr',
+			address:
+				'47ohRcAbr8b8iaqq3sQWm795zAr8V5DKSLzfLDihsi55W4xaZ5dBu3zVnkqE7zMVc7ckPgz8AHYai96BzyNF4D4X5eSHr7B',
+			expectedAmount: 0.05,
+			direction: 'incoming'
+		});
+		chainTxs.set('e'.repeat(40), transfer('bob', '500.000 BLURT', 'k7m2q9xa'));
+		claim('bob', 'e'.repeat(40), '500', 'k7m2q9xa');
+		await settle();
+		const st = getTradeState('sally', P)! as { phase: string; amountConfirmed?: boolean };
+		// Verified against his own claim — not a false "0.05 asked" mismatch —
+		// and not marked as checked against an ask: the seller judges it.
+		expect(st.phase).toBe('paid_verified');
+		expect(st.amountConfirmed).toBe(false);
+	});
 });

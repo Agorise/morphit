@@ -13,6 +13,8 @@ import { ensureSodium } from '$crypto/sodium';
 import { setPersonStorageTier } from '$lib/storage/personStorage';
 import { getTradeState, recordAddressShared, tradeStates } from '$lib/trades/tradeStatus';
 import { verifyBlurtTransfer } from './blurtVerify';
+import { chainAckedFor, rememberChainAck } from './chainAckMemory';
+import { _ledgerNow, recordLegPayment } from './legLedger';
 
 /** Every transaction the chain relay was asked about. */
 const relayAsked = vi.hoisted(() => [] as string[]);
@@ -93,5 +95,22 @@ describe('sign-out from an open conversation', () => {
 		// The cached answer is gone: the chain is asked again.
 		await verifyBlurtTransfer('a'.repeat(40), check);
 		expect(relayAsked).toEqual(['a'.repeat(40)]);
+	});
+
+	it('the payments made from this device and the chain read markers sent are gone too (v1.21.17)', async () => {
+		setPersonStorageTier('local');
+		recordLegPayment({
+			orderPermlink: 'sell-blurt-1',
+			peer: 'bob',
+			method: 'blurt',
+			txid: 'b'.repeat(40)
+		});
+		rememberChainAck('bob', 'sell-blurt-1', 1_000);
+		broadcastSignOut();
+		await vi.waitFor(() => expect(chainAckedFor('bob', 'sell-blurt-1')).toBeNull(), {
+			timeout: 2_000
+		});
+		expect(_ledgerNow()).toEqual([]);
+		expect(chatOnDisk()).not.toContain('leg_ledger');
 	});
 });

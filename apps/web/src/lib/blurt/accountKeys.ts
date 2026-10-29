@@ -41,21 +41,62 @@ export const ACCOUNT_KEYS_TIMEOUT_MS = 15_000;
  *  once; on Tor/I2P each is a slow round trip). Per fetch implementation. */
 const inFlight = new WeakMap<typeof fetch, Map<string, Promise<AccountAuthorities | null>>>();
 
+/** A found account's keys are reused for this long (v1.21.17). Posting an order
+ *  read them twice within seconds — the active-key window checks the key typed
+ *  against them, then the broadcast checks the session key — and each read is
+ *  a trusted read across several RPC operators on the indexer. The second one
+ *  timing out was the "…/keys timed out" error seen while posting. A key
+ *  rotation is applied by the chain within blocks anyway; this is the same
+ *  order of staleness. Only answers that found the account are kept. */
+export const ACCOUNT_KEYS_REUSE_MS = 15_000;
+const recent = new WeakMap<
+	typeof fetch,
+	Map<string, { readonly at: number; readonly value: AccountAuthorities }>
+>();
+
 export async function fetchAccountKeys(
 	indexerOrigin: string,
 	account: string,
 	fetchImpl: typeof fetch = fetch
 ): Promise<AccountAuthorities | null> {
 	const url = new URL(`/v1/account/${encodeURIComponent(account)}/keys`, indexerOrigin).href;
+	const kept = recent.get(fetchImpl)?.get(url);
+	if (kept !== undefined && Date.now() - kept.at < ACCOUNT_KEYS_REUSE_MS) return kept.value;
 	const m = inFlight.get(fetchImpl) ?? new Map<string, Promise<AccountAuthorities | null>>();
 	inFlight.set(fetchImpl, m);
 	const pending = m.get(url);
 	if (pending !== undefined) return pending;
-	const p = fetchAccountKeysOnce(indexerOrigin, account, fetchImpl).finally(() => {
-		m.delete(url);
-	});
+	const p = fetchAccountKeysOnce(indexerOrigin, account, fetchImpl)
+		.then((value) => {
+			const r = recent.get(fetchImpl) ?? new Map();
+			recent.set(fetchImpl, r);
+			if (value !== null) r.set(url, { at: Date.now(), value });
+			else r.delete(url);
+			return value;
+		})
+		.finally(() => {
+			m.delete(url);
+		});
 	m.set(url, p);
 	return p;
+}
+
+/** For a step that moves money or signs (posting an order, unlocking the
+ *  active key): one failed lookup — the indexer's 502 when its RPC operators
+ *  could not agree in time, or the browser's own timeout — is asked again once
+ *  before the person is shown an error. The indexer rests a node that failed,
+ *  so the second read usually goes to others. "No such account" (null) is an
+ *  answer and is not retried. */
+export async function fetchAccountKeysForSigning(
+	indexerOrigin: string,
+	account: string,
+	fetchImpl: typeof fetch = fetch
+): Promise<AccountAuthorities | null> {
+	try {
+		return await fetchAccountKeys(indexerOrigin, account, fetchImpl);
+	} catch {
+		return fetchAccountKeys(indexerOrigin, account, fetchImpl);
+	}
 }
 
 async function fetchAccountKeysOnce(

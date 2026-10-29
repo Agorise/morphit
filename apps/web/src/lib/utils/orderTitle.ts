@@ -75,17 +75,22 @@ export interface OrderTitleInput {
 	readonly payment_methods?: readonly string[] | null;
 }
 
+export type OrderTitleVoice = 'poster' | 'third' | 'mine' | 'who';
+
 export interface OrderTitleOptions {
 	/** Maps payment-method ids → localized display labels (crypto settlement).
 	 *  Usually `$lib/payments/display`'s `displayNamesForMethods`. */
 	readonly methodDisplay?: (methods: readonly string[]) => readonly string[];
 	/** Active locale, for the settlement disjunction ("A or B" vs "A o B"). */
 	readonly locale?: string;
-	/** Who the sentence speaks for (v1.21.16): 'poster' (default) is the
-	 *  order's own first-person title, "I'm buying …"; 'third' reads it for
-	 *  someone else's order, "Buying …" — the chat header shows that one to the
-	 *  person who did NOT post the order. Same values, `order_title_3p.*` keys. */
-	readonly voice?: 'poster' | 'third';
+	/** Who the sentence speaks for. 'poster' (default) is the order's own
+	 *  first-person title, "I'm buying …" (`order_title.*`); 'third' reads it
+	 *  for someone else's order, "Buying …" (`order_title_3p.*`, the chat
+	 *  header, v1.21.16). The inbox card (v1.21.17) names its order from the
+	 *  reader's side too: 'mine' — "Regarding my buy order of …"
+	 *  (`order_title_mine.*`) — and 'who', the line under the poster's name,
+	 *  "Who is buying …" (`order_title_who.*`). Same values in every voice. */
+	readonly voice?: OrderTitleVoice;
 }
 
 export interface OrderTitleParts {
@@ -164,10 +169,11 @@ export function orderTitleParts(
 	opts?: OrderTitleOptions
 ): OrderTitleParts {
 	const side = o.side === 'sell' ? 'sell' : 'buy';
-	// Each key is spelled out in full for both voices, never as a namespace
+	// Each key is spelled out in full for every voice, never as a namespace
 	// variable: the i18n dead-key gate resolves a template key by its literal
-	// prefix and suffix, and a hole for the namespace would hide both families.
-	const third = opts?.voice === 'third';
+	// prefix and suffix, and a hole for the namespace would hide the families.
+	const voice: OrderTitleVoice = opts?.voice ?? 'poster';
+	const pick = (keys: Record<OrderTitleVoice, string>): string => keys[voice];
 	// for a goods asset (BARTER) the sentence reads "…of goods/services"
 	// (or the user's inline title) instead of "…of BARTER"; callers pass a
 	// localized `goodsLabel`. Falls back to the raw ticker if none is provided
@@ -203,13 +209,23 @@ export function orderTitleParts(
 	// generic branch rendered it "40–40 MXN worth of BLURT".
 	if (hasMin && hasMax && o.amount_min === o.amount_max) {
 		return {
-			key: third ? `order_title_3p.${side}_exact` : `order_title.${side}_exact`,
+			key: pick({
+				poster: `order_title.${side}_exact`,
+				third: `order_title_3p.${side}_exact`,
+				mine: `order_title_mine.${side}_exact`,
+				who: `order_title_who.${side}_exact`
+			}),
 			values: { amount: iso(fmt(o.amount_min as number)), fiat: iso(fiat), asset: iso(asset), settlement }
 		};
 	}
 	if (hasMin && hasMax) {
 		return {
-			key: third ? `order_title_3p.${side}_range` : `order_title.${side}_range`,
+			key: pick({
+				poster: `order_title.${side}_range`,
+				third: `order_title_3p.${side}_range`,
+				mine: `order_title_mine.${side}_range`,
+				who: `order_title_who.${side}_range`
+			}),
 			values: {
 				min: iso(fmt(o.amount_min as number)),
 				max: iso(fmt(o.amount_max as number)),
@@ -221,13 +237,23 @@ export function orderTitleParts(
 	}
 	if (hasMin) {
 		return {
-			key: third ? `order_title_3p.${side}_min` : `order_title.${side}_min`,
+			key: pick({
+				poster: `order_title.${side}_min`,
+				third: `order_title_3p.${side}_min`,
+				mine: `order_title_mine.${side}_min`,
+				who: `order_title_who.${side}_min`
+			}),
 			values: { amount: iso(fmt(o.amount_min as number)), fiat: iso(fiat), asset: iso(asset), settlement }
 		};
 	}
 	if (hasMax) {
 		return {
-			key: third ? `order_title_3p.${side}_max` : `order_title.${side}_max`,
+			key: pick({
+				poster: `order_title.${side}_max`,
+				third: `order_title_3p.${side}_max`,
+				mine: `order_title_mine.${side}_max`,
+				who: `order_title_who.${side}_max`
+			}),
 			values: { amount: iso(fmt(o.amount_max as number)), fiat: iso(fiat), asset: iso(asset), settlement }
 		};
 	}
@@ -238,7 +264,12 @@ export function orderTitleParts(
 	// generic *_any wording so the title is always sensible.
 	if (isGoods && o.accepted_assets && o.accepted_assets.length > 0) {
 		return {
-			key: third ? `order_title_3p.${side}_barter_novalue` : `order_title.${side}_barter_novalue`,
+			key: pick({
+				poster: `order_title.${side}_barter_novalue`,
+				third: `order_title_3p.${side}_barter_novalue`,
+				mine: `order_title_mine.${side}_barter_novalue`,
+				who: `order_title_who.${side}_barter_novalue`
+			}),
 			values: { asset: iso(asset), settlement }
 		};
 	}
@@ -246,5 +277,13 @@ export function orderTitleParts(
 	// dropping everything else: the least specific listing produced the least
 	// informative title, exactly when a reader most needs to know what settles
 	// it. It now names the settlement like every other branch.
-	return { key: third ? `order_title_3p.${side}_any` : `order_title.${side}_any`, values: { asset: iso(asset), fiat: iso(fiat), settlement } };
+	return {
+		key: pick({
+			poster: `order_title.${side}_any`,
+			third: `order_title_3p.${side}_any`,
+			mine: `order_title_mine.${side}_any`,
+			who: `order_title_who.${side}_any`
+		}),
+		values: { asset: iso(asset), fiat: iso(fiat), settlement }
+	};
 }

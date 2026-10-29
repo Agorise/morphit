@@ -8,11 +8,13 @@ import {
 	ADDRESS_HISTORY_KEY,
 	LEGACY_ADDRESS_HISTORY_KEY,
 	addressHistoryCount,
+	canonicalAddress,
 	clearAddressHistory,
 	hasLegacyAddressHistory,
 	migrateLegacyAddressHistory,
 	recordAddressShare,
 	shareAddress,
+	tagFor,
 	wasSharedBefore
 } from './addressHistory';
 import { ensureSodium } from '$crypto/sodium';
@@ -146,5 +148,44 @@ describe('sharing an address', () => {
 	it('a share that was sent is remembered', async () => {
 		await shareAddress('BTC', BTC, async () => {});
 		await vi.waitFor(async () => expect(await wasSharedBefore('BTC', BTC)).toBe(true));
+	});
+});
+
+describe('the same address written in other case (v1.21.17)', () => {
+	const EVM = '0x52908400098527886E0F7030069857D2E4169EE7';
+	const CASH = 'bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a';
+	it('a bech32, Bitcoin Cash or EVM address is the same address in any case', async () => {
+		await recordAddressShare('BTC', BTC.toUpperCase());
+		expect(await wasSharedBefore('BTC', BTC)).toBe(true);
+		await recordAddressShare('USDT', EVM);
+		expect(await wasSharedBefore('USDT', EVM.toLowerCase())).toBe(true);
+		await recordAddressShare('BCH', CASH);
+		expect(await wasSharedBefore('BCH', CASH.slice('bitcoincash:'.length).toUpperCase())).toBe(
+			true
+		);
+	});
+	it('a case-sensitive address (Monero, base58) is not', async () => {
+		await recordAddressShare('XMR', XMR);
+		expect(await wasSharedBefore('XMR', XMR.toLowerCase())).toBe(false);
+		expect(canonicalAddress('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')).toBe(
+			'1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
+		);
+	});
+	it('an older plaintext record is converted in the one spelling', async () => {
+		store.set(
+			LEGACY_ADDRESS_HISTORY_KEY,
+			JSON.stringify({
+				entries: [{ asset: 'USDT', address: EVM, sharedAt: '2026-05-17T20:00:00Z' }]
+			})
+		);
+		await migrateLegacyAddressHistory();
+		expect(await wasSharedBefore('USDT', EVM.toLowerCase())).toBe(true);
+	});
+	it('what a v1.21.16 build recorded (as written) is still found', async () => {
+		await recordAddressShare('XMR', XMR);
+		const f = JSON.parse(store.get(ADDRESS_HISTORY_KEY)!) as { salt: string; tags: string[] };
+		f.tags.push(await tagFor(f.salt, 'USDT', EVM));
+		store.set(ADDRESS_HISTORY_KEY, JSON.stringify(f));
+		expect(await wasSharedBefore('USDT', EVM)).toBe(true);
 	});
 });

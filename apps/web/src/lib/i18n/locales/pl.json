@@ -422,7 +422,7 @@
 			"mark_all_read": "Oznacz wszystkie jako przeczytane",
 			"conversation_aria_unread": "Rozmowa z {peer} — nieprzeczytana",
 			"conversation_aria_read": "Rozmowa z {peer}",
-			"re_prefix": "RE:",
+			"no_order": "Bez zlecenia",
 			"tabs_aria": "Karty skrzynki",
 			"tab_inbox": "Odebrane",
 			"tab_starred": "Oznaczone",
@@ -437,7 +437,9 @@
 			"restore_toast": "Przywrócono do skrzynki odbiorczej.",
 			"tab_empty_inbox": "Nic tu nie ma: Twoje rozmowy są oznaczone gwiazdką lub zarchiwizowane.",
 			"tab_empty_starred": "Brak rozmów oznaczonych gwiazdką. Dotknij gwiazdki przy rozmowie, aby ją tu zachować.",
-			"tab_empty_archived": "Brak zarchiwizowanych rozmów."
+			"tab_empty_archived": "Brak zarchiwizowanych rozmów.",
+			"review_not_counted_yet": "Jeszcze się nie liczy",
+			"review_not_counted": "Nie liczy się"
 		},
 		"block": {
 			"busy": "Przetwarzanie…",
@@ -614,7 +616,9 @@
 			"pill_method_xrp": "Ripple (XRP)",
 			"blurt_account_not_found": "Nie istnieje konto Blurt o tej nazwie.",
 			"asset_label": "Moneta",
-			"too_long_to_send": "To jest za długie na jedną wiadomość czatu. Skróć notatkę lub link PayJoin i spróbuj ponownie."
+			"too_long_to_send": "To jest za długie na jedną wiadomość czatu. Skróć notatkę lub link PayJoin i spróbuj ponownie.",
+			"amount_label_required": "Kwota, której żądasz",
+			"reuse_blocked_body": "Aby otrzymać płatność za tę transakcję, udostępnij adres, którego nigdy wcześniej nie udostępniałeś: płatności na ponownie użyty adres nie da się odróżnić od wcześniejszej. Utwórz w portfelu nowy adres (lub podadres)."
 		},
 		"funds_sent": {
 			"button": "Zapłać teraz",
@@ -658,6 +662,7 @@
 			"self_verify_wrong_op": "Transakcja nie zawiera transferu do oczekiwanego odbiorcy.",
 			"view_on_explorer": "Zobacz w eksploratorze",
 			"send_failed": "Nie udało się wysłać potwierdzenia wysłania środków. Spróbuj ponownie.",
+			"too_long_to_send": "To jest za długie na jedną wiadomość czatu. Skróć notatkę. Jeśli to klucz transakcji Monero wydłuża wiadomość, pomiń go: sprzedawca sprawdzi wtedy płatność we własnym portfelu.",
 			"txid_invalid_usdt": "Ten ID transakcji nie pasuje do wybranej sieci USDT. Sprawdź sieć przed wysłaniem.",
 			"network_pinned_hint": "Sprzedawca określił tę sieć, udostępniając swój adres. Nie możesz jej tutaj zmienić.",
 			"pill_title_usdt": "USDT wysłany",
@@ -679,7 +684,11 @@
 			"receipt_title": "Potwierdzenie płatności",
 			"receipt_when": "{when}",
 			"verify_received_of": "Otrzymano {received} z {asked} BLURT.",
-			"verify_received_unasked": "Otrzymano {received} BLURT w łańcuchu (nie podano żądanej kwoty)"
+			"verify_received_unasked": "Otrzymano {received} BLURT w łańcuchu (nie podano żądanej kwoty)",
+			"tx_key_label": "Klucz transakcji (tx key)",
+			"tx_key_placeholder": "64 lub więcej liter i cyfr",
+			"tx_key_help": "Twój portfel Monero pokazuje go przy każdej wysłanej płatności. Dzięki niemu @{peer} widzi, że twoja płatność dociera. Dowodzi tylko tej jednej płatności i nie da się nim niczego wydać.",
+			"tx_key_invalid": "To nie wygląda na klucz transakcji Monero."
 		},
 		"unknown_version": "Ta wiadomość używa nowszego protokołu. Zaktualizuj Morphit, aby ją odczytać.",
 		"pay_blurt": {
@@ -804,7 +813,11 @@
 		"day_separator_tooltip": "Północ, UTC",
 		"feedback": {
 			"leave_prompt": "Wystaw opinię",
-			"sent_toast": "Opinia wysłana"
+			"sent_toast": "Opinia wysłana",
+			"not_counted_later": "Twoja opinia o @{peer} jeszcze się nie liczy: opinie o pierwszej transakcji liczą się od {date}. Wtedy zostaniesz tu poproszony o ponowne jej wysłanie.",
+			"not_counted": "Twoja opinia o @{peer} nie została uwzględniona: indeksery jej nie przyjęły.",
+			"resend_now": "Twoja wcześniejsza opinia o @{peer} się nie liczyła, ale teraz by się liczyła: wyślij ją ponownie.",
+			"not_counted_needs_transfer": "Twoja opinia o @{peer} jeszcze się nie liczy. Opinia o pierwszej transakcji liczy się, gdy @{from} wyśle @{to} co najmniej 50 BLURT jednym przelewem od {date}; wtedy zostaniesz tu poproszony o ponowne jej wysłanie."
 		},
 		"system": {
 			"order_settled_elsewhere": "Dziękuję za zainteresowanie tym zleceniem. Zawarłem już tę transakcję z innym handlowcem, więc nie jest już dostępna. Przykro mi, że tym razem się nie udało — bardzo doceniam Twoje zainteresowanie i mam nadzieję, że w przyszłości uda nam się przeprowadzić transakcję."
@@ -813,6 +826,35 @@
 		"history": {
 			"loading_older": "Wczytywanie starszych wiadomości…",
 			"load_failed": "Nie udało się wczytać starszych wiadomości."
+		},
+		"legs": {
+			"waiting_payment": "Czekamy, aż @{peer} zapłaci ci w {coins}. Nie wysyłaj nic, dopóki płatność się tu nie pojawi.",
+			"waiting_address": "Czekamy, aż @{peer} poda, dokąd masz zapłacić.",
+			"checking_payment": "Sprawdzanie płatności od @{peer}…",
+			"payment_short": "Płatność od @{peer} nie zgadza się z żądaną — zobacz potwierdzenie powyżej. Nic nie wysyłaj, chyba że twój własny portfel pokazuje właściwą płatność.",
+			"send_unchecked": "Nie udało się tu sprawdzić płatności od @{peer}. Upewnij się, że jest w twoim portfelu, zanim cokolwiek wyślesz.",
+			"wallet_confirm": "Widzę ją w swoim portfelu",
+			"check_wallet": "Nie udało się tu potwierdzić płatności od @{peer}. Poszukaj jej we własnym portfelu i sprawdź kwotę, zanim cokolwiek wyślesz.",
+			"payment_no_address": "@{peer} zgłosił płatność w walucie, dla której nie udostępniłeś adresu na tym czacie. Udostępnij adres, na który chcesz otrzymać płatność, i na razie nic nie wysyłaj.",
+			"amount_confirm": "Kwota się zgadza",
+			"check_amount": "Płatność od @{peer} dotarła, ale nie podano tu żądanej kwoty. Sprawdź, czy to uzgodniona kwota, zanim cokolwiek wyślesz.",
+			"payment_reused": "@{peer} wskazał płatność zapisaną już dla innego zlecenia: to nie jest płatność za to. Nic nie wysyłaj.",
+			"unconfirmed_btc": "Jeszcze niepotwierdzona: do tego czasu płatność w Bitcoinie wciąż może zostać zastąpiona. Bezpieczniej poczekać na jedno potwierdzenie.",
+			"ask_blurt": "Poproś o BLURT",
+			"ask_blurt_aria": "Powiedz @{peer}, na które konto Blurt zapłacić i ile BLURT",
+			"payment_old": "Płatność od @{peer} została wykonana, zanim udostępniłeś ten adres: to czyjaś wcześniejsza płatność, a nie za tę transakcję. Nic nie wysyłaj.",
+			"waiting_asset_address": "Płatność od @{peer} dotarła. Czekamy, aż @{peer} udostępni adres {asset}, na który wysłać."
+		},
+		"payment_check": {
+			"checking": "Sprawdzanie tej płatności…",
+			"not_found": "Jeszcze niewidoczna w sieci {coin}. Za chwilę sprawdzimy ponownie.",
+			"no_key": "Nie podano klucza transakcji, więc tej płatności w Monero nie można tu sprawdzić. Zajrzyj do portfela.",
+			"unavailable": "Tej płatności nie można teraz sprawdzić. Zajrzyj do portfela.",
+			"wrong_address": "Ta płatność nie dotarła na adres {coin} udostępniony na tym czacie.",
+			"short": "Na udostępniony adres dotarło tylko {amount} {coin} — mniej, niż proszono.",
+			"seen": "Otrzymano {amount} {coin} · potwierdzenia: {n}/{required}",
+			"confirmed": "Otrzymano {amount} {coin} · potwierdzone",
+			"old": "Ta płatność {coin} została wykonana, zanim adres udostępniono na tym czacie: to nie jest płatność za tę transakcję."
 		}
 	},
 	"cheat_sheet": {
@@ -880,7 +922,6 @@
 		"chart_aria": "Dzienny wykres ceny rozliczeniowej z ostatnich {days} dni",
 		"legend": "Wysokość słupka = cena rozliczeniowa (BLURT/godz). Pełna zieleń = wszystkie sloty zajęte (aukcja konkurencyjna). Wyblakła zieleń = część slotów zajęta. Szary = brak licytacji w danym dniu.",
 		"no_history_yet": "Nikt nie rozpoczął jeszcze licytacji o wyróżnione sloty w ciągu ostatnich {days} dni. Bądź pierwszy.",
-		"no_history_yet_active": "Brak jeszcze historii cen wyróżnionych slotów z ostatnich {days} dni.",
 		"bar_title": "{day}: {rate} BLURT/h · zajęte miejsca: {filled}/{max}"
 	},
 	"common": {
@@ -1474,7 +1515,7 @@
 			},
 			"xmr_txid": {
 				"q": "Czym jest TxID Monero i gdzie go znaleźć?",
-				"a": "ID transakcji Monero (TxID, czasem nazywany *hashem*) to 64-znakowy kod złożony z 0–9 i a–f, który oznacza jedną płatność Monero. Aby go znaleźć, otwórz płatność w historii portfela: TxID to długi kod w jej szczegółach, zwykle z przyciskiem kopiowania.\n\n**Kiedy {brand} o niego prosi:** gdy informujesz partnera transakcji, że zapłaciłeś w Monero (przycisk **Wyślij XMR** na czacie), oraz gdy płacisz opłatę za ogłoszenie w XMR (jeśli ta strona przyjmuje opłaty w XMR). Przy opłacie wklejasz TxID razem z kluczem transakcji tej płatności, żeby każda strona Morphit mogła ją sprawdzić — zobacz „Czym jest klucz transakcji Monero i dlaczego {brand} o niego prosi?”.\n\n**Prywatność:** TxID i tak jest publiczny — każdy może go sprawdzić w eksploratorze bloków — i nie pokazuje, kim jesteś ani jakie masz saldo. Ale jest zapisywany razem z twoim ogłoszeniem w łańcuchu Blurt, co wiąże tę jedną płatność opłaty z twoim kontem. Sama płatność w transakcji idzie bezpośrednio od osoby do osoby, poza Blurtem. Jeśli udostępnisz jej TxID na czacie, idzie on twoim szyfrowanym czatem, który możecie przeczytać tylko ty i twój partner. Jeśli nie chcesz żadnego powiązania z Monero, zapłać opłatę w BLURT: to opcja domyślna i kosztuje o połowę mniej."
+				"a": "ID transakcji Monero (TxID, czasem nazywany *hashem*) to 64-znakowy kod złożony z 0–9 i a–f, który oznacza jedną płatność Monero. Aby go znaleźć, otwórz płatność w historii portfela: TxID to długi kod w jej szczegółach, zwykle z przyciskiem kopiowania.\n\n**Kiedy {brand} o niego prosi:** gdy informujesz partnera transakcji, że zapłaciłeś w Monero (przycisk **Wyślij XMR** na czacie), oraz gdy płacisz opłatę za ogłoszenie w XMR (jeśli ta strona przyjmuje opłaty w XMR). Przy opłacie wklejasz TxID razem z kluczem transakcji tej płatności, żeby każda strona Morphit mogła ją sprawdzić — zobacz „Czym jest klucz transakcji Monero i dlaczego {brand} o niego prosi?”.\n\n**Prywatność:** TxID i tak jest publiczny — każdy może go sprawdzić w eksploratorze bloków — i nie pokazuje, kim jesteś ani jakie masz saldo. Ale jest zapisywany razem z twoim ogłoszeniem w łańcuchu Blurt, co wiąże tę jedną płatność opłaty z twoim kontem. Sama płatność w transakcji idzie bezpośrednio od osoby do osoby, poza Blurtem. Jeśli udostępnisz jej TxID na czacie, idzie on twoim szyfrowanym czatem, który możecie przeczytać tylko ty i twój partner. Żeby pokazać twojemu partnerowi, że płatność dociera, jego strona {brand} sprawdza TxID w eksploratorach bloków — sam TxID, nigdy twój adres ani klucz transakcji. Jeśli nie chcesz żadnego powiązania z Monero, zapłać opłatę w BLURT: to opcja domyślna i kosztuje o połowę mniej."
 			},
 			"xmr_tx_proof": {
 				"q": "Czym jest klucz transakcji Monero i dlaczego {brand} o niego prosi?",
@@ -1801,6 +1842,10 @@
 		"hours_option": "{n}h",
 		"cost_label": "Łączny koszt",
 		"cost_detail": "{per_hour} BLURT/godz. × {hours} godz.",
+		"balance_label": "Twoje saldo",
+		"balance_loading": "Odczytywanie salda…",
+		"balance_unknown": "Saldo jest teraz niedostępne",
+		"balance_short": "Za mało BLURT: brakuje {missing} BLURT (wliczając opłatę sieciową ok. {fee} BLURT).",
 		"submit_button": "Zapłać i wyróżnij",
 		"cancel_button": "Anuluj",
 		"success": "⭐ Oferta wyróżniona — zapłacono {blurt} BLURT",
@@ -2436,6 +2481,7 @@
 		},
 		"order": {
 			"posted_prefix": "Opublikowano",
+			"posted_on": "Opublikowano {date}",
 			"state_live": "Aktywne",
 			"state_cancelled": "Anulowane",
 			"state_expired": "Wygasłe",
@@ -2462,6 +2508,7 @@
 			"feedback_no_counterparty": "Nie było jeszcze żadnych czatów z kontrahentem",
 			"posting": "Publikowanie…",
 			"feature_arming_hint": "Dostępne, gdy tylko Twoje zlecenie będzie aktywne",
+			"feature_opens_when_fee_confirmed": "Formularz wyróżnienia otworzy się tutaj, gdy opłata za ogłoszenie zostanie potwierdzona.",
 			"fee_awaiting_payment": "Czeka na Twoją opłatę w BTC",
 			"fee_proof_unsupported": "Nie ma w orderbooku — opłaty nie da się sprawdzić; opublikuj ponownie z kluczem transakcji"
 		},
@@ -2838,6 +2885,7 @@
 		"terms": "Warunki",
 		"posted_on": "Opublikowane",
 		"expires_on": "Wygasa",
+		"expired_on": "Wygasło",
 		"listing_fee": "Opłata za wystawienie",
 		"fee_verified": "Zweryfikowana",
 		"fee_underpaid": "Opłata za niska",
@@ -2984,7 +3032,8 @@
 			"eta": "Oferty powinny być dostępne około {eta}.",
 			"estimating": "Szacowanie czasu do dostępności…"
 		},
-		"feed_title": "{site} — księga zleceń ({format})"
+		"feed_title": "{site} — księga zleceń ({format})",
+		"match_in_featured": "Pasujące zlecenie jest powyżej, w sekcji Wyróżnione."
 	},
 	"paired_readonly": {
 		"banner_heading": "Zalogowany jako @{account} — klucze są na telefonie.",
@@ -3686,12 +3735,12 @@
 		"tab_active_orders": "Aktywne oferty",
 		"tab_trade_history": "Historia transakcji",
 		"tabs_aria": "Szczegóły profilu",
-		"no_trade_history": "Brak zakończonych transakcji.",
+		"no_trade_history": "@{account} nie ma jeszcze zakończonych transakcji.",
 		"trade_history_with": "z @{account}",
 		"loading_feedback": "Wczytywanie opinii…",
 		"feedback_error": "Nie udało się teraz wczytać opinii.",
 		"rating_count": "{n, plural, one {# ocena} few {# oceny} many {# ocen} other {# ocen}}",
-		"no_feedback_yet": "Brak opinii. Ten użytkownik nie został jeszcze oceniony przez żadnego kontrahenta.",
+		"no_feedback_yet": "Brak opinii. @{account} nie został jeszcze oceniony przez żadnego kontrahenta.",
 		"reviews_heading": "@{account} otrzymał(a) opinie od",
 		"review_order_link": "Zobacz zlecenie",
 		"load_more": "Wczytaj więcej",
@@ -3705,8 +3754,8 @@
 		"given_heading": "@{account} zostawił(a) recenzję dla",
 		"given_rated": "Oceniłem(-am) @{account}:",
 		"loading_given": "Wczytywanie wystawionych recenzji…",
-		"given_error": "Nie udało się wczytać recenzji wystawionych przez tego użytkownika.",
-		"no_given_yet": "Jeszcze nic. Ten użytkownik nie wystawił opinii żadnemu kontrahentowi.",
+		"given_error": "Nie udało się wczytać recenzji wystawionych przez @{account}.",
+		"no_given_yet": "Jeszcze nic. @{account} nie wystawił opinii żadnemu kontrahentowi.",
 		"rss_subscribe_label": "RSS — śledź tego tradera",
 		"rss_subscribe_title": "Powiadomienia przez RSS, gdy ten trader opublikuje nowe zlecenie kupna lub sprzedaży. Uwaga: odpytywanie kanału per-trader jest nieco bardziej ujawniające niż ogólnoświatowy.",
 		"feedback_suppressed_chip": "Nie liczy się do oceny",
@@ -3813,7 +3862,13 @@
 		"received_rated": "Ocenił(a) mnie:",
 		"average_rating_detail": "Średnia ocena: {avg}",
 		"feedback_all_excluded": "Poniższe opinie nie są wliczane do tej oceny — konta, które je wystawiły, zostały oznaczone przez nasze kontrole samodzielnego handlu.",
-		"headline_is_average": "Średnia ocena"
+		"headline_is_average": "Średnia ocena",
+		"given_not_counted_later": "Jeszcze się nie liczy: opinie o pierwszej transakcji liczą się od {date}. Wtedy wyślij ją ponownie z czatu.",
+		"given_not_counted": "Nie liczy się: indeksery jej nie przyjęły.",
+		"given_send_again": "Jeszcze się nie liczy, ale teraz może: wyślij ją ponownie z czatu.",
+		"given_pending": "Wysłana. Jeszcze nie ma jej na liście indekserów.",
+		"given_open_chat": "Otwórz czat",
+		"given_needs_transfer": "Jeszcze się nie liczy: zacznie się liczyć, gdy @{from} wyśle @{to} co najmniej 50 BLURT jednym przelewem od {date}. Wtedy wyślij ją ponownie z czatu."
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4935,6 +4990,34 @@
 		"buy_exact": "Kupuje {asset} za dokładnie {amount} {fiat}, płacąc {settlement}",
 		"sell_exact": "Sprzedaje {asset} za dokładnie {amount} {fiat}, przyjmując {settlement}",
 		"buy_barter_novalue": "Kupuje {asset}, płacąc {settlement}",
+		"sell_barter_novalue": "Sprzedaje {asset}, przyjmując {settlement}"
+	},
+	"order_title_mine": {
+		"buy_min": "Moje zlecenie kupna: co najmniej {amount} {fiat} {asset}, płatność: {settlement}",
+		"buy_max": "Moje zlecenie kupna: {asset} za maksymalnie {amount} {fiat}, płatność: {settlement}",
+		"buy_range": "Moje zlecenie kupna: {asset} za {min}–{max} {fiat}, płatność: {settlement}",
+		"buy_any": "Moje zlecenie kupna: dowolna ilość {asset}, płatność: {settlement}",
+		"buy_exact": "Moje zlecenie kupna: {asset} za dokładnie {amount} {fiat}, płatność: {settlement}",
+		"buy_barter_novalue": "Moje zlecenie kupna: {asset}, płatność: {settlement}",
+		"sell_min": "Moje zlecenie sprzedaży: co najmniej {amount} {fiat} {asset}, płatność: {settlement}",
+		"sell_max": "Moje zlecenie sprzedaży: {asset} za maksymalnie {amount} {fiat}, płatność: {settlement}",
+		"sell_range": "Moje zlecenie sprzedaży: {asset} za {min}–{max} {fiat}, płatność: {settlement}",
+		"sell_any": "Moje zlecenie sprzedaży: dowolna ilość {asset}, płatność: {settlement}",
+		"sell_exact": "Moje zlecenie sprzedaży: {asset} za dokładnie {amount} {fiat}, płatność: {settlement}",
+		"sell_barter_novalue": "Moje zlecenie sprzedaży: {asset}, płatność: {settlement}"
+	},
+	"order_title_who": {
+		"buy_min": "Kupuje co najmniej {amount} {fiat} {asset}, płacąc {settlement}",
+		"buy_max": "Kupuje {asset} za maksymalnie {amount} {fiat}, płacąc {settlement}",
+		"buy_range": "Kupuje {asset} za {min}–{max} {fiat}, płacąc {settlement}",
+		"buy_any": "Kupuje dowolną ilość {asset}, płacąc {settlement}",
+		"buy_exact": "Kupuje {asset} za dokładnie {amount} {fiat}, płacąc {settlement}",
+		"buy_barter_novalue": "Kupuje {asset}, płacąc {settlement}",
+		"sell_min": "Sprzedaje co najmniej {amount} {fiat} {asset}, przyjmując {settlement}",
+		"sell_max": "Sprzedaje {asset} za maksymalnie {amount} {fiat}, przyjmując {settlement}",
+		"sell_range": "Sprzedaje {asset} za {min}–{max} {fiat}, przyjmując {settlement}",
+		"sell_any": "Sprzedaje dowolną ilość {asset}, przyjmując {settlement}",
+		"sell_exact": "Sprzedaje {asset} za dokładnie {amount} {fiat}, przyjmując {settlement}",
 		"sell_barter_novalue": "Sprzedaje {asset}, przyjmując {settlement}"
 	},
 	"stats": {

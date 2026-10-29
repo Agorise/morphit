@@ -37,12 +37,16 @@
  * 4. WHICH ORDER. The encrypted payment IDs in the same extra bytes are
  *    returned for the caller's binding check (xmrPaymentId.ts).
  *
- * Only the MAIN transaction key is used: a fee payment made on its own (one
- * destination + change) never has additional keys — wallet2 adds them only
- * for ≥1 subaddress destination together with another destination
- * (cryptonote_tx_utils.cpp classify_addresses, need_additional_txkeys; change
- * is not counted). Every step is checked against PyPI `monero` in
- * test/indexer/fee/xmrRawTx.test.ts.
+ * ADDITIONAL KEYS. A fee payment made on its own (one destination + change)
+ * never has additional keys — wallet2 adds them only for ≥1 subaddress
+ * destination together with another destination (cryptonote_tx_utils.cpp
+ * classify_addresses, need_additional_txkeys; change is not counted), so the
+ * fee path passes the main key alone. A trade payment can be part of such a
+ * transaction; the wallet's tx key is then the main key followed by one
+ * additional key per output (wallet2 get_tx_key), 64 hex each. Output i is
+ * then also tried with D_i = 8·r_i·A, exactly as wallet2 check_tx_key does,
+ * and its amount opened with that D_i. Every step is checked against PyPI
+ * `monero` in test/indexer/fee/xmrRawTx.test.ts.
  */
 import { ed25519 } from '@noble/curves/ed25519';
 import { keccak_256 } from '@noble/hashes/sha3';
@@ -56,6 +60,10 @@ const L = 2n ** 252n + 27742317777372353535851937790883648493n;
 const G = ed25519.ExtendedPoint.BASE;
 const H = ed25519.ExtendedPoint.fromHex(MONERO_H_HEX);
 const HEX32 = /^[0-9a-f]{64}$/i;
+/** A tx key as a wallet shows it: the main key, then none or one additional
+ *  key per output — a transaction has at most 16 outputs (Bulletproofs+,
+ *  BULLETPROOF_PLUS_MAX_OUTPUTS), so 1 + 16 = 17 keys at most. */
+export const XMR_TX_KEYS = /^(?:[0-9a-f]{64}){1,17}$/i;
 const enc = new TextEncoder();
 
 function fromHex(h: string): Uint8Array {
@@ -260,9 +268,15 @@ export function scanRawTxForAddress(
 	txKeyHex: string,
 	dest: { readonly viewPub: string; readonly spendPub: string }
 ): RawTxScan {
-	if (!/^[0-9a-f]{64}$/i.test(txKeyHex)) return { error: 'bad_key' };
-	const r = leToBig(fromHex(txKeyHex.toLowerCase()));
-	if (r === 0n || r >= L) return { error: 'bad_key' };
+	if (!XMR_TX_KEYS.test(txKeyHex)) return { error: 'bad_key' };
+	const keys: bigint[] = [];
+	for (let k = 0; k < txKeyHex.length; k += 64) {
+		const r = leToBig(fromHex(txKeyHex.slice(k, k + 64).toLowerCase()));
+		if (r === 0n || r >= L) return { error: 'bad_key' };
+		keys.push(r);
+	}
+	const r = keys[0]!;
+	const additional = keys.slice(1);
 	let A: InstanceType<typeof ed25519.ExtendedPoint>;
 	let B: InstanceType<typeof ed25519.ExtendedPoint>;
 	try {
@@ -279,6 +293,9 @@ export function scanRawTxForAddress(
 		const ecdh = arr(rct.ecdhInfo);
 		const outPk = arr(rct.outPk);
 		if (ecdh.length !== vout.length || outPk.length !== vout.length) return { error: 'malformed' };
+		// wallet2 keeps exactly one additional key per output, or none: any
+		// other count is not this transaction's key.
+		if (additional.length !== 0 && additional.length !== vout.length) return { error: 'bad_key' };
 		const extraBytes = arr(tx.extra).map((x) => {
 			if (typeof x !== 'number' || !Number.isInteger(x) || x < 0 || x > 255)
 				throw new Error('bad extra');
@@ -286,7 +303,8 @@ export function scanRawTxForAddress(
 		});
 		const pids = encryptedPaymentIdsFromExtra(toHex(Uint8Array.from(extraBytes))) ?? [];
 
-		const derivation = A.multiply(r).multiply(8n).toRawBytes(); // 8·r·A
+		const derive = (k: bigint): Uint8Array => A.multiply(k).multiply(8n).toRawBytes(); // 8·k·A
+		const derivation = derive(r);
 		const outputs: number[] = [];
 		let amount = 0n;
 		for (let i = 0; i < vout.length; i++) {
@@ -302,13 +320,17 @@ export function scanRawTxForAddress(
 			} else keyHex = String(t.key);
 			if (!HEX32.test(keyHex)) return { error: 'malformed' };
 			const idx = varint(i);
-			if (viewTag !== null) {
-				const vt = keccak_256(concat(enc.encode('view_tag'), derivation, idx))[0]!;
-				if (vt.toString(16).padStart(2, '0') !== viewTag) continue;
-			}
-			const hs = hashToScalar(concat(derivation, idx));
-			const P = mulG(hs).add(B);
-			if (toHex(P.toRawBytes()) !== keyHex.toLowerCase()) continue;
+			/** Hs for output i under derivation `d`, or null when it is not ours. */
+			const ours = (d: Uint8Array): bigint | null => {
+				if (viewTag !== null) {
+					const vt = keccak_256(concat(enc.encode('view_tag'), d, idx))[0]!;
+					if (vt.toString(16).padStart(2, '0') !== viewTag) return null;
+				}
+				const h = hashToScalar(concat(d, idx));
+				return toHex(mulG(h).add(B).toRawBytes()) === keyHex.toLowerCase() ? h : null;
+			};
+			const hs = ours(derivation) ?? (additional.length > 0 ? ours(derive(additional[i]!)) : null);
+			if (hs === null) continue;
 			// ours: open the amount against the chain's commitment
 			const e = ecdh[i];
 			if (!isObj(e) || typeof e.amount !== 'string' || !/^[0-9a-f]{16}$/i.test(e.amount)) {

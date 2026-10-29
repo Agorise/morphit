@@ -28,6 +28,8 @@
 	 * header for why we don't do checksum verification here.
 	 */
 
+	import { untrack } from 'svelte';
+	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { _, locale } from 'svelte-i18n';
 	import { parseAmountInput } from '$lib/orders/amountInput';
 	import {
@@ -75,9 +77,13 @@
 		 *  a crypto they actually accept, i.e. the order's accepted_assets).
 		 *  Undefined → all methods offered (the normal crypto-trade case). */
 		allowedMethods?: readonly ChatAssetTicker[];
+		/** v1.21.17 — the amount must be given: the address is where the
+		 *  seller of a crypto-for-crypto trade is paid, and the payment check
+		 *  compares what arrives with what he asked. */
+		requireAmount?: boolean;
 	}
 
-	let { orderPermlink, onShare, onCancel, allowedMethods }: Props = $props();
+	let { orderPermlink, onShare, onCancel, allowedMethods, requireAmount = false }: Props = $props();
 
 	/** every method tab in on-screen order. `visibleMethods` filters
 	 *  this to `allowedMethods` when the modal is restricted (barter). */
@@ -118,6 +124,21 @@
 		}
 	});
 	let address = $state('');
+	// v1.21.17 — BLURT is paid to an account: start from the user's own (he
+	// can still type another). Only when the field is empty as he switches to
+	// BLURT, so clearing it by hand is not undone.
+	$effect(() => {
+		if (method !== 'blurt') return;
+		untrack(() => {
+			if (address !== '') return;
+			try {
+				const own = getUserBlurtAccount();
+				if (own) address = own;
+			} catch {
+				/* no session: he types it */
+			}
+		});
+	});
 	let amount = $state('');
 	/** the requested amount is read with the active
 	 *  locale's conventions (either decimal mark, native digits) and SENT in
@@ -306,6 +327,9 @@
 	 *  Reuse links trades on the public chain and builds a counterparty
 	 *  graph against the same address over time. */
 	let sharedBefore = $state(false);
+	/** The address the reuse check last answered for (null: none yet). A
+	 *  payment address must not be shared before that answer is in. */
+	let reuseCheckedFor = $state<string | null>(null);
 	$effect(() => {
 		const asset = method.toUpperCase();
 		const address = trimmedAddress;
@@ -315,16 +339,20 @@
 		}
 		let current = true;
 		void wasSharedBefore(asset, address).then((seen) => {
-			if (current) sharedBefore = seen;
+			if (!current) return;
+			sharedBefore = seen;
+			reuseCheckedFor = `${asset}\u0000${address}`;
 		});
 		return () => {
 			current = false;
 		};
 	});
-	/** Amount is OPTIONAL.  Empty is fine.  Non-empty must be a
-	 *  valid positive decimal. */
+	/** Amount is OPTIONAL (unless `requireAmount`).  Empty is fine.
+	 *  Non-empty must be a valid positive decimal. */
 	const amountLooksValid = $derived(
-		trimmedAmount.length === 0 || /^\d{1,12}(?:\.\d{1,12})?$/.test(trimmedAmount)
+		trimmedAmount.length === 0
+			? !requireAmount
+			: /^\d{1,12}(?:\.\d{1,12})?$/.test(trimmedAmount) && /[1-9]/.test(trimmedAmount)
 	);
 	const noteLooksValid = $derived(trimmedNote.length <= PAYLOAD_CONSTANTS.MAX_NOTE_LEN);
 
@@ -345,8 +373,21 @@
 	 *  surface on Morphit. */
 	const daiNetworkPicked = $derived(method !== 'dai' || daiNetwork !== null);
 
+	/** v1.21.17 — where a crypto-for-crypto seller is paid, the address must
+	 *  be new: a payment to a reused address cannot be told apart from an
+	 *  earlier one (someone else's, or the same one cited in two chats). A
+	 *  Blurt account is exempt: a BLURT payment is checked by who sent it. */
+	const reuseBlocked = $derived(
+		requireAmount &&
+			method !== 'blurt' &&
+			(sharedBefore || reuseCheckedFor !== `${method.toUpperCase()}\u0000${trimmedAddress}`)
+	);
+	/** …and a BLURT ask carries its memo (see the memo block below). */
+	const memoMissing = $derived(requireAmount && method === 'blurt' && (!useMemo || memo === ''));
 	const canSubmit = $derived(
 		addressLooksValid &&
+			!reuseBlocked &&
+			!memoMissing &&
 			amountLooksValid &&
 			noteLooksValid &&
 			usdtNetworkPicked &&
@@ -688,7 +729,9 @@
 						⚠ {$_('chat.address.reuse_warning_heading')}
 					</div>
 					<p class="mt-1 text-red-800 dark:text-red-200">
-						{$_('chat.address.reuse_warning_body')}
+						{reuseBlocked
+							? $_('chat.address.reuse_blocked_body')
+							: $_('chat.address.reuse_warning_body')}
 					</p>
 				</div>
 			{/if}
@@ -763,25 +806,34 @@
 						{$_('chat.address.memo_explain')}
 					</p>
 				{/if}
-				<label class="mt-2 flex items-center gap-2 text-xs">
-					<input
-						type="checkbox"
-						checked={!useMemo}
-						onchange={(e) => {
-							useMemo = !(e.currentTarget as HTMLInputElement).checked;
-						}}
-						class="h-3.5 w-3.5"
-					/>
-					<span class="text-ink-600 dark:text-ink-300">
-						{$_('chat.address.memo_skip')}
-					</span>
-				</label>
+				<!-- A crypto-for-crypto seller's BLURT ask keeps its memo: it is what
+				     ties the payment to THIS ask (an earlier transfer from the same
+				     payer does not carry it). -->
+				{#if !requireAmount}
+					<label class="mt-2 flex items-center gap-2 text-xs">
+						<input
+							type="checkbox"
+							checked={!useMemo}
+							onchange={(e) => {
+								useMemo = !(e.currentTarget as HTMLInputElement).checked;
+							}}
+							class="h-3.5 w-3.5"
+						/>
+						<span class="text-ink-600 dark:text-ink-300">
+							{$_('chat.address.memo_skip')}
+						</span>
+					</label>
+				{/if}
 			</div>
 		{/if}
 
 		<!-- Amount input (optional) -->
 		<label class="mt-4 block">
-			<span class="text-sm font-semibold">{$_('chat.address.amount_label')}</span>
+			<span class="text-sm font-semibold"
+				>{requireAmount
+					? $_('chat.address.amount_label_required')
+					: $_('chat.address.amount_label')}</span
+			>
 			<input
 				type="text"
 				bind:value={amount}

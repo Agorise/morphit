@@ -53,6 +53,7 @@ import { hasXmlNoncharacter, jsonNestingExceeds, pgSafeBlock, pgSafeDeep } from 
 import { consensusV2Active } from '$indexer/consensusActivation';
 import { blockTimeOf } from '$indexer/blockTime';
 import { recordFeePayment } from '$indexer/feePayments';
+import { blurtTransfersOfBlock, recordWaiverTradeTransfers } from '$indexer/waiverTradeTransfers';
 
 import profileHandler from '$indexer/handlers/profile';
 import orderHandler from '$indexer/handlers/order';
@@ -774,6 +775,17 @@ export async function applyBlock(
 	);
 	await writeFeeTransfers(client, feeRows);
 
+	// Pre-pass (v70): the BLURT transfers that can prove a first-buy waiver
+	// trade (waiverTradeTransfers.ts) — those to an account whose waiver order
+	// is older than this block. One statement, only when the block (stamped at
+	// or after the consensus activation time) has a qualifying BLURT transfer.
+	// Before the ops, so a review later in this block sees them.
+	const blurtTransfers = blurtTransfersOfBlock(block);
+	await recordWaiverTradeTransfers(client, { blockNum, blockTime, transfers: blurtTransfers });
+	// Set when an order op applies in this block: its waiver order (if it is
+	// one) may make this block's own transfers evidence — see the post-pass.
+	let orderApplied = false;
+
 	// Pre-pass: record every observed account_create op (and its
 	// variants). Populates `accounts` so Signal A can find pairs
 	// of accounts sharing a creator — ADR-0009 §5. Accounts whose
@@ -1096,6 +1108,7 @@ export async function applyBlock(
 				rejectReason: null
 			});
 			applied++;
+			if (op.id === OP_IDS.order) orderApplied = true;
 			// Mark the account's first Morphit activity. Idempotent —
 			// the UPDATE only touches rows where first_activity_at
 			// IS NULL, so subsequent applied ops for the same account
@@ -1131,6 +1144,15 @@ export async function applyBlock(
 			});
 			rejected++;
 		}
+	}
+
+	// Post-pass (v70): a waiver order posted in THIS block was posted at this
+	// block's time, so this block's transfers to its owner are evidence too
+	// (the recording condition is "posted at or before the transfer's
+	// block"). Only when an order op applied here; a pair the pre-pass already
+	// recorded keeps its row (the same transfer is not earlier).
+	if (orderApplied) {
+		await recordWaiverTradeTransfers(client, { blockNum, blockTime, transfers: blurtTransfers });
 	}
 
 	return {

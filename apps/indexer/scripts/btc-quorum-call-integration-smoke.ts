@@ -47,6 +47,13 @@ function fail(name: string, detail?: string): void {
 	results.push({ name, passed: false, detail });
 }
 
+/** Each fake explorer gets its own loopback address: the verifier counts a
+ *  quorum by OPERATOR, and explorers on one host are one operator
+ *  (feeSources.ts explorerOperatorOf) — four ports of 127.0.0.1 would be one
+ *  answer. Linux routes all of 127.0.0.0/8 to the loopback interface. */
+let lastHost = 0;
+const nextHost = (): string => `127.0.0.${++lastHost}`;
+
 /** Spin up a fake explorer that returns the given tx body on /tx/<txid>. */
 function startHealthyExplorer(amountSatoshis: number): Promise<{
 	url: string;
@@ -73,10 +80,11 @@ function startHealthyExplorer(amountSatoshis: number): Promise<{
 				res.end();
 			}
 		});
-		server.listen(0, '127.0.0.1', () => {
+		const host = nextHost();
+		server.listen(0, host, () => {
 			const port = (server.address() as AddressInfo).port;
 			resolve({
-				url: `http://127.0.0.1:${port}`,
+				url: `http://${host}:${port}`,
 				close: () => new Promise((r) => server.close(() => r()))
 			});
 		});
@@ -93,10 +101,11 @@ function startHangingExplorer(): Promise<{
 		const server = createServer(() => {
 			// Never write to res — request hangs.
 		});
-		server.listen(0, '127.0.0.1', () => {
+		const host = nextHost();
+		server.listen(0, host, () => {
 			const port = (server.address() as AddressInfo).port;
 			resolve({
-				url: `http://127.0.0.1:${port}`,
+				url: `http://${host}:${port}`,
 				close: () => new Promise((r) => server.close(() => r()))
 			});
 		});
@@ -108,9 +117,10 @@ function startHangingExplorer(): Promise<{
 function dummyClosedPortUrl(): Promise<string> {
 	return new Promise((resolve) => {
 		const server = createServer();
-		server.listen(0, '127.0.0.1', () => {
+		const host = nextHost();
+		server.listen(0, host, () => {
 			const port = (server.address() as AddressInfo).port;
-			server.close(() => resolve(`http://127.0.0.1:${port}`));
+			server.close(() => resolve(`http://${host}:${port}`));
 		});
 	});
 }

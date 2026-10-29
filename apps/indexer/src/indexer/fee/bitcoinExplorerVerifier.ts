@@ -40,12 +40,21 @@ import type {
 	AddressPaymentResult,
 	FeeClaim,
 	FeeVerifier,
-	FeeVerifyResult
+	FeeVerifyResult,
+	PaymentLookupResult
 } from '$indexer/fee/verifier';
+import { paymentTimeOf } from '$indexer/fee/verifier';
 import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
 import { minAcceptableSatoshis, FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
+import { explorerOperatorOf } from '@morphit/operator-config/fee-sources';
 import { logger } from '$log';
-import { explorerInit, readExplorerJson, readExplorerText } from './explorerHttp';
+import {
+	blockTimeOf,
+	explorerInit,
+	privateLogContext,
+	readExplorerJson,
+	readExplorerText
+} from './explorerHttp';
 
 const log = logger('btc-verify');
 
@@ -72,6 +81,10 @@ export interface BitcoinExplorerFeeVerifierConfig {
 	 *  2 (config resolveBtcQuorum): one explorer alone cannot mark a
 	 *  fee paid.  Bounded: must be >= 1 and <= explorerUrls.length. */
 	readonly minSuccessfulResponses: number;
+	/** The txids this verifier is asked about are not public (the trade
+	 *  payment check, fee/paymentCheck.ts): its warnings name the explorer and
+	 *  status only (explorerHttp.ts privateLogContext). */
+	readonly privateLookups?: boolean;
 }
 
 /** Minimal shape of the Blockstream/mempool.space /tx/{txid}
@@ -85,7 +98,12 @@ interface ExplorerTxResponse {
 	readonly status: {
 		readonly confirmed: boolean;
 		readonly block_height?: number;
+		/** Unix seconds; confirmed transactions only (Esplora API.md). */
+		readonly block_time?: number;
 	};
+	/** Inputs, each with the output it spends (`prevout`, the vout shape;
+	 *  null for a coinbase). Read only by lookupPayment. */
+	readonly vin?: unknown;
 }
 
 /**
@@ -111,6 +129,41 @@ export function isExplorerTxNotFound(body: string): boolean {
 	return t === 'transaction not found' || t === 'no such mempool or blockchain transaction';
 }
 
+/** Does `tx` spend an output of `address`? null when its inputs cannot be
+ *  read: no `vin` list, or an input that is not a coinbase and names no
+ *  `prevout` (Esplora gives every input its prevout, null for a coinbase). An
+ *  input whose prevout has no address (a non-standard script) is not from
+ *  `address`. */
+export function spendsFromAddress(tx: ExplorerTxResponse, address: string): boolean | null {
+	if (!Array.isArray(tx.vin)) return null;
+	let from = false;
+	for (const inp of tx.vin as readonly unknown[]) {
+		if (typeof inp !== 'object' || inp === null) return null;
+		const i = inp as { is_coinbase?: unknown; prevout?: unknown };
+		if (i.is_coinbase === true) continue;
+		if (typeof i.prevout !== 'object' || i.prevout === null) return null;
+		if ((i.prevout as { scriptpubkey_address?: unknown }).scriptpubkey_address === address) {
+			from = true;
+		}
+	}
+	return from;
+}
+
+/** Satoshis `tx` pays to `address`. Only whole, non-negative satoshi values
+ *  count: anything else is not an amount (and could not become the BigInt the
+ *  payment lookup returns). */
+function satsPaidTo(tx: ExplorerTxResponse, address: string): number {
+	let total = 0;
+	for (const out of tx.vout as readonly unknown[]) {
+		if (typeof out !== 'object' || out === null) continue;
+		const o = out as { value?: unknown; scriptpubkey_address?: unknown };
+		if (o.scriptpubkey_address !== address) continue;
+		if (typeof o.value !== 'number' || !Number.isSafeInteger(o.value) || o.value < 0) continue;
+		total += o.value;
+	}
+	return total;
+}
+
 export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 	readonly name = 'btc-explorer';
 	private readonly pool: EndpointPool;
@@ -123,7 +176,13 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		if (config.explorerUrls.length === 0) {
 			throw new Error('BitcoinExplorerFeeVerifier: at least one explorer URL required');
 		}
-		this.pool = pool ?? new EndpointPool({ endpoints: [...config.explorerUrls] });
+		// Agreement counts OPERATORS, not URLs (feeSources.ts EXPLORER_OPERATORS):
+		// one operator's onion, I2P and clearnet addresses are one answer. A
+		// tier whose explorers are fewer operators than minSuccessfulResponses
+		// can then never agree — pending / no answer, never a verdict.
+		this.pool =
+			pool ??
+			new EndpointPool({ endpoints: [...config.explorerUrls], operatorOf: explorerOperatorOf });
 	}
 
 	/** The address the verifier was constructed with.  Surfaced
@@ -319,9 +378,12 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 					reason: 'confirmed tx missing block_height in explorer response'
 				};
 			}
-			// Use the lowest block_height across successful explorers
-			// — that's the most conservative (smallest depth) read.
-			const txBlock = Math.min(...(txBlockHeights as number[]));
+			// The HIGHEST block_height across successful explorers: depth is
+			// (tip + 1) - height, so the latest block is the smallest depth —
+			// the conservative read. (v1.21.17: this took the LOWEST height,
+			// the largest depth, while saying the opposite; one explorer
+			// claiming an older block could make a fee look confirmed.)
+			const txBlock = Math.max(...(txBlockHeights as number[]));
 			// Use the same explorer that gave us a /tx response for
 			// the tip fetch — guarantees /tx and /tip see the same
 			// chain view.  We don't cross-check tip across explorers;
@@ -425,6 +487,125 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		return { kind: 'not_yet', confirmedSats, unconfirmedSats };
 	}
 
+	/**
+	 * A trade payment, by txid (fee/paymentCheck.ts): how much `txid` pays to
+	 * `address`, how deep it is and when it was mined, as
+	 * `minSuccessfulResponses` explorers (distinct operators) agree.
+	 *
+	 * The agreement key is the amount paid to the address, as for the fee: an
+	 * explorer a block behind still agrees on what the transaction pays. A
+	 * transaction that SPENDS from the address is its owner's own spend — its
+	 * output back to the address is change, not a payment — and its amount is
+	 * 0; an answer whose inputs cannot be read is no answer (spendsFromAddress).
+	 *
+	 * Depth, never overstated (depthOf): 0 while any agreeing explorer still
+	 * has it in the mempool; otherwise from the HIGHEST block height they
+	 * report and the LOWEST tip height among them — every agreeing explorer's
+	 * tip is asked, and when any of them gives none (or a height is missing)
+	 * it is 1, all that `confirmed: true` proves.
+	 *
+	 * Block time (blockTimeOf `status.block_time`): paymentTimeOf over the
+	 * agreeing answers — the earliest when they agree; none when they cannot
+	 * both be true (`timeDisputed`: one explorer's made-up time must not mark
+	 * an honest payment "old"); none when it is in the mempool for all of
+	 * them. One explorer calling an old transaction unconfirmed does not hide
+	 * its time either: next to an hours-old block time that is a dispute.
+	 *
+	 * "Not found" follows verify(): only an explorer's own "no such
+	 * transaction" (isExplorerTxNotFound) counts — a captcha or an error page
+	 * is malformed — from a quorum of explorers, with no usable answer saying
+	 * otherwise. A 429, a 5xx, a timeout or a refused connection is a transport
+	 * failure: never an answer, never "not found".
+	 */
+	async lookupPayment(
+		txid: string,
+		address: string,
+		signal?: AbortSignal
+	): Promise<PaymentLookupResult> {
+		if (!/^[0-9a-f]{64}$/i.test(txid)) return { kind: 'no_answer' };
+		let notFoundCount = 0;
+		const quorum = await this.pool.quorumCall<{
+			base: string;
+			body: ExplorerTxResponse;
+			sats: number;
+		}>(
+			async (base, signal) => {
+				const r = await this.fetchTx(base, txid, signal);
+				switch (r.kind) {
+					case 'ok': {
+						const from = spendsFromAddress(r.body, address);
+						if (from === null) {
+							this.warn('explorer_tx_inputs_unreadable', { explorer: base });
+							return null;
+						}
+						return { base, body: r.body, sats: from ? 0 : satsPaidTo(r.body, address) };
+					}
+					case 'transport_failure':
+						throw new Error('transport_failure');
+					case 'data_not_found':
+						notFoundCount++;
+						return null;
+					case 'data_malformed':
+						return null;
+				}
+			},
+			{
+				equivalenceKey: (p) => String(p.sats),
+				minAgree: this.config.minSuccessfulResponses,
+				timeoutMs: this.config.requestTimeoutMs * 2,
+				...(signal !== undefined ? { signal } : {})
+			}
+		);
+		if (quorum.kind === 'no_endpoints') return { kind: 'no_answer' };
+		if (quorum.kind === 'all_responses_in') {
+			return notFoundCount >= this.config.minSuccessfulResponses && quorum.responses.length === 0
+				? { kind: 'not_found' }
+				: { kind: 'no_answer' };
+		}
+		const agreed = quorum.agreedKey!;
+		const agreeing = quorum.responses.filter((p) => String(p.sats) === agreed);
+		const confirmations = await this.depthOf(agreeing);
+		const { blockTime, timeDisputed } = paymentTimeOf(
+			agreeing.map((p) => ({
+				inBlock: p.body.status.confirmed === true,
+				time: blockTimeOf(p.body.status.block_time)
+			})),
+			Math.floor(Date.now() / 1000)
+		);
+		return {
+			kind: 'found',
+			amount: BigInt(agreed),
+			confirmations,
+			blockTime,
+			...(timeDisputed ? { timeDisputed: true } : {})
+		};
+	}
+
+	/** The depth the agreeing answers allow (see lookupPayment). */
+	private async depthOf(
+		agreeing: readonly { base: string; body: ExplorerTxResponse }[]
+	): Promise<number> {
+		if (agreeing.some((p) => !p.body.status.confirmed)) return 0;
+		const heights = agreeing.map((p) => p.body.status.block_height);
+		if (heights.some((h) => typeof h !== 'number' || !Number.isSafeInteger(h) || h < 0)) return 1;
+		const txBlock = Math.max(...(heights as number[]));
+		// Every agreeing explorer's tip, the LOWEST counting: one explorer's
+		// tip alone could run ahead of the others' (or be made up).
+		const tips = await Promise.all(agreeing.map((p) => this.fetchTipHeight(p.base)));
+		const known: number[] = [];
+		for (const t of tips) {
+			if (t.kind !== 'ok') return 1;
+			known.push(t.tipHeight);
+		}
+		return Math.max(1, Math.min(...known) + 1 - txBlock);
+	}
+
+	/** log.warn, reduced for a verifier that does private lookups. */
+	private warn(event: string, ctx: Record<string, unknown>, err?: unknown): void {
+		if (this.config.privateLookups === true) log.warn(event, privateLogContext(ctx, err));
+		else log.warn(event, ctx, err);
+	}
+
 	/** One explorer's view of an address: confirmed (depth-qualified) and
 	 *  unconfirmed totals received. */
 	private async fetchAddressTotals(
@@ -442,7 +623,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			return got.kind === 'transport_failure' ? got : { kind: 'data_malformed' };
 		const b = got.body as Record<string, unknown> | null;
 		if (typeof b !== 'object' || b === null || b.address !== address) {
-			log.warn('explorer_address_bad_shape', { explorer: baseUrl });
+			this.warn('explorer_address_bad_shape', { explorer: baseUrl });
 			return { kind: 'data_malformed' };
 		}
 		const funded = (s: unknown): number | null => {
@@ -453,7 +634,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		const chain = funded(b.chain_stats);
 		const mempool = funded(b.mempool_stats);
 		if (chain === null || mempool === null) {
-			log.warn('explorer_address_bad_amounts', { explorer: baseUrl });
+			this.warn('explorer_address_bad_amounts', { explorer: baseUrl });
 			return { kind: 'data_malformed' };
 		}
 		if (this.config.minConfirmations <= 1 || chain === 0) {
@@ -525,7 +706,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 				return { kind: 'data_malformed' };
 			}
 		} catch (err) {
-			log.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
+			this.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
 			return { kind: 'transport_failure' };
 		} finally {
 			clearTimeout(timer);
@@ -574,17 +755,17 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 					text = '';
 				}
 				if (!isExplorerTxNotFound(text)) {
-					log.warn('explorer_404_without_not_found', { explorer: baseUrl, txid });
+					this.warn('explorer_404_without_not_found', { explorer: baseUrl, txid });
 					return { kind: 'data_malformed' };
 				}
-				log.warn('explorer_tx_not_found', {
+				this.warn('explorer_tx_not_found', {
 					explorer: baseUrl,
 					txid
 				});
 				return { kind: 'data_not_found' };
 			}
 			if (res.status >= 500) {
-				log.warn('explorer_5xx', {
+				this.warn('explorer_5xx', {
 					explorer: baseUrl,
 					txid,
 					status: res.status
@@ -594,7 +775,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			if (!res.ok) {
 				// Other 4xx — most commonly 429 rate-limit, which is
 				// an explorer health signal (count toward breaker).
-				log.warn('explorer_bad_status', {
+				this.warn('explorer_bad_status', {
 					explorer: baseUrl,
 					txid,
 					status: res.status
@@ -605,14 +786,14 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			try {
 				body = await readExplorerJson(res, ac);
 			} catch {
-				log.warn('explorer_non_json', {
+				this.warn('explorer_non_json', {
 					explorer: baseUrl,
 					txid
 				});
 				return { kind: 'data_malformed' };
 			}
 			if (!this.isExplorerTxResponse(body, txid)) {
-				log.warn('explorer_bad_shape', {
+				this.warn('explorer_bad_shape', {
 					explorer: baseUrl,
 					txid
 				});
@@ -621,7 +802,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			return { kind: 'ok', body };
 		} catch (err) {
 			// Network error, abort, DNS failure, etc. — transport.
-			log.warn('explorer_fetch_failed', { explorer: baseUrl, txid }, err);
+			this.warn('explorer_fetch_failed', { explorer: baseUrl, txid }, err);
 			return { kind: 'transport_failure' };
 		} finally {
 			clearTimeout(timer);
@@ -720,7 +901,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		// upper-case hex (rare but legal) is not rejected on
 		// cosmetics alone.
 		if (b.txid.toLowerCase() !== expectedTxid.toLowerCase()) {
-			log.warn('explorer_txid_mismatch', {
+			this.warn('explorer_txid_mismatch', {
 				expected: expectedTxid,
 				got: b.txid
 			});

@@ -14,6 +14,9 @@ import { clearReadState } from './readState';
 import { clearChatFolders } from './chatFolders';
 import { clearAllPins } from './pubPin';
 import { clearRecentPeers } from './recentPeers';
+import { clearLegLedger } from './legLedger';
+import { clearChainAckMemory } from './chainAckMemory';
+import { forgetSentReviewsOnSignOut } from '$lib/feedback/sentReviews';
 import { resetBlocks } from './blocks';
 import { clearStreamTickets } from './streamTicket';
 import { _clearVerifyCache } from './blurtVerify';
@@ -25,6 +28,12 @@ export function resetChatOnSignOut(): void {
 		clearChatFolders,
 		clearAllPins,
 		clearRecentPeers,
+		// Payments made from this device (v1.21.17): they name peers.
+		clearLegLedger,
+		// The chain read markers this tab sent (v1.21.17).
+		clearChainAckMemory,
+		// The reviews sent from here, held in memory, and their watchers.
+		forgetSentReviewsOnSignOut,
 		resetBlocks,
 		// Tickets this page signed for the account's live streams (review C, L2).
 		clearStreamTickets,

@@ -698,7 +698,7 @@
 </script>
 
 <section
-	class="card border border-morphit-emerald/30 bg-emerald-50/30 dark:border-morphit-emerald/40 dark:bg-emerald-950/20"
+	class="card border border-morphit-emerald/30 bg-morphit-emerald/[0.04] dark:border-morphit-emerald/40 dark:bg-morphit-emerald/[0.05]"
 	aria-label={$_('profile.my_balance.section_label', { values: { account } })}
 >
 	<header class="mb-3 flex items-center justify-between">

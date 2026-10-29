@@ -47,6 +47,7 @@
 		FeedbackValidationError
 	} from '$blurt/ops/feedback';
 	import { noteFeedbackGiven } from '$lib/feedback/optimisticFeedbackGiven';
+	import { rememberSentReview } from '$lib/feedback/sentReviews';
 	import { broadcastOrderComplete } from '$blurt/ops/order';
 	import { sendReviewAndCompletion } from '$lib/feedback/reviewAndComplete';
 	import { announceSettledElsewhere } from '$lib/chat/settledElsewhere';
@@ -99,6 +100,10 @@
 		onSuccess?: (result: { trx_id: string }) => void;
 		/** Called when the user dismisses the form. */
 		onCancel?: () => void;
+		/** v1.21.17 — a review sent earlier that did not count and can now be
+		 *  sent again: the form opens with its stars and words (a saved draft,
+		 *  if any, still wins). */
+		resend?: { rating: 1 | 2 | 3 | 4 | 5; comment: string | null } | null;
 	}
 
 	let {
@@ -107,7 +112,8 @@
 		lockSubject = false,
 		completeOwnedOrder = false,
 		onSuccess,
-		onCancel
+		onCancel,
+		resend = null
 	}: Props = $props();
 
 	// localStorage key — once set, we skip the Post A broadcast for
@@ -338,6 +344,9 @@
 			rating = saved.value.rating;
 			comment = saved.value.comment;
 			draftSavedAt = new Date(saved.meta.savedAt);
+		} else if (resend) {
+			rating = resend.rating;
+			comment = resend.comment ?? '';
 		}
 
 		return () => {
@@ -466,6 +475,18 @@
 			// /feedback-given fetch to catch up. rating + reviewerAccount are
 			// non-null here (submit early-returns otherwise, line ~355).
 			if (rating !== null && reviewerAccount) {
+				// v1.21.17 — kept on this device too, so a reload neither loses
+				// the stars nor asks for the review again while the indexers
+				// have not taken it (or refused it: the chat then says so).
+				rememberSentReview({
+					reviewer: reviewerAccount,
+					subject,
+					order_permlink: orderPermlink,
+					rating,
+					comment: outgoingComment.length > 0 ? outgoingComment : null,
+					trx_id: result.trx_id,
+					sent_at: new Date().toISOString()
+				});
 				noteFeedbackGiven({
 					id: -1,
 					reviewer: reviewerAccount,

@@ -114,7 +114,7 @@ check(
 );
 check(
 	'a failed REST prefetch does not error-card over an existing snapshot',
-	/if \(currentStreamHadSnapshot\) \{\s*phase = 'ready';\s*\} else \{[\s\S]*?phase = 'error';/.test(
+	/if \(currentStreamHadSnapshot\) \{\s*phase = 'ready';\s*(?:listServerSearch = loadingFor;\s*)?\} else \{[\s\S]*?phase = 'error';/.test(
 		page
 	)
 );

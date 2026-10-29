@@ -148,7 +148,8 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 		// welcome bonus only fires when the feedback cites an
 		// order_permlink (anti-Sybil gate).
 		const mock = makeMockClient([
-			{ match: 'FROM orders', rowCount: 1 },
+			// The citation the order gives (reviewCitation.ts returns its kind).
+			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -202,7 +203,8 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 		// non-NULL first_trade_complete_at, so the upsert's WHERE
 		// clause didn't match.  Result: no welcome bonus fires.
 		const mock = makeMockClient([
-			{ match: 'FROM orders', rowCount: 1 },
+			// The citation the order gives (reviewCitation.ts returns its kind).
+			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -253,7 +255,8 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 		// handles it.  Feedback INSERT succeeded before the savepoint
 		// opened, so the overall op is still ok:true.
 		const mock = makeMockClient([
-			{ match: 'FROM orders', rowCount: 1 },
+			// The citation the order gives (reviewCitation.ts returns its kind).
+			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -305,7 +308,8 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 		// Batching to minimise client round-trips. Check the SQL
 		// contains both VALUES clauses.
 		const mock = makeMockClient([
-			{ match: 'FROM orders', rowCount: 1 },
+			// The citation the order gives (reviewCitation.ts returns its kind).
+			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -468,7 +472,8 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		// and rejected this (account=alice≠bob). Now it is
 		// `account IN (subject, reviewer)`.
 		const mock = makeMockClient([
-			{ match: 'FROM orders', rowCount: 1 },
+			// The citation the order gives (reviewCitation.ts returns its kind).
+			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]

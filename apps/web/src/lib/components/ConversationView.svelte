@@ -78,20 +78,46 @@
 	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import {
+		blurtLegVerdict,
+		watchBlurtLeg,
+		type BlurtLegInput,
+		type BlurtLegState
+	} from '$lib/chat/blurtLegCheck';
+	import {
 		getChatAdmission,
 		getOrder,
 		getReputationReceipt,
 		getFeedbackGiven
 	} from '$lib/indexer/client';
 	import {
+		sentReviewFor,
+		sentReviewsTick,
+		reviewRefOf,
+		watchSentReview,
+		type SentReviewVerdict
+	} from '$lib/feedback/sentReviews';
+	import {
 		chatMoneyFlow,
 		chatMoneyFlowLabels,
 		chatOrderHeading,
 		orderCanShip as orderShipsPhysicalItem
 	} from '$lib/chat/orderRole';
+	import {
+		twoLegButtons,
+		twoLegPlan,
+		isCryptoForCrypto,
+		type PaymentCheckVerdict,
+		type ThreadFact
+	} from '$lib/chat/cryptoLegs';
+	import {
+		verdictOf,
+		watchPaymentCheck,
+		type PaymentCheckInput,
+		type PaymentCheckState
+	} from '$lib/chat/paymentChecks';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
-	import { orderTitleParts } from '$lib/utils/orderTitle';
+	import { formatDisjunction, orderTitleParts } from '$lib/utils/orderTitle';
 	import { formatDayMonthTime } from '$i18n/formatters';
 	import StrangerFeeModal from '$components/StrangerFeeModal.svelte';
 	import AddressShareModal from '$components/AddressShareModal.svelte';
@@ -99,7 +125,9 @@
 	import MailingAddressModal from '$components/MailingAddressModal.svelte';
 	import ShipmentModal from '$components/ShipmentModal.svelte';
 	import PayBlurtModal from '$components/PayBlurtModal.svelte';
-	import { encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
+	import { decodePayload, encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
+	import { legLedger, legPaymentsFor, recordLegPayment } from '$lib/chat/legLedger';
+	import { chainAckedFor, rememberChainAck } from '$lib/chat/chainAckMemory';
 	import type { ChatAssetTicker } from '$lib/chat/payload';
 	import { chatAssetFromTicker, getAsset } from '$lib/assets/registry';
 	import { isGoodsAsset } from '@morphit/asset-registry';
@@ -314,9 +342,7 @@
 	 *  user's whoami. When null, IdentityLabel falls back to the heart
 	 *  identicon (and, for isSelf, its own selfProfile lookup). */
 	const myAvatarSvg = $derived($selfProfile.account === me ? $selfProfile.avatarSvg : null);
-	const myAvatarDataUri = $derived(
-		$selfProfile.account === me ? $selfProfile.avatarDataUri : null
-	);
+	const myAvatarDataUri = $derived($selfProfile.account === me ? $selfProfile.avatarDataUri : null);
 
 	/** when this conversation was opened about a specific
 	 *  order (orderPermlink set), the resolved order record, fetched via
@@ -365,9 +391,8 @@
 				const r = await getFeedbackGiven(me, { limit: 100 });
 				if (r.ok) {
 					myFeedbackForPeer =
-						r.data.items.find(
-							(f) => f.subject === peer && f.order_permlink === orderPermlink
-						) ?? null;
+						r.data.items.find((f) => f.subject === peer && f.order_permlink === orderPermlink) ??
+						null;
 				}
 			} catch {
 				/* best-effort — the form's submit + the indexer still gate correctly */
@@ -382,12 +407,50 @@
 			(tradeStateWith($tradeStates, orderOwner, orderPermlink, peer)?.phase ?? 'address_shared') !==
 				'address_shared'
 	);
+	/** v1.21.17 — the review of this trade this device sent (kept across
+	 *  reloads), and what the instance did with it, or with one sent before
+	 *  this version or from another device (sentReviews.ts). Before, a review
+	 *  the indexers refused vanished on the next reload and the form asked for
+	 *  it again on every visit, with nothing saying it had not counted. */
+	const mySentReview = $derived.by(() => {
+		void $sentReviewsTick;
+		return orderPermlink !== undefined && me ? sentReviewFor(me, peer, orderPermlink) : null;
+	});
+	let reviewVerdict = $state<SentReviewVerdict>({ kind: 'checking' });
+	$effect(() => {
+		if (orderPermlink === undefined || !me || !tradeSettled || !feedbackChecked) return;
+		if (myFeedbackForPeer !== null) return;
+		const ref = reviewRefOf(me, peer, orderPermlink, mySentReview);
+		return watchSentReview(ref).subscribe((v) => (reviewVerdict = v));
+	});
+	/** Ask for a review: none sent (that the instance has seen, or this
+	 *  device kept), or one refused that would count if sent again now. */
+	const reviewWanted = $derived(
+		reviewVerdict.kind === 'resend' || (reviewVerdict.kind === 'pending' && mySentReview === null)
+	);
+	/** A review that did not count, and why (shown instead of the form). */
+	const reviewNotCounted = $derived(
+		myFeedbackForPeer === null &&
+			!justSubmittedFeedback &&
+			(reviewVerdict.kind === 'later' ||
+				reviewVerdict.kind === 'refused' ||
+				reviewVerdict.kind === 'needs_transfer')
+			? reviewVerdict
+			: null
+	);
+	/** What to put back in the form when a review is sent again. */
+	const reviewResend = $derived.by(() => {
+		if (reviewVerdict.kind !== 'resend') return null;
+		const sent = reviewVerdict.sent ?? mySentReview;
+		return sent ? { rating: sent.rating, comment: sent.comment } : null;
+	});
 	const canLeaveFeedback = $derived(
 		orderPermlink !== undefined &&
 			tradeSettled &&
 			feedbackChecked &&
 			myFeedbackForPeer === null &&
 			!justSubmittedFeedback &&
+			reviewWanted &&
 			$isUnlocked &&
 			!$isPairedReadOnly
 	);
@@ -747,10 +810,14 @@
 				gap: 3
 			});
 
-		para(t('chat.export.exported_at', { datetime: formatDayMonthTime(new Date().toISOString()) }), 8, {
-			color: 90,
-			gap: 12
-		});
+		para(
+			t('chat.export.exported_at', { datetime: formatDayMonthTime(new Date().toISOString()) }),
+			8,
+			{
+				color: 90,
+				gap: 12
+			}
+		);
 
 		// ─── Plain-language verification explainer ───
 		para(t('chat.export.verify_heading'), 10, { style: 'bold', gap: 3 });
@@ -993,6 +1060,20 @@
 	}
 
 	async function handleFundsSent(payload: string): Promise<void> {
+		// Paid from his own wallet: noted before the receipt is posted, which
+		// may fail (legLedger.ts).
+		const d = decodePayload(payload);
+		if (d.kind === 'funds_sent') {
+			const order = d.payload.orderPermlink ?? orderPermlink;
+			if (order) {
+				recordLegPayment({
+					orderPermlink: order,
+					peer,
+					method: d.payload.method,
+					txid: d.payload.txid
+				});
+			}
+		}
 		await sendFromModal(payload);
 		showFundsSentModal = false;
 		markSentArgs = null;
@@ -1117,6 +1198,16 @@
 				: stagedArgs.orderPermlink === orderPermlink && orderOwner !== null
 					? orderOwner
 					: await orderOwnerOf(stagedArgs.orderPermlink, peer, me).catch(() => null);
+		// The payment is made: noted before its receipt is posted, so a receipt
+		// that fails to post does not bring "Send" back (legLedger.ts).
+		if (stagedArgs.orderPermlink !== undefined) {
+			recordLegPayment({
+				orderPermlink: stagedArgs.orderPermlink,
+				peer,
+				method: 'blurt',
+				txid: args.trxId
+			});
+		}
 		if (stagedArgs.orderPermlink !== undefined && typeof owner === 'string') {
 			recordFundsSent({
 				orderOwner: owner,
@@ -1533,32 +1624,127 @@
 		markConversationRead(peer, orderPermlink ?? '', at, { newestIsFast: newestIsFastCopy() });
 	}
 
-	/** The on-chain read-ack (cross-device read state), once per visit, when
-	 *  the first live answer is in — with the newest message's time. It used
-	 *  to be broadcast by the route as the view loaded, with the device clock
-	 *  (W-M3). Needs a session that can sign (not a paired read-only one). */
-	let chainAckSent = false;
-	$effect(() => {
-		if (chainAckSent || !history.ready) return;
-		const at = untrack(() => readAckTimestamp(latestConfirmedAt()));
-		const live = untrack(() => get(liveIdentity));
-		if (at === null || live === null || untrack(() => $isPairedReadOnly)) return;
-		chainAckSent = true;
+	/** The on-chain read-ack (cross-device read state, and what the relay's
+	 *  offline notices go by): the newest message SHOWN, never the device clock.
+	 *  Needs a session that can sign (not a paired read-only one).
+	 *
+	 *  v1.21.17: it used to be sent ONCE per visit, when the first live answer
+	 *  was in. Every message that arrived while the conversation was open was
+	 *  marked read on this device only, so the relay — which sees only the chain
+	 *  — sent an offline notice ("someone sent you a chat message") 10–60 min
+	 *  later for messages the reader had already seen, and he opened the chat to
+	 *  find nothing new. Now: the first ack as before; then, while the tab is
+	 *  visible, a newer SEEN message is acked at most once every five minutes
+	 *  (inside the notice's 10-minute minimum wait); and whatever is pending goes
+	 *  out at once when the tab is hidden or the conversation closed. A message
+	 *  that arrived while the tab was hidden is not "seen" until it is shown.
+	 *
+	 *  Every ack is a chain operation, paid in the account's bandwidth, so only
+	 *  the PEER's messages are acked (the relay never notifies anyone of his own
+	 *  messages), hiding or leaving sends one only when a peer message newer
+	 *  than the last ack was seen, and opening the thread again in this tab does
+	 *  not ack again what this tab already acked (chainAckMemory.ts).
+	 *
+	 *  Known limit: a FAST copy carries its signing time, a few seconds before
+	 *  its block's. Leaving within those seconds acks just short of it, and its
+	 *  chain copy may still get an offline notice. Acking further ahead would
+	 *  silence a NEXT message sent in that gap, which is worse. */
+	const CHAIN_ACK_COALESCE_MS = 5 * 60_000;
+	/** Newest message time shown while the tab was visible. */
+	let seenAtMs: number | null = null;
+	/** Newest message time acked on chain (or being acked): what this tab
+	 *  acked for this thread before, if anything. */
+	let chainAckedAtMs: number | null = untrack(() => chainAckedFor(peer, orderPermlink ?? ''));
+	let chainAckTimer: ReturnType<typeof setTimeout> | null = null;
+	/** When an ack was last broadcast (device clock), failed ones included: a
+	 *  failed first ack must not turn every later message into a broadcast of
+	 *  its own (an RPC outage would mean one attempt per message). */
+	let chainAckTriedAtMs: number | null = null;
+
+	/** The newest of the PEER's messages with a chain time. */
+	function latestPeerConfirmedAt(): Date | null {
+		let newest: Date | null = null;
+		for (const m of messages) {
+			if (m.sender === me) continue;
+			const at = m.createdAt;
+			if (at === null) continue;
+			if (newest === null || at.getTime() > newest.getTime()) newest = at;
+		}
+		return newest;
+	}
+
+	function noteSeen(): void {
+		if (typeof document !== 'undefined' && document.hidden) return;
+		const at = readAckTimestamp(latestPeerConfirmedAt());
+		if (at === null) return;
+		if (seenAtMs === null || at.getTime() > seenAtMs) seenAtMs = at.getTime();
+	}
+
+	function sendChainAck(): void {
+		if (chainAckTimer !== null) {
+			clearTimeout(chainAckTimer);
+			chainAckTimer = null;
+		}
+		if (seenAtMs === null || (chainAckedAtMs !== null && seenAtMs <= chainAckedAtMs)) return;
+		const live = get(liveIdentity);
+		if (live === null || get(isPairedReadOnly)) return;
+		const previous = chainAckedAtMs;
+		const at = seenAtMs;
+		chainAckedAtMs = at;
+		chainAckTriedAtMs = Date.now();
 		const order = orderPermlink ?? '';
+		const ackPeer = peer;
 		void import('$blurt/ops/chatRead')
-			.then((m) => m.broadcastChatRead(live, peer, order, at))
+			.then((m) => m.broadcastChatRead(live, ackPeer, order, new Date(at)))
+			.then(() => rememberChainAck(ackPeer, order, at))
 			.catch(() => {
-				// Network / node error — silent. The local read state is right;
-				// cross-device sync catches up on the next visit.
+				// Network / node error: the local read state is right; let the next
+				// seen message (or leaving) try again.
+				if (chainAckedAtMs === at) chainAckedAtMs = previous;
 			});
-	});
+	}
+
+	/** Ack on chain now (the first time, or on hide/leave) or within a minute. */
+	function scheduleChainAck(now: boolean): void {
+		if (!history.ready) return;
+		if (seenAtMs === null || (chainAckedAtMs !== null && seenAtMs <= chainAckedAtMs)) return;
+		const triedRecently =
+			chainAckTriedAtMs !== null && Date.now() - chainAckTriedAtMs < CHAIN_ACK_COALESCE_MS;
+		if (now || (chainAckedAtMs === null && !triedRecently)) {
+			sendChainAck();
+			return;
+		}
+		if (chainAckTimer === null) chainAckTimer = setTimeout(sendChainAck, CHAIN_ACK_COALESCE_MS);
+	}
 
 	$effect(() => {
-		// Re-runs whenever the message list changes. Acking while the tab is
-		// hidden would mark messages read that the user never saw.
+		// Re-runs whenever the message list changes or the first live answer
+		// lands. Acking while the tab is hidden would mark messages read that the
+		// user never saw.
 		void messages.length;
+		void history.ready;
 		if (typeof document !== 'undefined' && document.hidden) return;
 		ackRead();
+		untrack(() => {
+			noteSeen();
+			scheduleChainAck(false);
+		});
+	});
+
+	onMount(() => {
+		const onVisibility = (): void => {
+			if (document.hidden) {
+				// Leaving the tab: what was seen goes out now.
+				scheduleChainAck(true);
+			} else {
+				// Back: what is on screen now is seen.
+				ackRead();
+				noteSeen();
+				scheduleChainAck(false);
+			}
+		};
+		document.addEventListener('visibilitychange', onVisibility);
+		return () => document.removeEventListener('visibilitychange', onVisibility);
 	});
 
 	onDestroy(() => {
@@ -1566,6 +1752,8 @@
 		cancelPin = null;
 		// Leaving the conversation: everything on screen has been seen.
 		ackRead();
+		noteSeen();
+		scheduleChainAck(true);
 		controller?.destroy();
 		controller = null;
 		viewDestroyed = true;
@@ -1681,6 +1869,324 @@
 		orderRecord && !isGoodsAsset(orderRecord.asset) ? chatAssetFromTicker(orderRecord.asset) : null
 	);
 
+	// ─── crypto-for-crypto trades (v1.21.17; see $lib/chat/cryptoLegs) ───
+	// An order paid in another coin ("buying BLURT with XMR or BTC") is two
+	// payments: the asset receiver pays the payment coin first, and the asset
+	// sender gets "Send <asset>" only once that payment is seen. Null for every
+	// other order, which keeps the one-leg buttons below.
+	const legPlan = $derived(twoLegPlan(orderRecord, orderIsMine));
+
+	/** The thread's money messages (addresses, receipts), reduced to what the
+	 *  legs need. Only for a two-leg trade; a refused or unproved sender's
+	 *  message counts for nothing, as it moves nothing in ChatMessage either. */
+	type MoneyFact = ThreadFact & {
+		address?: string;
+		amount?: string;
+		memo?: string;
+		txKey?: string;
+		/** When the message was sent (ms; NaN when unknown). */
+		at: number;
+	};
+	const moneyFacts = $derived.by((): MoneyFact[] => {
+		if (legPlan === null) return [];
+		const out: MoneyFact[] = [];
+		for (const m of messages) {
+			if (m.decryptFailed || m.senderUnverified === true) continue;
+			const d = decodePayload(m.text);
+			if (d.kind !== 'address' && d.kind !== 'funds_sent') continue;
+			const mine = m.sender === me;
+			// A message that failed to post told the peer nothing — except my own
+			// receipt: the money it records has left, so it still counts, or
+			// "Send" would come back (legLedger.ts).
+			if (m.state === 'failed' && !(mine && d.kind === 'funds_sent')) continue;
+			const order = d.payload.orderPermlink ?? m.orderPermlink ?? null;
+			const at = m.createdAt ? m.createdAt.getTime() : NaN;
+			if (d.kind === 'address') {
+				out.push({
+					kind: 'address',
+					mine,
+					method: d.payload.method,
+					orderPermlink: order,
+					address: d.payload.address,
+					at,
+					...(d.payload.amount !== undefined ? { amount: d.payload.amount } : {}),
+					...(d.payload.memo !== undefined ? { memo: d.payload.memo } : {})
+				});
+			} else {
+				out.push({
+					kind: 'funds_sent',
+					mine,
+					method: d.payload.method,
+					orderPermlink: order,
+					txid: d.payload.txid,
+					at,
+					...(d.payload.txKey !== undefined ? { txKey: d.payload.txKey } : {})
+				});
+			}
+		}
+		return out;
+	});
+
+	/** The payment leg's receipt (the asset receiver's), newest, and the
+	 *  address it was paid to: the asset sender's newest address of that coin
+	 *  shared BEFORE the receipt (one shared later cannot be what was paid —
+	 *  and must not lend an old receipt a new address). `reused`: the same
+	 *  txid was already cited by an earlier receipt in this thread. */
+	const legPayment = $derived.by(() => {
+		if (legPlan === null || !orderPermlink) return null;
+		const plan = legPlan;
+		const about = (f: MoneyFact): boolean =>
+			f.orderPermlink === null || f.orderPermlink === orderPermlink;
+		let receiptAt = -1;
+		for (let i = moneyFacts.length - 1; i >= 0; i--) {
+			const f = moneyFacts[i]!;
+			if (
+				f.kind === 'funds_sent' &&
+				about(f) &&
+				plan.paymentCoins.includes(f.method) &&
+				f.mine !== plan.iSendAsset
+			) {
+				receiptAt = i;
+				break;
+			}
+		}
+		if (receiptAt < 0) return null;
+		const receipt = moneyFacts[receiptAt]!;
+		if (receipt.kind !== 'funds_sent') return null;
+		let to: MoneyFact | null = null;
+		for (let i = receiptAt - 1; i >= 0; i--) {
+			const f = moneyFacts[i]!;
+			if (
+				f.kind === 'address' &&
+				about(f) &&
+				f.method === receipt.method &&
+				f.mine === plan.iSendAsset
+			) {
+				to = f;
+				break;
+			}
+		}
+		// When that address was FIRST shared: re-posting the same address later
+		// must not make a payment made after the first share look older than it.
+		let sharedAt = to?.at ?? NaN;
+		if (to !== null) {
+			for (let i = 0; i < receiptAt; i++) {
+				const f = moneyFacts[i]!;
+				if (
+					f.kind === 'address' &&
+					about(f) &&
+					f.mine === plan.iSendAsset &&
+					f.method === to.method &&
+					f.address === to.address &&
+					Number.isFinite(f.at)
+				) {
+					sharedAt = Math.min(Number.isFinite(sharedAt) ? sharedAt : Infinity, f.at);
+				}
+			}
+		}
+		// The same txid cited earlier for ANOTHER order is not a new payment.
+		// Recorded again for this order (a Monero key added or corrected, a
+		// receipt sent twice) it is the same payment, checked as such.
+		const reused = moneyFacts
+			.slice(0, receiptAt)
+			.some(
+				(f) =>
+					f.kind === 'funds_sent' &&
+					f.txid.toLowerCase() === receipt.txid.toLowerCase() &&
+					f.orderPermlink !== null &&
+					f.orderPermlink !== orderPermlink
+			);
+		return { receipt, to, reused, sharedAt };
+	});
+
+	/** What to ask the instance about (BTC/XMR paid to a shared address). */
+	const legCheckInput = $derived.by((): PaymentCheckInput | null => {
+		const p = legPayment;
+		// A txid already cited for another order is not checked as this one's:
+		// its receipt card must not show it arriving (L5).
+		if (p === null || p.reused || p.to === null || p.to.address === undefined) return null;
+		const asset = p.receipt.method;
+		if ((asset !== 'btc' && asset !== 'xmr') || p.receipt.kind !== 'funds_sent') return null;
+		return {
+			asset,
+			txid: p.receipt.txid,
+			address: p.to.address,
+			...(p.receipt.txKey !== undefined ? { txKey: p.receipt.txKey } : {}),
+			...(p.to.amount !== undefined ? { asked: p.to.amount } : {}),
+			...(Number.isFinite(p.sharedAt) ? { sharedAtMs: p.sharedAt } : {})
+		};
+	});
+	/** Its live check, shared with the receipt card. Resubscribed only when the
+	 *  payment itself changes, not on every message. */
+	let legCheck = $state<PaymentCheckState | null>(null);
+	const legCheckKey = $derived(
+		legCheckInput === null
+			? ''
+			: [
+					legCheckInput.asset,
+					legCheckInput.txid,
+					legCheckInput.address,
+					legCheckInput.txKey ?? '',
+					legCheckInput.asked ?? '',
+					legCheckInput.sharedAtMs ?? ''
+				].join('\u0000')
+	);
+	$effect(() => {
+		if (legCheckKey === '') {
+			legCheck = null;
+			return;
+		}
+		const input = untrack(() => legCheckInput);
+		if (input === null) return;
+		return watchPaymentCheck(input).subscribe((st) => {
+			legCheck = st;
+		});
+	});
+
+	/** The payment leg's verdict for the buttons: the live check for BTC/XMR;
+	 *  the chain verification of a BLURT receipt (tradeStatus, blurtVerify);
+	 *  "no address" for a BTC/XMR payment with no address of that coin shared
+	 *  before it; "not confirmed here" for a coin without a check. A txid
+	 *  already cited by an earlier receipt is not a new payment. */
+	const legVerdict = $derived.by((): PaymentCheckVerdict | null => {
+		const p = legPayment;
+		if (p === null) return null;
+		if (p.reused) return 'reused';
+		// No address of its coin shared before it, whatever the coin: it cannot
+		// be this trade's payment (and he was never asked to be paid in it).
+		if (p.to === null) return 'no_address';
+		if (legCheckInput !== null) return legCheck === null ? 'checking' : verdictOf(legCheck);
+		if (p.receipt.method === 'btc' || p.receipt.method === 'xmr') return 'no_address';
+		if (p.receipt.method === 'blurt') {
+			// Checked against the seller's own ask in this thread (blurtLegCheck),
+			// not the one-leg trade record — which the other leg, a reload or a
+			// second buyer on the same order would get wrong.
+			if (legBlurtInput === null) return 'no_address';
+			return legBlurtCheck === null ? 'checking' : blurtLegVerdict(legBlurtCheck);
+		}
+		return 'unverifiable';
+	});
+
+	/** The BLURT payment leg, checked against the chain: paid by the payer of
+	 *  this thread to the account the seller asked for, with his amount and
+	 *  memo (his own newest ask before the receipt). */
+	const legBlurtInput = $derived.by((): BlurtLegInput | null => {
+		const p = legPayment;
+		if (p === null || p.reused || legPlan === null || p.receipt.kind !== 'funds_sent') return null;
+		if (p.receipt.method !== 'blurt' || p.to === null || p.to.address === undefined) return null;
+		const asked = p.to.amount !== undefined ? Number(p.to.amount) : NaN;
+		return {
+			txid: p.receipt.txid,
+			payer: legPlan.iSendAsset ? peer : me,
+			payee: p.to.address,
+			...(Number.isFinite(asked) && asked > 0 ? { asked } : {}),
+			memo: p.to.memo ?? ''
+		};
+	});
+	let legBlurtCheck = $state<BlurtLegState | null>(null);
+	const legBlurtKey = $derived(
+		legBlurtInput === null
+			? ''
+			: [
+					legBlurtInput.txid,
+					legBlurtInput.payer,
+					legBlurtInput.payee,
+					legBlurtInput.asked ?? '',
+					legBlurtInput.memo
+				].join('\u0000')
+	);
+	$effect(() => {
+		if (legBlurtKey === '') {
+			legBlurtCheck = null;
+			return;
+		}
+		const input = untrack(() => legBlurtInput);
+		if (input === null) return;
+		return watchBlurtLeg(input).subscribe((st) => {
+			legBlurtCheck = st;
+		});
+	});
+
+	/** The receipt (txid) the seller said he sees in his own wallet, after
+	 *  the app could not confirm it, and what the check said then. For this
+	 *  visit only: he says it again next time rather than the app remembering a
+	 *  promise for him. It counts only while the check still says the same:
+	 *  said while the explorers could not be asked, it does not cover a payment
+	 *  they later find short. */
+	let walletConfirmed = $state<{
+		readonly txid: string;
+		readonly verdict: PaymentCheckVerdict | null;
+	} | null>(null);
+	/** A Bitcoin payment seen at 0 confirmations: "Send" shows, with a word
+	 *  that until it confirms a Bitcoin payment can still be replaced. */
+	const legUnconfirmedBtc = $derived(
+		legCheckInput?.asset === 'btc' && legCheck?.phase === 'seen' && legCheck.confirmations === 0
+	);
+	/** The payments made from this device for this order to this peer: my
+	 *  receipts, whether or not their messages ever posted (legLedger.ts). */
+	const ledgerFacts = $derived.by((): ThreadFact[] =>
+		!orderPermlink
+			? []
+			: legPaymentsFor($legLedger, orderPermlink, peer).map((e) => ({
+					kind: 'funds_sent' as const,
+					mine: true,
+					method: e.method,
+					orderPermlink: e.orderPermlink,
+					txid: e.txid
+				}))
+	);
+	const legButtons = $derived(
+		legPlan !== null && orderPermlink
+			? twoLegButtons(
+					legPlan,
+					[...moneyFacts, ...ledgerFacts],
+					orderPermlink,
+					legVerdict,
+					// His word counts for the payment AND the verdict it answered: a check
+					// that later finds it short (or anything else) is told to him again.
+					legPayment !== null &&
+						walletConfirmed !== null &&
+						walletConfirmed.txid === legPayment.receipt.txid &&
+						walletConfirmed.verdict === legVerdict
+				)
+			: null
+	);
+	/** May an address card in the thread offer "Pay now" / "Mark sent"? In a
+	 *  crypto-for-crypto trade the asset sender pays only once he has been
+	 *  paid (the same gate as his "Send <asset>"): an address card the other
+	 *  side shared — from an older app, or crafted — must not be a way round
+	 *  it. The payment side pays when he likes. */
+	const cardPaymentsAllowed = $derived(
+		legPlan === null
+			? // An order thread whose order is not read (yet): closed, as the
+				// money actions stay closed until whose order it is is known.
+				!(orderPermlink !== undefined && orderRecord === null) && !isCryptoForCrypto(orderRecord)
+			: !legPlan.iSendAsset || legButtons?.sendAsset === true
+	);
+
+	/** "XMR or BTC" — the payment coins that need an address, as the coin
+	 *  names a button shows (upper-case tickers, the locale's "or"). */
+	const legPaymentCoinsLabel = $derived(
+		legPlan === null
+			? ''
+			: formatDisjunction(
+					legPlan.paymentAddressCoins.map((c) => c.toUpperCase()),
+					currentLang
+				)
+	);
+
+	/** Paid only in BLURT: the seller's first step is asking for it (his
+	 *  account and the amount), not "sharing an address". */
+	const legAsksBlurtOnly = $derived(
+		legPlan !== null &&
+			legPlan.paymentAddressCoins.length === 1 &&
+			legPlan.paymentAddressCoins[0] === 'blurt'
+	);
+
+	/** The coins the address window offers when a two-leg button opened it;
+	 *  null when the one-leg button did (then the order's own rule applies). */
+	let addressShareCoins = $state<readonly ChatAssetTicker[] | null>(null);
+
 	/** once a payment has been SENT for this order (this
 	 *  thread's trade reached 'paid' or beyond), neither the "Pay now" (sender)
 	 *  nor the "Share crypto address" (receiver) button belongs on screen for
@@ -1704,11 +2210,15 @@
 	/** I send the crypto ⇒ show "Pay now". Only when a live order is connected
 	 *  AND the peer is buying the asset. Hidden with no live order — and once the
 	 *  order has been paid (paymentAlreadySent). */
-	const showPayNowButton = $derived(cryptoButtons.payNow && !paymentAlreadySent);
+	const showPayNowButton = $derived(
+		legPlan === null && cryptoButtons.payNow && !paymentAlreadySent
+	);
 	/** I receive the crypto ⇒ show "Share crypto address". Only when a live
 	 *  order is connected AND the peer is selling. Hidden with no live order —
 	 *  and once the order has been paid. */
-	const showShareAddressButton = $derived(cryptoButtons.shareAddress && !paymentAlreadySent);
+	const showShareAddressButton = $derived(
+		legPlan === null && cryptoButtons.shareAddress && !paymentAlreadySent
+	);
 
 	// the "Share mailing address" + "Record shipment" controls
 	// only matter when the trade moves a PHYSICAL thing that can be posted:
@@ -1740,7 +2250,16 @@
 	 *  (profile Message button) or a chat whose order went non-live renders no
 	 *  toolbar strip at all, rather than an empty bordered bar. */
 	const showChatActionToolbar = $derived(
-		showPayNowButton || showShareAddressButton || showShareMailingButton || showRecordShipmentButton
+		showPayNowButton ||
+			showShareAddressButton ||
+			showShareMailingButton ||
+			showRecordShipmentButton ||
+			(legButtons !== null &&
+				(legButtons.sharePaymentAddress ||
+					legButtons.sendAsset ||
+					legButtons.payBlurt ||
+					legButtons.shareAssetAddress ||
+					legButtons.hint !== null))
 	);
 
 	/** when the composer "Pay now" (no pill context, so
@@ -1786,6 +2305,66 @@
 		composerPayNowAsset === 'blurt' ||
 			(barterAcceptedMethods?.length === 1 && barterAcceptedMethods[0] === 'blurt')
 	);
+
+	/** The toolbar's "Send <asset>" (one-leg "Pay now", or a two-leg trade's
+	 *  second step). Clears any stale pill context first. BLURT is sent by the
+	 *  app itself (broadcast, no manual txid), so it goes to PayBlurtModal with
+	 *  a validated in-modal amount; every other asset records an external
+	 *  payment (amount + txid) via FundsSentModal, locked to the order's asset. */
+	function startPayNow(): void {
+		markSentArgs = null;
+		if (payNowSendsBlurt) {
+			payBlurtArgs = {
+				recipient: peer,
+				// pre-fill the order's fiat-minimum equivalent in BLURT (0 when
+				// uncomputable); the field stays editable.
+				amount: payPrefillAmount ?? 0,
+				memo: '',
+				orderPermlink: orderPermlink ?? undefined,
+				amountEditable: true
+			};
+		} else {
+			showFundsSentModal = true;
+		}
+	}
+
+	/** A two-leg trade's first step when it is paid in BLURT (e.g. buying XMR
+	 *  with BLURT): the asset receiver sends BLURT straight from the app. The
+	 *  amount is his to enter: the order's pre-fill is for its asset. */
+	/** Pay the BLURT the asset sender asked for: his newest ask in this
+	 *  thread (account, amount, memo) — what his screen checks it against. */
+	function startPayBlurtLeg(): void {
+		const ask = [...moneyFacts]
+			.reverse()
+			.find(
+				(f) =>
+					f.kind === 'address' &&
+					f.method === 'blurt' &&
+					!f.mine &&
+					(f.orderPermlink === null || f.orderPermlink === orderPermlink)
+			);
+		if (ask === undefined || ask.address === undefined) return;
+		const amount = ask.amount !== undefined ? Number(ask.amount) : NaN;
+		markSentArgs = null;
+		payBlurtArgs = {
+			recipient: ask.address,
+			amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+			memo: ask.memo ?? '',
+			orderPermlink: orderPermlink ?? undefined,
+			amountEditable: !(Number.isFinite(amount) && amount > 0)
+		};
+	}
+
+	/** Open the address window for these coins (a two-leg button), or with the
+	 *  order's own rule (null: the one-leg "Share your … address"). */
+	function openAddressShare(coins: readonly ChatAssetTicker[] | null, requireAmount = false): void {
+		addressShareCoins = coins;
+		addressShareRequireAmount = requireAmount;
+		showAddressShareModal = true;
+	}
+	/** Where to be PAID for a two-leg trade, the amount is asked for: without
+	 *  it, any dust payment would pass the check (v1.21.17). */
+	let addressShareRequireAmount = $state(false);
 
 	// ─── Pay-now amount pre-fill ──────────────────────────
 	// Seed the "Pay now" modal with the crypto amount equal to the order's fiat
@@ -2029,7 +2608,6 @@
 								</span>
 							{/if}
 						</div>
-
 					</div>
 
 					<!-- Kebab: last item of the identity row, so its top is level with
@@ -2041,149 +2619,151 @@
 							     indicator pinned above them. the standalone Block
 							     button was removed from the header row. -->
 							<div class="relative">
-						<button
-							type="button"
-							bind:this={overflowTriggerEl}
-							class="relative rounded-xl bg-white px-2 py-1.5 text-ink-700 hover:bg-ink-100 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
-							aria-haspopup="menu"
-							aria-expanded={overflowMenuOpen}
-							aria-label={$_('chat.menu.aria_open') as string}
-							onclick={() => (overflowMenuOpen = !overflowMenuOpen)}
-						>
-							<!-- Vertical kebab: 3 dots stacked.  Inline
+								<button
+									type="button"
+									bind:this={overflowTriggerEl}
+									class="relative rounded-xl bg-white px-2 py-1.5 text-ink-700 hover:bg-ink-100 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
+									aria-haspopup="menu"
+									aria-expanded={overflowMenuOpen}
+									aria-label={$_('chat.menu.aria_open') as string}
+									onclick={() => (overflowMenuOpen = !overflowMenuOpen)}
+								>
+									<!-- Vertical kebab: 3 dots stacked.  Inline
 							     SVG to avoid an icon-component dependency. -->
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								viewBox="0 0 16 16"
-								fill="currentColor"
-								aria-hidden="true"
-							>
-								<circle cx="8" cy="3" r="1.5" />
-								<circle cx="8" cy="8" r="1.5" />
-								<circle cx="8" cy="13" r="1.5" />
-							</svg>
-							{#if !chatSecurityNudgeSeen}
-								<!-- one-time nudge dot inviting discovery of Chat
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										viewBox="0 0 16 16"
+										fill="currentColor"
+										aria-hidden="true"
+									>
+										<circle cx="8" cy="3" r="1.5" />
+										<circle cx="8" cy="8" r="1.5" />
+										<circle cx="8" cy="13" r="1.5" />
+									</svg>
+									{#if !chatSecurityNudgeSeen}
+										<!-- one-time nudge dot inviting discovery of Chat
 								     Security. Cleared for good the first time the item is opened. -->
-								<span
-									class="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-ink-900"
-									aria-hidden="true"
-								></span>
-							{/if}
-						</button>
-						{#if overflowMenuOpen}
-							<div
-								bind:this={overflowMenuEl}
-								class="absolute right-0 top-full z-40 mt-1 min-w-[12rem] rounded-lg border border-ink-200 bg-white shadow-lg dark:border-ink-700 dark:bg-ink-900"
-								role="menu"
-							>
-								<!-- top row of the kebab menu: the star
+										<span
+											class="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-ink-900"
+											aria-hidden="true"
+										></span>
+									{/if}
+								</button>
+								{#if overflowMenuOpen}
+									<div
+										bind:this={overflowMenuEl}
+										class="absolute right-0 top-full z-40 mt-1 min-w-[12rem] rounded-lg border border-ink-200 bg-white shadow-lg dark:border-ink-700 dark:bg-ink-900"
+										role="menu"
+									>
+										<!-- top row of the kebab menu: the star
 								     toggle pinned top-RIGHT (always present so it's always
 								     reachable and always shows the current ☆/★ state), with the
 								     animated LIVE readout to its LEFT when the thread is streaming.
 								     Toggling the star flips it in place (the menu stays open) and
 								     writes the SAME per-discussion folder the inbox reads, so
 								     leaving the chatroom lands this thread under the right tab. -->
-								<div class="flex items-center justify-between gap-2 px-4 py-2">
-									{#if streaming}
-										<span
-											class="flex items-center gap-1.5 text-xs"
-											aria-label={$_('chat.live') as string}
-										>
-											<span class="relative inline-flex h-2 w-2" aria-hidden="true">
+										<div class="flex items-center justify-between gap-2 px-4 py-2">
+											{#if streaming}
 												<span
-													class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
-												></span>
-												<span class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"
-												></span>
-											</span>
-											<span class="uppercase tracking-widest text-ink-500 dark:text-ink-500">
-												{$_('chat.live')}
-											</span>
-										</span>
-									{:else}
-										<span></span>
-									{/if}
-									<button
-										type="button"
-										onclick={handleToggleThreadStar}
-										aria-pressed={threadStarred}
-										aria-label={threadStarred
-											? ($_('chat.menu.unstar_aria') as string)
-											: ($_('chat.menu.star_aria') as string)}
-										class="flex-none rounded p-0.5 text-lg leading-none transition-colors {threadStarred
-											? 'text-amber-400 hover:text-amber-500'
-											: 'text-ink-300 hover:text-amber-400 dark:text-ink-600 dark:hover:text-amber-400'}"
-									>
-										{threadStarred ? '★' : '☆'}
-									</button>
-								</div>
-								<!-- Hairline divider under the status/star row. -->
-								<div class="border-t border-ink-200 dark:border-ink-700"></div>
+													class="flex items-center gap-1.5 text-xs"
+													aria-label={$_('chat.live') as string}
+												>
+													<span class="relative inline-flex h-2 w-2" aria-hidden="true">
+														<span
+															class="absolute inline-flex h-full w-full animate-ping rounded-full bg-morphit-emerald opacity-60"
+														></span>
+														<span
+															class="relative inline-flex h-2 w-2 rounded-full bg-morphit-emerald"
+														></span>
+													</span>
+													<span class="uppercase tracking-widest text-ink-500 dark:text-ink-500">
+														{$_('chat.live')}
+													</span>
+												</span>
+											{:else}
+												<span></span>
+											{/if}
+											<button
+												type="button"
+												onclick={handleToggleThreadStar}
+												aria-pressed={threadStarred}
+												aria-label={threadStarred
+													? ($_('chat.menu.unstar_aria') as string)
+													: ($_('chat.menu.star_aria') as string)}
+												class="flex-none rounded p-0.5 text-lg leading-none transition-colors {threadStarred
+													? 'text-amber-400 hover:text-amber-500'
+													: 'text-ink-300 hover:text-amber-400 dark:text-ink-600 dark:hover:text-amber-400'}"
+											>
+												{threadStarred ? '★' : '☆'}
+											</button>
+										</div>
+										<!-- Hairline divider under the status/star row. -->
+										<div class="border-t border-ink-200 dark:border-ink-700"></div>
 
-								<!-- Chat Security: opt into "destroy on leave" (PFS) or
+										<!-- Chat Security: opt into "destroy on leave" (PFS) or
 								     keep the default readable history. Opening clears the dot. -->
-								<button
-									type="button"
-									role="menuitem"
-									class="flex w-full items-center gap-1.5 px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
-									onclick={openChatSecurity}
-								>
-									<span>{$_('chat.security.menu_label')}</span>
-									{#if !chatSecurityNudgeSeen}
-										<!-- matching one-time nudge dot at the end of the
+										<button
+											type="button"
+											role="menuitem"
+											class="flex w-full items-center gap-1.5 px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+											onclick={openChatSecurity}
+										>
+											<span>{$_('chat.security.menu_label')}</span>
+											{#if !chatSecurityNudgeSeen}
+												<!-- matching one-time nudge dot at the end of the
 										     item; clears together with the kebab dot the first time
 										     Chat Security is opened (openChatSecurity → seen). -->
-										<span class="h-2 w-2 flex-none rounded-full bg-red-500" aria-hidden="true"></span>
-									{/if}
-								</button>
+												<span class="h-2 w-2 flex-none rounded-full bg-red-500" aria-hidden="true"
+												></span>
+											{/if}
+										</button>
 
-								<button
-									type="button"
-									role="menuitem"
-									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
-									onclick={openVerifyPeer}
-								>
-									{$_('chat.menu.verify_peer')}
-								</button>
+										<button
+											type="button"
+											role="menuitem"
+											class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+											onclick={openVerifyPeer}
+										>
+											{$_('chat.menu.verify_peer')}
+										</button>
 
-								<!-- Block/Unblock moved here from a standalone header
+										<!-- Block/Unblock moved here from a standalone header
 								     button. Reuses the confirm modal's named block/unblock label
 								     (it interpolates the peer, so it reads "Block @username"); the
 								     click closes the menu and opens the existing confirm modal
 								     (onToggleBlock → pendingBlockAction). Destructive (block) is
 								     tinted red; unblock is neutral. Disabled while in flight. -->
-								<button
-									type="button"
-									role="menuitem"
-									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 disabled:cursor-wait disabled:opacity-60 dark:hover:bg-ink-800 {isPeerBlocked
-										? 'text-ink-700 dark:text-ink-200'
-										: 'text-red-700 dark:text-red-400'}"
-									disabled={blockActionBusy}
-									onclick={() => {
-										closeOverflowMenu();
-										onToggleBlock();
-									}}
-								>
-									{isPeerBlocked
-										? $_('chat.block.confirm.unblock.yes', { values: { peer } })
-										: $_('chat.block.confirm.block.yes', { values: { peer } })}
-								</button>
+										<button
+											type="button"
+											role="menuitem"
+											class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 disabled:cursor-wait disabled:opacity-60 dark:hover:bg-ink-800 {isPeerBlocked
+												? 'text-ink-700 dark:text-ink-200'
+												: 'text-red-700 dark:text-red-400'}"
+											disabled={blockActionBusy}
+											onclick={() => {
+												closeOverflowMenu();
+												onToggleBlock();
+											}}
+										>
+											{isPeerBlocked
+												? $_('chat.block.confirm.unblock.yes', { values: { peer } })
+												: $_('chat.block.confirm.block.yes', { values: { peer } })}
+										</button>
 
-								<!-- export the conversation to a printable PDF (browser
+										<!-- export the conversation to a printable PDF (browser
 								     Save-as-PDF; built client-side from decrypted messages, no deps). -->
-								<button
-									type="button"
-									role="menuitem"
-									class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
-									onclick={exportChatToPdf}
-								>
-									{$_('chat.export.menu_label')}
-								</button>
-							</div>
-						{/if}
+										<button
+											type="button"
+											role="menuitem"
+											class="block w-full px-4 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+											onclick={exportChatToPdf}
+										>
+											{$_('chat.export.menu_label')}
+										</button>
+									</div>
+								{/if}
 							</div>
 						{/if}
 					</div>
@@ -2205,7 +2785,7 @@
 					<a
 						href={lp(`/@${orderOwner ?? peer}/${orderPermlink}`)}
 						data-testid="chat-order-ref"
-						class="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline sm:flex-nowrap dark:text-ink-400"
+						class="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs text-ink-500 hover:text-morphit-emerald hover:underline dark:text-ink-400 sm:flex-nowrap"
 						title={`${$_(orderHeading.label.key, { values: orderHeading.label.values })} ${orderSummaryForReader}`}
 					>
 						<!-- v1.21.16: on a phone the title gets a line of its own under
@@ -2248,7 +2828,7 @@
 	{#if hasMessages && (history.loading || history.failed)}
 		<div class="chat-older-status pointer-events-none relative z-10">
 			<p
-				class="absolute left-1/2 top-2 w-max max-w-[90%] -translate-x-1/2 rounded-full text-center bg-ink-100 px-3 py-1 text-xs text-ink-600 shadow dark:bg-ink-800 dark:text-ink-300"
+				class="absolute left-1/2 top-2 w-max max-w-[90%] -translate-x-1/2 rounded-full bg-ink-100 px-3 py-1 text-center text-xs text-ink-600 shadow dark:bg-ink-800 dark:text-ink-300"
 				role="status"
 			>
 				{#if history.loading}
@@ -2331,15 +2911,16 @@
 						{me}
 						{peer}
 						onRetry={handleRetry}
-						onPayNow={handlePayNowClick}
-						onMarkSent={handleMarkSentClick}
+						onPayNow={cardPaymentsAllowed ? handlePayNowClick : undefined}
+						onMarkSent={cardPaymentsAllowed ? handleMarkSentClick : undefined}
 						onVerifyPeer={openVerifyPeerFor}
 						{orderOwner}
+						paymentCheck={legCheckInput !== null && legCheck !== null
+							? { txid: legCheckInput.txid, state: legCheck }
+							: null}
 						showWhoami={visibleMessages[i - 1]?.sender !== m.sender}
 						senderAvatarSvg={m.sender === me ? myAvatarSvg : peerLabelProps.avatarSvg}
-						senderAvatarDataUri={m.sender === me
-							? myAvatarDataUri
-							: peerLabelProps.avatarDataUri}
+						senderAvatarDataUri={m.sender === me ? myAvatarDataUri : peerLabelProps.avatarDataUri}
 						senderPostingKey={m.sender === me ? myPostingKey : peerPostingKey}
 					/>
 				{/each}
@@ -2380,15 +2961,50 @@
 				     order — completing is owner-only, and in that direction it's
 				     the peer's job. tester3 owned the order and reviewed
 				     from here, which is exactly why it sat "Live" forever. -->
+				{#if reviewVerdict.kind === 'resend'}
+					<p class="mb-1 text-xs text-ink-600 dark:text-ink-300" data-testid="chat-review-resend">
+						{$_('chat.feedback.resend_now', { values: { peer } })}
+					</p>
+				{/if}
+				<!-- The completion goes along unless it would change nothing: the
+				     order already completed naming this peer. An order completed
+				     with no partner named still gets this peer named (the indexer
+				     lets the owner fill it in), which is both the partner's trade
+				     credit and, from 1 November, what proves the trade. -->
 				<LeaveFeedbackForm
 					{orderPermlink}
 					prefillSubject={peer}
 					lockSubject={true}
-					completeOwnedOrder={orderIsMine}
+					completeOwnedOrder={orderIsMine &&
+						!(orderRecord?.status === 'completed' && orderRecord.completed_counterparty != null)}
+					resend={reviewResend}
 					onSuccess={onChatFeedbackSuccess}
 					onCancel={() => (feedbackDismissed = true)}
 				/>
 			</div>
+		{:else if reviewNotCounted}
+			<p
+				class="mx-2 mb-2 rounded-lg border border-amber-500/40 bg-amber-50 px-3 py-2 text-xs text-ink-700 dark:bg-amber-950/30 dark:text-ink-200"
+				role="status"
+				data-testid="chat-review-not-counted"
+			>
+				{#if reviewNotCounted.kind === 'needs_transfer'}
+					{$_('chat.feedback.not_counted_needs_transfer', {
+						values: {
+							peer,
+							from: reviewNotCounted.from,
+							to: reviewNotCounted.to,
+							date: formatDayMonthTime(reviewNotCounted.after)
+						}
+					})}
+				{:else if reviewNotCounted.kind === 'later'}
+					{$_('chat.feedback.not_counted_later', {
+						values: { peer, date: formatDayMonthTime(reviewNotCounted.from) }
+					})}
+				{:else}
+					{$_('chat.feedback.not_counted', { values: { peer } })}
+				{/if}
+			</p>
 		{/if}
 	{/if}
 
@@ -2450,16 +3066,145 @@
 						     the crypto (the peer is selling the asset). Hidden when
 						     I'm the sender, and hidden entirely when there's no live
 						     order (unsolicited / non-live chats). -->
+						<!-- v1.21.17: a crypto-for-crypto trade, one step at a time
+						     ($lib/chat/cryptoLegs): the asset sender shares where to be
+						     paid, then sends the asset only once that payment is seen. -->
+						{#if legButtons !== null && legPlan !== null}
+							{#if legButtons.sharePaymentAddress}
+								<button
+									type="button"
+									class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
+									onclick={() => openAddressShare(legPlan?.paymentAddressCoins ?? null, true)}
+									aria-label={legAsksBlurtOnly
+										? ($_('chat.legs.ask_blurt_aria', { values: { peer } }) as string)
+										: ($_('chat.address.share_button_aria_asset', {
+												values: { asset: legPaymentCoinsLabel }
+											}) as string)}
+								>
+									{legAsksBlurtOnly
+										? $_('chat.legs.ask_blurt')
+										: $_('chat.address.share_button_asset', {
+												values: { asset: legPaymentCoinsLabel }
+											})}
+								</button>
+							{/if}
+							{#if legButtons.payBlurt}
+								<button
+									type="button"
+									class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
+									onclick={startPayBlurtLeg}
+									aria-label={$_('chat.funds_sent.button_aria_asset', {
+										values: { asset: 'BLURT' }
+									}) as string}
+								>
+									{$_('chat.funds_sent.button_asset', { values: { asset: 'BLURT' } })}
+								</button>
+							{/if}
+							{#if legButtons.shareAssetAddress}
+								<button
+									type="button"
+									class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
+									onclick={() => openAddressShare(legPlan ? [legPlan.asset] : null)}
+									aria-label={$_('chat.address.share_button_aria_asset', {
+										values: { asset: legPlan.asset.toUpperCase() }
+									}) as string}
+								>
+									{$_('chat.address.share_button_asset', {
+										values: { asset: legPlan.asset.toUpperCase() }
+									})}
+								</button>
+							{/if}
+							{#if legButtons.confirmInWallet}
+								<button
+									type="button"
+									class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
+									data-testid="chat-leg-wallet-confirm"
+									onclick={() =>
+										(walletConfirmed =
+											legPayment === null
+												? null
+												: { txid: legPayment.receipt.txid, verdict: legVerdict })}
+								>
+									{legButtons.hint === 'check_amount'
+										? $_('chat.legs.amount_confirm')
+										: $_('chat.legs.wallet_confirm')}
+								</button>
+							{/if}
+							{#if legButtons.sendAsset}
+								<button
+									type="button"
+									class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
+									onclick={startPayNow}
+									aria-label={$_(moneyFlowLabels.payNowAria.key, {
+										values: moneyFlowLabels.payNowAria.values
+									}) as string}
+								>
+									{$_(moneyFlowLabels.payNow.key, { values: moneyFlowLabels.payNow.values })}
+								</button>
+							{/if}
+							{#if legButtons.hint !== null || legButtons.sendAssetUnchecked}
+								<p
+									class="w-full text-center text-xs text-ink-600 dark:text-ink-300"
+									data-testid="chat-leg-hint"
+									role="status"
+								>
+									{#if legButtons.sendAssetUnchecked}
+										{$_('chat.legs.send_unchecked', { values: { peer } })}
+									{:else if legButtons.hint === 'waiting_payment'}
+										{$_('chat.legs.waiting_payment', {
+											values: {
+												peer,
+												coins: formatDisjunction(
+													legPlan.paymentCoins.map((c) => c.toUpperCase()),
+													currentLang
+												)
+											}
+										})}
+									{:else if legButtons.hint === 'waiting_address'}
+										{$_('chat.legs.waiting_address', { values: { peer } })}
+									{:else if legButtons.hint === 'checking_payment'}
+										{$_('chat.legs.checking_payment', { values: { peer } })}
+									{:else if legButtons.hint === 'payment_short'}
+										{$_('chat.legs.payment_short', { values: { peer } })}
+									{:else if legButtons.hint === 'payment_no_address'}
+										{$_('chat.legs.payment_no_address', { values: { peer } })}
+									{:else if legButtons.hint === 'check_wallet'}
+										{$_('chat.legs.check_wallet', { values: { peer } })}
+									{:else if legButtons.hint === 'check_amount'}
+										{$_('chat.legs.check_amount', { values: { peer } })}
+									{:else if legButtons.hint === 'payment_reused'}
+										{$_('chat.legs.payment_reused', { values: { peer } })}
+									{:else if legButtons.hint === 'payment_old'}
+										{$_('chat.legs.payment_old', { values: { peer } })}
+									{:else if legButtons.hint === 'waiting_asset_address'}
+										{$_('chat.legs.waiting_asset_address', {
+											values: { peer, asset: legPlan.asset.toUpperCase() }
+										})}
+									{/if}
+								</p>
+							{/if}
+							{#if legButtons.sendAsset && legUnconfirmedBtc}
+								<p
+									class="w-full text-center text-xs text-ink-600 dark:text-ink-300"
+									data-testid="chat-leg-unconfirmed"
+									role="status"
+								>
+									{$_('chat.legs.unconfirmed_btc')}
+								</p>
+							{/if}
+						{/if}
 						{#if showShareAddressButton}
 							<button
 								type="button"
-								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
-								onclick={() => (showAddressShareModal = true)}
+								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
+								onclick={() => openAddressShare(null)}
 								aria-label={$_(moneyFlowLabels.shareAddressAria.key, {
 									values: moneyFlowLabels.shareAddressAria.values
 								}) as string}
 							>
-								{$_(moneyFlowLabels.shareAddress.key, { values: moneyFlowLabels.shareAddress.values })}
+								{$_(moneyFlowLabels.shareAddress.key, {
+									values: moneyFlowLabels.shareAddress.values
+								})}
 							</button>
 						{/if}
 						<!-- the funds-sent / "Pay now" button initiates
@@ -2471,31 +3216,8 @@
 						{#if showPayNowButton}
 							<button
 								type="button"
-								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
-								onclick={() => {
-									// composer "Pay now". Clear any stale
-									// pill context first. BLURT is sent by the app
-									// itself (broadcast, no manual txid), so route it to
-									// PayBlurtModal with a validated in-modal amount;
-									// every other asset records an external payment
-									// (amount + txid) via FundsSentModal, with the asset
-									// locked to the order's asset.
-									markSentArgs = null;
-									if (payNowSendsBlurt) {
-										payBlurtArgs = {
-											recipient: peer,
-											// pre-fill the order's fiat-minimum
-											// equivalent in BLURT (0 when uncomputable);
-											// the field stays editable.
-											amount: payPrefillAmount ?? 0,
-											memo: '',
-											orderPermlink: orderPermlink ?? undefined,
-											amountEditable: true
-										};
-									} else {
-										showFundsSentModal = true;
-									}
-								}}
+								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
+								onclick={startPayNow}
 								aria-label={$_(moneyFlowLabels.payNowAria.key, {
 									values: moneyFlowLabels.payNowAria.values
 								}) as string}
@@ -2513,7 +3235,7 @@
 						{#if showShareMailingButton}
 							<button
 								type="button"
-								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
+								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
 								onclick={() => (showMailingAddressModal = true)}
 								aria-label={$_('chat.mailing_address.button_aria') as string}
 							>
@@ -2523,7 +3245,7 @@
 						{#if showRecordShipmentButton}
 							<button
 								type="button"
-								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10"
+								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
 								onclick={() => (showShipmentModal = true)}
 								aria-label={$_('chat.shipment.button_aria') as string}
 							>
@@ -2582,7 +3304,10 @@
 {#if showAddressShareModal}
 	<AddressShareModal
 		{orderPermlink}
-		allowedMethods={barterAcceptedMethods ?? (orderChatAsset ? [orderChatAsset] : undefined)}
+		allowedMethods={addressShareCoins ??
+			barterAcceptedMethods ??
+			(orderChatAsset ? [orderChatAsset] : undefined)}
+		requireAmount={addressShareRequireAmount}
 		onShare={handleAddressShare}
 		onCancel={() => (showAddressShareModal = false)}
 	/>
@@ -2734,12 +3459,7 @@
      overflow menu.  Closing does NOT persist any verified-state
      anywhere — re-opening recomputes from scratch. -->
 {#if verifyPeerOpen}
-	<VerifyPeerPanel
-		{me}
-		{peer}
-		onAccepted={onVerifyAccepted}
-		onClose={closeVerifyPeer}
-	/>
+	<VerifyPeerPanel {me} {peer} onAccepted={onVerifyAccepted} onClose={closeVerifyPeer} />
 {/if}
 
 <style>

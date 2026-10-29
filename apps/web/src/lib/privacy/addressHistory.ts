@@ -87,7 +87,23 @@ async function fileForWrite(): Promise<AddressHistoryFile> {
 	};
 }
 
-async function tagFor(salt: string, asset: string, address: string): Promise<string> {
+/** One spelling per address where the format ignores case, so the same
+ *  address written another way is still "shared before" (v1.21.17): a bech32
+ *  Bitcoin or Litecoin address (`bc1…` = `BC1…`), a Bitcoin Cash address
+ *  (with or without `bitcoincash:`), an EVM address (`0x…`, checksummed or
+ *  not). Anything else is compared as written: Monero and base58 addresses
+ *  are case-sensitive. */
+export function canonicalAddress(address: string): string {
+	const a = address.trim();
+	if (/^(bc1|tb1|bcrt1|ltc1|tltc1)[0-9a-z]+$/i.test(a)) return a.toLowerCase();
+	if (/^0x[0-9a-f]{40}$/i.test(a)) return a.toLowerCase();
+	const cash = /^(?:bitcoincash:)?([qp][0-9a-z]{41})$/i.exec(a);
+	if (cash) return cash[1]!.toLowerCase();
+	return a;
+}
+
+/** The tag of an address as written. Exported for tests only. */
+export async function tagFor(salt: string, asset: string, address: string): Promise<string> {
 	await ensureSodium();
 	const key = sodium.from_base64(salt, sodium.base64_variants.ORIGINAL);
 	const msg = sodium.from_string(`${asset.toUpperCase()}\u0000${address}`);
@@ -129,7 +145,7 @@ export async function migrateLegacyAddressHistory(): Promise<void> {
 			const asset = (e as { asset?: unknown })?.asset;
 			const address = (e as { address?: unknown })?.address;
 			if (typeof asset === 'string' && typeof address === 'string') {
-				f = withTag(f, await tagFor(f.salt, asset, address));
+				f = withTag(f, await tagFor(f.salt, asset, canonicalAddress(address)));
 			}
 		}
 		writeFile(f);
@@ -149,7 +165,7 @@ export async function recordAddressShare(asset: string, address: string): Promis
 	try {
 		await migrateLegacyAddressHistory();
 		const f = await fileForWrite();
-		writeFile(withTag(f, await tagFor(f.salt, asset, address)));
+		writeFile(withTag(f, await tagFor(f.salt, asset, canonicalAddress(address))));
 	} catch {
 		/* best-effort: the share itself is never blocked */
 	}
@@ -176,7 +192,11 @@ export async function wasSharedBefore(asset: string, address: string): Promise<b
 		await migrateLegacyAddressHistory();
 		const f = readFile();
 		if (f === null || f.tags.length === 0) return false;
-		return f.tags.includes(await tagFor(f.salt, asset, address));
+		// The canonical spelling, and as written (what an older build recorded).
+		return (
+			f.tags.includes(await tagFor(f.salt, asset, canonicalAddress(address))) ||
+			f.tags.includes(await tagFor(f.salt, asset, address))
+		);
 	} catch {
 		return false;
 	}

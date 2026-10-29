@@ -65,6 +65,7 @@
 
 import type pg from 'pg';
 import type { Database } from '$db/pool';
+import { consensusV2Active } from '$indexer/consensusActivation';
 
 /** Minimum reviews in each direction to trigger Signal B. */
 const SIGNAL_B_MIN_COUNT = 3;
@@ -696,13 +697,24 @@ export async function detectTradeConcentration(
 }
 
 /** Implementation that operates on a caller-provided transaction. The window
- *  ends at $4 (the triggering op's block time — a completed order's
- *  updated_at is its completion's block time); $5, when given, restricts it
- *  to those accounts. */
+ *  ends at $4 (the triggering op's block time); $5, when given, restricts it
+ *  to those accounts.
+ *
+ *  Which time places a trade in the window: from CONSENSUS_V2_ACTIVATION_TIME,
+ *  completed_at — the completion's block time, the same on every node. Before
+ *  it, updated_at, as it always was, so history keeps its verdicts. updated_at
+ *  is not the completion time: an attestation or the partner named later moves
+ *  it to that op's block time, and a fee re-check to the node's own wall clock,
+ *  so two nodes could count different trades in the same window. */
+export function tradeWindowColumn(blockTime: Date): 'o.completed_at' | 'o.updated_at' {
+	return consensusV2Active(blockTime) ? 'o.completed_at' : 'o.updated_at';
+}
+
 export async function detectTradeConcentrationInTx(
 	client: pg.PoolClient,
 	opts: SignalWindow & { readonly accounts?: readonly string[] }
 ): Promise<number> {
+	const at = tradeWindowColumn(opts.asOf);
 	const sql = `
 		WITH credits AS (
 			-- One row per trade CREDIT: both sides of every completed order in
@@ -712,16 +724,16 @@ export async function detectTradeConcentrationInTx(
 			  FROM orders o
 			 WHERE o.status = 'completed'
 			   AND o.completed_counterparty IS NOT NULL
-			   AND o.updated_at > $4::timestamptz - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
-			   AND o.updated_at <= $4::timestamptz
+			   AND ${at} > $4::timestamptz - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
+			   AND ${at} <= $4::timestamptz
 			   AND ($5::text[] IS NULL OR o.account = ANY($5::text[]))
 			UNION ALL
 			SELECT o.completed_counterparty AS account, o.account AS peer
 			  FROM orders o
 			 WHERE o.status = 'completed'
 			   AND o.completed_counterparty IS NOT NULL
-			   AND o.updated_at > $4::timestamptz - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
-			   AND o.updated_at <= $4::timestamptz
+			   AND ${at} > $4::timestamptz - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
+			   AND ${at} <= $4::timestamptz
 			   AND ($5::text[] IS NULL OR o.completed_counterparty = ANY($5::text[]))
 		),
 		account_totals AS (

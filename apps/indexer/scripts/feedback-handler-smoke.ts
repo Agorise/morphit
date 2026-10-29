@@ -118,7 +118,7 @@ await scenario('G1.1: feedback WITH valid order_permlink DOES trigger bonus', as
 	});
 	const exps: QueryExpectation[] = [
 		// 1. Order ownership check returns a row → permlink valid.
-		{ match: 'SELECT 1 FROM orders', rows: [{ '?column?': 1 }], rowCount: 1 },
+		{ match: 'FROM orders o', rows: [{ kind: 'paid' }], rowCount: 1 },
 		// 1b. Verified-chat conformance query (ADR-0014).
 		{
 			match: 'COUNT(*) FILTER (WHERE sender',
@@ -177,7 +177,7 @@ await scenario('G1.1: feedback with order_permlink but order NOT FOUND rejects',
 	});
 	const exps: QueryExpectation[] = [
 		// Order ownership check returns no rows → permlink invalid.
-		{ match: 'SELECT 1 FROM orders', rows: [], rowCount: 0 }
+		{ match: 'FROM orders o', rows: [], rowCount: 0 }
 		// No INSERT INTO feedback, no bonus path.
 	];
 	const mock = makeMockClient(exps);
@@ -201,7 +201,7 @@ await scenario('G1.1: feedback with order_permlink owned by attacker rejects', a
 		}),
 		siblingOps: []
 	});
-	const exps: QueryExpectation[] = [{ match: 'SELECT 1 FROM orders', rows: [], rowCount: 0 }];
+	const exps: QueryExpectation[] = [{ match: 'FROM orders o', rows: [], rowCount: 0 }];
 	const mock = makeMockClient(exps);
 	const r = await handler(ctx, mock.client);
 	assertEqual(r, { ok: false, reason: 'order_permlink_not_found_or_unverified' }, 'result');
@@ -239,7 +239,7 @@ await scenario(
 			}),
 			siblingOps: []
 		});
-		const exps: QueryExpectation[] = [{ match: 'SELECT 1 FROM orders', rows: [], rowCount: 0 }];
+		const exps: QueryExpectation[] = [{ match: 'FROM orders o', rows: [], rowCount: 0 }];
 		const mock = makeMockClient(exps);
 		const r = await handler(ctx, mock.client);
 		assertEqual(r, { ok: false, reason: 'order_permlink_not_found_or_unverified' }, 'result');
@@ -249,10 +249,10 @@ await scenario(
 await scenario(
 	'Part 113 A5: feedback handler SELECT query includes fee_status = verified',
 	async () => {
-		// Structural test: confirm the SELECT 1 FROM orders query
-		// in the feedback handler is actually filtering on
-		// fee_status='verified'.  Without this gate the A5 defense
-		// is theoretical.
+		// Structural test: confirm the citation query (reviewCitation.ts,
+		// `FROM orders o`; it names the kind of order cited) is actually
+		// filtering on fee_status='verified'.  Without this gate the A5
+		// defense is theoretical.
 		const ctx = makeCtx({
 			signer: 'alice',
 			payload: feedbackPayload({
@@ -261,12 +261,12 @@ await scenario(
 			}),
 			siblingOps: []
 		});
-		const exps: QueryExpectation[] = [{ match: 'SELECT 1 FROM orders', rows: [], rowCount: 0 }];
+		const exps: QueryExpectation[] = [{ match: 'FROM orders o', rows: [], rowCount: 0 }];
 		const mock = makeMockClient(exps);
 		await handler(ctx, mock.client);
-		const ordersQuery = mock.queries.find((q) => q.text.includes('SELECT 1 FROM orders'));
+		const ordersQuery = mock.queries.find((q) => q.text.includes('FROM orders o'));
 		if (!ordersQuery) {
-			throw new Error('no SELECT 1 FROM orders query observed');
+			throw new Error('no citation query (FROM orders o) observed');
 		}
 		if (!ordersQuery.text.includes("fee_status = 'verified'")) {
 			throw new Error(`orders query is missing fee_status filter; got: ${ordersQuery.text}`);
@@ -286,7 +286,7 @@ await scenario(
 			siblingOps: []
 		});
 		const exps: QueryExpectation[] = [
-			{ match: 'SELECT 1 FROM orders', rows: [{ '?column?': 1 }], rowCount: 1 },
+			{ match: 'FROM orders o', rows: [{ kind: 'paid' }], rowCount: 1 },
 			{
 				match: 'COUNT(*) FILTER (WHERE sender',
 				rows: [

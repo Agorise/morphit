@@ -422,7 +422,7 @@
 			"mark_all_read": "全部标为已读",
 			"conversation_aria_unread": "与 {peer} 的对话 — 未读",
 			"conversation_aria_read": "与 {peer} 的对话",
-			"re_prefix": "RE:",
+			"no_order": "与订单无关",
 			"tabs_aria": "收件箱选项卡",
 			"tab_inbox": "收件箱",
 			"tab_starred": "已加星标",
@@ -437,7 +437,9 @@
 			"restore_toast": "已移回收件箱。",
 			"tab_empty_inbox": "这里没有内容:你的对话已加星标或已归档。",
 			"tab_empty_starred": "没有加星标的对话。点按对话上的星标即可将其保留在这里。",
-			"tab_empty_archived": "没有已归档的对话。"
+			"tab_empty_archived": "没有已归档的对话。",
+			"review_not_counted_yet": "尚未计入",
+			"review_not_counted": "未计入"
 		},
 		"block": {
 			"busy": "处理中…",
@@ -614,7 +616,9 @@
 			"pill_method_xrp": "Ripple (XRP)",
 			"blurt_account_not_found": "不存在使用该名称的 Blurt 账户。",
 			"asset_label": "币种",
-			"too_long_to_send": "内容太长，无法在一条聊天消息中发送。请缩短备注或 PayJoin 链接后重试。"
+			"too_long_to_send": "内容太长，无法在一条聊天消息中发送。请缩短备注或 PayJoin 链接后重试。",
+			"amount_label_required": "你要求收取的金额",
+			"reuse_blocked_body": "要收取这笔交易的付款，请分享一个你从未分享过的地址：付到重复使用地址的款项无法与以前的付款区分开。请在钱包中生成一个新地址（或子地址）。"
 		},
 		"funds_sent": {
 			"button": "立即支付",
@@ -658,6 +662,7 @@
 			"self_verify_wrong_op": "该交易不包含发送给预期收件人的转账。",
 			"view_on_explorer": "在浏览器中查看",
 			"send_failed": "无法发送资金发送凭据。请重试。",
+			"too_long_to_send": "内容太长，无法在一条聊天消息中发送。请缩短备注。如果是门罗币交易密钥太长，请不要填写：卖家可以在自己的钱包里核对这笔付款。",
 			"txid_invalid_usdt": "此交易 ID 与你选择的 USDT 网络不匹配。发送前请核对网络。",
 			"network_pinned_hint": "卖家在分享地址时指定了此网络。你无法在此处更改。",
 			"pill_title_usdt": "已发送 USDT",
@@ -679,7 +684,11 @@
 			"receipt_title": "付款收据",
 			"receipt_when": "于 {when}",
 			"verify_received_of": "已收到 {received} / {asked} BLURT。",
-			"verify_received_unasked": "链上已收到 {received} BLURT（未要求金额）"
+			"verify_received_unasked": "链上已收到 {received} BLURT（未要求金额）",
+			"tx_key_label": "交易密钥 (tx key)",
+			"tx_key_placeholder": "64 个或更多字母和数字",
+			"tx_key_help": "你的门罗币钱包会为你发出的每笔付款显示它。有了它，@{peer} 能看到你的付款到账。它只证明这一笔付款，不能用来花费任何东西。",
+			"tx_key_invalid": "这看起来不像门罗币交易密钥。"
 		},
 		"unknown_version": "此消息使用较新的协议。请更新 Morphit 以读取。",
 		"pay_blurt": {
@@ -804,7 +813,11 @@
 		"day_separator_tooltip": "午夜，UTC",
 		"feedback": {
 			"leave_prompt": "留下评价",
-			"sent_toast": "评价已发送"
+			"sent_toast": "评价已发送",
+			"not_counted_later": "你对 @{peer} 的评价尚未计入：首次交易的评价从 {date} 起计入。届时会在这里提醒你重新发送。",
+			"not_counted": "你对 @{peer} 的评价未被计入：索引器没有接受它。",
+			"resend_now": "你之前对 @{peer} 的评价未被计入，但现在可以计入了：请重新发送。",
+			"not_counted_needs_transfer": "你对 @{peer} 的评价尚未计入。首次交易的评价要在 @{from} 于 {date} 或之后向 @{to} 单笔发送至少 50 BLURT 后才计入；届时会在这里提醒你重新发送。"
 		},
 		"system": {
 			"order_settled_elsewhere": "感谢您对此订单的关注。我现在已经与另一位交易者完成了这笔交易，因此它不再可用。很抱歉这次未能成交——我非常感谢您的关注，也希望我们将来有机会交易。"
@@ -813,6 +826,35 @@
 		"history": {
 			"loading_older": "正在加载更早的消息…",
 			"load_failed": "无法加载更早的消息。"
+		},
+		"legs": {
+			"waiting_payment": "正在等待 @{peer} 用 {coins} 付款给你。付款出现在这里之前，不要发送任何东西。",
+			"waiting_address": "正在等待 @{peer} 告诉你付款地址。",
+			"checking_payment": "正在核对 @{peer} 的付款…",
+			"payment_short": "@{peer} 的付款与要求的不符——请看上面的收据。除非你自己的钱包显示了正确的付款，否则不要发送任何东西。",
+			"send_unchecked": "无法在这里核对 @{peer} 的付款。发送任何东西之前，请先确认它已到你的钱包。",
+			"wallet_confirm": "我在钱包里看到了",
+			"check_wallet": "无法在这里确认 @{peer} 的付款。发送任何东西之前，请在你自己的钱包里找到它并核对金额。",
+			"payment_no_address": "@{peer} 记录了一笔你在本聊天中没有分享过地址的币种的付款。请分享你想收款的地址，暂时不要发送任何东西。",
+			"amount_confirm": "金额正确",
+			"check_amount": "@{peer} 的付款已到账，但这里没有要求金额。发送任何东西之前，请确认这是约定的金额。",
+			"payment_reused": "@{peer} 引用了一笔已为另一个订单记录过的付款：它不是这个订单的付款。不要发送任何东西。",
+			"unconfirmed_btc": "尚未确认：在确认之前，比特币付款仍可能被替换。等待一次确认更安全。",
+			"ask_blurt": "索取 BLURT",
+			"ask_blurt_aria": "告诉 @{peer} 向哪个 Blurt 账户支付多少 BLURT",
+			"payment_old": "@{peer} 的付款是在你分享这个地址之前付的：那是别人更早的付款，不是这笔交易的。不要发送任何东西。",
+			"waiting_asset_address": "@{peer} 的付款已到。正在等待 @{peer} 提供接收 {asset} 的地址。"
+		},
+		"payment_check": {
+			"checking": "正在核对这笔付款…",
+			"not_found": "在 {coin} 网络上还看不到。稍后再次检查。",
+			"no_key": "没有提供交易密钥，所以无法在这里核对这笔门罗币付款。请查看你的钱包。",
+			"unavailable": "现在无法核对这笔付款。请查看你的钱包。",
+			"wrong_address": "这笔付款没有到达本聊天中分享的 {coin} 地址。",
+			"short": "只有 {amount} {coin} 到达分享的地址——少于要求的数额。",
+			"seen": "已收到 {amount} {coin} · {n}/{required} 次确认",
+			"confirmed": "已收到 {amount} {coin} · 已确认",
+			"old": "这笔 {coin} 付款是在本聊天分享地址之前付的：它不是这笔交易的付款。"
 		}
 	},
 	"cheat_sheet": {
@@ -880,7 +922,6 @@
 		"chart_aria": "最近 {days} 天的每日出清价图表",
 		"legend": "柱高 = 出清价(BLURT/小时)。深绿 = 所有位置都满(竞争激烈)。浅绿 = 部分位置占用。灰色 = 当天无出价。",
 		"no_history_yet": "最近 {days} 天没有精选位置出价。成为第一个。",
-		"no_history_yet_active": "过去 {days} 天还没有精选位置的价格历史。",
 		"bar_title": "{day}:{rate} BLURT/小时 · 已占用 {filled}/{max} 个位置"
 	},
 	"common": {
@@ -1474,7 +1515,7 @@
 			},
 			"xmr_txid": {
 				"q": "什么是 Monero TxID,在哪里找到?",
-				"a": "Monero 交易 ID（TxID，有时也叫*哈希*）是一个 64 个字符的代码，由 0–9 和 a–f 组成，用来标识一笔 Monero 付款。要找到它，在你钱包的历史记录中打开这笔付款：TxID 就是详情里那串长代码，通常带有复制按钮。\n\n**{brand} 什么时候需要它：** 当你告诉交易伙伴你已用 Monero 付款时（聊天中的 **发送 XMR** 按钮），以及当你用 XMR 支付挂单费时（如果本站接受 XMR 费用）。支付费用时，你把 TxID 和这笔付款的交易密钥一起粘贴进去，这样每个 Morphit 网站都能核验它——见「什么是 Monero 交易密钥？{brand} 为什么需要它？」。\n\n**隐私：** TxID 本来就是公开的——任何人都能在区块浏览器上查到——而且它不会显示你是谁或你的余额。但它会随你的挂单保存在 Blurt 链上，从而把这一笔费用付款和你的账户联系起来。你的交易付款本身是点对点进行的，不经过 Blurt。如果你在聊天中分享它的 TxID，它会通过你的加密聊天传送，只有你和你的交易伙伴能读取。如果完全不想与 Monero 产生关联，请用 BLURT 支付费用：这是默认选项，而且只要一半的价格。"
+				"a": "Monero 交易 ID（TxID，有时也叫*哈希*）是一个 64 个字符的代码，由 0–9 和 a–f 组成，用来标识一笔 Monero 付款。要找到它，在你钱包的历史记录中打开这笔付款：TxID 就是详情里那串长代码，通常带有复制按钮。\n\n**{brand} 什么时候需要它：** 当你告诉交易伙伴你已用 Monero 付款时（聊天中的 **发送 XMR** 按钮），以及当你用 XMR 支付挂单费时（如果本站接受 XMR 费用）。支付费用时，你把 TxID 和这笔付款的交易密钥一起粘贴进去，这样每个 Morphit 网站都能核验它——见「什么是 Monero 交易密钥？{brand} 为什么需要它？」。\n\n**隐私：** TxID 本来就是公开的——任何人都能在区块浏览器上查到——而且它不会显示你是谁或你的余额。但它会随你的挂单保存在 Blurt 链上，从而把这一笔费用付款和你的账户联系起来。你的交易付款本身是点对点进行的，不经过 Blurt。如果你在聊天中分享它的 TxID，它会通过你的加密聊天传送，只有你和你的交易伙伴能读取。为了让你的交易伙伴看到付款到账，对方的 {brand} 站点会在区块浏览器上查询这个 TxID——只查 TxID，绝不会发送你的地址或交易密钥。如果完全不想与 Monero 产生关联，请用 BLURT 支付费用：这是默认选项，而且只要一半的价格。"
 			},
 			"xmr_tx_proof": {
 				"q": "什么是 Monero 交易密钥？{brand} 为什么需要它？",
@@ -1801,6 +1842,10 @@
 		"hours_option": "{n}小时",
 		"cost_label": "总费用",
 		"cost_detail": "{per_hour} BLURT/小时 × {hours} 小时",
+		"balance_label": "你的余额",
+		"balance_loading": "正在读取余额…",
+		"balance_unknown": "暂时无法获取余额",
+		"balance_short": "BLURT 不足：还差 {missing} BLURT（含约 {fee} BLURT 的网络费）。",
 		"submit_button": "支付并推广",
 		"cancel_button": "取消",
 		"success": "⭐ 订单已推广 — 已支付 {blurt} BLURT",
@@ -2436,6 +2481,7 @@
 		},
 		"order": {
 			"posted_prefix": "已发布",
+			"posted_on": "发布于 {date}",
 			"state_live": "活跃",
 			"state_cancelled": "已取消",
 			"state_expired": "已过期",
@@ -2462,6 +2508,7 @@
 			"feedback_no_counterparty": "尚未与任何交易对手聊天",
 			"posting": "发布中…",
 			"feature_arming_hint": "订单上线后即可使用",
+			"feature_opens_when_fee_confirmed": "你的挂单费确认后，推广表单会在这里自动打开。",
 			"fee_awaiting_payment": "等待您的 BTC 费用",
 			"fee_proof_unsupported": "不在订单簿中 — 手续费无法核实；请用交易密钥重新发布"
 		},
@@ -2838,6 +2885,7 @@
 		"terms": "条款",
 		"posted_on": "发布于",
 		"expires_on": "到期于",
+		"expired_on": "过期于",
 		"listing_fee": "挂单费用",
 		"fee_verified": "已验证",
 		"fee_underpaid": "费用不足",
@@ -2984,7 +3032,8 @@
 			"eta": "订单预计将在 {eta} 左右可用。",
 			"estimating": "正在估算订单可用时间…"
 		},
-		"feed_title": "{site} — 订单簿（{format}）"
+		"feed_title": "{site} — 订单簿（{format}）",
+		"match_in_featured": "符合条件的订单在上方的“当前推广”里。"
 	},
 	"paired_readonly": {
 		"banner_heading": "以 @{account} 登录 — 密钥在手机上。",
@@ -3686,12 +3735,12 @@
 		"tab_active_orders": "活跃订单",
 		"tab_trade_history": "交易历史",
 		"tabs_aria": "个人资料详情",
-		"no_trade_history": "暂无已完成的交易。",
+		"no_trade_history": "@{account} 暂无已完成的交易。",
 		"trade_history_with": "与 @{account}",
 		"loading_feedback": "加载反馈中…",
 		"feedback_error": "现在无法加载反馈。",
 		"rating_count": "{n, plural, other {#}} 条评分",
-		"no_feedback_yet": "暂无反馈。还没有对方评价过该用户。",
+		"no_feedback_yet": "暂无反馈。还没有对方评价过 @{account}。",
 		"reviews_heading": "@{account} 收到了来自以下用户的评价",
 		"review_order_link": "查看订单",
 		"load_more": "加载更多",
@@ -3705,8 +3754,8 @@
 		"given_heading": "@{account} 评价了",
 		"given_rated": "我给 @{account} 的评分：",
 		"loading_given": "正在加载已留评价…",
-		"given_error": "现在无法加载此用户留下的评价。",
-		"no_given_yet": "还没有。此用户尚未给任何对方留下反馈。",
+		"given_error": "现在无法加载 @{account} 留下的评价。",
+		"no_given_yet": "还没有。@{account} 尚未给任何对方留下反馈。",
 		"rss_subscribe_label": "RSS — 关注该交易者",
 		"rss_subscribe_title": "当该交易者发布新的买/卖单时通过 RSS 收到通知。注意:轮询按交易者的订阅比全站订阅稍稍更具揭示性。",
 		"feedback_suppressed_chip": "不计入评分",
@@ -3813,7 +3862,13 @@
 		"received_rated": "给我的评分：",
 		"average_rating_detail": "平均评分：{avg}",
 		"feedback_all_excluded": "下面的评价未计入此评分——留下这些评价的账户已被我们的自我交易检查标记。",
-		"headline_is_average": "平均评分"
+		"headline_is_average": "平均评分",
+		"given_not_counted_later": "尚未计入：首次交易的评价从 {date} 起计入。届时请在聊天中重新发送。",
+		"given_not_counted": "未计入：索引器没有接受它。",
+		"given_send_again": "尚未计入，但现在可以计入了：请在聊天中重新发送。",
+		"given_pending": "已发送，尚未出现在索引器的列表中。",
+		"given_open_chat": "打开聊天",
+		"given_needs_transfer": "尚未计入：要在 @{from} 于 {date} 或之后向 @{to} 单笔发送至少 50 BLURT 后才计入。届时请在聊天中重新发送。"
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4936,6 +4991,34 @@
 		"sell_exact": "卖正好 {amount} {fiat} 的 {asset} 换 {settlement}",
 		"buy_barter_novalue": "用 {settlement} 买 {asset}",
 		"sell_barter_novalue": "卖 {asset} 换 {settlement}"
+	},
+	"order_title_mine": {
+		"buy_min": "关于我的买单：用 {settlement} 买至少 {amount} {fiat} 的 {asset}",
+		"buy_max": "关于我的买单：用 {settlement} 买最多 {amount} {fiat} 的 {asset}",
+		"buy_range": "关于我的买单：用 {settlement} 买 {min}–{max} {fiat} 的 {asset}",
+		"buy_any": "关于我的买单：用 {settlement} 买任意数量的 {asset}",
+		"buy_exact": "关于我的买单：用 {settlement} 买正好 {amount} {fiat} 的 {asset}",
+		"buy_barter_novalue": "关于我的买单：用 {settlement} 买 {asset}",
+		"sell_min": "关于我的卖单：卖至少 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"sell_max": "关于我的卖单：卖最多 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"sell_range": "关于我的卖单：卖 {min}–{max} {fiat} 的 {asset} 换 {settlement}",
+		"sell_any": "关于我的卖单：卖任意数量的 {asset} 换 {settlement}",
+		"sell_exact": "关于我的卖单：卖正好 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"sell_barter_novalue": "关于我的卖单：卖 {asset} 换 {settlement}"
+	},
+	"order_title_who": {
+		"buy_min": "正在用 {settlement} 买至少 {amount} {fiat} 的 {asset}",
+		"buy_max": "正在用 {settlement} 买最多 {amount} {fiat} 的 {asset}",
+		"buy_range": "正在用 {settlement} 买 {min}–{max} {fiat} 的 {asset}",
+		"buy_any": "正在用 {settlement} 买任意数量的 {asset}",
+		"buy_exact": "正在用 {settlement} 买正好 {amount} {fiat} 的 {asset}",
+		"buy_barter_novalue": "正在用 {settlement} 买 {asset}",
+		"sell_min": "正在卖至少 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"sell_max": "正在卖最多 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"sell_range": "正在卖 {min}–{max} {fiat} 的 {asset} 换 {settlement}",
+		"sell_any": "正在卖任意数量的 {asset} 换 {settlement}",
+		"sell_exact": "正在卖正好 {amount} {fiat} 的 {asset} 换 {settlement}",
+		"sell_barter_novalue": "正在卖 {asset} 换 {settlement}"
 	},
 	"stats": {
 		"page_title": "网络统计",

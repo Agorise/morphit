@@ -1069,7 +1069,7 @@ A Monero transaction ID (TxID, sometimes called a *hash*) is a 64-character code
 
 **When Morphit asks for it:** when you tell your trade partner you've paid in Monero (the **Send XMR** button in chat), and when you pay a listing fee in XMR (if this site takes XMR fees). For a fee, you paste the TxID together with the payment's transaction key, so every Morphit site can check it — see "What is the Monero transaction key and why does Morphit ask for it?".
 
-**Privacy:** a TxID is public anyway — anyone can look it up on a block explorer — and it doesn't show who you are or your balance. But it is saved with your listing on the Blurt chain, which links that one fee payment to your account. Your trade payment itself goes person to person, off Blurt. If you share its TxID in chat, it travels in your encrypted chat, which only you and your partner can read. For no Monero link at all, pay the fee in BLURT: it's the default and costs half as much.
+**Privacy:** a TxID is public anyway — anyone can look it up on a block explorer — and it doesn't show who you are or your balance. But it is saved with your listing on the Blurt chain, which links that one fee payment to your account. Your trade payment itself goes person to person, off Blurt. If you share its TxID in chat, it travels in your encrypted chat, which only you and your partner can read. To show your partner the payment arriving, their Morphit site looks the TxID up on block explorers — the TxID alone, never your address or transaction key. For no Monero link at all, pay the fee in BLURT: it's the default and costs half as much.
 
 ---
 

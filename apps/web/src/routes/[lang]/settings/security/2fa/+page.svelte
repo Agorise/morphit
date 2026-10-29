@@ -65,6 +65,7 @@
 	} from '$lib/auth/recommendedAuthenticatorApps';
 	import BusyButton from '$components/BusyButton.svelte';
 	import { webCryptoAvailable } from '$lib/security/secureContext';
+	import { topOnChange } from '$lib/ui/pageTop';
 
 	// Display order = alphabetical by name. The source
 	// arrays keep their own documented order for programmatic/smoke use;
@@ -89,6 +90,9 @@
 		| 'enrolled_disable';
 
 	let phase = $state<Phase>('loading');
+	// Each step opens at its top (the content is swapped, not navigated).
+	const phaseTop = topOnChange<Phase>({ quietFrom: ['loading'] });
+	$effect(() => phaseTop(phase));
 	let hasTotp = $state(false);
 	let backupRemaining = $state(0);
 	let backupTotal = $state(0);

@@ -42,7 +42,8 @@
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import { formatDayMonthTime } from '$i18n/formatters';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
-	import { chatOrderHeading } from '$lib/chat/orderRole';
+	import { inboxOrderVoice } from '$lib/chat/orderRole';
+	import { relativeAge } from '$lib/utils/relativeAge';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { loadRecentPeers } from '$lib/chat/recentPeers';
 	import { readState, mergeRemoteReadState } from '$lib/chat/readState';
@@ -62,6 +63,16 @@
 		getOptimisticFeedbackGiven,
 		optimisticFeedbackTick
 	} from '$lib/feedback/optimisticFeedbackGiven';
+	import {
+		sentReviewAsRecord,
+		sentReviewFor,
+		sentReviewsTick,
+		reviewRefOf,
+		watchSentReview,
+		type ReviewRef,
+		type SentReviewVerdict
+	} from '$lib/feedback/sentReviews';
+	import { inboxOrderRef } from '$lib/chat/inboxOrderRef';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { peersNeedingProfile, mergeProfileMap } from '$lib/indexer/profileMerge';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
@@ -191,21 +202,9 @@
 				// older live orders).
 				const r = await getOrder(owner, permlink);
 				if (!r.ok) continue;
-				const rec = r.data.item;
 				// Reassign (not mutate) so the derived actually re-runs.
 				const next = new Map(pendingOrders);
-				next.set(permlink, {
-					permlink: rec.permlink,
-					account: rec.account,
-					side: rec.side,
-					asset: rec.asset,
-					fiat_currency: rec.fiat_currency,
-					amount_min: rec.amount_min,
-					amount_max: rec.amount_max,
-					// Absent status → no label, rather than inventing "(Live)" for an
-					// order that might be cancelled. The durable row settles it shortly.
-					status: rec.status ?? ''
-				});
+				next.set(permlink, inboxOrderRef(r.data.item));
 				pendingOrders = next;
 				return;
 			}
@@ -384,23 +383,19 @@
 	 *  phone card, squeezing the name/subject/feedback — so the timing now lives
 	 *  in the card's `title`: the project's canonical "14 July, 2026 @ 14:03:21
 	 *  UTC" plus the same "· 2h ago" the card used to show. Mirrors
-	 *  RelativeTime's descriptive ladder so the two never disagree. Computed at
+	 *  the app's one ladder (relativeAge) so it never disagrees with RelativeTime. Computed at
 	 *  render (Date.now()); a native title is hover-only and the absolute UTC
 	 *  part is always exact, so a between-render "· 2h ago" drift is immaterial. */
 	function whenTooltip(iso: string): string {
 		const abs = formatDayMonthTime(iso);
 		const then = new Date(iso).getTime();
 		if (!Number.isFinite(then)) return abs;
-		const s = Math.max(0, Math.floor((Date.now() - then) / 1000));
 		const t = $_ as (k: string, o?: { values: Record<string, unknown> }) => string;
-		let rel: string;
-		if (s < 60) rel = t('relative_time.descriptive.just_now');
-		else if (s < 3600) rel = t('relative_time.descriptive.minutes', { values: { n: Math.floor(s / 60) } });
-		else if (s < 86400) rel = t('relative_time.descriptive.hours', { values: { n: Math.floor(s / 3600) } });
-		else if (s < 2592000) rel = t('relative_time.descriptive.days', { values: { n: Math.floor(s / 86400) } });
-		else if (s < 31104000)
-			rel = t('relative_time.descriptive.months', { values: { n: Math.floor(s / 2592000) } });
-		else rel = t('relative_time.descriptive.years', { values: { n: Math.floor(s / 31104000) } });
+		const { unit, n } = relativeAge(then, Date.now());
+		const rel =
+			unit === 'lt1m'
+				? t('relative_time.descriptive.just_now')
+				: t(`relative_time.descriptive.${unit}`, { values: { n } });
 		return `${abs} · ${rel}`;
 	}
 
@@ -664,28 +659,116 @@
 		}
 		feedbackGivenChecked = true;
 	}
+	/** v1.21.17 — what the instance did with my review of each settled trade
+	 *  the indexer's list does not have (sentReviews.ts): one watcher per such
+	 *  card, keyed like feedbackGivenMap. A refused review no longer turns back
+	 *  into "Leave feedback" on the next reload. */
+	let reviewVerdicts = $state<Record<string, SentReviewVerdict>>({});
+	/** Live watchers, by card and sent transaction. Kept across the inbox's
+	 *  5 s refreshes: re-subscribing on each would ask the instance about
+	 *  every card every 5 s. */
+	const reviewWatches = new Map<string, () => void>();
+	$effect(() => {
+		if (!me || !feedbackGivenChecked) return;
+		void $sentReviewsTick;
+		const wanted = new Map<string, { key: string; ref: ReviewRef }>();
+		for (const convo of conversations) {
+			const permlink = convo.order?.permlink;
+			if (!permlink) continue;
+			const key = `${convo.peer}\u0000${permlink}`;
+			if (feedbackGivenMap.has(key)) continue;
+			if (!inboxTradeSettled($tradeStates, convo)) continue;
+			const ref = reviewRefOf(me, convo.peer, permlink, sentReviewFor(me, convo.peer, permlink));
+			wanted.set(`${key}\u0000${ref.trx_id ?? ''}`, { key, ref });
+		}
+		for (const [watchKey, stop] of reviewWatches) {
+			if (!wanted.has(watchKey)) {
+				stop();
+				reviewWatches.delete(watchKey);
+			}
+		}
+		for (const [watchKey, w] of wanted) {
+			if (reviewWatches.has(watchKey)) continue;
+			reviewWatches.set(
+				watchKey,
+				watchSentReview(w.ref).subscribe((v) => (reviewVerdicts[w.key] = v))
+			);
+		}
+	});
+	onDestroy(() => {
+		for (const stop of reviewWatches.values()) stop();
+		reviewWatches.clear();
+	});
+
 	/** Per-card feedback state: can the current user review this peer for this
 	 *  order (settled trade, not yet reviewed, unlocked), and/or have they
-	 *  already (→ show the rating). */
+	 *  already (→ show the rating, and whether it did not count). */
 	function feedbackStateFor(convo: ConversationSummary): {
 		canLeave: boolean;
 		record: FeedbackRecord | null;
+		/** My review of this trade did not count: not yet, or at all. */
+		notCounted: 'later' | 'refused' | null;
 	} {
 		const permlink = convo.order?.permlink;
-		if (!permlink) return { canLeave: false, record: null };
+		if (!permlink) return { canLeave: false, record: null, notCounted: null };
 		// prefer the durable indexer record, but fall back to an
 		// optimistic one the chatroom recorded the instant feedback was broadcast,
 		// so this card shows the ★ stars immediately instead of a stale "Leave
 		// feedback" until the next /feedback-given poll. Reading the tick re-runs
 		// this the moment a feedback lands.
 		void $optimisticFeedbackTick;
-		const durable = feedbackGivenMap.get(`${convo.peer}\u0000${permlink}`) ?? null;
-		const record = durable ?? getOptimisticFeedbackGiven(convo.peer, permlink);
+		void $sentReviewsTick;
+		const key = `${convo.peer}\u0000${permlink}`;
+		const durable = feedbackGivenMap.get(key) ?? null;
+		// v1.21.17 — then what this device sent (kept across reloads), then
+		// what the chain says was sent (a refused review is in no list).
+		const verdict = durable === null ? (reviewVerdicts[key] ?? { kind: 'checking' }) : null;
+		const sent = me ? sentReviewFor(me, convo.peer, permlink) : null;
+		const fromChain =
+			me &&
+			verdict !== null &&
+			(verdict.kind === 'later' ||
+				verdict.kind === 'refused' ||
+				verdict.kind === 'resend' ||
+				verdict.kind === 'needs_transfer') &&
+			verdict.sent !== null
+				? sentReviewAsRecord({
+						reviewer: me,
+						subject: convo.peer,
+						order_permlink: permlink,
+						rating: verdict.sent.rating,
+						comment: verdict.sent.comment,
+						trx_id: '',
+						sent_at: ''
+					})
+				: null;
+		const record =
+			durable ??
+			getOptimisticFeedbackGiven(convo.peer, permlink) ??
+			(sent ? sentReviewAsRecord(sent) : null) ??
+			fromChain;
 		// The trade with THIS card's peer (inboxTradeSettled).
 		const settled = inboxTradeSettled($tradeStates, convo);
+		const wanted =
+			verdict === null
+				? false
+				: verdict.kind === 'resend' || (verdict.kind === 'pending' && record === null);
 		const canLeave =
-			settled && record === null && feedbackGivenChecked && $isUnlocked && !$isPairedReadOnly;
-		return { canLeave, record };
+			settled && wanted && feedbackGivenChecked && $isUnlocked && !$isPairedReadOnly;
+		// A review that may be sent again ('resend') has not counted either: when
+		// the prompt cannot show (locked, paired read-only), its stars must not
+		// pass for counted ones.
+		const notCounted =
+			verdict === null
+				? null
+				: verdict.kind === 'later' ||
+					  verdict.kind === 'resend' ||
+					  verdict.kind === 'needs_transfer'
+					? 'later'
+					: verdict.kind === 'refused'
+						? 'refused'
+						: null;
+		return { canLeave, record: canLeave ? null : record, notCounted };
 	}
 
 	// The inbox reads (conversations, blocks, feedback, the 5 s poll) start
@@ -1043,11 +1126,13 @@
 											showCopy={false}
 										/>
 									</div>
-									<!-- "RE:" line — ALWAYS present. Bound to the order
-									     ("RE: <title> (Live|Cancelled|Expired)") or "RE: -". Inside the
-									     text block, so it lines up under the name with no manual indent. -->
+									<!-- The order line — ALWAYS present: "<title> (Live|Paid|…)", or "Not
+									     about an order". v1.21.17: no "RE:" in front; the sentence says
+									     whose order it is, from this reader's side — her own: "Regarding my
+									     buy order of …"; the other person's, under that person's name: "Who
+									     is buying …". Inside the text block, so it lines up under the name
+									     with no manual indent. -->
 									<div class="flex min-w-0 items-baseline gap-1 text-xs text-ink-500 dark:text-ink-400">
-										<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
 										{#if convo.pending}
 										<!-- optimistic placeholder card: the message just
 										     arrived via the fast push, so the thread exists but the order's
@@ -1057,16 +1142,13 @@
 										     permlink we have; the conversation view streams the message). -->
 											<span class="min-w-0 truncate" aria-hidden="true">…</span>
 										{:else if convo.order}
-											<!-- v1.21.16: read from this side — my own order in the first
-											     person ("I'm buying …"), the peer's as "Buying …", the same
-											     voice as the conversation's own "Regarding …" line. -->
 											{@const parts = orderTitleParts(
 												convo.order,
 												undefined,
-												$_('order_title.goods_services'),
+												convo.order.specific_barter_title || ($_('order_title.goods_services') as string),
 												{
 													locale: currentLang,
-													voice: chatOrderHeading(convo.order.account === me, convo.order.account).voice
+													voice: inboxOrderVoice(convo.order.account === me)
 												}
 											)}
 											{@const orderTitle = $_(parts.key, { values: parts.values }) as string}
@@ -1078,7 +1160,7 @@
 												<span class="flex-none">({orderStatusLabel(convo.order)})</span>
 											{/if}
 										{:else}
-											<span class="min-w-0 truncate">-</span>
+											<span class="min-w-0 truncate">{$_('chat.inbox.no_order')}</span>
 										{/if}
 									</div>
 									{#if fb.canLeave}
@@ -1116,6 +1198,17 @@
 												>{$_('profile.given_rated', { values: { account: convo.peer } })}
 												{fb.record.rating}/5</span
 											>
+											{#if fb.notCounted}
+												<!-- v1.21.17 — the stars of a review the indexers did
+												     not take must not pass for a counted one. -->
+												<span
+													class="flex-none font-semibold text-amber-700 dark:text-amber-400"
+													data-testid="inbox-review-not-counted"
+													>{fb.notCounted === 'later'
+														? $_('chat.inbox.review_not_counted_yet')
+														: $_('chat.inbox.review_not_counted')}</span
+												>
+											{/if}
 											{#if fb.record.comment}
 												<span dir="auto" class="min-w-0 truncate text-ink-500 dark:text-ink-400"
 													>{fb.record.comment}</span

@@ -86,7 +86,35 @@ export async function readExplorerText(
 	return parts.join('');
 }
 
+/** Context keys a PRIVATE lookup may log: which explorer, and the HTTP status
+ *  it answered. A listing fee's txid and tx key are public in its order op, so
+ *  the fee path logs the txid; a trade payment's are not (they travel only in
+ *  an encrypted chat), so a verifier built for the payment check
+ *  (fee/paymentCheck.ts) logs nothing else. */
+const PRIVATE_LOG_KEYS: ReadonlySet<string> = new Set(['explorer', 'status']);
+
+/** A warning's context reduced for a private lookup: only PRIVATE_LOG_KEYS,
+ *  and of an error only its name — a fetch error's message or stack can quote
+ *  the request URL, which carries the txid, the address and (XMR) the tx key. */
+export function privateLogContext(
+	ctx: Record<string, unknown>,
+	err?: unknown
+): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const [k, v] of Object.entries(ctx)) if (PRIVATE_LOG_KEYS.has(k)) out[k] = v;
+	if (err !== undefined) out.error = err instanceof Error ? err.name : typeof err;
+	return out;
+}
+
 /** The body parsed as JSON, under the same cap. Throws on either failure. */
 export async function readExplorerJson(res: Response, ac?: AbortController): Promise<unknown> {
 	return JSON.parse(await readExplorerText(res, ac)) as unknown;
+}
+
+/** A block time (unix seconds) an explorer gives, or null when it is not a
+ *  plausible one: a positive whole number that a Date can hold. */
+export function blockTimeOf(t: unknown): number | null {
+	return typeof t === 'number' && Number.isSafeInteger(t) && t > 0 && t <= 253_402_300_799
+		? t
+		: null;
 }

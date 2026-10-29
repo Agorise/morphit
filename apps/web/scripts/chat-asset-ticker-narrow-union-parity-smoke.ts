@@ -41,6 +41,15 @@ const CANONICAL = new Set([
 // present in the line, the union is allow-listed.
 const NARROW_BY_DESIGN: Array<{ pattern: string; reason: string }> = [
 	{
+		pattern: "readonly asset: 'btc' | 'xmr';",
+		reason:
+			'v1.21.17 payment check (/v1/payment-check, PaymentCheckInput/Response) — the coins the instance checks against block explorers: BTC and XMR only'
+	},
+	{
+		pattern: "q: { asset: 'btc' | 'xmr';",
+		reason: 'v1.21.17 getPaymentCheck query — BTC and XMR only, as /v1/payment-check'
+	},
+	{
 		pattern: "'usdt' | 'usdc' | 'dai'",
 		reason:
 			'OrderCard networkChip tone (cp404) — only the 3 multi-network stablecoins get a network-chip tone; this is a chip-tone enum, NOT a ChatAssetTicker'

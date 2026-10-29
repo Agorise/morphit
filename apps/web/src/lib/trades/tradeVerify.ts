@@ -109,9 +109,13 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 	const counterparty = args.direction === 'incoming' ? args.sender : args.recipient;
 	const trade = getTradeState(args.orderOwner, args.orderPermlink);
 	if (trade === null || trade.engagedPeer !== counterparty) return;
-	// The seller's ask, not the claim.
-	const expectedMemo = trade.expectedMemo ?? args.echoedMemo;
-	const asked = trade.expectedAmount;
+	// The seller's ask, not the claim — when the ask on record is a BLURT one.
+	// In a crypto-for-crypto trade the other side's address of another coin
+	// (shared later, for the other leg) replaces the record; its amount and
+	// memo are not this BLURT payment's (v1.21.17).
+	const blurtAsk = (trade.askMethod ?? trade.method) === 'blurt';
+	const expectedMemo = (blurtAsk ? trade.expectedMemo : undefined) ?? args.echoedMemo;
+	const asked = blurtAsk ? trade.expectedAmount : undefined;
 	const amountConfirmed = typeof asked === 'number' && Number.isFinite(asked) && asked > 0;
 	const expectedAmount = amountConfirmed ? asked : args.amountBlurt;
 

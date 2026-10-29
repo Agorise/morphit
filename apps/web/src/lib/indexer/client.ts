@@ -45,7 +45,9 @@ import type {
 	RpcEndpointsResponse,
 	StrangerFeeQuoteResponse,
 	ErrorResponse,
-	ErrorCode
+	ErrorCode,
+	FeedbackStatusQuery,
+	FeedbackStatusResponse
 } from '@morphit/indexer-client';
 
 /**
@@ -412,6 +414,51 @@ export async function getAccountOrderPages(
 	return { items, complete: false };
 }
 
+/** GET /v1/accounts/:account/trades — the account's completed trades on both
+ *  sides: orders it posted that were completed, and other people's orders
+ *  completed naming it as the counterparty (v1.21.17). Newest first. An older
+ *  instance answers 404/400 (the route is new): callers fall back. */
+export function getAccountTrades(
+	account: string,
+	signal?: AbortSignal
+): Promise<Result<{ items: OrderRecord[] }>> {
+	return request<{ items: OrderRecord[] }>(`/v1/accounts/${encodeURIComponent(account)}/trades`, {
+		signal,
+		query: new URLSearchParams({ limit: '100' })
+	});
+}
+
+/** GET /v1/payment-check — does this BTC/XMR transaction pay this address,
+ *  how much, and how far has it confirmed (v1.21.17)? Asked of this instance,
+ *  which asks block explorers (Tor/I2P only on a hidden-only instance). */
+export interface PaymentCheckResponse {
+	readonly asset: 'btc' | 'xmr';
+	readonly txid: string;
+	readonly status: 'found' | 'not_found' | 'unavailable';
+	/** Coin units paid to the address by this transaction (decimal string). */
+	readonly amount: string | null;
+	/** 0 = in the mempool. */
+	readonly confirmations: number | null;
+	readonly required_confirmations: number;
+	readonly checked_at: string;
+	/** v1.21.17 — time of the block holding the transaction; null when no
+	 *  explorer gives one, or when their times disagree (`tx_time_disputed`).
+	 *  Both absent from an older instance. */
+	readonly tx_time?: string | null;
+	/** v1.21.17 — the explorers' times for it cannot both be true: the payment
+	 *  cannot be dated, so it cannot be checked here (the seller's own call). */
+	readonly tx_time_disputed?: true;
+}
+
+export function getPaymentCheck(
+	q: { asset: 'btc' | 'xmr'; txid: string; address: string; txKey?: string },
+	signal?: AbortSignal
+): Promise<Result<PaymentCheckResponse>> {
+	const query = new URLSearchParams({ asset: q.asset, txid: q.txid, address: q.address });
+	if (q.txKey) query.set('tx_key', q.txKey);
+	return request<PaymentCheckResponse>('/v1/payment-check', { signal, query, cache: 'no-store' });
+}
+
 /** GET /v1/orders/:account/:permlink — one order, whatever its age (404
  *  `not_found` when this instance has none, or hides its owner). Use this,
  *  not a search of getOrdersByAccount, which returns only the newest page. */
@@ -618,6 +665,27 @@ export function getOrderCounterparties(
 		`/v1/orders/${encodeURIComponent(owner)}/${encodeURIComponent(permlink)}/counterparties${qs}`,
 		{ signal: opts.signal }
 	);
+}
+
+/**
+ * GET /v1/feedback/status — what the indexer did with one review: `indexed`,
+ * `refused` (with the refusal's slug) or `unknown` (not seen yet). Lets the
+ * review form tell a reviewer their review was refused instead of leaving them
+ * waiting for it to appear.
+ */
+export function getFeedbackStatus(
+	q: FeedbackStatusQuery,
+	signal?: AbortSignal
+): Promise<Result<FeedbackStatusResponse>> {
+	const params = new URLSearchParams();
+	params.set('reviewer', q.reviewer);
+	params.set('subject', q.subject);
+	if (q.order_permlink !== undefined) params.set('order_permlink', q.order_permlink);
+	return request<FeedbackStatusResponse>('/v1/feedback/status', {
+		signal,
+		query: params,
+		cache: 'no-store'
+	});
 }
 
 /**

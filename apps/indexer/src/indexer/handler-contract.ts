@@ -200,8 +200,9 @@ export interface OpContext {
 /** Return `{ ok: true }` to apply state changes. Return `{ ok: false,
  *  reason }` to reject this op and lodge the reason in the event log.
  *  The `reason` field is a stable machine-readable slug (no spaces,
- *  lowercase) — the HTTP API never surfaces it, but operators grepping
- *  the event log will rely on these slugs. */
+ *  lowercase): operators grepping the event log rely on these slugs, and
+ *  GET /v1/feedback/status serves a review's (api/feedbackStatus.ts), so
+ *  the web UI can tell a reviewer why a review was refused. */
 export type HandlerResult = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 /** The handler function signature. */

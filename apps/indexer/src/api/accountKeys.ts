@@ -32,6 +32,8 @@
 
 import { Hono } from 'hono';
 
+import { DEFAULT_USER_FACING_TIMEOUT_MS } from '@morphit/rpc-pool';
+
 import type { BlurtClient, ChainAccount } from '$blurt/client';
 import { primaryPostingKey } from '$indexer/postingKeyBackfill';
 import { errorBody, isAccountName } from '$api/shared';
@@ -67,6 +69,24 @@ function authoritiesKey(acc: ChainAccount | undefined): string {
 	return JSON.stringify([auth(acc.owner), auth(acc.active), auth(acc.posting), acc.memo_key ?? null]);
 }
 
+/** A person is waiting on this answer, and the browser gives up on it after
+ *  15 s on clearnet (web ACCOUNT_KEYS_TIMEOUT_MS) or 75 s over Tor/I2P/Lokinet
+ *  (web CHAIN_VIA_INDEXER_HIDDEN_MS). The trusted read used to run at
+ *  background priority — 10 s per node, 60 s for a hidden one, three operators
+ *  heard in full — so one slow node made it outlast the browser, which then
+ *  reported "indexer /v1/account/:name/keys timed out" while posting an order.
+ *  It now ends in time to answer, with a 502 the browser can retry when it
+ *  could not decide. */
+export const ACCOUNT_KEYS_DEADLINE_CLEARNET_MS = 11_000;
+export const ACCOUNT_KEYS_DEADLINE_HIDDEN_MS = 60_000;
+
+/** The page reached this instance over a hidden network (the browser's budget
+ *  is then the long one). Same suffixes as web isHiddenHostname. */
+export function hiddenRequestHost(host: string | undefined): boolean {
+	const h = (host ?? '').toLowerCase().replace(/:\d+$/, '');
+	return h.endsWith('.onion') || h.endsWith('.i2p') || h.endsWith('.loki');
+}
+
 export function accountKeysRoute(
 	blurt: BlurtClient,
 	opts: {
@@ -91,10 +111,23 @@ export function accountKeysRoute(
 		// read the fast path already uses for keys: two operators agreeing on
 		// every authority and the memo key, a majority of those that answered.
 		let agreed: ReadonlyMap<string, ChainAccount> | null;
+		const deadline = new AbortController();
+		const timer = setTimeout(
+			() => deadline.abort(),
+			hiddenRequestHost(c.req.header('host'))
+				? ACCOUNT_KEYS_DEADLINE_HIDDEN_MS
+				: ACCOUNT_KEYS_DEADLINE_CLEARNET_MS
+		);
 		try {
-			agreed = await blurt.getAccountsAgreed([account], authoritiesKey);
+			agreed = await blurt.getAccountsAgreed([account], authoritiesKey, {
+				timeoutMs: DEFAULT_USER_FACING_TIMEOUT_MS,
+				userFacing: true,
+				signal: deadline.signal
+			});
 		} catch {
 			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
+		} finally {
+			clearTimeout(timer);
 		}
 		if (agreed === null) {
 			return c.json(errorBody('internal', 'Blurt RPC operators did not agree on this account yet'), 502);

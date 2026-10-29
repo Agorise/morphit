@@ -329,6 +329,11 @@ export interface OrderRecord {
 	readonly profile_json_metadata?: unknown;
 	readonly created_at: string;
 	readonly updated_at: string;
+	/** v1.21.17: on a completed order, when it was completed (the completion
+	 *  op's block time). updated_at is not that time: a fee re-check, an
+	 *  attestation or the partner named later moves it. Absent on any other
+	 *  order, and from an older indexer. */
+	readonly completed_at?: string;
 	readonly expires_at: string | null;
 }
 
@@ -863,6 +868,49 @@ export interface AccountFeedbackGivenResponse {
 	readonly next_cursor: string | null;
 }
 
+/** Query of GET /v1/feedback/status: one review, named as its op names it.
+ *  `order_permlink` omitted = a review that cites no order. */
+export interface FeedbackStatusQuery {
+	readonly reviewer: string;
+	readonly subject: string;
+	readonly order_permlink?: string;
+}
+
+/** Response from GET /v1/feedback/status — what this indexer did with a
+ *  review, from its own event log:
+ *   - `indexed`: applied (wins over a later re-send refused as a duplicate);
+ *   - `refused`: every such review was refused; `reason` is the newest one's
+ *     stable slug, e.g. `order_permlink_not_found_or_unverified` (the cited
+ *     order is not a valid citation for this pair) or
+ *     `no_verified_counterparty` (no substantiated conversation);
+ *   - `unknown`: not seen — not broadcast, or in a block this indexer has not
+ *     applied yet. */
+export interface FeedbackStatusResponse {
+	readonly state: 'indexed' | 'refused' | 'unknown';
+	readonly reason?: string;
+	/** Block time (ISO 8601) and transaction of the op the state comes from;
+	 *  absent for `unknown`. */
+	readonly block_time?: string;
+	readonly trx_id?: string;
+	/** `refused` only: the consensus activation time (ISO 8601), present when
+	 *  the review was refused before it and only for that — it cites a
+	 *  first-buy waiver order whose trade with this pair is now proven (a
+	 *  transfer from the activation time on), and the pair still has its
+	 *  conversation — so sending it again makes it count. */
+	readonly resend_from?: string;
+	/** `refused` only: the refused review's rating (1..5) and comment (`null`
+	 *  when it had none), each present only when well-formed, so the form can
+	 *  be filled in again. */
+	readonly rating?: number;
+	readonly comment?: string | null;
+	/** `refused` only: the review cites a first-buy waiver order completed
+	 *  naming this pair and everything else is in place, but the partner
+	 *  (`from`) has not yet sent the order's owner (`to`) at least 50.000 BLURT
+	 *  in one transfer from the consensus activation time on. Once they do, the
+	 *  review can be sent again. Never together with `resend_from`. */
+	readonly waiting_for_transfer?: { readonly from: string; readonly to: string };
+}
+
 // ─── Release discovery ─────────────────────────────────────────────
 
 export interface ReleaseResponse {
@@ -1094,6 +1142,14 @@ export interface ConversationOrderRef {
 	 *  "RE: <title>" subline, so a conversation about a dead order says so
 	 *  without the user having to open it. */
 	readonly status: string;
+	/** v1.21.17: what the order settles in — its payment-method ids (crypto
+	 *  orders: `pay_xmr`, `paypal` …) and, for a barter order, the accepted
+	 *  coins and its own title — so the inbox subject is the full sentence.
+	 *  Optional because an indexer older than v1.21.17 does not send them
+	 *  (the web app talks to its own instance, which ships with it). */
+	readonly payment_methods?: readonly string[];
+	readonly accepted_assets?: readonly string[] | null;
+	readonly specific_barter_title?: string | null;
 }
 
 /** One peer the account has a chat history with. */
@@ -1300,6 +1356,71 @@ export interface StrangerFeeQuoteResponse {
 	/** The ceiling itself, for context. */
 	readonly max_multiplier: number;
 }
+
+// ─── Trade payment check ───────────────────────────────────────────
+// GET /v1/payment-check?asset=btc|xmr&txid=<64 hex>&address=<addr>
+//   [&tx_key=<64×n hex, n = 1..17>, XMR only and required there]
+// The seller's screen in a crypto-for-crypto trade polls this to see
+// whether the buyer's BTC / XMR payment reached the address shared in
+// the chat, and how deep it is. 400 on a malformed query, 429 past the
+// `payment-check` rate-limit tier. Answers are display-only.
+
+export type PaymentCheckAsset = 'btc' | 'xmr';
+
+/** The query, as sent. `tx_key` only for XMR: the transaction key the
+ *  wallet shows for the sent transaction, as shown — the main key, or the
+ *  main key followed by one additional key per output (64 hex each) when
+ *  the transaction has additional keys. Surrounding whitespace is
+ *  ignored. */
+export interface PaymentCheckQuery {
+	readonly asset: PaymentCheckAsset;
+	readonly txid: string;
+	readonly address: string;
+	readonly tx_key?: string;
+}
+
+interface PaymentCheckCommon {
+	readonly asset: PaymentCheckAsset;
+	/** The txid asked about, lowercase. */
+	readonly txid: string;
+	/** Depth at which the payment counts as confirmed: 3. */
+	readonly required_confirmations: number;
+	/** When the explorers gave this answer (ISO). It can be older than
+	 *  the request: a recent answer is reused, and kept while a re-check
+	 *  gets no answer. */
+	readonly checked_at: string;
+}
+
+/** 200 body, discriminated by `status`:
+ *   - `found`: the explorers agree the transaction exists. `amount` is
+ *     what it pays to the address, in coin units as a decimal string
+ *     ("0" when nothing goes there: a wrong address, an XMR key that
+ *     proves nothing, or a BTC transaction that spends from the address —
+ *     its owner's own spend, whose change is no payment); `confirmations`
+ *     is a lower bound, 0 = mempool; `tx_time` (v1.21.17) is the ISO time
+ *     of the block holding the transaction, the earliest the agreeing
+ *     explorers give when their times agree — null when none of them puts it
+ *     in a block with a time (treat null as "not known yet"), or when their
+ *     times cannot both be true, which `tx_time_disputed: true` says (the
+ *     payment cannot be dated here); both absent from an older instance;
+ *   - `not_found`: enough explorers positively said "no such
+ *     transaction" (for XMR also: the key was refused);
+ *   - `unavailable`: no agreed answer yet (explorers down, disagreeing,
+ *     or still being asked) — ask again. */
+export type PaymentCheckResponse =
+	| (PaymentCheckCommon & {
+			readonly status: 'found';
+			readonly amount: string;
+			readonly confirmations: number;
+			readonly tx_time?: string | null;
+			readonly tx_time_disputed?: true;
+	  })
+	| (PaymentCheckCommon & {
+			readonly status: 'not_found' | 'unavailable';
+			readonly amount: null;
+			readonly confirmations: null;
+			readonly tx_time?: null;
+	  });
 
 // ─── Error envelope ────────────────────────────────────────────────
 // Every non-2xx response from the indexer returns this shape.

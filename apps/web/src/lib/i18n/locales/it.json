@@ -422,7 +422,7 @@
 			"mark_all_read": "Segna tutto come letto",
 			"conversation_aria_unread": "Conversazione con {peer} — non letta",
 			"conversation_aria_read": "Conversazione con {peer}",
-			"re_prefix": "RE:",
+			"no_order": "Senza ordine collegato",
 			"tabs_aria": "Schede della casella",
 			"tab_inbox": "In arrivo",
 			"tab_starred": "Speciali",
@@ -437,7 +437,9 @@
 			"restore_toast": "Riportato nella posta in arrivo.",
 			"tab_empty_inbox": "Non c'è niente qui: le tue conversazioni sono contrassegnate o archiviate.",
 			"tab_empty_starred": "Nessuna conversazione contrassegnata. Tocca la stella di una conversazione per tenerla qui.",
-			"tab_empty_archived": "Nessuna conversazione archiviata."
+			"tab_empty_archived": "Nessuna conversazione archiviata.",
+			"review_not_counted_yet": "Non conta ancora",
+			"review_not_counted": "Non conteggiata"
 		},
 		"block": {
 			"busy": "In corso…",
@@ -614,7 +616,9 @@
 			"pill_method_xrp": "Ripple (XRP)",
 			"blurt_account_not_found": "Non esiste alcun account Blurt con quel nome.",
 			"asset_label": "Moneta",
-			"too_long_to_send": "È troppo lungo per un solo messaggio di chat. Accorcia la nota o il link PayJoin e riprova."
+			"too_long_to_send": "È troppo lungo per un solo messaggio di chat. Accorcia la nota o il link PayJoin e riprova.",
+			"amount_label_required": "Importo che chiedi",
+			"reuse_blocked_body": "Per essere pagato per questo scambio, condividi un indirizzo che non hai mai condiviso: un pagamento a un indirizzo riutilizzato non si distingue da uno precedente. Crea un nuovo indirizzo (o sottoindirizzo) nel tuo wallet."
 		},
 		"funds_sent": {
 			"button": "Paga ora",
@@ -658,6 +662,7 @@
 			"self_verify_wrong_op": "La transazione non contiene un trasferimento al destinatario previsto.",
 			"view_on_explorer": "Vedi sull'explorer",
 			"send_failed": "Non siamo riusciti a inviare la ricevuta di invio fondi. Riprova.",
+			"too_long_to_send": "È troppo lungo per un solo messaggio di chat. Accorcia la nota. Se a renderlo lungo è la chiave di transazione Monero, lasciala fuori: il venditore potrà controllare il pagamento nel proprio portafoglio.",
 			"txid_invalid_usdt": "Questo ID di transazione non corrisponde alla rete USDT scelta. Controlla la rete prima di inviare.",
 			"network_pinned_hint": "Il venditore ha specificato questa rete quando ha condiviso il suo indirizzo. Non puoi cambiarla qui.",
 			"pill_title_usdt": "USDT inviato",
@@ -679,7 +684,11 @@
 			"receipt_title": "Ricevuta di pagamento",
 			"receipt_when": "il {when}",
 			"verify_received_of": "Ricevuti {received} su {asked} BLURT.",
-			"verify_received_unasked": "Ricevuti {received} BLURT sulla catena (non era stato chiesto alcun importo)"
+			"verify_received_unasked": "Ricevuti {received} BLURT sulla catena (non era stato chiesto alcun importo)",
+			"tx_key_label": "Chiave della transazione (tx key)",
+			"tx_key_placeholder": "64 o più lettere e cifre",
+			"tx_key_help": "Il tuo wallet Monero la mostra per ogni pagamento che invii. Con essa, @{peer} vede arrivare il tuo pagamento. Prova solo questo pagamento e non può servire a spendere nulla.",
+			"tx_key_invalid": "Non sembra una chiave di transazione Monero."
 		},
 		"unknown_version": "Questo messaggio usa un protocollo più recente. Aggiorna Morphit per leggerlo.",
 		"pay_blurt": {
@@ -804,7 +813,11 @@
 		"day_separator_tooltip": "Mezzanotte, UTC",
 		"feedback": {
 			"leave_prompt": "Lascia recensione",
-			"sent_toast": "Recensione inviata"
+			"sent_toast": "Recensione inviata",
+			"not_counted_later": "La tua recensione per @{peer} non conta ancora: le recensioni di un primo scambio contano dal {date}. Allora ti verrà chiesto qui di inviarla di nuovo.",
+			"not_counted": "La tua recensione per @{peer} non è stata conteggiata: gli indicizzatori non l'hanno accettata.",
+			"resend_now": "La tua recensione precedente per @{peer} non è stata conteggiata, ma ora lo sarebbe: inviala di nuovo.",
+			"not_counted_needs_transfer": "La tua recensione per @{peer} non conta ancora. La recensione di un primo scambio conta quando @{from} ha inviato a @{to} almeno 50 BLURT in un unico trasferimento dal {date}; allora ti verrà chiesto qui di inviarla di nuovo."
 		},
 		"system": {
 			"order_settled_elsewhere": "Grazie per l'interesse dimostrato per questo ordine. Ho ormai completato questo scambio con un altro commerciante, quindi non è più disponibile. Mi dispiace che non sia andata a buon fine questa volta — apprezzo molto il tuo interesse e spero che potremo commerciare in futuro."
@@ -813,6 +826,35 @@
 		"history": {
 			"loading_older": "Caricamento dei messaggi precedenti…",
 			"load_failed": "Impossibile caricare i messaggi precedenti."
+		},
+		"legs": {
+			"waiting_payment": "In attesa che @{peer} ti paghi in {coins}. Non inviare nulla finché il pagamento non compare qui.",
+			"waiting_address": "In attesa che @{peer} indichi dove pagare.",
+			"checking_payment": "Verifica del pagamento di @{peer}…",
+			"payment_short": "Il pagamento di @{peer} non corrisponde a quanto richiesto: vedi la ricevuta qui sopra. Non inviare nulla a meno che il tuo wallet mostri il pagamento giusto.",
+			"send_unchecked": "Non è stato possibile verificare qui il pagamento di @{peer}. Assicurati che sia nel tuo wallet prima di inviare qualsiasi cosa.",
+			"wallet_confirm": "Lo vedo nel mio wallet",
+			"check_wallet": "Il pagamento di @{peer} non è stato confermato qui. Cercalo nel tuo wallet e controlla l'importo prima di inviare qualsiasi cosa.",
+			"payment_no_address": "@{peer} ha registrato un pagamento in una moneta per cui non hai condiviso un indirizzo in questa chat. Condividi l'indirizzo su cui vuoi essere pagato e per ora non inviare nulla.",
+			"amount_confirm": "L'importo è giusto",
+			"check_amount": "Il pagamento di @{peer} è arrivato, ma qui non è stato chiesto alcun importo. Controlla che sia l'importo concordato prima di inviare qualsiasi cosa.",
+			"payment_reused": "@{peer} ha indicato un pagamento già registrato per un altro ordine: non è un pagamento per questo. Non inviare nulla.",
+			"unconfirmed_btc": "Non ancora confermato: finché non lo è, un pagamento in Bitcoin può ancora essere sostituito. Aspettare una conferma è più sicuro.",
+			"ask_blurt": "Chiedi BLURT",
+			"ask_blurt_aria": "Indica a @{peer} quale account Blurt pagare e quanti BLURT",
+			"payment_old": "Il pagamento di @{peer} è stato fatto prima che condividessi questo indirizzo: è un pagamento precedente di qualcun altro, non di questo scambio. Non inviare nulla.",
+			"waiting_asset_address": "Il pagamento di @{peer} è arrivato. In attesa che @{peer} condivida un indirizzo {asset} a cui inviare."
+		},
+		"payment_check": {
+			"checking": "Verifica di questo pagamento…",
+			"not_found": "Non ancora visibile sulla rete {coin}. Nuovo controllo a breve.",
+			"no_key": "Non è stata fornita la chiave della transazione, quindi questo pagamento Monero non può essere verificato qui. Controlla nel tuo wallet.",
+			"unavailable": "Al momento questo pagamento non può essere verificato. Controlla nel tuo wallet.",
+			"wrong_address": "Questo pagamento non è arrivato all'indirizzo {coin} condiviso in questa chat.",
+			"short": "Sono arrivati solo {amount} {coin} all'indirizzo condiviso: meno di quanto richiesto.",
+			"seen": "{amount} {coin} ricevuti · {n}/{required} conferme",
+			"confirmed": "{amount} {coin} ricevuti · confermato",
+			"old": "Questo pagamento in {coin} è stato fatto prima che l'indirizzo fosse condiviso in questa chat: non è un pagamento per questo scambio."
 		}
 	},
 	"cheat_sheet": {
@@ -880,7 +922,6 @@
 		"chart_aria": "Grafico giornaliero del prezzo di equilibrio negli ultimi {days} giorni",
 		"legend": "Altezza barra = prezzo di equilibrio (BLURT/ora). Verde pieno = tutti gli slot occupati (asta competitiva). Verde sbiadito = alcuni slot occupati. Grigio = nessuna offerta quel giorno.",
 		"no_history_yet": "Nessuna offerta per slot in evidenza negli ultimi {days} giorni. Sii il primo.",
-		"no_history_yet_active": "Ancora nessuno storico prezzi degli slot in evidenza per gli ultimi {days} giorni.",
 		"bar_title": "{day}: {rate} BLURT/h · {filled}/{max} posti occupati"
 	},
 	"common": {
@@ -1474,7 +1515,7 @@
 			},
 			"xmr_txid": {
 				"q": "Cos'è un TxID Monero e dove lo trovo?",
-				"a": "Un ID transazione Monero (TxID, a volte chiamato *hash*) è un codice di 64 caratteri, fatto di 0–9 e a–f, che identifica un pagamento Monero. Per trovarlo, apri il pagamento nella cronologia del tuo wallet: il TxID è il codice lungo nei suoi dettagli, di solito con un pulsante per copiarlo.\n\n**Quando {brand} lo chiede:** quando dici al tuo partner di scambio che hai pagato in Monero (il pulsante **Invia XMR** nella chat), e quando paghi una commissione di pubblicazione in XMR (se questo sito accetta commissioni in XMR). Per una commissione, incolli il TxID insieme alla chiave di transazione del pagamento, così ogni sito Morphit può verificarla — vedi «Che cos'è la chiave della transazione Monero e perché {brand} la chiede?».\n\n**Privacy:** un TxID è comunque pubblico — chiunque può cercarlo su un block explorer — e non mostra chi sei né il tuo saldo. Ma viene salvato con il tuo annuncio sulla catena Blurt, il che collega quel pagamento di commissione al tuo account. Il pagamento del tuo scambio, invece, va da persona a persona, fuori da Blurt. Se condividi il suo TxID nella chat, viaggia nella tua chat cifrata, che solo tu e il tuo partner potete leggere. Per non avere alcun collegamento con Monero, paga la commissione in BLURT: è l'opzione predefinita e costa la metà."
+				"a": "Un ID transazione Monero (TxID, a volte chiamato *hash*) è un codice di 64 caratteri, fatto di 0–9 e a–f, che identifica un pagamento Monero. Per trovarlo, apri il pagamento nella cronologia del tuo wallet: il TxID è il codice lungo nei suoi dettagli, di solito con un pulsante per copiarlo.\n\n**Quando {brand} lo chiede:** quando dici al tuo partner di scambio che hai pagato in Monero (il pulsante **Invia XMR** nella chat), e quando paghi una commissione di pubblicazione in XMR (se questo sito accetta commissioni in XMR). Per una commissione, incolli il TxID insieme alla chiave di transazione del pagamento, così ogni sito Morphit può verificarla — vedi «Che cos'è la chiave della transazione Monero e perché {brand} la chiede?».\n\n**Privacy:** un TxID è comunque pubblico — chiunque può cercarlo su un block explorer — e non mostra chi sei né il tuo saldo. Ma viene salvato con il tuo annuncio sulla catena Blurt, il che collega quel pagamento di commissione al tuo account. Il pagamento del tuo scambio, invece, va da persona a persona, fuori da Blurt. Se condividi il suo TxID nella chat, viaggia nella tua chat cifrata, che solo tu e il tuo partner potete leggere. Per mostrare al tuo partner che il pagamento sta arrivando, il suo sito {brand} cerca il TxID sui block explorer: solo il TxID, mai il tuo indirizzo né la chiave della transazione. Per non avere alcun collegamento con Monero, paga la commissione in BLURT: è l'opzione predefinita e costa la metà."
 			},
 			"xmr_tx_proof": {
 				"q": "Che cos'è la chiave della transazione Monero e perché {brand} la chiede?",
@@ -1801,6 +1842,10 @@
 		"hours_option": "{n}h",
 		"cost_label": "Costo totale",
 		"cost_detail": "{per_hour} BLURT/ora × {hours} ore",
+		"balance_label": "Il tuo saldo",
+		"balance_loading": "Lettura del saldo…",
+		"balance_unknown": "Saldo non disponibile al momento",
+		"balance_short": "BLURT insufficienti: mancano {missing} BLURT (inclusa la commissione di rete di circa {fee} BLURT).",
 		"submit_button": "Paga e metti in evidenza",
 		"cancel_button": "Annulla",
 		"success": "⭐ Ordine in evidenza — pagati {blurt} BLURT",
@@ -2436,6 +2481,7 @@
 		},
 		"order": {
 			"posted_prefix": "Pubblicato",
+			"posted_on": "Pubblicato il {date}",
 			"state_live": "Attivo",
 			"state_cancelled": "Annullato",
 			"state_expired": "Scaduto",
@@ -2462,6 +2508,7 @@
 			"feedback_no_counterparty": "Ancora nessuna chat con una controparte",
 			"posting": "Pubblicazione…",
 			"feature_arming_hint": "Disponibile appena il tuo ordine è attivo",
+			"feature_opens_when_fee_confirmed": "Il modulo per mettere in evidenza si aprirà qui appena la tua commissione di pubblicazione sarà confermata.",
 			"fee_awaiting_payment": "In attesa della tua commissione in BTC",
 			"fee_proof_unsupported": "Non è nell'orderbook — la commissione non è verificabile; pubblica di nuovo con la chiave della transazione"
 		},
@@ -2838,6 +2885,7 @@
 		"terms": "Condizioni",
 		"posted_on": "Pubblicato il",
 		"expires_on": "Scade il",
+		"expired_on": "Scaduto il",
 		"listing_fee": "Commissione di pubblicazione",
 		"fee_verified": "Verificata",
 		"fee_underpaid": "Commissione insufficiente",
@@ -2984,7 +3032,8 @@
 			"eta": "Gli ordini dovrebbero essere disponibili intorno alle {eta}.",
 			"estimating": "Stima del tempo rimanente…"
 		},
-		"feed_title": "{site} — book degli ordini ({format})"
+		"feed_title": "{site} — book degli ordini ({format})",
+		"match_in_featured": "L'ordine che corrisponde è in «In evidenza», qui sopra."
 	},
 	"paired_readonly": {
 		"banner_heading": "Connesso come @{account} — il telefono ha le chiavi.",
@@ -3686,12 +3735,12 @@
 		"tab_active_orders": "Ordini attivi",
 		"tab_trade_history": "Cronologia scambi",
 		"tabs_aria": "Dettagli del profilo",
-		"no_trade_history": "Ancora nessuno scambio completato.",
+		"no_trade_history": "@{account} non ha ancora completato scambi.",
 		"trade_history_with": "con @{account}",
 		"loading_feedback": "Caricamento feedback…",
 		"feedback_error": "Non è stato possibile caricare i feedback adesso.",
 		"rating_count": "{n, plural, one {# valutazione} other {# valutazioni}}",
-		"no_feedback_yet": "Nessun feedback ancora. Questo utente non è stato recensito da nessuna controparte.",
+		"no_feedback_yet": "Nessun feedback ancora. @{account} non è stato recensito da nessuna controparte.",
 		"reviews_heading": "@{account} ha ricevuto recensioni da",
 		"review_order_link": "Vedi l'ordine",
 		"load_more": "Carica altri",
@@ -3705,8 +3754,8 @@
 		"given_heading": "@{account} ha lasciato una recensione per",
 		"given_rated": "Ho valutato @{account}:",
 		"loading_given": "Caricamento recensioni lasciate…",
-		"given_error": "Non è stato possibile caricare le recensioni lasciate da questo utente.",
-		"no_given_yet": "Nulla ancora. Questo utente non ha lasciato feedback a nessuna controparte.",
+		"given_error": "Non è stato possibile caricare le recensioni lasciate da @{account}.",
+		"no_given_yet": "Nulla ancora. @{account} non ha lasciato feedback a nessuna controparte.",
 		"rss_subscribe_label": "RSS — segui questo trader",
 		"rss_subscribe_title": "Ricevi notifiche via RSS quando questo trader pubblica un nuovo ordine di acquisto o vendita. Nota: interrogare un feed per-trader è leggermente più rivelatore del feed mondiale.",
 		"feedback_suppressed_chip": "Non conteggiato nella valutazione",
@@ -3813,7 +3862,13 @@
 		"received_rated": "Mi ha valutato:",
 		"average_rating_detail": "Valutazione media: {avg}",
 		"feedback_all_excluded": "Le recensioni qui sotto non sono incluse in questo punteggio: gli account che le hanno lasciate sono stati segnalati dai nostri controlli anti-autoscambio.",
-		"headline_is_average": "Valutazione media"
+		"headline_is_average": "Valutazione media",
+		"given_not_counted_later": "Non conta ancora: le recensioni di un primo scambio contano dal {date}. Allora inviala di nuovo dalla chat.",
+		"given_not_counted": "Non conteggiata: gli indicizzatori non l'hanno accettata.",
+		"given_send_again": "Non conta ancora, ma ora può contare: inviala di nuovo dalla chat.",
+		"given_pending": "Inviata. Non è ancora nell'elenco degli indicizzatori.",
+		"given_open_chat": "Apri la chat",
+		"given_needs_transfer": "Non conta ancora: conterà quando @{from} avrà inviato a @{to} almeno 50 BLURT in un unico trasferimento dal {date}. Allora inviala di nuovo dalla chat."
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4936,6 +4991,34 @@
 		"sell_exact": "Vendita di esattamente {amount} {fiat} di {asset} per {settlement}",
 		"buy_barter_novalue": "Acquisto di {asset} per {settlement}",
 		"sell_barter_novalue": "Vendita di {asset} per {settlement}"
+	},
+	"order_title_mine": {
+		"buy_min": "Riguardo al mio ordine di acquisto: almeno {amount} {fiat} di {asset} con {settlement}",
+		"buy_max": "Riguardo al mio ordine di acquisto: fino a {amount} {fiat} di {asset} con {settlement}",
+		"buy_range": "Riguardo al mio ordine di acquisto: da {min} a {max} {fiat} di {asset} con {settlement}",
+		"buy_any": "Riguardo al mio ordine di acquisto: qualsiasi importo di {asset} con {settlement}",
+		"buy_exact": "Riguardo al mio ordine di acquisto: esattamente {amount} {fiat} di {asset} con {settlement}",
+		"buy_barter_novalue": "Riguardo al mio ordine di acquisto: {asset} per {settlement}",
+		"sell_min": "Riguardo al mio ordine di vendita: almeno {amount} {fiat} di {asset} per {settlement}",
+		"sell_max": "Riguardo al mio ordine di vendita: fino a {amount} {fiat} di {asset} per {settlement}",
+		"sell_range": "Riguardo al mio ordine di vendita: da {min} a {max} {fiat} di {asset} per {settlement}",
+		"sell_any": "Riguardo al mio ordine di vendita: qualsiasi importo di {asset} per {settlement}",
+		"sell_exact": "Riguardo al mio ordine di vendita: esattamente {amount} {fiat} di {asset} per {settlement}",
+		"sell_barter_novalue": "Riguardo al mio ordine di vendita: {asset} per {settlement}"
+	},
+	"order_title_who": {
+		"buy_min": "Compra almeno {amount} {fiat} di {asset} con {settlement}",
+		"buy_max": "Compra fino a {amount} {fiat} di {asset} con {settlement}",
+		"buy_range": "Compra da {min} a {max} {fiat} di {asset} con {settlement}",
+		"buy_any": "Compra qualsiasi importo di {asset} con {settlement}",
+		"buy_exact": "Compra esattamente {amount} {fiat} di {asset} con {settlement}",
+		"buy_barter_novalue": "Compra {asset} per {settlement}",
+		"sell_min": "Vende almeno {amount} {fiat} di {asset} per {settlement}",
+		"sell_max": "Vende fino a {amount} {fiat} di {asset} per {settlement}",
+		"sell_range": "Vende da {min} a {max} {fiat} di {asset} per {settlement}",
+		"sell_any": "Vende qualsiasi importo di {asset} per {settlement}",
+		"sell_exact": "Vende esattamente {amount} {fiat} di {asset} per {settlement}",
+		"sell_barter_novalue": "Vende {asset} per {settlement}"
 	},
 	"stats": {
 		"page_title": "Statistiche della rete",

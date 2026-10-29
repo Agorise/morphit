@@ -27,8 +27,10 @@
 	import { formatAmountForInput, parseAmountInput } from '$lib/orders/amountInput';
 	import {
 		encodeFundsSentPayload,
+		fitsChatMessage,
 		isValidTxid,
 		PAYLOAD_CONSTANTS,
+		XMR_TX_KEY_RE,
 		type FundsSentPayload,
 		type ChatAssetTicker
 	} from '$lib/chat/payload';
@@ -210,6 +212,10 @@
 			: initialAmount
 	);
 	let note = $state('');
+	/** v1.21.17 — Monero only: the payment's tx key, so the receiver's screen
+	 *  can see it arrive (a Monero payment cannot be seen any other way).
+	 *  Optional: without it he checks his wallet instead. */
+	let txKey = $state('');
 	let sending = $state(false);
 	let sendError = $state<string | null>(null);
 
@@ -257,8 +263,13 @@
 	 *  branch to distinguish like USDC has). */
 	const daiNetworkPicked = $derived(method !== 'dai' || daiNetwork !== null);
 
+	const trimmedTxKey = $derived(txKey.replace(/\s+/g, '').toLowerCase());
+	const txKeyLooksValid = $derived(
+		method !== 'xmr' || trimmedTxKey.length === 0 || XMR_TX_KEY_RE.test(trimmedTxKey)
+	);
 	const canSubmit = $derived(
 		txidLooksValid &&
+			txKeyLooksValid &&
 			amountLooksValid &&
 			noteLooksValid &&
 			usdtNetworkPicked &&
@@ -327,6 +338,7 @@
 				...(trimmedAmount.length > 0 ? { amount: trimmedAmount } : {}),
 				...(orderPermlink !== undefined ? { orderPermlink } : {}),
 				...(trimmedNote.length > 0 ? { note: trimmedNote } : {}),
+				...(method === 'xmr' && trimmedTxKey.length > 0 ? { txKey: trimmedTxKey } : {}),
 				// pin the USDT network on the message
 				// so the receiver's chat renders the right
 				// per-network explorer link.
@@ -346,6 +358,13 @@
 				...(method === 'dai' && daiNetwork !== null ? { network: daiNetwork } : {})
 			};
 			const wire = encodeFundsSentPayload(payload);
+			// Too long for one chat message (a long note, a Monero key in many
+			// parts): say why BEFORE anything is sent, not a bare "send failed".
+			if (!fitsChatMessage(wire)) {
+				sendError = $_('chat.funds_sent.too_long_to_send');
+				sending = false;
+				return;
+			}
 			await onShare(wire);
 		} catch (err) {
 			console.warn('[FundsSentModal] send failed:', err);
@@ -524,6 +543,31 @@
 				</p>
 			{/if}
 		</label>
+
+		{#if method === 'xmr'}
+			<label class="mt-4 block">
+				<span class="text-sm font-semibold">{$_('chat.funds_sent.tx_key_label')}</span>
+				<input
+					type="text"
+					bind:value={txKey}
+					maxlength="1100"
+					placeholder={$_('chat.funds_sent.tx_key_placeholder') as string}
+					autocomplete="off"
+					autocapitalize="none"
+					autocorrect="off"
+					spellcheck="false"
+					class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-xs dark:border-ink-700 dark:bg-ink-900"
+				/>
+				<p class="mt-1 text-xs text-ink-600 dark:text-ink-300">
+					{$_('chat.funds_sent.tx_key_help', { values: { peer } })}
+				</p>
+				{#if !txKeyLooksValid}
+					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+						{$_('chat.funds_sent.tx_key_invalid')}
+					</p>
+				{/if}
+			</label>
+		{/if}
 
 		<label class="mt-4 block">
 			<span class="text-sm font-semibold"

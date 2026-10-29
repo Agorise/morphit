@@ -19,13 +19,20 @@ tarball, runs `npm ci`, rebuilds and redeploys the web frontend
 (then checks it answered on its configured bind), and restarts
 services. If anything fails, it rolls back automatically.
 
-**Deadline: every instance must run v1.21.1 or later before
+**Deadline: every instance must run v1.21.17 or later before
 2026-11-01 00:00 UTC.** From that time (by block timestamp) every
 indexer applies the stricter "consensus v2" rules (listed in
-`docs/release-notes/RELEASE-NOTES-v1.21.0.md`, refined in v1.21.1). An
-instance that applies those blocks with an older release keeps
-records no other instance has — orders, reviews, profiles, featured
-slots — for good; it would then need `sudo morphit-ops fast-sync`.
+`docs/release-notes/RELEASE-NOTES-v1.21.0.md`, refined in v1.21.1),
+and, from v1.21.17, accepts reviews of a proven first-buy trade
+(`docs/release-notes/RELEASE-NOTES-v1.21.17.md`). An instance that
+applies those blocks with an older release keeps or lacks records no
+other instance has — orders, reviews, profiles, featured slots — for
+good; it would then need `sudo morphit-ops fast-sync`. From v1.21.17 the
+indexer notices this itself: if blocks stamped from that time on were
+applied by an older release (a late upgrade, a rollback, or a restore of
+an older snapshot), it stops before applying anything more and its log
+says `waiver_evidence_gap` — run `sudo morphit-ops fast-sync`, then start
+it again. (Judged by the chain's block times, not your server's clock.)
 
 The rest of this doc covers the details: how the trust chain
 works, the manual procedure (for operators who prefer to apply

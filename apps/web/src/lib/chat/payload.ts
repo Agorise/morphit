@@ -1006,7 +1006,20 @@ export interface FundsSentPayload {
 	 *  explorer URL when rendering the txid as a clickable
 	 *  link. */
 	readonly network?: string;
+	/** v1.21.17 — Monero only: the payment's transaction key ("tx key",
+	 *  shown by every Monero wallet for a sent payment; for a payment to a
+	 *  subaddress the main key followed by the additional keys, 64×n hex).
+	 *  With it the receiver's instance can check, through a block explorer,
+	 *  that this payment reached the address he shared and how much — a Monero
+	 *  payment cannot be seen any other way. It proves this one payment and
+	 *  nothing else: it cannot spend or reveal any other funds. Wire name
+	 *  `tx_key`; an older client ignores it. */
+	readonly txKey?: string;
 }
+
+/** A Monero transaction key as the chat carries it: 64 hex per key, the main
+ *  key first, then none or one per output (at most 16 outputs): up to 17. */
+export const XMR_TX_KEY_RE = /^(?:[0-9a-f]{64}){1,17}$/;
 
 export type StructuredPayload = AddressPayload | FundsSentPayload | OrderSettledElsewherePayload;
 
@@ -1858,6 +1871,12 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		wire.order_permlink = p.orderPermlink;
 	if (p.note !== undefined && p.note !== '') wire.note = p.note;
 	if (p.memo !== undefined && p.memo !== '') wire.memo = p.memo;
+	if (p.txKey !== undefined && p.txKey !== '') {
+		if (p.method !== 'xmr' || !XMR_TX_KEY_RE.test(p.txKey)) {
+			throw new Error('payload: tx_key is a Monero transaction key (64×n hex)');
+		}
+		wire.tx_key = p.txKey;
+	}
 	// inline-fix — same latent bug as encodeAddressPayload:
 	// FundsSent USDT messages were dropping the network field on
 	// the wire, breaking the per-network explorer-link rendering
@@ -2579,7 +2598,16 @@ function optionalFieldsFundsSent(
 			return null;
 		}
 	}
-	return { ...base, amount, orderPermlink, note, memo, network };
+	// v1.21.17 — Monero only, 64×n lower-case hex; anything else voids the
+	// receipt like any other malformed field.
+	let txKey: string | undefined;
+	if (Object.hasOwn(o, 'tx_key')) {
+		if (base.method !== 'xmr' || typeof o.tx_key !== 'string' || !XMR_TX_KEY_RE.test(o.tx_key)) {
+			return null;
+		}
+		txKey = o.tx_key;
+	}
+	return { ...base, amount, orderPermlink, note, memo, network, ...(txKey ? { txKey } : {}) };
 }
 
 // ─── optionalFields for new payloads ───────────────────

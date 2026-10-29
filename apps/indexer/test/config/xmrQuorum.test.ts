@@ -8,7 +8,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadConfig, resolveBtcQuorum, resolveXmrQuorum } from '../../src/config/index';
+import {
+	explorerOperatorCount,
+	loadConfig,
+	resolveBtcQuorum,
+	resolveXmrQuorum
+} from '../../src/config/index';
 import {
 	DEFAULT_BTC_FEE_EXPLORERS,
 	DEFAULT_XMR_FEE_EXPLORERS
@@ -94,5 +99,32 @@ describe('XMR explorer quorum', () => {
 		expect(DEFAULT_XMR_FEE_EXPLORERS.length).toBe(9);
 		expect(resolveXmrQuorum(undefined, 1).note).toContain('(the default list has 9)');
 		expect(resolveBtcQuorum(undefined, 1).note).toContain('(the default list has 8)');
+	});
+});
+
+describe('the quorum is counted in explorer operators (v1.21.17)', () => {
+	const MEMPOOL_ONION = 'http://mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion/api';
+	it('two addresses of ONE operator: quorum 1, said at boot — never a quorum that cannot be met', () => {
+		const { cfg, warned } = load({
+			MORPHIT_INDEXER_BTC_EXPLORER_URLS: `${MEMPOOL_ONION},https://mempool.space/api`
+		});
+		expect(explorerOperatorCount(cfg.btcExplorerUrls)).toBe(1);
+		expect(cfg.btcMinSuccessfulResponses).toBe(1);
+		expect(warned.some((w) => w.includes('1 BTC explorer operator(s) configured'))).toBe(true);
+	});
+	it('two operators: quorum 2, nothing to say', () => {
+		const { cfg, warned } = load({
+			MORPHIT_INDEXER_BTC_EXPLORER_URLS: `${MEMPOOL_ONION},https://blockstream.info/api`
+		});
+		expect(cfg.btcMinSuccessfulResponses).toBe(2);
+		expect(warned.filter((w) => w.includes('BTC_MIN_SUCCESSFUL_RESPONSES'))).toEqual([]);
+	});
+	it('an explicit quorum above the operators refuses to boot, however many URLs', () => {
+		expect(() =>
+			load({
+				MORPHIT_INDEXER_BTC_EXPLORER_URLS: `${MEMPOOL_ONION},https://mempool.space/api`,
+				MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES: '2'
+			})
+		).toThrow(/distinct BTC explorer operators/);
 	});
 });

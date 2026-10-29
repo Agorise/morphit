@@ -120,3 +120,73 @@ export type AddressPaymentResult =
 	| { readonly kind: 'paid'; readonly confirmedSats: number; readonly unconfirmedSats: number }
 	| { readonly kind: 'not_yet'; readonly confirmedSats: number; readonly unconfirmedSats: number }
 	| { readonly kind: 'no_answer'; readonly reason: string };
+
+/** A trade payment looked up by txid (fee/paymentCheck.ts), as a quorum of
+ *  one verifier's explorers sees it.
+ *   - `found`: they agree the transaction exists and pays `amount` (satoshis
+ *     or piconero; 0 when nothing in it goes to the address, and for BTC 0
+ *     when the transaction spends from the address — its owner's own spend,
+ *     whose change is no payment) to the address; `confirmations` is the
+ *     least any of them allows (0 = in the mempool); `blockTime` is the time
+ *     of the block holding it (unix seconds) from paymentTimeOf — null when no
+ *     agreeing explorer puts it in a block with a time, or when their times
+ *     disagree (`timeDisputed`);
+ *   - `not_found`: a quorum positively answered "no such transaction" and no
+ *     usable answer said otherwise;
+ *   - `no_answer`: unreachable, rate-limited, timed-out, malformed or
+ *     disagreeing explorers. */
+export type PaymentLookupResult =
+	| {
+			readonly kind: 'found';
+			readonly amount: bigint;
+			readonly confirmations: number;
+			readonly blockTime: number | null;
+			/** The agreeing explorers' times for it cannot both be true
+			 *  (paymentTimeOf): no time is given, and the payment cannot be
+			 *  dated here at all. */
+			readonly timeDisputed?: boolean;
+	  }
+	| { readonly kind: 'not_found' }
+	| { readonly kind: 'no_answer' };
+
+/** How far apart two honest explorers' times for one block can be, and how
+ *  long ago a block an honest explorer still has in its mempool can have been
+ *  mined (one explorer a few blocks behind). The web's slack against the
+ *  address-share time is the same (PAYMENT_CHECK_TIME_SLACK_MS). */
+export const PAYMENT_TIME_SLACK_SEC = 2 * 60 * 60;
+
+/**
+ * The block time of a trade payment from the agreeing explorers' answers
+ * (v1.21.17). The amount is what they must agree on, so the time
+ * came from whichever of them answered — and the earliest one used to win:
+ * one lying explorer that copied the right amount and said "mined in 1970"
+ * marked an honest payment "older than the address — send nothing", with no
+ * way for the seller to overrule it.
+ *
+ * Now a time is given only when the answers that date it agree:
+ *   - the times of the answers that put it in a block are within
+ *     PAYMENT_TIME_SLACK_SEC of each other, and
+ *   - if any agreeing explorer still has it in its mempool, none of those
+ *     times is older than PAYMENT_TIME_SLACK_SEC (a transaction mined hours
+ *     ago is in no honest explorer's mempool).
+ * Otherwise the time is disputed: none is given, and the seller is told it
+ * cannot be checked here (he may confirm from his own wallet). With them
+ * agreeing, the earliest is given — at most the slack below the true one.
+ */
+export function paymentTimeOf(
+	answers: readonly { readonly inBlock: boolean; readonly time: number | null }[],
+	nowSec: number
+): { readonly blockTime: number | null; readonly timeDisputed: boolean } {
+	const times = answers.filter((a) => a.inBlock && a.time !== null).map((a) => a.time as number);
+	if (times.length === 0) return { blockTime: null, timeDisputed: false };
+	const earliest = Math.min(...times);
+	const latest = Math.max(...times);
+	const someInMempool = answers.some((a) => !a.inBlock);
+	if (
+		latest - earliest > PAYMENT_TIME_SLACK_SEC ||
+		(someInMempool && earliest < nowSec - PAYMENT_TIME_SLACK_SEC)
+	) {
+		return { blockTime: null, timeDisputed: true };
+	}
+	return { blockTime: earliest, timeDisputed: false };
+}

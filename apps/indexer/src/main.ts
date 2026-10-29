@@ -75,8 +75,11 @@ import { clearingPriceHistoryRoute } from '$api/clearingPriceHistory';
 import { loginPairingRoute, PairingRegistry } from '$api/loginPairing';
 import { pairingForwardRoute, selfPairingAddresses } from '$api/pairingForward';
 import { compareOrderbookRoute } from '$api/compareOrderbook';
-import { orderByPermlinkRoute, ordersByAccountRoute } from '$api/orders';
+import { accountTradesRoute, orderByPermlinkRoute, ordersByAccountRoute } from '$api/orders';
 import { feeCheckRoute } from '$api/feeCheck';
+import { paymentCheckRoute, PAYMENT_CHECK_RATE_PER_MIN } from '$api/paymentCheck';
+import { buildPaymentChecker } from '$indexer/fee/paymentCheck';
+import { makeSourceFetch, sourceClearnetAllowed } from '$indexer/sourceFetch';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { orderViewsRoute } from '$api/orderViews';
 import { orderCounterpartiesRoute } from '$api/orderCounterparties';
@@ -99,6 +102,7 @@ import { closePinnedClearnet } from '$indexer/pinnedClearnetPost';
 import { ChatFastDispatcher } from '$indexer/chatFastDispatcher';
 import { closePool } from '$indexer/hiddenServicePool';
 import { feedbackByAccountRoute } from '$api/feedback';
+import { feedbackStatusRoute } from '$api/feedbackStatus';
 import { reputationReceiptRoute } from '$api/reputationReceipt';
 import { releaseRoute } from '$api/release';
 import { fxRoute } from '$api/fx';
@@ -691,6 +695,26 @@ async function main(): Promise<void> {
 	listingFeeApp.route('/', listingFeeRoute(config, priceSource, multiAssetSources.get('BTC') ?? null, multiAssetSources.get('XMR') ?? null));
 	app.route('/v1/listing-fee', listingFeeApp);
 
+	// GET /v1/payment-check — is a trade's BTC / XMR payment on chain, how much
+	// reached the seller's address, how deep (api/paymentCheck.ts). The same
+	// explorers, tiers, quorum and transport as the fee verifiers: hidden
+	// explorers over Tor / I2P first, clearnet ones only where clearnet is
+	// allowed (makeSourceFetch refuses them on a zero-clearnet node). Its own
+	// rate-limit tier: every new question costs a round of explorer requests.
+	const paymentCheckApp = new Hono();
+	paymentCheckApp.use('*', rateLimit('payment-check', PAYMENT_CHECK_RATE_PER_MIN));
+	{
+		const checker = buildPaymentChecker(
+			config,
+			makeSourceFetch({
+				proxies: config.hiddenProxies ?? hiddenServiceProxyConfigFromEnv(process.env),
+				clearnetAllowed: sourceClearnetAllowed(config)
+			})
+		);
+		paymentCheckApp.route('/', paymentCheckRoute({ check: (q, signal) => checker.check(q, signal) }));
+	}
+	app.route('/v1/payment-check', paymentCheckApp);
+
 	// price-derivation receipt endpoint.  Resource-rate-
 	// limited (same as listing-fee — these are forensic-grade
 	// reads, not list pagination).  Available whether or not the
@@ -913,7 +937,19 @@ async function main(): Promise<void> {
 	// mount point; resource-rate-limited rather than list-rate-
 	// limited because the receipt is "one big read" not pagination.
 	feedbackApp.route('/', reputationReceiptRoute(apiDb));
+	// v1.21.17 — both sides of an account's trades (the profile's history).
+	feedbackApp.route('/', accountTradesRoute(apiDb, config.operatorAccountName));
 	app.route('/v1/accounts', feedbackApp);
+
+	// What became of one review (indexed / refused and why / not seen), from
+	// this indexer's own event log — so a reviewer whose review was refused is
+	// told, rather than left waiting for it to appear. One probe of a partial
+	// index (ops_feedback_status_idx), plus, for a refusal that may be resent,
+	// the citation and conversation checks the handler runs: resource tier.
+	const feedbackStatusApp = new Hono();
+	feedbackStatusApp.use('*', rateLimit('resource', config.resourceRatePerMin));
+	feedbackStatusApp.route('/', feedbackStatusRoute(apiDb));
+	app.route('/v1/feedback', feedbackStatusApp);
 
 	const releaseApp = new Hono();
 	releaseApp.use('*', rateLimit('resource', config.resourceRatePerMin));

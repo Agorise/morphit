@@ -28,6 +28,7 @@
 	 * card.
 	 */
 
+	import { topOnChange } from '$lib/ui/pageTop';
 	import { onDestroy } from 'svelte';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { _ } from 'svelte-i18n';
@@ -99,6 +100,11 @@
 		| 'load_error'
 		| 'save_error';
 	let phase = $state<Phase>('loading');
+	// Each screen opens at its top (the content is swapped, not navigated).
+	// 'saving' is the form's own screen (its Save button turns busy), so
+	// pressing Save does not jump the page.
+	const phaseTop = topOnChange<Phase>({ quietFrom: ['loading', 'retrying_indexer'] });
+	$effect(() => phaseTop(phase === 'saving' ? 'ready' : phase));
 	let errorMessage = $state('');
 
 	// lazy-load

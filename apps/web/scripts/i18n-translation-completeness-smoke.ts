@@ -234,9 +234,6 @@ const ALLOW_LIST: AllowEntry[] = [
 	// convention rendered identically in email clients across languages; it is
 	// the maintainer's literal wording and the intended text, not an untranslated miss.
 	// (The order title that follows IS fully translated via order_title.*.)
-	{ key: 'chat.inbox.re_prefix', locale: 'de', reason: '(b) "RE:" is a universal "regarding" convention (Latin in re); identical in every locale' },
-	{ key: 'chat.inbox.re_prefix', locale: 'es', reason: '(b) "RE:" is a universal "regarding" convention (Latin in re); identical in every locale' },
-	{ key: 'chat.inbox.re_prefix', locale: 'fr', reason: '(b) "RE:" is a universal "regarding" convention (Latin in re); identical in every locale' },
 	// post-beta.28 — the RPC endpoint-health error label "Error: {code}".
 	// "Error" is spelled identically in Spanish (cognate); only the
 	// interpolated HTTP status code follows, so es is legitimately

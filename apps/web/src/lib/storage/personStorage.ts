@@ -27,7 +27,11 @@ export type PersonStorageTier = 'local' | 'session' | null;
 /** The keys kept in person storage. */
 export const PERSON_STORAGE_KEYS: readonly string[] = [
 	'morphit.chat.read_state',
-	'morphit.chat.recent_peers'
+	'morphit.chat.recent_peers',
+	// v1.21.17: the payments made from this device per order ($lib/chat/legLedger)
+	'morphit.chat.leg_ledger.v1',
+	// v1.21.17: the reviews sent from this device ($lib/feedback/sentReviews)
+	'morphit.sentReviews.v1'
 ];
 
 const tierStore = writable<PersonStorageTier>(null);

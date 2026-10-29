@@ -158,7 +158,12 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				getDynamicGlobalProperties: async () =>
 					({ head_block_number: 100, last_irreversible_block_num: 100 }) as never,
 				crossCheckChainConsistency: async () =>
-					({ consistent: true, reason: 'ok', agreeing: 1, contacted: 1, required: 1 }) as never
+					({ consistent: true, reason: 'ok', agreeing: 1, contacted: 1, required: 1 }) as never,
+				// The first-trade evidence check at start (waiverEvidenceGuard.ts):
+				// this state row, as an older version wrote it, has no marker, so
+				// the start asks the chain for its last block's time — years before
+				// the activation time.
+				getBlock: async () => ({ timestamp: '2016-03-24T16:05:00' }) as never
 			});
 			const poller = new Poller(config, fx.db, chain, null, null);
 			const run = poller.run().catch(() => undefined);

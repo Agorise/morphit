@@ -137,7 +137,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	}
 
 	const res = await client.query(
-		`UPDATE orders SET status = 'completed', updated_at = $3,
+		`UPDATE orders SET status = 'completed', updated_at = $3, completed_at = $3,
 		        completed_counterparty = $4
 		 WHERE account = $1 AND permlink = $2 AND status = 'live'`,
 		[ctx.signer, permlink, ctx.blockTime, counterparty]
@@ -151,7 +151,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// trade credit. The OWNER may now fill a still-NULL counterparty on
 		// their own completed order — same provable-conversation bar as above
 		// (`counterparty` is non-null only if it passed), never overwriting one
-		// already recorded.
+		// already recorded. completed_at stays the completion's own block time:
+		// naming the partner later is not another trade.
 		if (counterparty !== null) {
 			const fill = await client.query(
 				`UPDATE orders SET completed_counterparty = $3, updated_at = $4

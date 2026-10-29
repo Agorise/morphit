@@ -177,6 +177,31 @@ fee ops' transactions from the chain again (`indexer/feeLegsBackfill.ts`). It al
 `operator_stats` (node-local — the Operators page's figures, recomputed from the tables
 above and the node's own orders; exported empty, refilled once the restored node has caught up
 with the chain).
+v70 adds `waiver_trade_transfers` (chain-derived — per first-buy waiver owner and
+sender, the earliest transfer of at least 50.000 BLURT from the order's block on, stamped
+at or after the consensus activation time: the proof a review citing such an order
+needs; exported). Rows are recorded only from the activation time, so a snapshot's rows
+equal what a node replaying the chain would record. A node restored from an older
+snapshot runs the v70 migration again, which empties the table (the rows left are this
+node's own: a restore drops and recreates only the tables in its dump); the blocks after
+the snapshot record theirs again as they are applied. That is complete only for a
+snapshot exported before the activation time, which covers no block at or after it, so
+a snapshot older than v70 exported on or after the activation time is refused
+(`verifyManifestCompatible`, `snapshotManifest.ts`). **Trust:** a restoring node takes
+the publisher's rows as it takes its reviews and orders, and the post-restore Tier-2
+chain check (`indexer/snapshotChainCheck.ts`) samples them: each sampled row must be, in
+a block read with the trusted quorum's agreement, the transfer at its recorded position,
+in the recorded transaction (id recomputed), from its sender to its recipient, of its
+amount (at least the minimum), at its block time (at or after the activation time), to
+an account holding a waiver order by then — any mismatch quarantines the snapshot. It is
+a sample, like the rest of the check. Whether a row is the pair's earliest transfer is
+not checked; a real but later transfer can only make a review be refused, never admit
+one. A snapshot older than v70 is not sampled for it: the rows still in the table are
+this node's own, and the v70 migration empties them on the next start.
+v70 also adds `orders.completed_at` (chain-derived: the block time of the op that
+completed the order; exported with `orders`). A node restored from an older snapshot fills
+it, in the v70 migration, from the first applied `morphit_order_complete_v1` op of each
+completed order in `ops` (which every snapshot carries), so it equals what a replay records.
 
 ---
 

@@ -62,13 +62,22 @@
 		 *  (the clearing-price *history* endpoint can be empty even when a
 		 *  current bid exists). */
 		oncount?: (n: number) => void;
+		/** v1.21.17 — the `account/permlink` of every order shown, whenever it
+		 *  changes: the orderbook leaves them out of its list (one card per
+		 *  order on the page). */
+		onkeys?: (keys: readonly string[]) => void;
+		/** v1.21.17 — orders whose card flashes its border twice (a search on
+		 *  the orderbook found them). */
+		flashKeys?: ReadonlySet<string>;
 	}
 
 	let {
 		variant = 'grid',
 		showEmptyState = false,
 		embedded = false,
-		oncount
+		oncount,
+		onkeys,
+		flashKeys
 	}: Props = $props();
 
 	let slots = $state<readonly FeaturedSlot[]>([]);
@@ -104,6 +113,10 @@
 	// but there's no settled clearing-price history yet".
 	$effect(() => {
 		oncount?.(visibleSlots.length);
+	});
+	$effect(() => {
+		if (!loaded) return;
+		onkeys?.(visibleSlots.map((s) => `${s.order.account}/${s.order.permlink}`));
 	});
 
 	/** Profile data for featured slots' posters. */
@@ -193,6 +206,9 @@
 	});
 
 	onDestroy(() => {
+		// Gone from the page: whoever left these orders out of a list because
+		// this card showed them must show them again.
+		onkeys?.([]);
 		abortController?.abort();
 		if (pollTimer !== null) clearInterval(pollTimer);
 		if (tickTimer !== null) clearInterval(tickTimer);
@@ -250,6 +266,7 @@
 					$_ as unknown as Parameters<typeof formatOrderPriceModel>[1]
 				)}
 				featured
+				class={flashKeys?.has(`${o.account}/${o.permlink}`) ? 'flash-featured' : ''}
 			/>
 		{/each}
 	</ul>
@@ -283,3 +300,23 @@
 		{$_('featured.empty_state')}
 	</section>
 {/if}
+
+<style>
+	/* v1.21.17 — a search on the orderbook found this featured order: two
+	   pulses of the same border glow the instances page gives the footer
+	   "Contact" link's ?highlight=current, in the brand colour. */
+	@keyframes flash-featured-border {
+		0%,
+		100% {
+			box-shadow: 0 0 0 0 rgb(var(--brand-primary-rgb) / 0);
+		}
+		50% {
+			box-shadow:
+				0 0 0 2px rgb(var(--brand-primary-rgb)),
+				0 0 12px 2px rgb(var(--brand-primary-rgb) / 0.6);
+		}
+	}
+	:global(.flash-featured) {
+		animation: flash-featured-border 2s ease-in-out 2;
+	}
+</style>

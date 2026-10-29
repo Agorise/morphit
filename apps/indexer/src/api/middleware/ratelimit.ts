@@ -19,6 +19,11 @@
  *                 every peer AND every user arrives as 127.0.0.1,
  *                 so that is one shared bucket for the whole world.
  *                 Adding a tier is how you get a separate bucket.
+ *   - `payment-check`: GET /v1/payment-check (api/paymentCheck.ts). Its
+ *                 own bucket for the same reason: each new question costs
+ *                 a round of block-explorer requests over Tor, so its
+ *                 ceiling is far below `list`, and sharing `list`'s bucket
+ *                 would let a seller's polling 429 their own chat.
  *
  * Client-IP derivation (Finding B; v1.20.0 E2): forwarded-address
  * headers are honoured only when the socket peer is a TRUSTED proxy.
@@ -93,7 +98,7 @@ import { logger } from '$log';
 
 const log = logger('ratelimit');
 
-type Tier = 'list' | 'resource' | 'federation' | 'rpc-endpoints';
+type Tier = 'list' | 'resource' | 'federation' | 'rpc-endpoints' | 'payment-check';
 
 interface Bucket {
 	/** Unix-ms timestamps of requests still within the window. */

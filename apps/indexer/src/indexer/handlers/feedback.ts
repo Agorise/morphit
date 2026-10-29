@@ -43,7 +43,7 @@ import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
 import { inSavepoint } from '$indexer/savepoint';
 import { raiseReviewSignals } from '$indexer/signals';
 import { hasVerifiedChat as verifiedChatGate } from '$indexer/chatGates';
-import { reviewCitesFeePaidOrder } from '$indexer/reviewCitation';
+import { reviewCitesFeePaidOrder, type ReviewCitation } from '$indexer/reviewCitation';
 import { consensusV2Active } from '$indexer/consensusActivation';
 
 const log = logger('feedback');
@@ -115,6 +115,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	}
 
 	let orderPermlink: string | null = null;
+	/** Which kind of order the review cites (reviewCitation.ts); null with no
+	 *  order cited. */
+	let citation: ReviewCitation | null = null;
 	if (ctx.payload.order_permlink !== undefined && ctx.payload.order_permlink !== null) {
 		if (typeof ctx.payload.order_permlink !== 'string') {
 			return { ok: false, reason: 'order_permlink_not_string' };
@@ -167,7 +170,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// tailer's fast review notification, which used to carry its own copy
 		// that also accepted 'verified_by_attestation'.
 		// From the consensus activation time the cited order must also be one
-		// this pair traded on (see reviewCitation.ts).
+		// this pair traded on, and a first-buy waiver order may be cited when
+		// its trade is proven on chain (see reviewCitation.ts).
 		const cited = await reviewCitesFeePaidOrder(client, {
 			permlink: ctx.payload.order_permlink,
 			subject,
@@ -179,6 +183,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			return { ok: false, reason: 'order_permlink_not_found_or_unverified' };
 		}
 		orderPermlink = ctx.payload.order_permlink;
+		citation = cited;
 	}
 
 	// ─── ADR-0014 verified-chat badge ────────────────────────────
@@ -398,6 +403,16 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (orderPermlink === null) {
 		// No order cited — feedback row stays committed, but no
 		// bonus trigger.  Skip the savepoint dance entirely.
+		return { ok: true };
+	}
+	// A review admitted through a first-buy WAIVER order (proven trade, from
+	// the consensus activation time) never pays the bonus and never uses up the
+	// subject's one-time flag: the owner's decision. The order cost nothing,
+	// and the bonus is what a relay pays out of its own wallet. (Checked here,
+	// not left to the paid-order lookup below: that lookup also matches the
+	// subject's own paid order under the same permlink, which did not admit
+	// this review.)
+	if (citation === 'waived') {
 		return { ok: true };
 	}
 	const bonusSavepoint = 'welcome_bonus_sp';

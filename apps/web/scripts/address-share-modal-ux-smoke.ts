@@ -115,6 +115,47 @@ if (/e\.stopPropagation\(\)/.test(flatSelect)) {
 	);
 }
 
+// ── v1.21.17: where a crypto-for-crypto seller is PAID, the amount is required ──
+// The payment check compares what arrives with what he asked; without an
+// amount any dust payment would read as "received". The chat opens the modal
+// with requireAmount for that share only.
+{
+	const view = readFileSync(resolve(WEB, 'src/lib/components/ConversationView.svelte'), 'utf8');
+	if (
+		/trimmedAmount\.length === 0\s*\?\s*!requireAmount/.test(modal) &&
+		/requireAmount=\{addressShareRequireAmount\}/.test(view) &&
+		/openAddressShare\(legPlan\?\.paymentAddressCoins \?\? null, true\)/.test(view)
+	) {
+		ok('sharing where to be paid in a crypto-for-crypto trade requires the amount');
+	} else {
+		bad(
+			'payment check',
+			'the payment address of a crypto-for-crypto trade can be shared without an amount — any dust payment would then pass the payment check.'
+		);
+	}
+	if (
+		/const reuseBlocked = \$derived\(\s*requireAmount &&\s*method !== 'blurt' &&\s*\(sharedBefore \|\| reuseCheckedFor !== /.test(modal) &&
+		/addressLooksValid &&\s*!reuseBlocked &&/.test(modal)
+	) {
+		ok('where a crypto-for-crypto seller is paid, a reused address is refused, and none is shared before the reuse check answers (a Blurt account is exempt)');
+	} else {
+		bad(
+			'payment check',
+			'a reused address can be shared to be paid for a crypto-for-crypto trade — an earlier payment to it, or the same payment cited in two chats, would pass.'
+		);
+	}
+	if (/const memoMissing = \$derived\(requireAmount && method === 'blurt' && \(!useMemo \|\| memo === ''\)\)/.test(modal) && /!reuseBlocked &&\s*!memoMissing &&/.test(modal)) {
+		ok("a crypto-for-crypto seller's BLURT ask keeps its memo");
+	} else {
+		bad('payment check', "a BLURT ask can be shared without its memo — an earlier transfer from the same payer would then pass.");
+	}
+	if (/\/\[1-9\]\/\.test\(trimmedAmount\)/.test(modal)) {
+		ok('an amount of zero is not an amount');
+	} else {
+		bad('payment check', 'an amount of 0 is accepted as what was asked.');
+	}
+}
+
 console.log('\n' + '─'.repeat(56));
 if (fail === 0) {
 	console.log(`✓ all ${pass} scenarios passed`);

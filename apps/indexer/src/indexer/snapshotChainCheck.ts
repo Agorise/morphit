@@ -17,6 +17,17 @@
  *     op log was ever compared.
  *   - accounts: chain-created rows drawn at random must each have an
  *     account-creating op for that name in their recorded block.
+ *   - waiver_trade_transfers (v70): rows drawn at random must each be, in a
+ *     block read with agreement (BlurtClient.condenserAgreed, the trusted
+ *     quorum), a transfer at their recorded position, in the transaction with
+ *     their recorded id (recomputed from its content), from their sender to
+ *     their recipient, of their amount (at least the minimum), at their block
+ *     time (at or after the consensus activation time) — and the recipient
+ *     must hold a first-buy waiver order posted at or before it. A row is evidence a review can be admitted on
+ *     (reviewCitation.ts), so a planted one is what this looks for. Whether a
+ *     row is the pair's EARLIEST transfer is not checked (that needs the
+ *     account history): a real but later transfer can only make a review
+ *     refused, never admit one.
  *
  * Verdict (oplogVerdict): any mismatch → 'quarantine'; fewer than
  * MIN_VERIFIED_FRACTION of the sample actually checked (chain unreachable) →
@@ -24,6 +35,11 @@
  * lowers the odds of fabricated data, it does not prove there is none.
  */
 import type { Database } from '$db/pool';
+import { transactionIdOf } from '$blurt/snapshotOpTrust';
+import { blockTimeOf } from '$indexer/blockTime';
+import { parseBlurtMilli } from '$indexer/fee';
+import { WAIVER_TRADE_MIN_TRANSFER_BLURT } from '$indexer/waiverTradeTransfers';
+import { consensusV2Active } from '$indexer/consensusActivation';
 import {
 	newestShare,
 	oplogVerdict,
@@ -38,7 +54,18 @@ import {
 
 export interface SnapshotCheckDeps {
 	readonly db: Pick<Database, 'query'>;
-	readonly chain: { getBlock(n: number): Promise<unknown> };
+	readonly chain: {
+		getBlock(n: number): Promise<unknown>;
+		/** BlurtClient's agreed read, for the rows checked against an agreed
+		 *  block (waiver_trade_transfers). Without it those use getBlock. */
+		condenserAgreed?<T>(
+			method: string,
+			params: readonly unknown[],
+			keyOf: (answer: T) => string | null,
+			minAgree: number
+		): Promise<{ readonly value: T; readonly key: string } | null>;
+		trustedQuorumSize?(): number;
+	};
 	/** Lowest block the ops sample may come from. */
 	readonly startBlock: number;
 	/** Highest block the ops sample may come from (all when undefined). */
@@ -81,6 +108,84 @@ const toRef = (r: OpRow): StoredOpRef => ({
 	permlink: r.permlink
 });
 const refKey = (r: StoredOpRef): string => `${r.blockNum}:${r.trxInBlock}:${r.opInTrx}`;
+
+/** A waiver_trade_transfers row as the check reads it. */
+export interface WaiverRow {
+	readonly recipient: string;
+	readonly sender: string;
+	readonly block_num: string;
+	readonly trx_in_block: number;
+	readonly op_in_trx: number;
+	readonly block_time: Date;
+	readonly trx_id: string;
+	/** NUMERIC(18,3) as Postgres returns it, e.g. '2750.125'. */
+	readonly amount_blurt: string;
+}
+
+/** The transaction and operation a row names, in an answer to get_block. */
+function rowTarget(
+	row: Pick<WaiverRow, 'trx_in_block' | 'op_in_trx'>,
+	block: unknown
+): { tx: unknown; op: unknown; timestamp: unknown } | null {
+	const b = block as { timestamp?: unknown; transactions?: unknown } | null;
+	if (!b || !Array.isArray(b.transactions)) return null;
+	const tx = b.transactions[row.trx_in_block] as { operations?: unknown } | undefined;
+	if (!tx || !Array.isArray(tx.operations)) return null;
+	return { tx, op: tx.operations[row.op_in_trx], timestamp: b.timestamp };
+}
+
+/** What operators must agree on for one row's block: its time, and the id of
+ *  the transaction at the row's position, RECOMPUTED from its content (so
+ *  agreeing on it is agreeing on the transfer inside). An answer without a
+ *  transaction there, or one whose id cannot be computed, does not count. */
+export function waiverRowBlockKey(row: WaiverRow, block: unknown): string | null {
+	const t = rowTarget(row, block);
+	if (t === null || typeof t.timestamp !== 'string') return null;
+	const id = transactionIdOf(t.tx);
+	return id === null ? null : `${t.timestamp}|${id}`;
+}
+
+/** Is `row` the transfer at its recorded position in `block`? PURE; fails
+ *  closed. (Whether the recipient holds a waiver order is the database's
+ *  question, asked by the caller.) */
+export function verifyWaiverRowAgainstBlock(
+	row: WaiverRow,
+	block: unknown
+): { ok: true } | { ok: false; reason: string } {
+	const t = rowTarget(row, block);
+	if (t === null) return { ok: false, reason: 'no transaction at the recorded position' };
+	if (transactionIdOf(t.tx) !== row.trx_id) {
+		return { ok: false, reason: 'the transaction there is not the recorded one' };
+	}
+	const op = t.op as [unknown, Record<string, unknown>] | undefined;
+	if (!Array.isArray(op) || op[0] !== 'transfer' || !op[1]) {
+		return { ok: false, reason: 'no transfer at the recorded position' };
+	}
+	if (op[1].from !== row.sender || op[1].to !== row.recipient) {
+		return { ok: false, reason: `the transfer is ${String(op[1].from)} → ${String(op[1].to)}` };
+	}
+	const milli = typeof op[1].amount === 'string' ? parseBlurtMilli(op[1].amount) : null;
+	const recorded = parseBlurtMilli(`${row.amount_blurt} BLURT`);
+	if (milli === null || milli !== recorded) {
+		return { ok: false, reason: `the transfer is ${String(op[1].amount)}` };
+	}
+	if (milli < WAIVER_TRADE_MIN_TRANSFER_BLURT * 1000) {
+		return { ok: false, reason: 'below the minimum a row may hold' };
+	}
+	// Nothing stamped before the consensus activation time is ever recorded
+	// (waiverTradeTransfers.ts).
+	const rowBlockTime = row.block_time;
+	if (!consensusV2Active(rowBlockTime)) {
+		return { ok: false, reason: 'stamped before the consensus activation time' };
+	}
+	if (
+		typeof t.timestamp !== 'string' ||
+		blockTimeOf(t.timestamp).getTime() !== row.block_time.getTime()
+	) {
+		return { ok: false, reason: `the block's time is ${String(t.timestamp)}` };
+	}
+	return { ok: true };
+}
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 export async function checkSnapshotAgainstChain(
@@ -223,6 +328,78 @@ export async function checkSnapshotAgainstChain(
 		const m = verifyAccountCreatedInBlock(a.name, a.created_trx_id, block as never);
 		if (m.ok) verified++;
 		else failures.push(`accounts row ${a.name} (block ${a.created_block_num}): ${m.reason}`);
+	}
+
+	// ── waiver_trade_transfers: each sampled row is that transfer, agreed ──
+	const hasWaiver = await db.query<{ t: string | null }>(
+		`SELECT to_regclass('waiver_trade_transfers')::text AS t`
+	);
+	// Only when the RESTORED schema is at v70. A pre-v70 snapshot restored over
+	// a v70 database leaves this node's own rows behind (a restore drops only
+	// the tables in its dump), and they describe this node's orders, not the
+	// snapshot's — so they are not the snapshot's to be judged by. The v70
+	// migration then runs again on the next start and empties the table.
+	const restoredAtV70 =
+		hasWaiver.rows[0]?.t != null &&
+		((await db.query(`SELECT 1 FROM schema_migrations WHERE version = 70`)).rowCount ?? 0) > 0;
+	if (hasWaiver.rows[0]?.t != null && !restoredAtV70) {
+		say(
+			'  waiver_trade_transfers: not sampled (the snapshot predates schema v70; the table is emptied when v70 runs)'
+		);
+	}
+	const waiverCount = !restoredAtV70
+		? 0
+		: Number(
+				(await db.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM waiver_trade_transfers`))
+					.rows[0]?.n ?? '0'
+			);
+	const waiverPicks = randomDistinctIndices(waiverCount, derivedSample, randomInt);
+	let nthWaiver = 0;
+	for (const i of waiverPicks) {
+		const w = (
+			await db.query<WaiverRow>(
+				`SELECT recipient, sender, block_num::text, trx_in_block, op_in_trx, block_time,
+				        trx_id, amount_blurt::text
+				   FROM waiver_trade_transfers ORDER BY recipient, sender OFFSET $1 LIMIT 1`,
+				[i]
+			)
+		).rows[0];
+		if (!w) continue;
+		sampled++;
+		progress(`waiver transfer ${++nthWaiver} of ${waiverPicks.length}`);
+		const n = Number(w.block_num);
+		let block: unknown = null;
+		if (deps.chain.condenserAgreed && deps.chain.trustedQuorumSize) {
+			try {
+				const agreed = await deps.chain.condenserAgreed<unknown>(
+					'get_block',
+					[n],
+					(b) => waiverRowBlockKey(w, b),
+					deps.chain.trustedQuorumSize()
+				);
+				if (agreed === null) say(`  ? block ${n}: the RPC operators did not agree on it`);
+				block = agreed?.value ?? null;
+			} catch (e) {
+				say(`  ? block ${n}: could not be read: ${errMsg(e)}`);
+			}
+		} else {
+			block = await fetchBlock(n);
+		}
+		if (!block) {
+			unreachable++;
+			continue;
+		}
+		const m = verifyWaiverRowAgainstBlock(w, block);
+		const owner = await db.query(
+			`SELECT 1 FROM orders WHERE account = $1 AND fee_method = 'waived_first_buy'
+			   AND created_at <= $2 LIMIT 1`,
+			[w.recipient, w.block_time]
+		);
+		const where = `waiver_trade_transfers row ${w.sender} → ${w.recipient} (block ${n})`;
+		if (!m.ok) failures.push(`${where}: ${m.reason}`);
+		else if ((owner.rowCount ?? 0) === 0)
+			failures.push(`${where}: the recipient holds no waiver order posted by then`);
+		else verified++;
 	}
 
 	return {

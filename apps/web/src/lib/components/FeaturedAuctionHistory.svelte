@@ -32,6 +32,13 @@
 
 	type WindowDays = 7 | 30 | 90;
 
+	interface Props {
+		/** Passed on from the embedded FeaturedOrders (v1.21.17). */
+		onFeaturedKeys?: (keys: readonly string[]) => void;
+		flashKeys?: ReadonlySet<string>;
+	}
+	let { onFeaturedKeys, flashKeys }: Props = $props();
+
 	let windowDays = $state<WindowDays>(30);
 	let points = $state<readonly ClearingPricePoint[]>([]);
 	let loaded = $state(false);
@@ -77,14 +84,18 @@
 		if (pollTimer !== null) clearInterval(pollTimer);
 	});
 
+	/** True while another window's history is being read. The card stays
+	 *  (v1.21.17: `loaded = false` here used to unmount the featured order
+	 *  above with it, while the orderbook still left it out of its list). */
+	let switching = $state(false);
 	function selectWindow(w: WindowDays): void {
 		if (w === windowDays) return;
 		windowDays = w;
 		// Clear stale points so the chart doesn't flash old data
 		// at the new x-axis scale.
 		points = [];
-		loaded = false;
-		refresh();
+		switching = true;
+		void refresh().finally(() => (switching = false));
 	}
 
 	// ─── Derived chart data ───────────────────────────────────
@@ -164,7 +175,13 @@
 		     read as a jumbled second block). Renders the shared OrderCard, and
 		     self-hides when nothing is featured — leaving just the auction
 		     history + "be the first" prompt below. -->
-		<FeaturedOrders embedded variant="stack" oncount={(n) => (liveFeaturedCount = n)} />
+		<FeaturedOrders
+			embedded
+			variant="stack"
+			oncount={(n) => (liveFeaturedCount = n)}
+			onkeys={onFeaturedKeys}
+			{flashKeys}
+		/>
 
 		<!-- Requirement: with NO featured orders on the board, "1 of 3 slots filled today"
 		     is worse than useless — it sat directly above "No featured-slot bids in
@@ -248,20 +265,14 @@
 			<p class="mt-2 text-xs text-ink-500 dark:text-ink-400">
 				{$_('clearing_price.legend')}
 			</p>
-		{:else}
+		{:else if liveFeaturedCount === 0 && !switching}
+			<!-- v1.21.17 — with a featured order live (shown above) there is
+			     nothing to say about an empty price history: the note under it read
+			     as clutter. It shows only with nothing featured. -->
 			<div class="rounded-lg bg-ink-50 p-3 text-sm text-ink-600 dark:bg-ink-800 dark:text-ink-300">
-				{#if liveFeaturedCount > 0}
-					<!-- a featured order IS live (shown above); the history
-					     endpoint just has no settled clearing prices for this window
-					     yet. Don't claim "no bids — be the first". -->
-					{$_('clearing_price.no_history_yet_active', {
-						values: { days: windowDays }
-					})}
-				{:else}
-					{$_('clearing_price.no_history_yet', {
-						values: { days: windowDays }
-					})}
-				{/if}
+				{$_('clearing_price.no_history_yet', {
+					values: { days: windowDays }
+				})}
 			</div>
 		{/if}
 	</section>

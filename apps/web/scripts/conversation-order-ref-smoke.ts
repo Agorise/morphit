@@ -1,7 +1,9 @@
 /**
  * conversation-order-ref.
  *
- * Pins the cross-stack wiring for the chat-inbox "RE: <order title>" subline
+ * Pins the cross-stack wiring for the chat-inbox order subline (v1.21.17: no
+ * "RE:"; "Regarding my buy order of …" on my own order, "Who is buying …" under
+ * the other person's name, "Not about an order" for a thread citing none)
  * (the small linked order title shown under a peer's handle when the
  * conversation is about a specific order). The pieces span three workspaces
  * and are easy to break in isolation:
@@ -13,10 +15,10 @@
  *   2. CLIENT (@morphit/indexer-client) — ConversationSummary must carry the
  *      nullable `order` field, and ConversationOrderRef must expose the fiat
  *      band fields orderTitleParts needs.
- *   3. FRONTEND (chat/+page.svelte) — must render the RE: subline (gated on
- *      convo.order), link it to the order detail page, and use the
- *      chat.inbox.re_prefix key.
- *   4. LOCALES — chat.inbox.re_prefix present in all 10.
+ *   3. FRONTEND (chat/+page.svelte) — must render the subline (gated on
+ *      convo.order) in the reader's voice (inboxOrderVoice), with
+ *      chat.inbox.no_order when the thread cites no order.
+ *   4. LOCALES — chat.inbox.no_order present in all 10; re_prefix gone.
  *
  * The DB behaviour itself (which order, recipient=owner, both directions,
  * cancelled-still-shown, join-miss→null) is covered by the integration test
@@ -112,7 +114,10 @@ check(
 	'chat page still branches the RE: title on convo.order (after the pending placeholder)',
 	/\{:else if\s+convo\.order\}/.test(page) && /\{#if\s+convo\.pending\}/.test(page)
 );
-check('…with a "RE: -" fallback when the thread cites no order', /\{:else\}[\s\S]{0,140}truncate">-<\/span>/.test(page));
+check(
+	'…with "Not about an order" when the thread cites no order',
+	/\{:else\}[\s\S]{0,140}\$_\('chat\.inbox\.no_order'\)/.test(page)
+);
 // the RE: line is PLAIN TEXT now: it no longer links to the
 // order page; the whole card is the click target for the conversation.
 check(
@@ -120,7 +125,11 @@ check(
 	!/\/@\$\{convo\.order\.account\}\/\$\{convo\.order\.permlink\}/.test(page) &&
 		/after:absolute after:inset-0/.test(page)
 );
-check('RE: subline uses the chat.inbox.re_prefix key', /chat\.inbox\.re_prefix/.test(page));
+check(
+	'the subline reads in the reader\u2019s voice, with no "RE:" key',
+	/voice: inboxOrderVoice\(convo\.order\.account === me\)/.test(page) &&
+		!/chat\.inbox\.re_prefix/.test(page)
+);
 check(
 	'RE: subline builds its title from orderTitleParts(convo.order, …)',
 	// orderTitleParts takes an optional goodsLabel 3rd arg; the
@@ -133,11 +142,13 @@ const locales = SUPPORTED_LOCALES.map((l) => l.code);
 let localeMisses = 0;
 for (const loc of locales) {
 	const j = JSON.parse(read(`apps/web/src/lib/i18n/locales/${loc}.json`));
-	const v = j?.chat?.inbox?.re_prefix;
-	if (typeof v !== 'string' || v.length === 0) localeMisses++;
+	const v = j?.chat?.inbox?.no_order;
+	if (typeof v !== 'string' || v.length === 0 || j?.chat?.inbox?.re_prefix !== undefined) {
+		localeMisses++;
+	}
 }
 check(
-	`chat.inbox.re_prefix present + non-empty in all ${locales.length} locales`,
+	`chat.inbox.no_order present (and re_prefix gone) in all ${locales.length} locales`,
 	localeMisses === 0,
 	`${localeMisses} locale(s) missing the key`
 );

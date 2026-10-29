@@ -26,6 +26,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
 const page = readFileSync(join(REPO, 'apps/web/src/routes/[lang]/chat/+page.svelte'), 'utf8');
+// v1.21.17: the card's order is built by one helper (shared shape, unit-tested).
+const orderRef = readFileSync(join(REPO, 'apps/web/src/lib/chat/inboxOrderRef.ts'), 'utf8');
 
 let passed = 0;
 let failed = 0;
@@ -67,8 +69,18 @@ check(
 	/const next = new Map\(pendingOrders\);[\s\S]{0,600}?pendingOrders = next;/.test(page)
 );
 check(
+	'the resolved order is built by inboxOrderRef',
+	/next\.set\(permlink, inboxOrderRef\(r\.data\.item\)\)/.test(page)
+);
+check(
 	'an absent status renders no label rather than a fabricated "(Live)"',
-	/status: rec\.status \?\? ''/.test(page)
+	/status: rec\.status \?\? ''/.test(orderRef)
+);
+check(
+	'it carries what the order settles in (the subject is the full sentence)',
+	/payment_methods: rec\.payment_methods/.test(orderRef) &&
+		/accepted_assets: rec\.accepted_assets/.test(orderRef) &&
+		/specific_barter_title: rec\.specific_barter_title/.test(orderRef)
 );
 
 // The lookup must be driven by an effect. A $derived that fires fetches is

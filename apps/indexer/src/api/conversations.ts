@@ -10,7 +10,8 @@
  *     message_count: number,
  *     last_message_is_mine: boolean, // the last word in this thread is yours
  *     order: { permlink, account, side, asset, fiat_currency,
- *              amount_min, amount_max, status } | null
+ *              amount_min, amount_max, status, payment_methods,
+ *              accepted_assets, specific_barter_title } | null
  *       // the order THIS THREAD is about, for the frontend's
  *       // "RE: <linked title> (Live)" subline. null when the thread
  *       // cites no order — that thread gets no subline at all.
@@ -72,6 +73,12 @@ interface ConversationRow {
 	 *  the inbox card shows it beside "RE: <title>" so an old thread declares
 	 *  up-front whether the order still exists. */
 	order_status: string | null;
+	/** v1.21.17: what the order settles in, so the inbox subject is the same
+	 *  sentence as everywhere else ("… of BLURT with XMR or BTC"). Without
+	 *  them the title ended "… of BLURT with" — the settlement was empty. */
+	order_payment_methods: string[] | null;
+	order_accepted_assets: string[] | null;
+	order_specific_barter_title: string | null;
 }
 
 /**
@@ -112,7 +119,10 @@ export const CONVERSATIONS_SQL = `
 				o.fiat_currency     AS order_fiat_currency,
 				o.amount_min::text  AS order_amount_min,
 				o.amount_max::text  AS order_amount_max,
-				o.status            AS order_status
+				o.status            AS order_status,
+				o.payment_methods   AS order_payment_methods,
+				o.accepted_assets   AS order_accepted_assets,
+				o.specific_barter_title AS order_specific_barter_title
 			FROM (
 				SELECT
 					CASE WHEN sender = $1 THEN recipient ELSE sender END AS peer,
@@ -190,7 +200,10 @@ export function conversationsRoute(db: Database): Hono {
 								fiat_currency: r.order_fiat_currency ?? '',
 								amount_min: r.order_amount_min === null ? null : Number(r.order_amount_min),
 								amount_max: r.order_amount_max === null ? null : Number(r.order_amount_max),
-								status: r.order_status ?? 'live'
+								status: r.order_status ?? 'live',
+								payment_methods: r.order_payment_methods ?? [],
+								accepted_assets: r.order_accepted_assets,
+								specific_barter_title: r.order_specific_barter_title
 							}
 						: null
 			}))

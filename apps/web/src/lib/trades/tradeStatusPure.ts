@@ -65,6 +65,10 @@ export interface TradeState {
 	readonly engagedPeer?: string;
 
 	readonly address?: string;
+	/** v1.21.17 — the coin of the address record (`address`, `expectedAmount`,
+	 *  `expectedMemo`). `method` follows the latest payload of any kind, so a
+	 *  receipt in another coin does not say what the ask was in. */
+	readonly askMethod?: ChatAssetTicker;
 	readonly expectedAmount?: number;
 	readonly expectedMemo?: string;
 	readonly addressSharedAt?: Date;
@@ -257,6 +261,7 @@ export function recordAddressSharedPure(
 		method: args.method,
 		phase: advancePhase(base?.phase, 'address_shared'),
 		address: args.address,
+		askMethod: args.method,
 		expectedAmount: args.expectedAmount,
 		expectedMemo: args.expectedMemo,
 		addressSharedAt: base?.addressSharedAt ?? now,

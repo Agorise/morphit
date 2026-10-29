@@ -68,6 +68,9 @@
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import type { FxResponse } from '@morphit/indexer-client';
 	import { MAX_FEATURED_SLOTS } from '$lib/orders/featuredSlots';
+	import { chainFee } from '$stores/chainFee';
+	import { watchLiquidBlurt, type LiquidBlurt } from '$lib/balance/liquidBlurt';
+	import { featureBidCost, payableWith } from '$lib/balance/payable';
 
 	interface Props {
 		/** Permlink of the order to promote. Must be a live order
@@ -165,6 +168,49 @@
 	const canBid = $derived(
 		outlook !== null && (outlook.kind === 'visible' || outlook.kind === 'waits')
 	);
+
+	// v1.21.17 — the wallet's live liquid BLURT, next to the cost. Nothing is
+	// asked for (password, Active key) until it covers the bid AND the network
+	// fee: the form used to take the password and only then learn from the
+	// chain that the account could not pay.
+	let liquid = $state<LiquidBlurt>({ kind: 'loading' });
+	$effect(() => {
+		if (!signingAccount) return;
+		return watchLiquidBlurt(signingAccount).subscribe((v) => (liquid = v));
+	});
+	const cost = $derived(
+		featureBidCost({
+			account: signingAccount ?? '',
+			orderPermlink,
+			hours: selectedHours,
+			feeBlurtPerHour,
+			feeRecipient: resolveFeeRecipient(getInstanceSnapshot().fee_recipient),
+			fees: $chainFee
+		})
+	);
+	const payable = $derived(payableWith(liquid, cost.needBlurt));
+	/** Asking for the key is pointless while the wallet is short (or still
+	 *  being read). A balance that could not be read does not block. */
+	const affordable = $derived(payable.kind === 'enough' || payable.kind === 'unknown');
+	/** From the press of "Pay and Feature" until the bid is recorded (or
+	 *  fails): the key prompt and both buttons are gone, only the progress
+	 *  line shows (v1.21.17 — they stayed, greyed, under "Bid sent").
+	 *  `submitting` spans the wait for the indexer too (runBid awaits it). */
+	const inFlight = $derived(submitting);
+	const balanceDisplay = $derived(
+		liquid.kind === 'ok' ? (Math.floor(liquid.liquidBlurt * 1000) / 1000).toFixed(3) : null
+	);
+	/** The balance in the same fiat the cost is shown in. */
+	const balanceFiatDisplay = $derived.by(() => {
+		if (liquid.kind !== 'ok' || perBlurtUsd === null) return null;
+		const usd = liquid.liquidBlurt * perBlurtUsd;
+		const fiat = $userPreferences.fiat;
+		if (fiat && fiat !== 'USD' && fxTable !== null) {
+			const amount = usdToFiat(fxTable, usd, fiat);
+			if (amount !== null) return `~${formatFiat(amount, fiat)} ${fiat}`;
+		}
+		return `~$${usd.toFixed(2)} USD`;
+	});
 
 	async function checkBid(): Promise<void> {
 		if (!signingAccount) {
@@ -332,7 +378,9 @@
 	// it the moment signing is done — the same ephemeral pattern PayBlurtModal
 	// uses. This is what lets a posting-only user place a feature bid at all.
 	async function bidWithEphemeralActiveKey(activeScalar: Uint8Array): Promise<void> {
-		if (submitting || !canBid) {
+		// `affordable` again: the balance may have dropped while the Active key
+		// was being checked (the window is gone then, its answer is not).
+		if (submitting || !canBid || !affordable) {
 			sodium.memzero(activeScalar);
 			return;
 		}
@@ -399,25 +447,66 @@
 		</div>
 	</fieldset>
 
-	<!-- Cost preview -->
-	<div class="mb-3 rounded-lg bg-ink-50 p-3 dark:bg-ink-800">
-		<p class="text-xs text-ink-500 dark:text-ink-400">
-			{$_('feature_bid.cost_label')}
-		</p>
-		<p class="font-display text-lg font-bold">
-			{totalBlurtDisplay} BLURT{#if totalFiatDisplay}<span
-					class="ml-2 text-sm font-normal text-ink-500 dark:text-ink-400"
-					>(~{totalFiatDisplay})</span
-				>{:else if totalUsdDisplay}<span
-					class="ml-2 text-sm font-normal text-ink-500 dark:text-ink-400"
-					>(~${totalUsdDisplay} USD)</span
-				>{/if}
-		</p>
-		<p class="text-xs text-ink-500 dark:text-ink-400">
-			{$_('feature_bid.cost_detail', {
-				values: { per_hour: feeBlurtPerHour, hours: selectedHours }
-			})}
-		</p>
+	<!-- Cost preview, and on its right the wallet's live balance (v1.21.17). -->
+	<div class="mb-3 rounded-lg bg-ink-50 p-3 dark:bg-ink-800" data-testid="feature-cost">
+		<div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+			<div class="min-w-0">
+				<p class="text-xs text-ink-500 dark:text-ink-400">
+					{$_('feature_bid.cost_label')}
+				</p>
+				<p class="font-display text-lg font-bold">
+					{totalBlurtDisplay} BLURT{#if totalFiatDisplay}<span
+							class="ml-2 text-sm font-normal text-ink-500 dark:text-ink-400"
+							>(~{totalFiatDisplay})</span
+						>{:else if totalUsdDisplay}<span
+							class="ml-2 text-sm font-normal text-ink-500 dark:text-ink-400"
+							>(~${totalUsdDisplay} USD)</span
+						>{/if}
+				</p>
+				<p class="text-xs text-ink-500 dark:text-ink-400">
+					{$_('feature_bid.cost_detail', {
+						values: { per_hour: feeBlurtPerHour, hours: selectedHours }
+					})}
+				</p>
+			</div>
+			{#if signingAccount}
+				<div class="min-w-0 sm:text-end" data-testid="feature-balance" aria-live="polite">
+					<p class="text-xs text-ink-500 dark:text-ink-400">
+						{$_('feature_bid.balance_label')}
+					</p>
+					{#if balanceDisplay !== null}
+						<p
+							class="font-display text-lg font-bold {payable.kind === 'short'
+								? 'text-red-600 dark:text-red-400'
+								: ''}"
+						>
+							{balanceDisplay} BLURT{#if balanceFiatDisplay}<span
+									class="ml-2 text-sm font-normal text-ink-500 dark:text-ink-400"
+									>({balanceFiatDisplay})</span
+								>{/if}
+						</p>
+					{:else if liquid.kind === 'loading'}
+						<p class="text-sm text-ink-500 dark:text-ink-400">
+							{$_('feature_bid.balance_loading')}
+						</p>
+					{:else}
+						<p class="text-sm text-ink-500 dark:text-ink-400">
+							{$_('feature_bid.balance_unknown')}
+						</p>
+					{/if}
+				</div>
+			{/if}
+		</div>
+		{#if payable.kind === 'short'}
+			<p class="mt-2 text-sm font-medium text-red-700 dark:text-red-300" role="alert">
+				{$_('feature_bid.balance_short', {
+					values: {
+						missing: payable.missingBlurt.toFixed(3),
+						fee: cost.networkFeeBlurt.toFixed(3)
+					}
+				})}
+			</p>
+		{/if}
 	</div>
 
 	<!-- What this bid will do, checked before anything is signed. -->
@@ -450,9 +539,13 @@
 	{/if}
 	{#if confirming}
 		<div class="mb-3"><StatusLine kind="loading">{$_('feature_bid.confirming')}</StatusLine></div>
+	{:else if submitting}
+		<div class="mb-3" data-testid="feature-broadcasting">
+			<StatusLine kind="loading">{$_('common.broadcasting')}</StatusLine>
+		</div>
 	{/if}
 
-	{#if hasActiveKey && canBid}
+	{#if hasActiveKey && canBid && !inFlight}
 		<!-- Password prompt (session already holds an active key). Same JIT
 		     pattern as /post: never persisted, cleared after submit, and the
 		     plaintext active key only exists inside the useActiveKey callback.
@@ -468,7 +561,7 @@
 					maxlength="64"
 					bind:value={password}
 					autocomplete="current-password"
-					disabled={submitting}
+					disabled={submitting || !affordable}
 					class="w-full rounded-lg border bg-white px-3 py-2 text-sm focus:border-morphit-emerald focus:outline-none focus:ring-1 focus:ring-morphit-emerald dark:bg-ink-900 {passwordError
 						? 'border-red-500 dark:border-red-500'
 						: 'border-ink-300 dark:border-ink-700'}"
@@ -481,7 +574,7 @@
 				{passwordError}
 			</p>
 		{/if}
-	{:else if canBid}
+	{:else if canBid && affordable && !inFlight}
 		<!-- v1.8.15 — POSTING-ONLY. No active-key envelope to unlock,
 		     so instead of a password field that cannot work we render the SAME
 		     unlock modal the "Pay now" flow uses (inline here): the user pastes
@@ -491,7 +584,7 @@
 		<div class="mb-3">
 			<UnlockActiveKeyModal
 				account={signingAccount ?? ''}
-				canProceed={!submitting}
+				canProceed={!submitting && affordable}
 				onUnlocked={bidWithEphemeralActiveKey}
 				onCancel={() => onCancel?.()}
 			/>
@@ -503,13 +596,14 @@
 		</p>
 	{/if}
 
-	{#if hasActiveKey || !canBid}
+	{#if !inFlight && (hasActiveKey || !canBid || !affordable)}
 		<div class="flex flex-col gap-2">
 			{#if hasActiveKey && canBid}
 				<BusyButton
 					variant="primary"
 					busy={submitting}
 					busyLabel={$_('common.broadcasting')}
+					disabled={!affordable}
 					onclick={submit}
 				>
 					{$_('feature_bid.submit_button')}

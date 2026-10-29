@@ -6,6 +6,7 @@ import {
 	assertKeyControlsAccount
 } from './accountBinding';
 import type { LiveIdentity } from '$crypto/identity-core';
+import { formatPublicKeyBLT } from '$crypto/keygen';
 import * as secp256k1 from '@noble/secp256k1';
 
 // A REAL compressed pubkey — formatPublicKeyBLT validates the curve point, so a
@@ -128,5 +129,29 @@ describe('assertKeyControlsAccount — the forward check', () => {
 		);
 		expect(err).toBeInstanceOf(Error);
 		expect(err).not.toBeInstanceOf(AccountBindingError);
+	});
+
+	it('asks the indexer once more before failing an order post (v1.21.17)', async () => {
+		// The indexer's 502 when its RPC operators could not agree in time was
+		// shown as "Couldn't broadcast" on the first try.
+		const pub = await formatPublicKeyBLT(live.posting.publicKey);
+		const auth = (k: string) => ({ weight_threshold: 1, account_auths: [], key_auths: [[k, 1]] });
+		let n = 0;
+		const f = (async () =>
+			++n === 1
+				? new Response('{}', { status: 502 })
+				: new Response(
+						JSON.stringify({
+							account: {
+								owner: auth('BLTo'),
+								active: auth('BLTa'),
+								posting: auth(pub),
+								memo_key: 'BLTm'
+							}
+						}),
+						{ status: 200 }
+					)) as unknown as typeof fetch;
+		await expect(assertKeyControlsAccount(live, 'retrying-poster', f)).resolves.toBeUndefined();
+		expect(n).toBe(2);
 	});
 });

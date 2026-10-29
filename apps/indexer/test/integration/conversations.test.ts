@@ -28,7 +28,10 @@ import {
 // the exported constant makes drift impossible: change the query once, this test
 // exercises the change automatically.  (Aliased to the old local name so the
 // assertions below need no edits.)
-import { CONVERSATIONS_SQL as CONVERSATIONS_SELECT } from '../../src/api/conversations';
+import {
+	CONVERSATIONS_SQL as CONVERSATIONS_SELECT,
+	conversationsRoute
+} from '../../src/api/conversations';
 
 /** Insert one chat_messages row with sensible defaults. Caller
  *  provides sender/recipient/created_at; other fields get fillers
@@ -78,13 +81,17 @@ async function insertOrder(
 		amountMin?: number | null;
 		amountMax?: number | null;
 		status?: 'live' | 'cancelled' | 'expired';
+		paymentMethods?: string[];
+		acceptedAssets?: string[] | null;
+		barterTitle?: string | null;
 	} = {}
 ): Promise<void> {
 	await fx.db.query(
 		`INSERT INTO orders (
 			account, permlink, side, asset, fiat_currency, amount_min, amount_max,
-			price_model, payment_methods, status, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb, $8, $9, $10, $10)`,
+			price_model, payment_methods, status, created_at, updated_at,
+			accepted_assets, specific_barter_title
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb, $8, $9, $10, $10, $11, $12)`,
 		[
 			account,
 			permlink,
@@ -93,9 +100,11 @@ async function insertOrder(
 			opts.fiat ?? 'MXN',
 			opts.amountMin ?? null,
 			opts.amountMax ?? null,
-			[], // payment_methods text[]
+			opts.paymentMethods ?? [], // payment_methods text[]
 			opts.status ?? 'live',
-			new Date('2026-04-01T00:00:00Z')
+			new Date('2026-04-01T00:00:00Z'),
+			opts.acceptedAssets ?? null,
+			opts.barterTitle ?? null
 		]
 	);
 }
@@ -324,6 +333,54 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		expect(r.order_fiat_currency).toBe('MXN');
 		expect(r.order_amount_min).toBe('500'); // NUMERIC::text → frontend Number()
 		expect(r.order_amount_max).toBeNull();
+	});
+
+	// v1.21.17 — the inbox subject is the full order sentence; without what the
+	// order settles in it ended "… of BLURT with" (the settlement was empty).
+	it('carries what the order settles in: payment methods, accepted coins, barter title', async () => {
+		await insertOrder(fx, 'bob', 'order-pay', {
+			paymentMethods: ['pay_xmr', 'pay_btc']
+		});
+		await insertOrder(fx, 'bob', 'order-barter', {
+			asset: 'BARTER',
+			paymentMethods: ['pay_xmr'],
+			acceptedAssets: ['XMR'],
+			barterTitle: 'Banana plants'
+		});
+		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T10:00:00Z'), 'order-pay');
+		await insertMessage(fx, 'alice', 'bob', new Date('2026-04-23T11:00:00Z'), 'order-barter');
+		const result = await fx.db.query<{
+			order_permlink: string;
+			order_payment_methods: string[] | null;
+			order_accepted_assets: string[] | null;
+			order_specific_barter_title: string | null;
+		}>(CONVERSATIONS_SELECT, ['alice', 200]);
+		const byPermlink = new Map(result.rows.map((r) => [r.order_permlink, r]));
+		expect(byPermlink.get('order-pay')!.order_payment_methods).toEqual(['pay_xmr', 'pay_btc']);
+		expect(byPermlink.get('order-pay')!.order_accepted_assets).toBeNull();
+		expect(byPermlink.get('order-barter')!.order_accepted_assets).toEqual(['XMR']);
+		expect(byPermlink.get('order-barter')!.order_specific_barter_title).toBe('Banana plants');
+		// …and the route hands them to the inbox.
+		const res = await conversationsRoute(fx.db).request('/alice');
+		const body = (await res.json()) as {
+			items: {
+				order: {
+					permlink: string;
+					payment_methods: string[];
+					accepted_assets: string[] | null;
+					specific_barter_title: string | null;
+				} | null;
+			}[];
+		};
+		const byOrder = new Map(body.items.map((i) => [i.order?.permlink, i.order]));
+		expect(byOrder.get('order-pay')).toMatchObject({
+			payment_methods: ['pay_xmr', 'pay_btc'],
+			accepted_assets: null
+		});
+		expect(byOrder.get('order-barter')).toMatchObject({
+			accepted_assets: ['XMR'],
+			specific_barter_title: 'Banana plants'
+		});
 	});
 
 	it('surfaces the order when BOB cites ALICE\u2019s order (order_account = alice, the recipient)', async () => {

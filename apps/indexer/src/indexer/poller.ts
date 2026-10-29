@@ -67,6 +67,8 @@ import { TreasurySource } from '$indexer/treasurySource';
 import type { BlurtPriceSource } from '$indexer/price/source';
 import type { FxRateSource } from '$indexer/fx/source';
 import { logger } from '$log';
+import { checkWaiverEvidence, WaiverEvidenceGapError } from '$indexer/waiverEvidenceGuard';
+import { blockTimeOf } from '$indexer/blockTime';
 
 const log = logger('poller');
 
@@ -118,8 +120,8 @@ async function ensureStateRow(
 	}
 	// First boot — initialise.
 	await db.query(
-		`INSERT INTO indexer_state (id, last_applied_block, chain_id)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO indexer_state (id, last_applied_block, chain_id, waiver_evidence_through_block)
+		 VALUES ($1, $2, $3, $2)
 		 ON CONFLICT (id) DO NOTHING`,
 		[INDEXER_STATE_ID, Math.max(0, config.startBlock - 1), config.chainId]
 	);
@@ -131,11 +133,17 @@ async function ensureStateRow(
 
 /** Update last_applied_block in the same transaction where the
  *  block's ops were written. Never call this outside a tx. */
-async function markApplied(client: pg.PoolClient, blockNum: number): Promise<void> {
+export async function markApplied(client: pg.PoolClient, blockNum: number): Promise<void> {
 	await client.query(
 		`UPDATE indexer_state SET
 			last_applied_block = $1,
-			last_applied_at = NOW()
+			last_applied_at = NOW(),
+			-- In step only while it was: a gap left by an older version stays
+			-- visible (waiverEvidenceGuard.ts).
+			waiver_evidence_through_block = CASE
+				WHEN waiver_evidence_through_block = last_applied_block THEN $1
+				ELSE waiver_evidence_through_block
+			END
 		 WHERE id = $2`,
 		[blockNum, INDEXER_STATE_ID]
 	);
@@ -718,6 +726,14 @@ export class Poller {
 
 	/** Start the loop. Resolves only when `stop()` is called (or on
 	 *  a fatal, non-recoverable error). */
+	/** One block's chain time (the start's first-trade evidence check reads
+	 *  the last applied block's). Throws when the block is not served. */
+	private async blockTimeAt(height: number): Promise<Date> {
+		const b = await this.blurt.getBlock(height);
+		if (b === null) throw new Error(`block ${height} not served`);
+		return blockTimeOf(b.timestamp);
+	}
+
 	async run(): Promise<void> {
 		// Before this node writes anything (even the state row below): drop
 		// database code Morphit never creates (a hostile snapshot's trigger,
@@ -733,6 +749,27 @@ export class Poller {
 				`chain_id mismatch: DB recorded ${chainId}, config says ${this.config.chainId}. ` +
 					`Refusing to boot — resetting the DB is the correct fix if the chain really changed.`
 			);
+		}
+
+		// v1.21.17 — no silent gap in the first-trade evidence: blocks applied
+		// by an older version past the activation time stop the node here,
+		// before anything is applied (waiverEvidenceGuard.ts). The chain is
+		// asked for one block's time; while it cannot answer, ask again.
+		for (;;) {
+			try {
+				const r = await checkWaiverEvidence(this.db, (height) => this.blockTimeAt(height));
+				if (r === 'set')
+					log.info('waiver_evidence_marker_set', { last_applied_block: lastApplied });
+				break;
+			} catch (err) {
+				if (err instanceof WaiverEvidenceGapError) {
+					log.error('waiver_evidence_gap', {}, err);
+					throw err;
+				}
+				log.warn('waiver_evidence_check_retry', {}, err instanceof Error ? err : undefined);
+				if (this.abort.signal.aborted) return;
+				await sleep(this.config.errorBackoffMs, this.abort.signal);
+			}
 		}
 
 		// Capture bootIndexedBlock ONCE here (start): later status updates spread

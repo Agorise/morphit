@@ -128,7 +128,10 @@ check(
 // ── 5. the chat gates on ownership ──────────────────────────────────
 check(
 	'chat gates completion on orderIsMine (a chat may be about the PEER’s order)',
-	/<LeaveFeedbackForm[^>]*completeOwnedOrder=\{orderIsMine\}/.test(chat),
+	// v1.21.17: …and not again for an order already completed naming a partner.
+	/<LeaveFeedbackForm[^>]*completeOwnedOrder=\{orderIsMine &&\s*!\(orderRecord\?\.status === 'completed' && orderRecord\.completed_counterparty != null\)\}/.test(
+		chat
+	),
 	'completing is owner-only; in the other direction it is the peer’s job'
 );
 check(

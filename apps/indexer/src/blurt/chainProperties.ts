@@ -21,6 +21,11 @@ import { parseBlurtAmount } from '$indexer/fee-transfer';
  *  future features can read them without another round-trip. */
 export interface ChainProperties {
 	readonly accountCreationFeeBlurt: number;
+	/** The network fee every transaction pays from LIQUID BLURT: this much
+	 *  per operation, plus `bandwidthKbytesFeeBlurt` per kB of the signed
+	 *  transaction. null when the node did not send a parseable value. */
+	readonly operationFlatFeeBlurt: number | null;
+	readonly bandwidthKbytesFeeBlurt: number | null;
 	readonly observedAt: Date;
 	readonly raw: Record<string, unknown>;
 }
@@ -34,6 +39,18 @@ export class ChainPropertiesShapeError extends Error {
 		super(`get_chain_properties: ${message}`);
 		this.name = 'ChainPropertiesShapeError';
 	}
+}
+
+/** The most either network fee rate is taken to be (BLURT). Witnesses have
+ *  set 0.050 / 0.200; this read comes from ONE RPC node, and a broken or
+ *  hostile one naming "100000.000 BLURT" would, cached for a day, make every
+ *  Feature form on the instance say the wallet is short (v1.21.17).
+ *  Beyond it the value is dropped and the browser uses the chain's known
+ *  values. */
+export const NETWORK_FEE_MAX_BLURT = 1;
+
+function plausibleNetworkFee(v: number | null): number | null {
+	return v !== null && v >= 0 && v <= NETWORK_FEE_MAX_BLURT ? v : null;
 }
 
 /** Fetch the current chain properties. Rotates RPC nodes on
@@ -55,6 +72,8 @@ export async function fetchChainProperties(blurt: BlurtClient): Promise<ChainPro
 
 	return {
 		accountCreationFeeBlurt: parsed,
+		operationFlatFeeBlurt: plausibleNetworkFee(parseBlurtAmount(raw.operation_flat_fee)),
+		bandwidthKbytesFeeBlurt: plausibleNetworkFee(parseBlurtAmount(raw.bandwidth_kbytes_fee)),
 		observedAt: new Date(),
 		raw
 	};

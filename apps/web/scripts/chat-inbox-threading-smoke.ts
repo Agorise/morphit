@@ -102,9 +102,20 @@ check('a card opens its own thread, scoped by ?order=', /\$\{base\}\?order=\$\{e
 check('an order-less card opens the plain conversation', /return c\.order \? .* : base;/.test(inbox));
 check('the avatar is a uniform 40px on every card', /avatarSize=\{40\}/.test(inbox));
 
-// the "RE:" line is ALWAYS shown; "RE: -" when there is no order.
-check('the RE: prefix renders unconditionally (not gated on convo.order)', /re_prefix'\)\}<\/span>\s*\{#if convo\.(pending|order)\}/.test(inbox));
-check('…with a "RE: -" fallback when the thread cites no order', /\{:else\}[\s\S]{0,140}truncate">-<\/span>/.test(inbox));
+// v1.21.17: no "RE:" any more — the line itself says whose order it is
+// ("Regarding my buy order of …" / "Who is buying …"). It is still ALWAYS
+// present: the order's line, "…" while pending, or "Not about an order".
+check(
+	'the order line renders unconditionally: order, pending, or "not about an order"',
+	/\{#if convo\.pending\}[\s\S]*?\{:else if convo\.order\}[\s\S]*?\{:else\}\s*<span class="min-w-0 truncate">\{\$_\('chat\.inbox\.no_order'\)\}<\/span>/.test(
+		inbox
+	) && !/chat\.inbox\.re_prefix/.test(inbox)
+);
+check(
+	'the order line reads from this side: inboxOrderVoice(the order is mine)',
+	/voice: inboxOrderVoice\(convo\.order\.account === me\)/.test(inbox)
+);
+// (v1.21.17: the "RE: -" fallback became "Not about an order", checked above.)
 // the RE: line is plain text now; the whole card opens the chat.
 check('the RE: line no longer links to the order page', !/\/@\$\{convo\.order\.account\}\/\$\{convo\.order\.permlink\}/.test(inbox));
 // the per-card unread green dot is gone.

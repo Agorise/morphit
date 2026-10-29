@@ -121,6 +121,25 @@ describe('raw-tx verification', () => {
 		expect(Object.keys(v.pyscan)).toEqual(['1']);
 	});
 
+	it('additional tx keys: the full key the wallet shows (main + one per output) finds what PyPI found', () => {
+		const v = byName('additional-keys');
+		expect(v.tx_key_full).toHaveLength(64 * (1 + v.tx.vout.length));
+		const [, [, pyAmount]] = Object.entries(v.pyscan as Record<string, [string, string]>)[0]!;
+		expect(scanRawTxForAddress(v.tx, v.tx_key_full, keysOf(v.dest))).toMatchObject({
+			outputs: v.expect.with_all_keys_outputs,
+			amount: BigInt(pyAmount)
+		});
+		// A key count that is neither 1 nor 1 + one per output is not this tx's key.
+		expect(scanRawTxForAddress(v.tx, v.tx_key_full.slice(0, 128), keysOf(v.dest))).toEqual({
+			error: 'bad_key'
+		});
+		// The single-key transactions are unaffected by the longer form's rules.
+		const sub = byName('subaddress+change');
+		expect(scanRawTxForAddress(sub.tx, sub.tx_key.toUpperCase(), keysOf(sub.dest))).toMatchObject({
+			outputs: sub.expect.outputs
+		});
+	});
+
 	it('refuses malformed input without throwing', () => {
 		expect(
 			scanRawTxForAddress({}, byName('subaddress+change').tx_key, keysOf(V.treasury.primary))

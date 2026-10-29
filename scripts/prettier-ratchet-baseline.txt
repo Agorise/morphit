@@ -338,7 +338,6 @@ apps/web/scripts/chat-notif-nudge-gate-smoke.ts
 apps/web/scripts/chat-notif-nudge-smoke.ts
 apps/web/scripts/chat-notification-wiring-smoke.ts
 apps/web/scripts/chat-pdf-export-smoke.ts
-apps/web/scripts/chat-read-state-threading-smoke.ts
 apps/web/scripts/chat-realtime-cadence-smoke.ts
 apps/web/scripts/chat-scroll-to-newest-smoke.ts
 apps/web/scripts/chat-security-preference-smoke.ts
@@ -512,7 +511,6 @@ apps/web/src/lib/components/AssetFilterSelect.svelte
 apps/web/src/lib/components/AvatarMenu.svelte
 apps/web/src/lib/components/BusyButton.svelte
 apps/web/src/lib/components/CoinCarousel.svelte
-apps/web/src/lib/components/ConversationView.svelte
 apps/web/src/lib/components/FaqSearch.svelte
 apps/web/src/lib/components/FeaturedAuctionHistory.svelte
 apps/web/src/lib/components/FeaturedOrders.svelte
@@ -536,7 +534,6 @@ apps/web/src/lib/components/PrioritiesSection.svelte
 apps/web/src/lib/components/QrPanel.svelte
 apps/web/src/lib/components/RatingChip.svelte
 apps/web/src/lib/components/RecipientQrScanner.svelte
-apps/web/src/lib/components/RelativeTime.svelte
 apps/web/src/lib/components/RequireLiveSession.svelte
 apps/web/src/lib/components/RssFeedPicker.svelte
 apps/web/src/lib/components/SeedBackupPrint.svelte

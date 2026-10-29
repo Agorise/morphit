@@ -88,6 +88,10 @@ export interface EndpointState {
 	 *  into a queue rather than all reading the same "now" and firing
 	 *  together.  0 = no request paced yet. */
 	nextAllowedAt: number;
+	/** Unix-ms time a quorum read last stopped waiting for this endpoint
+	 *  (the caller's deadline, v1.21.17). Until it answers again it is asked
+	 *  after the others in a quorum read — not cooled down. */
+	cutAt?: number;
 }
 
 /** Cooldown ladder in milliseconds.  Same shape the two existing
@@ -245,9 +249,19 @@ export function effectiveTimeoutMs(url: string, timeoutMs: number, userFacing = 
  *  off + cooling down) or an application-level error from the
  *  upstream RPC (pass through to caller, keep endpoint warm)?
  *  Match the same substrings both pre-existing clients used. */
+/** The message an endpoint call throws to say "this endpoint could not be
+ *  reached" in its own words; isTransportError counts it. */
+export const TRANSPORT_FAILURE = 'transport_failure';
+
 export function isTransportError(err: unknown): boolean {
 	if (!(err instanceof Error)) return false;
 	const m = err.message.toLowerCase();
+	// v1.21.17: what the indexer's explorer checks (listing fees, the chat's
+	// payment check) throw for an explorer that could not be reached. They
+	// meant it to put the explorer on the cooldown ladder, but nothing below
+	// matched the bare word, so a dead explorer was asked again on every
+	// check (each time waiting out its full timeout).
+	if (m === TRANSPORT_FAILURE) return true;
 	if (m.includes('fetch failed')) return true;
 	if (m.includes('timeout')) return true;
 	if (m.includes('econnrefused')) return true;
@@ -1080,6 +1094,13 @@ export class EndpointPool {
 		}
 	}
 
+	/** A request this pool stopped waiting for (the caller's deadline): the
+	 *  endpoint is asked after the others until it answers again, without the
+	 *  cooldown a failure brings. */
+	private recordSlow(ep: EndpointState): void {
+		ep.cutAt = Date.now();
+	}
+
 	private recordFailure(ep: EndpointState, rateLimited = false): void {
 		ep.consecutiveFailures++;
 		// Persist failures too, not just successes — knowing which node is DOWN is
@@ -1165,6 +1186,12 @@ export class EndpointPool {
 			 *  so a cap never lowers what can be learned — it only stops every
 			 *  endpoint being hit for every call.  Default: all at once. */
 			maxOperators?: number;
+			/** A person is waiting: a hidden endpoint gets the user-facing floor
+			 *  (DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS), not the background one. */
+			userFacing?: boolean;
+			/** Stops the call: nobody more is asked, everyone still in flight is
+			 *  cancelled, and it resolves with the answers already in. */
+			signal?: AbortSignal;
 		}
 	): Promise<QuorumCallResult<T>> {
 		const minAgree = options.minAgree ?? 1;
@@ -1201,7 +1228,13 @@ export class EndpointPool {
 		// hidden-network timeouts. Known-good by latency, then never tried, then
 		// failing — nobody is excluded, only ordered.
 		const quorumRank = (e: EndpointState): number =>
-			e.ewmaLatencyMs !== null ? 0 : e.consecutiveFailures > 0 ? 2 : 1;
+			(e.cutAt ?? 0) > e.lastSuccessAt
+				? 2
+				: e.ewmaLatencyMs !== null
+					? 0
+					: e.consecutiveFailures > 0
+						? 2
+						: 1;
 		candidates.sort((a, b) => {
 			const d = quorumRank(a) - quorumRank(b);
 			if (d !== 0) return d;
@@ -1221,16 +1254,21 @@ export class EndpointPool {
 		const allResponses: T[] = [];
 		let agreedKey: string | undefined;
 		let contacted = 0;
-		const inFlight = new Set<AbortController>();
+		/** Each request still out, with its endpoint and start time. */
+		const inFlight = new Map<AbortController, { ep: EndpointState }>();
+		/** The caller's signal fired: an abort it causes says nothing about the
+		 *  endpoint, exactly like one caused by quorum being met. */
+		let stopped = options.signal?.aborted === true;
+		let stopListening = (): void => {};
 
 		/** Ask one operator: its endpoints in latency order until one answers
 		 *  (a value or a null) or all fail. Resolves with the answer, or
 		 *  undefined when none came. Never rejects. */
 		const askOperator = async (eps: EndpointState[]): Promise<{ value: T | null } | undefined> => {
 			for (const ep of eps) {
-				if (agreedKey !== undefined) return undefined;
+				if (agreedKey !== undefined || stopped) return undefined;
 				const c = new AbortController();
-				inFlight.add(c);
+				inFlight.set(c, { ep });
 				// rv2-9: the hidden-network floor, per endpoint. The flat 10 s
 				// budget cut every .onion/.i2p answer off mid-tunnel on a cold
 				// hidden-only node, so its quorum never formed.
@@ -1240,7 +1278,7 @@ export class EndpointPool {
 						timedOut = true;
 						c.abort();
 					},
-					effectiveTimeoutMs(ep.url, timeoutMs)
+					effectiveTimeoutMs(ep.url, timeoutMs, options.userFacing === true)
 				);
 				const t0 = Date.now();
 				contacted++;
@@ -1267,12 +1305,38 @@ export class EndpointPool {
 		await new Promise<void>((resolveDone) => {
 			let next = 0;
 			let running = 0;
+			if (stopped) {
+				resolveDone();
+				return;
+			}
+			const onStop = (): void => {
+				stopped = true;
+				// Still out when the caller ran out of time: not a failure (no
+				// cooldown), but it is asked after the others until it answers
+				// again, so the caller's next try is not held up by it a second
+				// time (v1.21.17 review).
+				for (const [c, { ep }] of inFlight) {
+					this.recordSlow(ep);
+					c.abort();
+				}
+				resolveDone();
+			};
+			options.signal?.addEventListener('abort', onStop, { once: true });
+			stopListening = () => options.signal?.removeEventListener('abort', onStop);
 			const launch = (): void => {
-				while (agreedKey === undefined && running < maxOperators && next < operators.length) {
+				while (
+					agreedKey === undefined &&
+					!stopped &&
+					running < maxOperators &&
+					next < operators.length
+				) {
 					const eps = operators[next++]!;
 					running++;
 					void askOperator(eps).then((answer) => {
 						running--;
+						// Stopped by the caller: the call has already resolved with
+						// what was in, and nothing arriving later is added to it.
+						if (stopped) return;
 						// The caller's key runs on whatever a node sent; one that throws on
 						// a malformed answer must not leave this promise rejected with
 						// nobody listening (and, as the last operator out, the call never
@@ -1293,7 +1357,7 @@ export class EndpointPool {
 							if (n >= minAgree) {
 								agreedKey = key;
 								// Quorum reached — cancel everyone still in flight.
-								for (const c of inFlight) c.abort();
+								for (const c of inFlight.keys()) c.abort();
 								resolveDone();
 								return;
 							}
@@ -1312,6 +1376,7 @@ export class EndpointPool {
 			};
 			launch();
 		});
+		stopListening();
 
 		if (agreedKey !== undefined) {
 			return {

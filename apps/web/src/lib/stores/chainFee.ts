@@ -26,6 +26,10 @@ import { browser } from '$app/environment';
 export interface ChainFeeState {
 	/** account_creation_fee in BLURT */
 	readonly accountCreationFeeBlurt: number;
+	/** The network fee per operation and per kB of a signed transaction
+	 *  (v1.21.17), or null when not known. */
+	readonly operationFlatFeeBlurt: number | null;
+	readonly bandwidthKbytesFeeBlurt: number | null;
 	/** ISO-8601 timestamp from the indexer's last chain read */
 	readonly observedAt: string | null;
 	/** 'chain' = live from chain RPC, 'fallback' = operator's
@@ -38,6 +42,8 @@ export interface ChainFeeState {
 
 const FALLBACK: ChainFeeState = {
 	accountCreationFeeBlurt: 100,
+	operationFlatFeeBlurt: null,
+	bandwidthKbytesFeeBlurt: null,
 	observedAt: null,
 	source: 'session_default',
 	loaded: false
@@ -86,6 +92,8 @@ export function initChainFee(): Promise<void> {
 			}
 			const body = (await res.json()) as {
 				account_creation_fee_blurt?: unknown;
+				operation_flat_fee_blurt?: unknown;
+				bandwidth_kbytes_fee_blurt?: unknown;
 				observed_at?: unknown;
 				source?: unknown;
 			};
@@ -97,8 +105,12 @@ export function initChainFee(): Promise<void> {
 			const observedAt = typeof body.observed_at === 'string' ? body.observed_at : null;
 			const source =
 				body.source === 'chain' || body.source === 'fallback' ? body.source : 'session_default';
+			const nonNegative = (v: unknown): number | null =>
+				typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
 			store.set({
 				accountCreationFeeBlurt: fee,
+				operationFlatFeeBlurt: nonNegative(body.operation_flat_fee_blurt),
+				bandwidthKbytesFeeBlurt: nonNegative(body.bandwidth_kbytes_fee_blurt),
 				observedAt,
 				source,
 				loaded: true

@@ -48,3 +48,38 @@ describe('orderTitleParts voice', () => {
 		expect(orderTitleParts(o, undefined, 'goods').key).toBe('order_title.sell_barter_novalue');
 	});
 });
+
+/** The inbox subject line (v1.21.17): "Regarding my buy order of …" on the
+ *  poster's own row, "Who is buying …" on the other person's — no "RE:". */
+describe('orderTitleParts — the inbox voices', () => {
+	for (const side of ['buy', 'sell'] as const) {
+		for (const [shape, amounts] of shapes) {
+			it(`${side}_${shape}: 'mine' and 'who' keys, same values`, () => {
+				const o = { ...base, side, ...amounts };
+				const poster = orderTitleParts(o);
+				const mine = orderTitleParts(o, undefined, undefined, { voice: 'mine' });
+				const who = orderTitleParts(o, undefined, undefined, { voice: 'who' });
+				expect(mine.key).toBe(`order_title_mine.${side}_${shape}`);
+				expect(who.key).toBe(`order_title_who.${side}_${shape}`);
+				expect(mine.values).toEqual(poster.values);
+				expect(who.values).toEqual(poster.values);
+			});
+		}
+	}
+	it('a valueless barter listing too', () => {
+		const o = {
+			side: 'sell',
+			asset: 'BARTER',
+			fiat_currency: 'USD',
+			amount_min: null,
+			amount_max: null,
+			accepted_assets: ['XMR']
+		};
+		expect(orderTitleParts(o, undefined, 'goods', { voice: 'mine' }).key).toBe(
+			'order_title_mine.sell_barter_novalue'
+		);
+		expect(orderTitleParts(o, undefined, 'goods', { voice: 'who' }).key).toBe(
+			'order_title_who.sell_barter_novalue'
+		);
+	});
+});

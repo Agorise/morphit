@@ -47,6 +47,12 @@ export type SnapshotOpCoverage = 'full' | 'orderbook-only';
 const OP_COVERAGE_VALUES: ReadonlySet<string> = new Set(['full', 'orderbook-only']);
 
 /** What an exported snapshot records about the SOURCE DB it was taken from. */
+import { CONSENSUS_V2_ACTIVATION_TIME } from '../indexer/consensusActivation';
+
+/** v1.21.17 — the schema (migration v70) that records the BLURT transfers
+ *  proving a first-buy trade, from the consensus activation time on. */
+export const WAIVER_EVIDENCE_SCHEMA_VERSION = 70;
+
 export interface SnapshotManifest {
 	readonly snapshotFormatVersion: number;
 	/** Blurt chain id the source indexed. A mismatch is FATAL — the derived state
@@ -253,6 +259,21 @@ export function verifyManifestCompatible(
 	} else if (manifest.schemaVersion < target.codeSchemaVersion) {
 		warnings.push(
 			`snapshot schema v${manifest.schemaVersion} < build v${target.codeSchemaVersion}; the indexer will forward-migrate on first start.`
+		);
+	}
+	// v1.21.17 — a snapshot from a build without the first-trade transfer
+	// evidence (schema < 70) that may cover blocks from the activation time on
+	// would come back without the transfers in those blocks — and the node
+	// would then refuse reviews every other instance accepts. Exported before
+	// the activation time it covers none (a block is never newer than the
+	// export), so only those are allowed.
+	if (
+		manifest.schemaVersion < WAIVER_EVIDENCE_SCHEMA_VERSION &&
+		target.codeSchemaVersion >= WAIVER_EVIDENCE_SCHEMA_VERSION &&
+		!(Date.parse(manifest.createdAt) < Date.parse(CONSENSUS_V2_ACTIVATION_TIME))
+	) {
+		reasons.push(
+			`snapshot schema v${manifest.schemaVersion} was exported on or after ${CONSENSUS_V2_ACTIVATION_TIME} by a build without the first-trade transfer evidence (v${WAIVER_EVIDENCE_SCHEMA_VERSION}); restoring it would lose that evidence for the blocks it covers — use a snapshot from v1.21.17 or later.`
 		);
 	}
 	if (manifest.pgMajor > target.pgMajor) {

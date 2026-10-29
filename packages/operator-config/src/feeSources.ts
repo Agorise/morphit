@@ -131,6 +131,64 @@ export const DEFAULT_PRICENODES: readonly string[] = [
 	'http://runbtcpn7gmbj5rgqeyfyvepqokrijem6rbw7o5wgqbguimuoxrmcdyd.onion'
 ] as const;
 
+/**
+ * Who runs each default hidden-service explorer, by host. The BTC / XMR
+ * verifiers count a quorum by OPERATOR (rpc-pool EndpointPool `operatorOf`):
+ * one operator's onion, I2P and clearnet addresses are one answer, never two —
+ * otherwise runbtc's .onion and .b32.i2p, or mempool.space's onion and its
+ * clearnet site, would make a two-explorer quorum on their own.
+ *
+ * A name is the operator's clearnet domain where it has one, so that it is the
+ * same name explorerOperatorOf derives for that operator's clearnet URLs
+ * (blockstream.info, mempool.space…); otherwise a label (runbtc,
+ * suddenwhipvapor). Every DEFAULT hidden explorer must be listed here
+ * (test/indexer/fee/explorerOperators.test.ts checks it). A name is a label,
+ * not proof: two names may still be one person, and nothing here can tell.
+ */
+export const EXPLORER_OPERATORS: Readonly<Record<string, string>> = {
+	// BTC, Tor
+	'mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion': 'mempool.space',
+	'mempool4t6mypeemozyterviq3i5de4kpoua65r3qkn5i3kknu5l2cad.onion': 'emzy.de',
+	'runbtcx3wfygbq2wdde6qzjnpyrqn3gvbks7t5jdymmunxttdvvttpyd.onion': 'runbtc',
+	'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion': 'blockstream.info',
+	'3pd56qzgyg7p4sk7rlcxrrsbx7nfucdckautxjqbre7uw7kr3ah53byd.onion': 'foundation.xyz',
+	// BTC, I2P
+	'44naenfnp6foaegpmujdn4pmhtgo52tjkgs2d3ir2wo7d7mfbufq.b32.i2p': 'runbtc',
+	// XMR, Tor
+	'xmrexplrthytnunr4jasr3vnjc6jo5idsyxzv74a7ep7dy7lwcv2eoyd.onion': 'runbtc',
+	'nklwsomtuok6dhqqecp3a26xzgokfgmeuaplcdkaxehncg57yzarvbad.onion': 'suddenwhipvapor',
+	// XMR, I2P
+	'ravfxexpucy437tc4slicbf5atir2akrcqanog3tgsc3mcdfmrqq.b32.i2p': 'xmr.mx'
+};
+
+/**
+ * The operator behind a BTC / XMR explorer entry (any `raw-tx+` / `node+`
+ * prefix skipped), for counting a quorum by operator. PURE.
+ *   - a host in EXPLORER_OPERATORS: its name;
+ *   - another hidden service: its host (unknown, so counted on its own);
+ *   - a clearnet host: its last two labels (`node.monero.fail` and
+ *     `xmr.monero.fail` → `monero.fail`), an IP address as it is. Where that
+ *     joins two operators (a `co.uk`-style suffix), the quorum only gets
+ *     harder to meet — never easier;
+ *   - not a URL: the entry itself.
+ * The port is ignored: two explorers on one host are one operator.
+ */
+export function explorerOperatorOf(spec: string): string {
+	const s = spec.trim().replace(/^(raw-tx|node)\+/, '');
+	let host: string;
+	try {
+		host = new URL(s).hostname.toLowerCase().replace(/\.$/, '');
+	} catch {
+		return spec;
+	}
+	const known = EXPLORER_OPERATORS[host];
+	if (known !== undefined) return known;
+	if (isHiddenSourceUrl(s)) return host;
+	if (host.startsWith('[') || /^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return host;
+	const labels = host.split('.');
+	return labels.length <= 2 ? host : labels.slice(-2).join('.');
+}
+
 /** Is `url`'s host a Tor v3 onion or an I2P name (a hidden service)? PURE.
  *  Any scheme prefix like `raw-tx+` / `node+` is skipped. */
 export function isHiddenSourceUrl(url: string): boolean {

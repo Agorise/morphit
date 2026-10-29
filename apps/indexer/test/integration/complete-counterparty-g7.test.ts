@@ -67,8 +67,8 @@ describe.skipIf(!INTEGRATION_ENABLED)('G7 — a later completion can name the co
 			);
 		}
 	}
-	const complete = (payload: Record<string, unknown>, signer = 'alice') =>
-		fx.db.withTx((c) => orderCompleteHandler(makeCtx({ signer, blockTime: LATER, payload }), c));
+	const complete = (payload: Record<string, unknown>, signer = 'alice', blockTime = LATER) =>
+		fx.db.withTx((c) => orderCompleteHandler(makeCtx({ signer, blockTime, payload }), c));
 	const cp = async () =>
 		(
 			await fx.db.query<{ completed_counterparty: string | null }>(
@@ -82,6 +82,25 @@ describe.skipIf(!INTEGRATION_ENABLED)('G7 — a later completion can name the co
 		expect(await cp()).toBeNull();
 		expect(await complete({ permlink: 'sell-blurt-1', counterparty: 'bob' })).toEqual({ ok: true });
 		expect(await cp()).toBe('bob');
+	});
+
+	it('the completion time stays the completion: naming the partner later moves only updated_at', async () => {
+		await chat('alice', 'bob');
+		const times = async () =>
+			(
+				await fx.db.query<{ completed_at: Date | null; updated_at: Date }>(
+					`SELECT completed_at, updated_at FROM orders WHERE permlink = 'sell-blurt-1'`
+				)
+			).rows[0];
+		expect((await times())?.completed_at).toBeNull();
+		await complete({ permlink: 'sell-blurt-1' });
+		expect((await times())?.completed_at?.toISOString()).toBe(LATER.toISOString());
+		const NAMED = new Date('2026-10-02T09:00:00Z');
+		await complete({ permlink: 'sell-blurt-1', counterparty: 'bob' }, 'alice', NAMED);
+		expect(await cp()).toBe('bob');
+		const t = await times();
+		expect(t?.completed_at?.toISOString()).toBe(LATER.toISOString());
+		expect(t?.updated_at.toISOString()).toBe(NAMED.toISOString());
 	});
 
 	it('never overwrites a counterparty already recorded', async () => {

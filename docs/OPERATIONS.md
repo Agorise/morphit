@@ -6484,6 +6484,30 @@ missing for an operator not counted yet.
 And separately, confirm the actual BLURT balance of your fees
 account on-chain — that is the ground truth for the money.
 
+### Reviews of a newcomer's first trade (waiver orders)
+
+A newcomer's first order is a fee-waived BLURT buy, and until now no review
+could cite it. From 2026-11-01 00:00 UTC (by block timestamp, the consensus-v2
+activation time) a review may cite such an order when the trade is proven on
+chain: the order was completed naming the other party, and that party sent the
+order's owner at least 50.000 BLURT in one transfer, in a block stamped at or
+after 2026-11-01 00:00 UTC and no earlier than the one that posted the order
+(even earlier in that block), up to and including the review's block (even
+later in that block). A review in the very block that posted the order is
+refused. A transfer before 1 November never counts: an older trade counts once
+the partner sends the owner at least 50.000 BLURT again from then on. Such a
+review never pays the welcome bonus.
+
+The indexer keeps, per owner and sender, the earliest such transfer in
+`waiver_trade_transfers`, recorded as it applies each block. Nothing older is
+ever read back from the chain, and there is nothing to wait for after an
+upgrade: a node that replays the chain from the start and one that upgraded
+before 1 November hold the same rows.
+
+A reviewer can ask what happened to a review with
+`GET /v1/feedback/status?reviewer=&subject=&order_permlink=` (see
+`docs/API.md`).
+
 ### If the money didn't arrive
 
 The 90% is a transfer inside the user's fee transaction, so if it
@@ -11002,8 +11026,23 @@ explorer on this box); they must reach the usual quorum among themselves
 — paid, not paid yet, underpaid, no such transaction — is final. Only when they
 give no answer does a node that may use clearnet ask **all** its explorers, onion
 and clearnet, with the same quorum (and only then may the XMR one-source rule of
-§40.4 apply). The first tier is used only when it holds enough explorers to meet
-the quorum on its own.
+§40.4 apply). The first tier is used only when it holds enough explorer
+operators (below) to meet the quorum on its own.
+
+**One operator, one vote.** The quorum counts explorer *operators*, not URLs: one
+operator's onion, I2P and clearnet addresses (runbtc's onion and I2P explorers,
+mempool.space's or Blockstream's onion and clearnet sites) give one answer, the
+second address being only a fallback when the first cannot be reached. The
+default hidden explorers carry their operator's name in
+`packages/operator-config/src/feeSources.ts` (`EXPLORER_OPERATORS`); any other
+hidden service counts on its own, and a clearnet host by its last two labels
+(`node.monero.fail` and `xmr.monero.fail` are one). The defaults are five BTC and
+nine XMR operators. The quorum itself is set from the operators in your list: left
+unset, it is two, or one when your list names only one operator (said at boot, as
+for a one-explorer list); an explicit `*_MIN_SUCCESSFUL_RESPONSES` above the number
+of operators refuses to boot. A tier with fewer operators than the quorum is not
+asked on its own (the full list is). It never passes on one operator's word unless
+your list has only that one.
 
 **A zero-clearnet node** (no clearnet RPC) drops the clearnet entries of its lists
 — never contacted, no DNS question — and verifies through the onion explorers

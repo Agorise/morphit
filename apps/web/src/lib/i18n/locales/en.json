@@ -422,7 +422,7 @@
 			"mark_all_read": "Mark all as read",
 			"conversation_aria_unread": "Conversation with {peer} — unread",
 			"conversation_aria_read": "Conversation with {peer}",
-			"re_prefix": "RE:",
+			"no_order": "Not about an order",
 			"tabs_aria": "Inbox tabs",
 			"tab_inbox": "Inbox",
 			"tab_starred": "Starred",
@@ -437,7 +437,9 @@
 			"restore_toast": "Moved back to your Inbox.",
 			"tab_empty_inbox": "Nothing here: your conversations are starred or archived.",
 			"tab_empty_starred": "No starred conversations. Tap the star on a conversation to keep it here.",
-			"tab_empty_archived": "No archived conversations."
+			"tab_empty_archived": "No archived conversations.",
+			"review_not_counted_yet": "Not counted yet",
+			"review_not_counted": "Not counted"
 		},
 		"block": {
 			"busy": "Working…",
@@ -614,7 +616,9 @@
 			"pill_method_xrp": "Ripple (XRP)",
 			"blurt_account_not_found": "No Blurt account with that name exists.",
 			"asset_label": "Coin",
-			"too_long_to_send": "This is too long to send in one chat message. Shorten the note or the PayJoin link and try again."
+			"too_long_to_send": "This is too long to send in one chat message. Shorten the note or the PayJoin link and try again.",
+			"amount_label_required": "Amount you ask to be paid",
+			"reuse_blocked_body": "To be paid for this trade, share an address you have never shared before: a payment to a reused address cannot be told apart from an earlier one. Make a new address (or subaddress) in your wallet."
 		},
 		"funds_sent": {
 			"button": "Pay now",
@@ -658,6 +662,7 @@
 			"self_verify_wrong_op": "The transaction doesn't contain a transfer to the expected recipient.",
 			"view_on_explorer": "View on explorer",
 			"send_failed": "Couldn't send the funds-sent receipt. Try again.",
+			"too_long_to_send": "This is too long to send in one chat message. Shorten the note. If it is the Monero transaction key that makes it long, leave the key out: the seller can then check the payment in his own wallet.",
 			"txid_invalid_usdt": "This transaction ID does not match the USDT network you picked. Double-check the network before sending.",
 			"network_pinned_hint": "The seller specified this network when sharing their address. You cannot change it here.",
 			"pill_title_usdt": "USDT sent",
@@ -679,7 +684,11 @@
 			"receipt_title": "Payment Receipt",
 			"receipt_when": "on {when}",
 			"verify_received_of": "Received {received} of {asked} BLURT.",
-			"verify_received_unasked": "Received {received} BLURT on chain (no amount was asked)"
+			"verify_received_unasked": "Received {received} BLURT on chain (no amount was asked)",
+			"tx_key_label": "Transaction key (tx key)",
+			"tx_key_placeholder": "64 or more letters and numbers",
+			"tx_key_help": "Your Monero wallet shows it for every payment you send. With it, @{peer} sees your payment arrive. It proves this one payment and can't be used to spend anything.",
+			"tx_key_invalid": "That doesn't look like a Monero transaction key."
 		},
 		"unknown_version": "This message uses a newer protocol. Please update Morphit to read it.",
 		"pay_blurt": {
@@ -804,7 +813,11 @@
 		"day_separator_tooltip": "Midnight, UTC",
 		"feedback": {
 			"leave_prompt": "Leave feedback",
-			"sent_toast": "Feedback sent"
+			"sent_toast": "Feedback sent",
+			"not_counted_later": "Your review of @{peer} is not counted yet: reviews of a first trade count from {date}. You will be asked here to send it again then.",
+			"not_counted": "Your review of @{peer} was not counted: the indexers did not accept it.",
+			"resend_now": "Your earlier review of @{peer} did not count, but it would now: please send it again.",
+			"not_counted_needs_transfer": "Your review of @{peer} is not counted yet. A review of a first trade counts once @{from} has sent @{to} at least 50 BLURT in one transfer on or after {date}; you will then be asked here to send it again."
 		},
 		"system": {
 			"order_settled_elsewhere": "Thank you for reaching out about this order. I've now completed this trade with another trader, so it's no longer available. I'm sorry it didn't work out this time — I really appreciate your interest, and I hope we can trade in the future."
@@ -813,6 +826,35 @@
 		"history": {
 			"loading_older": "Loading older messages…",
 			"load_failed": "Couldn't load older messages."
+		},
+		"legs": {
+			"waiting_payment": "Waiting for @{peer} to pay you in {coins}. Send nothing until the payment shows up here.",
+			"waiting_address": "Waiting for @{peer} to share where you should pay.",
+			"checking_payment": "Checking @{peer}'s payment…",
+			"payment_short": "@{peer}'s payment doesn't match what was asked — see the receipt above. Send nothing unless your own wallet shows the right payment.",
+			"send_unchecked": "@{peer}'s payment couldn't be checked here. Make sure it is in your wallet before you send anything.",
+			"wallet_confirm": "I see it in my wallet",
+			"check_wallet": "@{peer}'s payment could not be confirmed here. Look for it in your own wallet, and check the amount, before you send anything.",
+			"payment_no_address": "@{peer} recorded a payment in a coin you have not shared an address for in this chat. Share the address you want to be paid at, and send nothing yet.",
+			"amount_confirm": "The amount is right",
+			"check_amount": "@{peer}'s payment arrived, but no amount was asked for it here. Check it is the amount you agreed before you send anything.",
+			"payment_reused": "@{peer} cited a payment already recorded for another order: it is not a payment for this one. Send nothing.",
+			"unconfirmed_btc": "Not confirmed yet: until it is, a Bitcoin payment can still be replaced. Waiting for one confirmation is safer.",
+			"ask_blurt": "Ask for BLURT",
+			"ask_blurt_aria": "Tell @{peer} which Blurt account to pay, and how much BLURT",
+			"payment_old": "@{peer}'s payment was made before you shared this address: it is someone's earlier payment, not this trade's. Send nothing.",
+			"waiting_asset_address": "The payment from @{peer} is in. Waiting for @{peer} to share an {asset} address to send to."
+		},
+		"payment_check": {
+			"checking": "Checking this payment…",
+			"not_found": "Not seen on the {coin} network yet. Checking again shortly.",
+			"no_key": "No transaction key was given, so this Monero payment can't be checked here. Look in your wallet.",
+			"unavailable": "This payment can't be checked right now. Look in your wallet.",
+			"wrong_address": "This payment did not reach the {coin} address shared in this chat.",
+			"short": "Only {amount} {coin} reached the shared address — less than was asked.",
+			"seen": "{amount} {coin} received · {n}/{required} confirmations",
+			"confirmed": "{amount} {coin} received · confirmed",
+			"old": "This {coin} payment was made before the address was shared in this chat: it is not a payment for this trade."
 		}
 	},
 	"cheat_sheet": {
@@ -880,7 +922,6 @@
 		"chart_aria": "Daily clearing-price chart over the last {days} days",
 		"legend": "Bar height = clearing price (BLURT/hour). Solid green = all slots filled (auction was competitive). Faded green = some slots filled. Grey = no bids that day.",
 		"no_history_yet": "No featured-slot bids in the last {days} days yet. Be the first.",
-		"no_history_yet_active": "No featured-slot price history for the last {days} days yet.",
 		"bar_title": "{day}: {rate} BLURT/hr · {filled}/{max} slots filled"
 	},
 	"common": {
@@ -1474,7 +1515,7 @@
 			},
 			"xmr_txid": {
 				"q": "What is a Monero TxID and where do I find it?",
-				"a": "A Monero transaction ID (TxID, sometimes called a *hash*) is a 64-character code, using 0–9 and a–f, that names one Monero payment. To find it, open the payment in your wallet's history: the TxID is the long code in its details, usually with a copy button.\n\n**When {brand} asks for it:** when you tell your trade partner you've paid in Monero (the **Send XMR** button in chat), and when you pay a listing fee in XMR (if this site takes XMR fees). For a fee, you paste the TxID together with the payment's transaction key, so every Morphit site can check it — see \"What is the Monero transaction key and why does {brand} ask for it?\".\n\n**Privacy:** a TxID is public anyway — anyone can look it up on a block explorer — and it doesn't show who you are or your balance. But it is saved with your listing on the Blurt chain, which links that one fee payment to your account. Your trade payment itself goes person to person, off Blurt. If you share its TxID in chat, it travels in your encrypted chat, which only you and your partner can read. For no Monero link at all, pay the fee in BLURT: it's the default and costs half as much."
+				"a": "A Monero transaction ID (TxID, sometimes called a *hash*) is a 64-character code, using 0–9 and a–f, that names one Monero payment. To find it, open the payment in your wallet's history: the TxID is the long code in its details, usually with a copy button.\n\n**When {brand} asks for it:** when you tell your trade partner you've paid in Monero (the **Send XMR** button in chat), and when you pay a listing fee in XMR (if this site takes XMR fees). For a fee, you paste the TxID together with the payment's transaction key, so every Morphit site can check it — see \"What is the Monero transaction key and why does {brand} ask for it?\".\n\n**Privacy:** a TxID is public anyway — anyone can look it up on a block explorer — and it doesn't show who you are or your balance. But it is saved with your listing on the Blurt chain, which links that one fee payment to your account. Your trade payment itself goes person to person, off Blurt. If you share its TxID in chat, it travels in your encrypted chat, which only you and your partner can read. To show your partner the payment arriving, their {brand} site looks the TxID up on block explorers — the TxID alone, never your address or transaction key. For no Monero link at all, pay the fee in BLURT: it's the default and costs half as much."
 			},
 			"xmr_tx_proof": {
 				"q": "What is the Monero transaction key and why does {brand} ask for it?",
@@ -1801,6 +1842,10 @@
 		"hours_option": "{n}h",
 		"cost_label": "Total cost",
 		"cost_detail": "{per_hour} BLURT/hour × {hours} hours",
+		"balance_label": "Your balance",
+		"balance_loading": "Reading your balance…",
+		"balance_unknown": "Balance not available right now",
+		"balance_short": "Not enough BLURT: {missing} BLURT more is needed (this includes the network fee of about {fee} BLURT).",
 		"submit_button": "Pay and Feature",
 		"cancel_button": "Never mind",
 		"success": "⭐ Order featured — {blurt} BLURT paid",
@@ -2436,6 +2481,7 @@
 		},
 		"order": {
 			"posted_prefix": "Posted",
+			"posted_on": "Posted on {date}",
 			"state_live": "Live",
 			"state_cancelled": "Canceled",
 			"state_expired": "Expired",
@@ -2462,6 +2508,7 @@
 			"feedback_no_counterparty": "No chats with a counterparty have happened yet",
 			"posting": "Posting…",
 			"feature_arming_hint": "Available the moment your order is live",
+			"feature_opens_when_fee_confirmed": "The Feature form opens here once your listing fee is confirmed.",
 			"fee_awaiting_payment": "Waiting for your BTC fee",
 			"fee_proof_unsupported": "Not in orderbook — fee can't be checked; post again with the transaction key"
 		},
@@ -2838,6 +2885,7 @@
 		"terms": "Terms",
 		"posted_on": "Posted on",
 		"expires_on": "Expires on",
+		"expired_on": "Expired on",
 		"listing_fee": "Listing fee",
 		"fee_verified": "Verified",
 		"fee_underpaid": "Fee underpaid",
@@ -2984,7 +3032,8 @@
 			"eta": "Orders should be available around {eta}.",
 			"estimating": "Estimating when orders will be available…"
 		},
-		"feed_title": "{site} — orderbook ({format})"
+		"feed_title": "{site} — orderbook ({format})",
+		"match_in_featured": "The order that matches is in Featured, above."
 	},
 	"paired_readonly": {
 		"banner_heading": "Signed in as @{account} — phone holds the keys.",
@@ -3686,12 +3735,12 @@
 		"tab_active_orders": "Active orders",
 		"tab_trade_history": "Trade history",
 		"tabs_aria": "Profile details",
-		"no_trade_history": "No completed trades yet.",
+		"no_trade_history": "@{account} has no completed trades yet.",
 		"trade_history_with": "with @{account}",
 		"loading_feedback": "Loading feedback…",
 		"feedback_error": "Couldn't load feedback right now.",
 		"rating_count": "{n, plural, one {# rating} other {# ratings}}",
-		"no_feedback_yet": "No feedback yet. This user has not been reviewed by any counterparty.",
+		"no_feedback_yet": "No feedback yet. @{account} has not been reviewed by any counterparty.",
 		"reviews_heading": "@{account} has received reviews from",
 		"review_order_link": "View the order",
 		"load_more": "Load more",
@@ -3705,8 +3754,8 @@
 		"given_heading": "@{account} has left a review for",
 		"given_rated": "I rated @{account}:",
 		"loading_given": "Loading reviews given…",
-		"given_error": "Couldn't load the reviews this user has left.",
-		"no_given_yet": "Nothing yet. This user has not left feedback on any counterparties.",
+		"given_error": "Couldn't load the reviews @{account} has left.",
+		"no_given_yet": "Nothing yet. @{account} has not left feedback on any counterparties.",
 		"rss_subscribe_label": "RSS — follow this trader",
 		"rss_subscribe_title": "Get notified via RSS when this trader posts a new buy or sell order. Note: polling a per-trader feed is slightly more revealing than the worldwide feed.",
 		"feedback_suppressed_chip": "Not counted toward the rating",
@@ -3813,7 +3862,13 @@
 		"received_rated": "Rated me:",
 		"average_rating_detail": "Average rating: {avg}",
 		"feedback_all_excluded": "The reviews below aren't included in this score — the accounts that left them were flagged by our self-dealing checks.",
-		"headline_is_average": "Average rating"
+		"headline_is_average": "Average rating",
+		"given_not_counted_later": "Not counted yet: reviews of a first trade count from {date}. Send it again then, from the chat.",
+		"given_not_counted": "Not counted: the indexers did not accept it.",
+		"given_send_again": "Not counted yet, and it can count now: send it again from the chat.",
+		"given_pending": "Sent. Not in the indexers' list yet.",
+		"given_open_chat": "Open the chat",
+		"given_needs_transfer": "Not counted yet: it counts once @{from} has sent @{to} at least 50 BLURT in one transfer on or after {date}. Then send it again from the chat."
 	},
 	"relative_time": {
 		"descriptive": {
@@ -4936,6 +4991,34 @@
 		"sell_exact": "Selling exactly {amount} {fiat} of {asset} for {settlement}",
 		"buy_barter_novalue": "Buying {asset} for {settlement}",
 		"sell_barter_novalue": "Selling {asset} for {settlement}"
+	},
+	"order_title_mine": {
+		"buy_min": "Regarding my buy order of at least {amount} {fiat} of {asset} with {settlement}",
+		"buy_max": "Regarding my buy order of up to {amount} {fiat} of {asset} with {settlement}",
+		"buy_range": "Regarding my buy order of {min}–{max} {fiat} of {asset} with {settlement}",
+		"buy_any": "Regarding my buy order of any amount of {asset} with {settlement}",
+		"buy_exact": "Regarding my buy order of exactly {amount} {fiat} of {asset} with {settlement}",
+		"buy_barter_novalue": "Regarding my buy order of {asset} for {settlement}",
+		"sell_min": "Regarding my sell order of at least {amount} {fiat} of {asset} for {settlement}",
+		"sell_max": "Regarding my sell order of up to {amount} {fiat} of {asset} for {settlement}",
+		"sell_range": "Regarding my sell order of {min}–{max} {fiat} of {asset} for {settlement}",
+		"sell_any": "Regarding my sell order of any amount of {asset} for {settlement}",
+		"sell_exact": "Regarding my sell order of exactly {amount} {fiat} of {asset} for {settlement}",
+		"sell_barter_novalue": "Regarding my sell order of {asset} for {settlement}"
+	},
+	"order_title_who": {
+		"buy_min": "Who is buying at least {amount} {fiat} of {asset} with {settlement}",
+		"buy_max": "Who is buying up to {amount} {fiat} of {asset} with {settlement}",
+		"buy_range": "Who is buying {min}–{max} {fiat} of {asset} with {settlement}",
+		"buy_any": "Who is buying any amount of {asset} with {settlement}",
+		"buy_exact": "Who is buying exactly {amount} {fiat} of {asset} with {settlement}",
+		"buy_barter_novalue": "Who is buying {asset} for {settlement}",
+		"sell_min": "Who is selling at least {amount} {fiat} of {asset} for {settlement}",
+		"sell_max": "Who is selling up to {amount} {fiat} of {asset} for {settlement}",
+		"sell_range": "Who is selling {min}–{max} {fiat} of {asset} for {settlement}",
+		"sell_any": "Who is selling any amount of {asset} for {settlement}",
+		"sell_exact": "Who is selling exactly {amount} {fiat} of {asset} for {settlement}",
+		"sell_barter_novalue": "Who is selling {asset} for {settlement}"
 	},
 	"stats": {
 		"page_title": "Network statistics",

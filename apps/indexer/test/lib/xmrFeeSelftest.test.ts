@@ -55,6 +55,16 @@ const opts = {
 };
 
 describe('xmr fee self-test', () => {
+	it('every OPERATOR must agree: two addresses of one operator are one answer, not two', async () => {
+		const lines: string[] = [];
+		expect(
+			await runXmrFeeSelftest(
+				{ ...opts, explorers: ['https://xmr.one.example', 'https://explorer.one.example'] },
+				explorers(ENC, EXTRA),
+				(l) => lines.push(l)
+			)
+		).toBe(true);
+	});
 	it('passes on a payment made for the order, and shows each step', async () => {
 		const lines: string[] = [];
 		expect(await runXmrFeeSelftest(opts, explorers(ENC, EXTRA), (l) => lines.push(l))).toBe(true);

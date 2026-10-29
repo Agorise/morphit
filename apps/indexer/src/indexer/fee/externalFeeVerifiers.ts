@@ -4,9 +4,13 @@
  * From the explorers externalFeeAvailability allows: tier 1 = those that need
  * no clearnet (onion, I2P, this box), last tier = all of them
  * (fee/tieredFeeVerifier.ts). Tier 1 is only built when it holds enough
- * explorers to meet the quorum on its own and there is a wider tier after it;
- * the last tier's quorum is the configured one, lowered to its explorer count
- * (the config already refuses an explicit quorum larger than the list).
+ * distinct OPERATORS (feeSources.ts explorerOperatorOf) to meet the quorum on
+ * its own and there is a wider tier after it; the last tier's quorum is the
+ * configured one, lowered to its explorer count in URLs (the config already
+ * refuses an explicit quorum larger than the list). The verifiers count
+ * agreement by operator, so lowering by URLs — never by operators — is what
+ * keeps one operator's onion + I2P pair from making a quorum of two alone:
+ * such a tier can never agree, and stays pending / unavailable.
  *
  * A list with any hidden-service explorer gets SOURCE_HIDDEN_REQUEST_TIMEOUT_MS
  * per request (an onion answer took up to ~40 s when measured); a
@@ -18,9 +22,13 @@ import { MoneroProofFeeVerifier } from './moneroProofVerifier';
 import { TieredFeeVerifier } from './tieredFeeVerifier';
 import type { ExternalFeeAvailability } from './externalFeeAvailability';
 import { isClearnetSource, SOURCE_HIDDEN_REQUEST_TIMEOUT_MS } from '$indexer/sourceFetch';
+import { explorerOperatorOf } from '@morphit/operator-config/fee-sources';
 
 const urlOf = (spec: string): string => spec.trim().replace(/^(raw-tx|node)\+/, '');
-const anyHidden = (urls: readonly string[]): boolean =>
+/** Does the list hold a hidden-service (or local) explorer? It then gets
+ *  SOURCE_HIDDEN_REQUEST_TIMEOUT_MS per request. Also used by the trade
+ *  payment check (fee/paymentCheck.ts), which builds its tiers the same way. */
+export const anyHidden = (urls: readonly string[]): boolean =>
 	urls.some((u) => !isClearnetSource(urlOf(u)));
 
 /** The explorer lists to build tiers from, first to last. PURE. */
@@ -30,7 +38,8 @@ export function feeVerifierTiers(
 ): (readonly string[])[] {
 	const all = availability.explorerUrls;
 	const first = availability.firstTierUrls;
-	if (first.length > 0 && first.length < all.length && first.length >= quorum) return [first, all];
+	const operators = new Set(first.map(explorerOperatorOf)).size;
+	if (first.length > 0 && first.length < all.length && operators >= quorum) return [first, all];
 	return [all];
 }
 

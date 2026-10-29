@@ -63,6 +63,20 @@ const base = buildManifest({
 	const r = verifyManifestCompatible({ ...base, schemaVersion: 41 }, TARGET);
 	check('schema NEWER than this build is REFUSED', !r.ok && r.reasons.some((x) => /newer than this build/i.test(x)));
 }
+// ── v1.21.17: a pre-v70 snapshot exported after the activation time lacks the
+//    first-trade transfer evidence for the blocks it covers → refused ───────
+{
+	const T70: TargetFacts = { ...TARGET, codeSchemaVersion: 70 };
+	const old = { ...base, schemaVersion: 69 };
+	const before = verifyManifestCompatible({ ...old, createdAt: '2026-10-31T23:59:59.000Z' }, T70);
+	check('pre-v70 snapshot exported before the activation time → allowed', before.ok);
+	const after = verifyManifestCompatible({ ...old, createdAt: '2026-11-01T00:00:00.000Z' }, T70);
+	check('pre-v70 snapshot exported at/after the activation time → REFUSED', !after.ok && after.reasons.some((x) => /first-trade transfer evidence/.test(x)));
+	const unreadable = verifyManifestCompatible({ ...old, createdAt: 'not a date' }, T70);
+	check('pre-v70 snapshot with an unreadable export time → REFUSED (fail closed)', !unreadable.ok);
+	const v70 = verifyManifestCompatible({ ...base, schemaVersion: 70, createdAt: '2026-11-05T00:00:00.000Z' }, T70);
+	check('a v70 snapshot exported after the activation time → allowed', v70.ok);
+}
 {
 	const r = verifyManifestCompatible({ ...base, schemaVersion: 38 }, TARGET);
 	check('schema OLDER than build is allowed (forward-migrate warning, not refusal)', r.ok && r.warnings.some((x) => /forward-migrate/i.test(x)));

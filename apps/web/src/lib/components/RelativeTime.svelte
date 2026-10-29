@@ -49,6 +49,7 @@
 	import { onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { formatDayMonthTime } from '$i18n/formatters';
+	import { relativeAge } from '$lib/utils/relativeAge';
 
 	interface Props {
 		/** ISO 8601 timestamp string. */
@@ -65,9 +66,12 @@
 		 *  /my/orders' "Posted {age} ago". Composes correctly after a prefix
 		 *  because the "ago" word attaches to the time, not the sentence. */
 		ago?: boolean;
+		/** the tooltip, when the caller words it ("Posted on 28 July, 2026");
+		 *  by default the exact date and time. */
+		title?: string;
 	}
 
-	let { iso, format = 'terse', class: cls = '', ago = false }: Props = $props();
+	let { iso, format = 'terse', class: cls = '', ago = false, title }: Props = $props();
 
 	// Tick once per minute so a long-mounted view stays current.
 	// Below the minute mark the change rate doesn't matter (terse
@@ -94,53 +98,17 @@
 		if (!valid) {
 			return $_(`relative_time.${format}.unknown`) as string;
 		}
-		const seconds = Math.max(0, Math.floor((now - then) / 1000));
+		// v1.21.17: one ladder for the whole app (months and years round to
+		// the nearest one — see relativeAge).
+		const { unit, n } = relativeAge(then, now);
 		if (format === 'terse') {
-			let value: string;
-			if (seconds < 60) value = $_('relative_time.terse.lt1m') as string;
-			else {
-				const minutes = Math.floor(seconds / 60);
-				if (minutes < 60)
-					value = $_('relative_time.terse.minutes', { values: { n: minutes } }) as string;
-				else {
-					const hours = Math.floor(minutes / 60);
-					if (hours < 24)
-						value = $_('relative_time.terse.hours', { values: { n: hours } }) as string;
-					else {
-						const days = Math.floor(hours / 24);
-						if (days < 30)
-							value = $_('relative_time.terse.days', { values: { n: days } }) as string;
-						else {
-							const months = Math.floor(days / 30);
-							if (months < 12)
-								value = $_('relative_time.terse.months', { values: { n: months } }) as string;
-							else {
-								const years = Math.floor(months / 12);
-								value = $_('relative_time.terse.years', { values: { n: years } }) as string;
-							}
-						}
-					}
-				}
-			}
+			const value = $_(`relative_time.terse.${unit}`, { values: { n } }) as string;
 			return ago ? ($_('relative_time.terse.ago', { values: { t: value } }) as string) : value;
 		}
 		// descriptive
-		if (seconds < 60) return $_('relative_time.descriptive.just_now') as string;
-		const minutes = Math.floor(seconds / 60);
-		if (minutes < 60)
-			return $_('relative_time.descriptive.minutes', { values: { n: minutes } }) as string;
-		const hours = Math.floor(minutes / 60);
-		if (hours < 24)
-			return $_('relative_time.descriptive.hours', { values: { n: hours } }) as string;
-		const days = Math.floor(hours / 24);
-		if (days < 30)
-			return $_('relative_time.descriptive.days', { values: { n: days } }) as string;
-		const months = Math.floor(days / 30);
-		if (months < 12)
-			return $_('relative_time.descriptive.months', { values: { n: months } }) as string;
-		const years = Math.floor(months / 12);
-		return $_('relative_time.descriptive.years', { values: { n: years } }) as string;
+		if (unit === 'lt1m') return $_('relative_time.descriptive.just_now') as string;
+		return $_(`relative_time.descriptive.${unit}`, { values: { n } }) as string;
 	});
 </script>
 
-<time datetime={iso} title={absTitle} class={cls}>{label}</time>
+<time datetime={iso} title={title ?? absTitle} class={cls}>{label}</time>

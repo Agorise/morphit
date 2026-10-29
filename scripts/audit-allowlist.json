@@ -150,14 +150,6 @@
       "lastReviewed": "2026-10-20",
       "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). It is launch-editor bundled inside Vite, reached only through the Vite DEV server's /__open-in-editor endpoint (`vite dev`, which CI never starts; vitest and `vite build` do not serve it). Vite 5.4.21 is the newest 5.x; the fix is in Vite 6.4.4 and later, a major upgrade tied to SvelteKit and vitest 2. Needs a request to a running dev server on a developer's machine."
     },
-    "GHSA-rj75-hqrm-r3gf": {
-      "package": "postcss-selector-parser",
-      "severity": "moderate",
-      "category": "dev-build-only",
-      "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
-      "lastReviewed": "2026-10-19",
-      "rationale": "postcss-selector-parser 6.1.5 (2026-10-19) is the fix for the 6.x line: it backports 7.1.6's linear-time parsing (its changelog names this advisory; the published diff replaces the indexOf scans with Sets and changes nothing else). The advisory database still lists every version below 7.1.6, so npm keeps reporting it; remove this entry once the advisory names 6.1.5 as patched. Used only by tailwindcss, postcss-nested and eslint-plugin-svelte (devDependencies) while the frontend is built and linted in CI, on the project's own CSS; nodes serve the prebuilt frontend and never run it."
-    },
     "GHSA-v6wh-96g9-6wx3": {
       "package": "vite",
       "severity": "moderate",
@@ -189,6 +181,14 @@
       "title": "Zod can exhaust memory while validating oversized constrained collections",
       "lastReviewed": "2026-10-23",
       "rationale": "Zod 3.25.76 (indexer, relay, MCP server, matrix bot; and inside @session.js/client and the MCP SDK). The advisory needs an array schema WITHOUT a length bound fed outside input: zod then collects an issue per failing element without limit. Every zod array schema Morphit applies to outside input is bounded: indexer /v1/broadcast operations .max(10), signatures .max(8), extensions .max(16) (bounded in v1.21.15 for this advisory; test/api/broadcastLocalDeliver.test.ts), relay push muted_categories .max(3), relay create account_auths .max(0) / key_auths .length(1); request bodies are size-capped before parsing. @session.js/client's only zod schema is a number (its poll interval); the MCP SDK's schemas parse a local client's tool calls. No zod 3 release fixes it; the fix line is zod 4.6.6, a major upgrade across four apps."
+    },
+    "GHSA-rmxm-3fg6-px4f": {
+      "package": "@hono/node-server",
+      "severity": "moderate",
+      "category": "not-reachable",
+      "title": "@hono/node-server: `serveStatic` decodes the request path a second time, leading to bypass of middleware on static paths",
+      "lastReviewed": "2026-10-28",
+      "rationale": "Only `serveStatic` (the separate `@hono/node-server/serve-static` export) is affected. Morphit imports only `serve` from @hono/node-server (apps/indexer/src/main.ts, apps/relay/src/main.ts); nothing imports serveStatic, and the MCP SDK, which also depends on the package, never references it (the MCP server is a plain node:http server). The indexer and relay serve no static files through Hono (the frontend is served prebuilt by the web server). The fix is in 2.1.3 and later, a major upgrade."
     }
   }
 }

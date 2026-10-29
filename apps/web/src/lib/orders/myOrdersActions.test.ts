@@ -7,6 +7,9 @@ import {
 	autoCompleteCounterparty,
 	mergeNewestPage,
 	paidPermlinksOf,
+	featureFormOpenable,
+	featuringNextPollMs,
+	FEATURING_WAIT_MS,
 	parseMyOrdersHash
 } from './myOrdersActions';
 
@@ -112,5 +115,30 @@ describe('paidPermlinksOf (VT1-8: what /my/orders counts as Paid)', () => {
 		const states = statesOf(st({ orderOwner: 'bob', orderPermlink: 'o-1', phase: 'completed' }));
 		expect([...paidPermlinksOf(states, 'sally')]).toEqual([]);
 		expect([...paidPermlinksOf(states, 'bob')]).toEqual(['o-1']);
+	});
+});
+
+describe('featureFormOpenable (the featured-bid link opens the form, v1.21.17)', () => {
+	it('a live order with a verified fee that is not a finished trade can be featured', () => {
+		expect(featureFormOpenable({ fee_status: 'verified' }, true, false)).toBe(true);
+		expect(featureFormOpenable({ fee_status: 'verified_by_attestation' }, true, false)).toBe(true);
+	});
+	it('not before its fee is verified, nor once expired or paid', () => {
+		expect(featureFormOpenable({ fee_status: 'pending' }, true, false)).toBe(false);
+		expect(featureFormOpenable({ fee_status: null }, true, false)).toBe(false);
+		expect(featureFormOpenable({ fee_status: 'verified' }, false, false)).toBe(false);
+		expect(featureFormOpenable({ fee_status: 'verified' }, true, true)).toBe(false);
+	});
+});
+
+describe('featuringNextPollMs (waits long enough for a BTC/XMR fee, v1.21.17)', () => {
+	it('every 10 s at first, then every minute, for hours', () => {
+		expect(featuringNextPollMs(0)).toBe(10_000);
+		expect(featuringNextPollMs(4 * 60_000)).toBe(10_000);
+		expect(featuringNextPollMs(6 * 60_000)).toBe(60_000);
+		// A BTC fee's first confirmation is often 10–30 minutes away.
+		expect(featuringNextPollMs(45 * 60_000)).toBe(60_000);
+		expect(FEATURING_WAIT_MS).toBeGreaterThanOrEqual(2 * 60 * 60_000);
+		expect(featuringNextPollMs(FEATURING_WAIT_MS)).toBeNull();
 	});
 });

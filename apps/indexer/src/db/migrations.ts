@@ -1240,6 +1240,106 @@ COMMENT ON TABLE offline_notify_leave IS
     'Offline notices: Matrix rooms (sealed) the bot still has to leave and forget. Local only.';
 `
 	}
+
+	,{
+		version: 70,
+		description:
+			'waiver_trade_transfers: per first-buy waiver owner and sender, the earliest transfer of at least 50.000 BLURT from the order\'s block on, stamped at or after the consensus activation time — the proof that lets a review cite a waiver order from then; ops_feedback_status_idx for GET /v1/feedback/status. orders.completed_at (the completion\'s block time) for "Last trade", the trade history and Signal E. Additive.',
+		sql: `
+-- First-buy waiver trades that can earn reviews. A newcomer's first order is a
+-- fee-waived BLURT buy (orders.fee_method = 'waived_first_buy'); from the
+-- consensus activation time a review may cite one when its trade is proven on
+-- chain: the order was completed naming the other party, and that party sent
+-- the owner at least 50.000 BLURT in one transfer, in a block stamped at or
+-- after the activation time and no earlier than the order's block. One row per
+-- (owner, sender): the EARLIEST such transfer — the only one that can matter
+-- (a review earlier than it cannot be helped by a later one) — so whatever
+-- order a node sees blocks in, it holds the same row. Recorded live by the
+-- dispatcher, only for blocks stamped at or after the activation time, so a
+-- node that replays the chain from genesis and one that upgraded before the
+-- activation time hold exactly the same rows; nothing older is ever read back.
+-- Chain-derived: travels in snapshots, spot-checked against the chain after a
+-- restore.
+CREATE TABLE IF NOT EXISTS waiver_trade_transfers (
+    recipient TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    block_num BIGINT NOT NULL,
+    trx_in_block INT NOT NULL,
+    op_in_trx INT NOT NULL,
+    block_time TIMESTAMPTZ NOT NULL,
+    trx_id TEXT NOT NULL,
+    amount_blurt NUMERIC(18, 3) NOT NULL CHECK (amount_blurt > 0),
+    PRIMARY KEY (recipient, sender),
+    CHECK (recipient <> sender)
+);
+
+COMMENT ON TABLE waiver_trade_transfers IS
+    'Per (first-buy waiver owner, sender): the earliest transfer of at least 50.000 BLURT '
+    'from the order''s block on, stamped at or after the consensus activation time — '
+    'the on-chain proof a review citing a waiver order needs (v70).';
+
+-- (v70) When a completed order was completed: the block time of the op that
+-- completed it. updated_at is not that time — an attestation or the partner
+-- named later moves it to that op's block time, and a fee re-check to the
+-- node's own clock — so "Last trade", the trade history's order and Signal E
+-- (from the consensus activation time) read this instead. NULL on every order
+-- not completed. Filled for older completions by the data steps below.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN orders.completed_at IS
+    'v70: block time of the morphit_order_complete_v1 op that completed this order. NULL unless completed.';
+
+-- (v70) GET /v1/feedback/status looks up one reviewer's reviews of one
+-- subject citing one order. Partial, so chat and every other op of the signer
+-- are not in it; the expressions are the ones the query uses, character for
+-- character (api/feedbackStatus.ts), or the planner cannot use it. In
+-- schema.sql it sits with the ops table, not in the v70 section, which other
+-- workspaces' smokes run on their own (without an ops table).
+CREATE INDEX IF NOT EXISTS ops_feedback_status_idx
+    ON ops (signer, (payload->>'subject'), (COALESCE(payload->>'order_permlink', '')))
+    WHERE op_id = 'morphit_feedback_v1';
+
+-- (v70) How far the blocks applied here had their transfers recorded as
+-- first-trade evidence. Left NULL: the poller fills it in at start
+-- (waiverEvidenceGuard.ts) when every block applied so far is older than the
+-- activation time, and refuses to go on otherwise.
+ALTER TABLE indexer_state ADD COLUMN IF NOT EXISTS waiver_evidence_through_block BIGINT;
+`,
+		// Not in schema.sql: it concerns rows. This migration runs once on an
+		// upgrade or a fresh install (the table is empty then), and AGAIN after an
+		// older snapshot (whose schema_migrations stops before v70) is restored
+		// over a database that already had the table — a restore drops and
+		// recreates only the tables in its dump, so this node's own rows would
+		// outlive the restore. They are emptied; the blocks after the snapshot are
+		// applied again and record their rows again.
+		dataSteps: [
+			{
+				label: 'waiver evidence left from before a restore cleared',
+				sql: `TRUNCATE waiver_trade_transfers`
+			},
+			{
+				// The completion time of every order completed before v70: the
+				// first applied completion op of the order (a later one only
+				// named the partner). Chain data, so every node fills the same.
+				label: 'completion times of earlier completed orders',
+				sql: `UPDATE orders o
+				         SET completed_at = c.t
+				        FROM (SELECT signer, payload->>'permlink' AS permlink, MIN(block_time) AS t
+				                FROM ops
+				               WHERE op_id = 'morphit_order_complete_v1' AND status = 'applied'
+				               GROUP BY signer, payload->>'permlink') c
+				       WHERE o.account = c.signer AND o.permlink = c.permlink
+				         AND o.status = 'completed' AND o.completed_at IS NULL`
+			},
+			{
+				// A completed order whose op is not in ops (none is expected):
+				// its last change is the best time there is.
+				label: 'completion times with no completion op on record',
+				sql: `UPDATE orders SET completed_at = updated_at
+				       WHERE status = 'completed' AND completed_at IS NULL`
+			}
+		]
+	}
 ];
 
 /** Validate the MIGRATIONS array at load time:

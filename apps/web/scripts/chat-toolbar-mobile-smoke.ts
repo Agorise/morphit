@@ -65,12 +65,18 @@ check(
 );
 
 const buttons = [...toolbar.matchAll(/<button\b[\s\S]*?<\/button>/g)].map((m) => m[0]);
-check('the toolbar holds its four buttons', buttons.length === 4, String(buttons.length));
+// The one-leg four (share address, send, mailing, shipment) and, since
+// v1.21.17, the five of a crypto-for-crypto trade (share where to be paid,
+// pay BLURT, share where to receive, "I see it in my wallet", send).
+check('the toolbar holds its nine buttons', buttons.length === 9, String(buttons.length));
 const classOf = (b: string): Set<string> =>
 	new Set((/class="([^"]*)"/.exec(b)?.[1] ?? '').split(/\s+/));
 for (const [i, b] of buttons.entries()) {
 	const c = classOf(b);
-	const aria = /aria-label=\{\$_\(([^,)]+)/.exec(b)?.[1] ?? `button ${i}`;
+	const aria =
+		/aria-label=\{\$_\(([^,)]+)/.exec(b)?.[1] ??
+		/data-testid="([^"]+)"/.exec(b)?.[1] ??
+		`button ${i}`;
 	check(
 		`${aria}: full width and 44 px tall on a phone, compact from sm up`,
 		['w-full', 'min-h-11', 'sm:w-auto', 'sm:min-h-0'].every((t) => c.has(t)),
@@ -104,8 +110,8 @@ check(
 	!/'chat\.funds_sent\.button(_aria)?'|'chat\.address\.share_button(_aria)?'/.test(toolbar)
 );
 check(
-	'the address modal is limited to the order’s coin when no barter list applies',
-	/allowedMethods=\{barterAcceptedMethods \?\? \(orderChatAsset \? \[orderChatAsset\] : undefined\)\}/.test(
+	'the address modal is limited to the coins a two-leg button chose, else the barter list, else the order’s coin',
+	/allowedMethods=\{addressShareCoins \?\?\s*barterAcceptedMethods \?\?\s*\(orderChatAsset \? \[orderChatAsset\] : undefined\)\}/.test(
 		cv
 	)
 );
@@ -162,8 +168,8 @@ check(
 console.log('\n── the inbox subject, same voice ──────────────────────\n');
 
 check(
-	'the inbox card reads the order in the voice chatOrderHeading gives this side',
-	/orderTitleParts\(\s*convo\.order,[\s\S]{0,200}voice: chatOrderHeading\(convo\.order\.account === me, convo\.order\.account\)\.voice/.test(
+	'the inbox card reads the order from this side: inboxOrderVoice(the order is mine)',
+	/orderTitleParts\(\s*convo\.order,[\s\S]{0,250}voice: inboxOrderVoice\(convo\.order\.account === me\)/.test(
 		inbox
 	)
 );

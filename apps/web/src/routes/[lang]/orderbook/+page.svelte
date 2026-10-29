@@ -26,7 +26,14 @@
 	 * stale results never overwrite fresh ones.
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
+	import {
+		FEATURED_FLASH_MS,
+		SEARCH_SETTLE_MS,
+		featuredFlashFor,
+		orderKey,
+		withoutFeatured
+	} from '$lib/orders/featuredInList';
 	import { slide } from 'svelte/transition';
 	import { _ } from 'svelte-i18n';
 
@@ -611,6 +618,82 @@
 		});
 	});
 
+	// ─── The featured order, once (v1.21.17) ─────────────────────────
+	// The Featured card above the list shows it; the list leaves it out, so
+	// it is not on the page twice. A search that finds it flashes its card
+	// (featuredInList.ts says when).
+	let featuredKeys = $state<ReadonlySet<string>>(new Set());
+	let featuredKnown = $state(false);
+	let featuredFlash = $state<ReadonlySet<string>>(new Set());
+	const listedItems = $derived(withoutFeatured(visibleItems, featuredKeys));
+	/** The server-side filters in force, sort left out (re-ordering is not
+	 *  a search); '' when none. */
+	const serverSearch = $derived.by(() => {
+		const rest: Record<string, unknown> = { ...currentQuery() };
+		delete rest.sort;
+		return Object.keys(rest).length === 0 ? '' : JSON.stringify(rest);
+	});
+	/** The "Order details" words once typing has paused: each keystroke is
+	 *  not a new search to flash for. */
+	let settledTokens = $state('');
+	$effect(() => {
+		const t = orderDetailsTokens.join(' ');
+		const h = setTimeout(() => (settledTokens = t), SEARCH_SETTLE_MS);
+		return () => clearTimeout(h);
+	});
+	const search = $derived(
+		serverSearch === '' && settledTokens === '' ? '' : `${serverSearch}|${settledTokens}`
+	);
+	/** The server search the list on screen answers (set when it loaded). */
+	let listServerSearch = $state<string | null>(null);
+	/** The filters the page opened with (a saved language, say) are not a
+	 *  search the person just made: taken as decided, never flashed. */
+	let flashDecided = $state<string | null>(null);
+	let flashBaselineTaken = false;
+	let flashTimer: ReturnType<typeof setTimeout> | null = null;
+	$effect(() => {
+		// The list on screen answers the search only once the words typed have
+		// settled too (until then the matches are a half-typed search's).
+		const tokensNow = orderDetailsTokens.join(' ');
+		const listFor =
+			listServerSearch === null || tokensNow !== settledTokens
+				? null
+				: listServerSearch === '' && settledTokens === ''
+					? ''
+					: `${listServerSearch}|${settledTokens}`;
+		const input = {
+			search,
+			listFor,
+			decided: flashDecided,
+			featuredKnown,
+			featuredKeys,
+			matches: visibleItems.map(orderKey)
+		};
+		untrack(() => {
+			if (!flashBaselineTaken) {
+				// The page's first list sets the baseline, whether or not the
+				// Featured card has reported yet: a search made after it, even
+				// before the card loads, is the person's and may flash.
+				if (listFor === null || listFor !== search) return;
+				flashBaselineTaken = true;
+				flashDecided = search;
+				return;
+			}
+			const r = featuredFlashFor(input);
+			if (r.decided === flashDecided && r.flash.length === 0) return;
+			flashDecided = r.decided;
+			if (r.flash.length === 0) return;
+			if (flashTimer !== null) clearTimeout(flashTimer);
+			featuredFlash = new Set();
+			// A new set on the next frame restarts the animation on a card
+			// that is still flashing from the search before.
+			requestAnimationFrame(() => {
+				featuredFlash = new Set(r.flash);
+				flashTimer = setTimeout(() => (featuredFlash = new Set()), FEATURED_FLASH_MS);
+			});
+		});
+	});
+
 	/** Count of items filtered out by the moderation sets. Surfaces
 	 *  in the transparency line below the filters. */
 	const hiddenInView = $derived.by(() => {
@@ -868,6 +951,8 @@
 		items = [];
 		cursor = null;
 		errorMessage = '';
+		const loadingFor = untrack(() => serverSearch);
+		listServerSearch = null;
 
 		const result = await getOrderbook(currentQuery(), myAbort.signal);
 		// Check OUR OWN signal, not the module-level `currentAbort` — a newer
@@ -883,6 +968,7 @@
 			// card over a failed REST prefetch.
 			if (currentStreamHadSnapshot) {
 				phase = 'ready';
+				listServerSearch = loadingFor;
 			} else {
 				errorMessage = $_('orderbook.error.fetch_failed');
 				phase = 'error';
@@ -891,6 +977,7 @@
 		}
 		cursor = result.data.next_cursor;
 		phase = 'ready';
+		listServerSearch = loadingFor;
 		// do NOT clobber the authoritative SSE snapshot. If the
 		// stream already replaced items (snapshot, or a live upsert of a
 		// just-verified order), a late REST prefetch that queried a moment
@@ -1107,6 +1194,7 @@
 	});
 
 	onDestroy(() => {
+		if (flashTimer !== null) clearTimeout(flashTimer);
 		if (syncPollTimer) {
 			clearInterval(syncPollTimer);
 			syncPollTimer = null;
@@ -1253,7 +1341,15 @@
 	{/if}
 
 	<!-- Filters -->
-	<section class="card mb-6 {filtersExpanded ? '' : 'px-6 py-1'}" aria-labelledby="filters-heading">
+	<!-- v1.21.17 — the header row (the word and the +/− button) is the same in
+	     both states and sits at the same place: opening the card used to grow its
+	     padding, text and button and push them down a line, so the pointer had to
+	     chase the button to close it again. Only the space below it changes. -->
+	<section
+		class="card mb-6 px-6 pt-1 {filtersExpanded ? 'pb-6' : 'pb-1'}"
+		aria-labelledby="filters-heading"
+		data-testid="filters-card"
+	>
 		<h2 id="filters-heading" class={filtersExpanded ? 'mb-4' : 'mb-0'}>
 			<button
 				type="button"
@@ -1261,17 +1357,14 @@
 				aria-expanded={filtersExpanded}
 				aria-controls="orderbook-filters-body"
 				title={filtersExpanded ? $_('orderbook.filters.collapse') : $_('orderbook.filters.expand')}
-				class="group -mx-2 flex w-full items-center justify-between gap-3 rounded-xl px-2 text-start transition focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald {filtersExpanded
-					? 'py-1.5'
-					: 'py-0.5'}"
+				class="group -mx-2 flex w-full items-center justify-between gap-3 rounded-xl px-2 py-0.5 text-start transition focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+				data-testid="filters-toggle"
 			>
-				<span class="font-display font-bold {filtersExpanded ? 'text-lg' : 'text-base'}">
+				<span class="font-display text-base font-bold">
 					{$_('orderbook.filters.heading')}
 				</span>
 				<span
-					class="flex flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition group-hover:bg-emerald-50 group-hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:group-hover:bg-ink-700 {filtersExpanded
-						? 'h-8 w-8'
-						: 'h-6 w-6'}"
+					class="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition group-hover:bg-emerald-50 group-hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:group-hover:bg-ink-700"
 					aria-hidden="true"
 				>
 					<svg
@@ -1484,7 +1577,13 @@
 	     history + window selector, instead of a separate section here (which
 	     read as a jumbled second featured block). Self-hides when empty. -->
 	{#await loadFeaturedAuctionHistory() then FeaturedAuctionHistory}
-		<FeaturedAuctionHistory />
+		<FeaturedAuctionHistory
+			onFeaturedKeys={(keys) => {
+				featuredKeys = new Set(keys);
+				featuredKnown = true;
+			}}
+			flashKeys={featuredFlash}
+		/>
 	{/await}
 
 	<!-- Loading status -->
@@ -1654,8 +1753,18 @@
 					{/if}
 				</p>
 			{/if}
+			{#if listedItems.length === 0}
+				<!-- Every match is a featured order, shown once, in the Featured
+				     card above (v1.21.17): say so rather than leave a blank list. -->
+				<p
+					class="card text-center text-sm text-ink-600 dark:text-ink-300"
+					data-testid="match-in-featured"
+				>
+					{$_('orderbook.match_in_featured')}
+				</p>
+			{/if}
 			<ul class="space-y-3">
-				{#each visibleItems as o (o.account + '/' + o.permlink)}
+				{#each listedItems as o (o.account + '/' + o.permlink)}
 					{@const accountIsHidden = $hiddenAccounts.has(o.account.toLowerCase())}
 					{@const accountIsBlocked = $blockedAccounts.has(o.account.toLowerCase())}
 					<!-- v1.8.13 — prefer the INLINE profile the orderbook now

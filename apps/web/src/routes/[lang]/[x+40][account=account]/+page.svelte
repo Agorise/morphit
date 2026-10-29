@@ -4,7 +4,7 @@
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
-	import { formatRating } from '$lib/i18n/formatters';
+	import { formatDayMonthTime, formatRating } from '$lib/i18n/formatters';
 	/**
 	 * Profile page — /@{account}
 	 *
@@ -29,7 +29,14 @@
 	 * a "Load more" button.
 	 */
 
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
+	import {
+		sentReviewsBy,
+		sentReviewsTick,
+		watchSentReview,
+		type SentReview,
+		type SentReviewVerdict
+	} from '$lib/feedback/sentReviews';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 
@@ -65,6 +72,7 @@
 		getFeedback,
 		getFeedbackGiven,
 		getAccountOrderPages,
+		getAccountTrades,
 		getReputationReceipt
 	} from '$lib/indexer/client';
 	import { getProfilesBatch, isSoftMiss } from '$lib/indexer/profileCache';
@@ -78,6 +86,7 @@
 	import OrderCard from '$lib/components/OrderCard.svelte';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { isOrderLive } from '$lib/orders/orderExpiry';
+	import { byTradeTimeDesc, tradeTimeOf } from '$lib/orders/tradeTime';
 	import { isUsdtNetwork, isUsdcNetwork, isDaiNetwork } from '$lib/assets/networks';
 	import { recordOrderView } from '$lib/orders/views';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
@@ -193,6 +202,60 @@
 	let feedbackGivenNextCursor: string | null = $state(null);
 	let feedbackGivenError = $state('');
 	let loadingMoreGiven = $state(false);
+
+	/** v1.21.17 — on my own profile, the reviews I sent from this device that
+	 *  are not (yet) in the indexer's list, with what became of each: still on
+	 *  its way, not counted yet (a first trade's, until it may be sent again),
+	 *  or not counted. Before, a refused review was simply nowhere. */
+	/** At most this many of my newest kept reviews are asked about (one
+	 *  status read each, once). */
+	const SENT_ASKED_MAX = 20;
+	const sentCandidates = $derived.by((): SentReview[] => {
+		void $sentReviewsTick;
+		if (!isOwnProfile || feedbackGivenState !== 'ready') return [];
+		const listed = new Set(
+			feedbackGivenItems.map((f) => `${f.subject}\u0000${f.order_permlink ?? ''}`)
+		);
+		return sentReviewsBy(account)
+			.filter((r) => !listed.has(`${r.subject}\u0000${r.order_permlink}`))
+			.slice(0, SENT_ASKED_MAX);
+	});
+	let sentVerdicts = $state<Record<string, SentReviewVerdict>>({});
+	/** Live watchers by transaction, kept while the review stays a candidate:
+	 *  "load more" and a new send do not ask about every review again. */
+	const sentWatches = new Map<string, () => void>();
+	/** Subscribe to new candidates, drop the ones gone (a named effect: the
+	 *  page's account-reload effect is the first anonymous one). */
+	function syncSentWatches(): void {
+		const wanted = new Map(sentCandidates.map((r) => [r.trx_id, r]));
+		for (const [trx, stop] of sentWatches) {
+			if (!wanted.has(trx)) {
+				stop();
+				sentWatches.delete(trx);
+			}
+		}
+		for (const [trx, r] of wanted) {
+			if (sentWatches.has(trx)) continue;
+			sentWatches.set(
+				trx,
+				watchSentReview(r).subscribe((v) => (sentVerdicts[trx] = v))
+			);
+		}
+	}
+	$effect(syncSentWatches);
+	onDestroy(() => {
+		for (const stop of sentWatches.values()) stop();
+		sentWatches.clear();
+	});
+	/** Shown: the ones the instance answered about and did not count (yet) —
+	 *  a counted one beyond the first page of the list is not news, and one
+	 *  not answered yet would only flicker in. */
+	const sentNotListed = $derived(
+		sentCandidates.filter((r) => {
+			const k = sentVerdicts[r.trx_id]?.kind;
+			return k !== undefined && k !== 'checking' && k !== 'counted';
+		})
+	);
 
 	/** Feedback id of the currently-open reply form. Only one form
 	 *  open at a time — a second Reply click auto-closes the first. */
@@ -368,9 +431,15 @@
 		ordersState = 'loading';
 		ordersError = '';
 		// Up to 5 pages of 100 (newest-updated first), so live orders older
-		// than the newest hundred still show.
-		const r = await getAccountOrderPages(forAccount, { maxPages: 5 });
+		// than the newest hundred still show. The trade history comes from its
+		// own read (both sides of every trade, v1.21.17); an older instance
+		// without it falls back to the completed orders this account posted.
+		const [r, t] = await Promise.all([
+			getAccountOrderPages(forAccount, { maxPages: 5 }),
+			getAccountTrades(forAccount)
+		]);
 		if (forAccount !== account) return;
+		trades = t.ok ? [...t.data.items] : null;
 		if (r !== null) {
 			allOrders = [...r.items];
 			ordersState = 'ready';
@@ -434,6 +503,7 @@
 			feedbackGivenError = '';
 			feedbackGivenState = 'loading';
 			allOrders = [];
+			trades = null;
 			ordersError = '';
 			ordersState = 'loading';
 			reviewerProfileMap = {};
@@ -610,24 +680,46 @@
 		activeTab = nextId;
 		requestAnimationFrame(() => document.getElementById(`tab-${nextId}`)?.focus());
 	}
-	// Completed trades for the Trade history tab. Same source as
-	// liveOrders — allOrders is already fetched via getAccountOrderPages and
-	// carries every status — filtered to completed, newest-first. No new
-	// endpoint or public exposure; counterparty shows only when the owner
-	// named it in morphit_order_complete_v1.
+	/** Completed trades on BOTH sides (v1.21.17): orders this account posted,
+	 *  and other people's orders completed naming it as the counterparty —
+	 *  the seller who filled a buyer's order had no history of it. Newest
+	 *  completion first. null until read, or when this instance is too old to
+	 *  serve them: then the completed orders it posted, as before. */
+	let trades = $state<OrderRecord[] | null>(null);
 	const completedOrders = $derived.by(() =>
-		[...allOrders]
-			.filter((o) => o.status === 'completed')
-			.sort((a, b) => b.created_at.localeCompare(a.created_at))
+		(trades ?? allOrders.filter((o) => o.status === 'completed')).slice().sort(byTradeTimeDesc)
 	);
+
+	/** A trade's title on this profile. Its own order reads as its title
+	 *  ("I'm buying …"); another person's order says whose it is, from the
+	 *  outside ("Regarding @alice's order: Buying …") — or it read as if this
+	 *  account had been the buyer. */
+	function tradeTitle(o: OrderRecord): string {
+		if (o.account === account) return cardTitle(o);
+		const tp = orderTitleParts(o, formatAmount, goodsLabel(o), {
+			locale: currentLang,
+			voice: 'third'
+		});
+		return `${$_('chat.header.re_peer', { values: { owner: o.account } })} ${$_(tp.key, { values: tp.values })}`;
+	}
+	/** Who the trade was with: the named counterparty of its own order, the
+	 *  owner of someone else's. */
+	function tradePartner(o: OrderRecord): string | null {
+		return o.account === account ? (o.completed_counterparty ?? null) : o.account;
+	}
 
 	/** Canonical order title — the same unified sentence used on the
 	 *  orderbook, /my/orders, and the order-detail page. Replaces the
 	 *  old per-card formatting that mislabelled the fiat trade-size
 	 *  band with the asset ticker. */
 	function cardTitle(o: OrderRecord): string {
-		const tp = orderTitleParts(o, formatAmount, undefined, { locale: currentLang });
+		const tp = orderTitleParts(o, formatAmount, goodsLabel(o), { locale: currentLang });
 		return $_(tp.key, { values: tp.values }) as string;
+	}
+	/** What a barter order trades: its own title, else "goods & services"
+	 *  (as the orderbook says) — never the bare "BARTER". */
+	function goodsLabel(o: OrderRecord): string {
+		return o.specific_barter_title || ($_('order_title.goods_services') as string);
 	}
 
 	function starString(n: 1 | 2 | 3 | 4 | 5): string {
@@ -914,7 +1006,7 @@
 			</p>
 		{:else}
 			<p class="text-sm text-ink-600 dark:text-ink-300">
-				{$_('profile.no_feedback_yet')}
+				{$_('profile.no_feedback_yet', { values: { account } })}
 			</p>
 		{/if}
 
@@ -934,6 +1026,11 @@
 		aria-label={$_('profile.tabs_aria')}
 		class="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-ink-200 dark:border-ink-800"
 	>
+		<!-- v1.21.17: the keyboard-focus cue is a light tint behind the tab, not
+		     a ring — the row scrolls sideways (overflow-x-auto), which clipped the
+		     ring into a partial box around the tab (seen on a Mac). The underline
+		     marks the selected tab; keyboard focus needs a cue of its own, since
+		     the arrow keys select the tab they move to. -->
 		{#each tabDefs as tab (tab.id)}
 			<button
 				role="tab"
@@ -944,7 +1041,7 @@
 				tabindex={activeTab === tab.id ? 0 : -1}
 				onclick={() => (activeTab = tab.id)}
 				onkeydown={(e) => onTabKeydown(e, tab.id)}
-				class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald {activeTab ===
+				class="-mb-px whitespace-nowrap rounded-t-md border-b-2 px-3 py-2 text-sm font-semibold transition focus:outline-none focus-visible:bg-morphit-emerald/20 focus-visible:underline focus-visible:decoration-2 focus-visible:underline-offset-4 {activeTab ===
 				tab.id
 					? 'border-morphit-emerald text-morphit-emerald'
 					: 'border-transparent text-ink-500 hover:text-ink-800 dark:text-ink-400 dark:hover:text-ink-100'}"
@@ -1081,7 +1178,9 @@
 			<StatusLine kind="warn">{$_('profile.feedback_error')}</StatusLine>
 			<p class="mt-1 text-xs text-ink-500">{feedbackError}</p>
 		{:else if feedbackItems.length === 0}
-			<p class="text-sm text-ink-600 dark:text-ink-300">{$_('profile.no_feedback_yet')}</p>
+			<p class="text-sm text-ink-600 dark:text-ink-300">
+				{$_('profile.no_feedback_yet', { values: { account } })}
+			</p>
 		{:else}
 			<ul class="space-y-3">
 				{#each feedbackItems as fb (fb.id)}
@@ -1309,13 +1408,75 @@
 		{#if feedbackGivenState === 'loading'}
 			<StatusLine kind="loading">{$_('profile.loading_given')}</StatusLine>
 		{:else if feedbackGivenState === 'error'}
-			<StatusLine kind="warn">{$_('profile.given_error')}</StatusLine>
+			<StatusLine kind="warn">{$_('profile.given_error', { values: { account } })}</StatusLine>
 			<p class="mt-1 text-xs text-ink-500">{feedbackGivenError}</p>
-		{:else if feedbackGivenItems.length === 0}
+		{:else if feedbackGivenItems.length === 0 && sentNotListed.length === 0}
 			<p class="text-sm text-ink-600 dark:text-ink-300">
-				{$_('profile.no_given_yet')}
+				{$_('profile.no_given_yet', { values: { account } })}
 			</p>
 		{:else}
+			{#if sentNotListed.length > 0}
+				<ul class="mb-3 space-y-3" data-testid="given-sent-not-listed">
+					{#each sentNotListed as r (r.trx_id)}
+						{@const v = sentVerdicts[r.trx_id]}
+						<li class="card border-dashed">
+							<div class="mb-2 flex items-start justify-between gap-2">
+								<a href={lp(`/@${r.subject}`)} class="font-semibold hover:text-morphit-emerald"
+									>@{r.subject}</a
+								>
+								<span class="flex-none text-xs text-ink-500">
+									<RelativeTime iso={r.sent_at} format="terse" ago />
+								</span>
+							</div>
+							<div
+								class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+								aria-label={$_('feedback.form.rating_n_stars', {
+									values: { n: r.rating }
+								}) as string}
+							>
+								<span class="text-ink-600 dark:text-ink-300">
+									{$_('profile.given_rated', { values: { account: r.subject } })}
+								</span>
+								<span class="text-morphit-emerald" aria-hidden="true">{starString(r.rating)}</span>
+							</div>
+							{#if r.comment}
+								<p class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
+									<span class="text-ink-500 dark:text-ink-400">{$_('profile.given_said')}</span>
+									<bdi>{r.comment}</bdi>
+								</p>
+							{/if}
+							<p
+								class="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-400"
+								role="status"
+							>
+								{#if v?.kind === 'needs_transfer'}
+									{$_('profile.given_needs_transfer', {
+										values: { from: v.from, to: v.to, date: formatDayMonthTime(v.after) }
+									})}
+								{:else if v?.kind === 'later'}
+									{$_('profile.given_not_counted_later', {
+										values: { date: formatDayMonthTime(v.from) }
+									})}
+								{:else if v?.kind === 'refused'}
+									{$_('profile.given_not_counted')}
+								{:else if v?.kind === 'resend'}
+									{$_('profile.given_send_again')}
+								{:else}
+									{$_('profile.given_pending')}
+								{/if}
+							</p>
+							<p class="mt-2 text-xs text-ink-500">
+								<a
+									href={lp(`/chat/${r.subject}?order=${encodeURIComponent(r.order_permlink)}`)}
+									class="hover:text-morphit-emerald hover:underline"
+								>
+									{$_('profile.given_open_chat')}
+								</a>
+							</p>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 			<ul class="space-y-3">
 				{#each feedbackGivenItems as fb (fb.id)}
 					{@const subjectProps = extractLabelPropsFromProfile(reviewerProfileMap[fb.subject])}
@@ -1480,21 +1641,23 @@
 				<p class="mt-1 text-xs text-ink-500">{ordersError}</p>
 			{:else if completedOrders.length === 0}
 				<p class="text-sm text-ink-600 dark:text-ink-300">
-					{$_('profile.no_trade_history')}
+					{$_('profile.no_trade_history', { values: { account } })}
 				</p>
 			{:else}
 				<ul class="space-y-3">
-					{#each completedOrders as o (o.permlink)}
+					{#each completedOrders as o (`${o.account}/${o.permlink}`)}
+						{@const partner = tradePartner(o)}
 						<li class="card">
-							<div class="font-medium">{cardTitle(o)}</div>
+							<div class="font-medium">{tradeTitle(o)}</div>
 							<div class="mt-1 text-xs text-ink-500 dark:text-ink-400">
-								{#if o.completed_counterparty}
+								{#if partner}
 									{$_('profile.trade_history_with', {
-										values: { account: o.completed_counterparty }
+										values: { account: partner }
 									})}
 									<span aria-hidden="true">·</span>
 								{/if}
-								<RelativeTime iso={o.created_at} format="descriptive" />
+								<!-- when it was completed -->
+								<RelativeTime iso={tradeTimeOf(o)} format="descriptive" />
 							</div>
 						</li>
 					{/each}

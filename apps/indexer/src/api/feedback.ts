@@ -203,20 +203,27 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		);
 		const s = summary.rows[0]!;
 
-		// ─── last_traded_at (dormancy signal) ─────────────
-		// Single query — MAX(created_at) across the two activity
-		// sources that matter for a "real" trader:
-		//   1. orders posted with fee_status='verified'
-		//   2. feedback received as subject (someone else completed
-		//      a trade with this account and left a review)
-		// We DON'T include feedback the account LEFT (that's review
-		// activity, not trade activity).
-		// Returns NULL if the account has neither posted a verified
-		// order nor received any feedback.
+		// ─── last_traded_at (the profile's "Last trade") ─────────────
+		// The newest of:
+		//   1. a completed trade, on EITHER side — an order this account
+		//      posted that was completed, or someone else's order completed
+		//      naming it as the counterparty (completed_at: the completion's
+		//      block time — updated_at is not, as a fee re-check, an
+		//      attestation or the partner named later moves it);
+		//   2. feedback received as subject (someone traded with it and left
+		//      a review).
+		// Feedback the account LEFT is review activity, not trade activity.
+		// v1.21.17: (1) used to be the newest order POSTED with a verified
+		// fee. Posting is not trading: a buyer who traded today read "Last
+		// trade: 6d ago" (the day he posted), and a seller who had only ever
+		// posted orders read "3mo ago" while his trade of today, on the other
+		// person's order, did not count at all.
+		// NULL when the account has neither.
 		const dormancy = await db.query<{ last_traded_at: Date | null }>(
 			`SELECT GREATEST(
-			          (SELECT MAX(created_at) FROM orders
-			            WHERE account = $1 AND fee_status = 'verified'),
+			          (SELECT MAX(completed_at) FROM orders
+			            WHERE status = 'completed'
+			              AND (account = $1 OR completed_counterparty = $1)),
 			          (SELECT MAX(created_at) FROM feedback
 			            WHERE subject = $1)
 			        ) AS last_traded_at`,

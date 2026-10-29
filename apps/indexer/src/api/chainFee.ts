@@ -29,11 +29,16 @@ import type { Config } from '$config';
 
 interface CachedValue {
 	readonly accountCreationFeeBlurt: number;
+	readonly operationFlatFeeBlurt: number | null;
+	readonly bandwidthKbytesFeeBlurt: number | null;
 	readonly observedAt: number; // ms epoch
 	readonly source: 'chain' | 'fallback';
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/** A fallback (the chain could not be read) is asked again much sooner:
+ *  one bad read must not stand for a day. */
+const FALLBACK_TTL_MS = 10 * 60 * 1000;
 
 /** Module-level cache.  Survives across requests within a
  *  single indexer process; restart resets it. */
@@ -48,6 +53,8 @@ async function refresh(blurt: BlurtClient, fallbackBlurt: number): Promise<Cache
 		const props = await fetchChainProperties(blurt);
 		return {
 			accountCreationFeeBlurt: props.accountCreationFeeBlurt,
+			operationFlatFeeBlurt: props.operationFlatFeeBlurt,
+			bandwidthKbytesFeeBlurt: props.bandwidthKbytesFeeBlurt,
 			observedAt: Date.now(),
 			source: 'chain'
 		};
@@ -57,6 +64,8 @@ async function refresh(blurt: BlurtClient, fallbackBlurt: number): Promise<Cache
 		// value or surface a "couldn't reach chain" hint.
 		return {
 			accountCreationFeeBlurt: fallbackBlurt,
+			operationFlatFeeBlurt: null,
+			bandwidthKbytesFeeBlurt: null,
 			observedAt: Date.now(),
 			source: 'fallback'
 		};
@@ -65,7 +74,10 @@ async function refresh(blurt: BlurtClient, fallbackBlurt: number): Promise<Cache
 
 async function getOrRefresh(blurt: BlurtClient, fallbackBlurt: number): Promise<CachedValue> {
 	const now = Date.now();
-	if (cache !== null && now - cache.observedAt < CACHE_TTL_MS) {
+	if (
+		cache !== null &&
+		now - cache.observedAt < (cache.source === 'chain' ? CACHE_TTL_MS : FALLBACK_TTL_MS)
+	) {
 		return cache;
 	}
 	if (inflight !== null) return inflight;
@@ -81,6 +93,11 @@ async function getOrRefresh(blurt: BlurtClient, fallbackBlurt: number): Promise<
 
 export interface ChainFeeResponse {
 	account_creation_fee_blurt: number;
+	/** The network fee per operation and per kB of a signed transaction
+	 *  (v1.21.17; null when the chain could not be read). The browser adds
+	 *  them to a payment before saying the balance covers it. */
+	operation_flat_fee_blurt: number | null;
+	bandwidth_kbytes_fee_blurt: number | null;
 	observed_at: string; // ISO-8601
 	source: 'chain' | 'fallback';
 }
@@ -93,6 +110,8 @@ export function chainFeeRoute(blurt: BlurtClient, config: Config): Hono {
 		const value = await getOrRefresh(blurt, fallback);
 		const body: ChainFeeResponse = {
 			account_creation_fee_blurt: value.accountCreationFeeBlurt,
+			operation_flat_fee_blurt: value.operationFlatFeeBlurt,
+			bandwidth_kbytes_fee_blurt: value.bandwidthKbytesFeeBlurt,
 			observed_at: new Date(value.observedAt).toISOString(),
 			source: value.source
 		};
@@ -100,7 +119,10 @@ export function chainFeeRoute(blurt: BlurtClient, config: Config): Hono {
 		// shorter than our internal 24h TTL but lets reverse
 		// proxies and CDNs help under load.  Frontend service
 		// worker can cache for the same duration.
-		c.header('Cache-Control', 'public, max-age=3600');
+		c.header(
+			'Cache-Control',
+			value.source === 'chain' ? 'public, max-age=3600' : 'public, max-age=300'
+		);
 		return c.json(body);
 	});
 

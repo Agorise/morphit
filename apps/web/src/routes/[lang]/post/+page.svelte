@@ -148,6 +148,7 @@
 	import { saveDraft, loadDraftWithMeta, clearDraft } from '$lib/drafts';
 	import { safeSession } from '$lib/utils/safeStorage';
 	import { triggerBalanceRefresh } from '$lib/balance/bus';
+	import { topOnChange } from '$lib/ui/pageTop';
 
 	/** Session-storage key written by other pages that want to
 	 *  prefill the compose form (e.g. profile "Top up BLURT").
@@ -687,6 +688,9 @@
 	// ─── Flow state ────────────────────────────────────────────────
 	type Phase = 'editing' | 'reviewing' | 'awaiting_password' | 'broadcasting' | 'success' | 'error';
 	let phase = $state<Phase>('editing');
+	// Each step opens at its top (Continue sits at the bottom of step 3).
+	const phaseTop = topOnChange<Phase>();
+	$effect(() => phaseTop(phase));
 
 	// Mid-broadcast navigation guard. Order permlinks are
 	// random per attempt, so a user who navigates away mid-broadcast —
@@ -710,7 +714,9 @@
 	 *  A `use:` action rather than the `autofocus` attribute avoids the
 	 *  Svelte a11y warning and fires exactly once, when the field appears. */
 	function focusOnMount(node: HTMLElement): void {
-		node.focus();
+		// preventScroll: focusing scrolls the field into view, which would undo
+		// the step opening at its top (topOnChange).
+		node.focus({ preventScroll: true });
 	}
 	let broadcastError = $state('');
 	let successPermlink: string | null = $state(null);

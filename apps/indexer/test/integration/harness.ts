@@ -209,6 +209,8 @@ export async function truncateAll(fx: IntegrationFixture): Promise<void> {
 		'relay_pending_transfers',
 		'releases',
 		'suspicious_reciprocity',
+		// v70: the BLURT legs that prove a first-buy waiver trade.
+		'waiver_trade_transfers',
 		'witness_fee_history'
 	];
 	// Goes through db.query so search_path is set on the client

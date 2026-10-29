@@ -55,6 +55,34 @@ export function parseMyOrdersHash(hash: string): MyOrdersHashAction | null {
 	return { kind, permlink: m[3]! };
 }
 
+/** Whether an order's Feature form can be opened: the order is live, not a
+ *  finished trade, and its listing fee is verified (a feature bid needs all
+ *  three; the row shows the Feature button under exactly these). */
+export function featureFormOpenable(
+	o: { readonly fee_status?: string | null },
+	live: boolean,
+	paid: boolean
+): boolean {
+	return (
+		live && !paid && (o.fee_status === 'verified' || o.fee_status === 'verified_by_attestation')
+	);
+}
+
+/** How long /my/orders?featuring=<permlink> keeps waiting for the just-posted
+ *  order to become featurable. A BLURT-fee order is durable within about a
+ *  minute; a BTC fee is verified at its first confirmation (often 10–30 min)
+ *  and an XMR fee later still, so the wait covers those (v1.21.17 review). */
+export const FEATURING_WAIT_MS = 3 * 60 * 60_000;
+/** Read every 10 s for the first minutes (a BLURT fee), then every minute. */
+export const FEATURING_FAST_FOR_MS = 5 * 60_000;
+
+/** When to read the orders again, `elapsedMs` after the page opened with
+ *  ?featuring=, or null to stop waiting. */
+export function featuringNextPollMs(elapsedMs: number): number | null {
+	if (elapsedMs >= FEATURING_WAIT_MS) return null;
+	return elapsedMs < FEATURING_FAST_FOR_MS ? 10_000 : 60_000;
+}
+
 /** Merge a fresh read of the NEWEST page into the orders already loaded:
  *  rows in the page replace their older copies, rows only in `existing`
  *  (older pages) stay. Ordered newest-updated first, as the indexer pages. */

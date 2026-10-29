@@ -35,7 +35,7 @@
 
 import { formatPublicKeyBLT } from '$crypto/keygen';
 import { resolveAccountsByPublicKeys } from './accountByKey';
-import { fetchAccountKeys } from './accountKeys';
+import { fetchAccountKeysForSigning } from './accountKeys';
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import type { LiveIdentity } from '$crypto/identity-core';
 
@@ -170,7 +170,7 @@ export async function assertKeyControlsAccount(
 	const memo = `${account}\u0000${pub}`;
 	if (authorityCache.has(memo)) return;
 
-	const authorities = await fetchAccountKeys(
+	const authorities = await fetchAccountKeysForSigning(
 		resolveOrigin(MORPHIT_INDEXER_ORIGIN),
 		account,
 		fetchImpl

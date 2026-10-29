@@ -19,7 +19,7 @@
 	 * device cancelled the same order concurrently.
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { scrollToLazySection } from '$lib/ui/scrollToLazySection';
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
@@ -58,6 +58,8 @@
 	import { fetchOrderViewCounts } from '$lib/orders/views';
 	import {
 		autoCompleteCounterparty,
+		featureFormOpenable,
+		featuringNextPollMs,
 		mergeNewestPage,
 		paidPermlinksOf,
 		parseMyOrdersHash
@@ -352,11 +354,7 @@
 		const o = items.find((x) => x.permlink === action.permlink);
 		if (o === undefined) return;
 		if (action.kind === 'feature') {
-			if (
-				isLive(o) &&
-				!paidPermlinks.has(o.permlink) &&
-				(o.fee_status === 'verified' || o.fee_status === 'verified_by_attestation')
-			) {
+			if (featureFormOpenable(o, isLive(o), paidPermlinks.has(o.permlink))) {
 				pendingFeaturePermlink = o.permlink;
 				void ensureFeatureRateFetched();
 				scrollToFeatureForm(o.permlink);
@@ -489,6 +487,14 @@
 	// this file stays `isExpired(o)` / `isLive(o)` while the rule lives in a pure,
 	// unit-tested module (orderExpiry.test.ts).  Both read the `nowMs` ticker so
 	// the pill / label / actions flip the second an order crosses its deadline.
+	/** "Posted on 28 July, 2026" — the exact day behind "Posted 3mo ago"
+	 *  (v1.21.17): the line's tooltip, and what a screen reader says. */
+	function postedOn(o: OrderRecord): string {
+		return $_('my_orders.order.posted_on', {
+			values: { date: formatDayMonth(o.created_at) }
+		}) as string;
+	}
+
 	function isExpired(o: OrderRecord): boolean {
 		return isOrderExpired(o, nowMs);
 	}
@@ -548,6 +554,54 @@
 	// links here as /my/orders?featuring=<permlink>; we ring + scroll that card so
 	// the user lands right on the order they want to feature.
 	const featuringPermlink = $derived($page.url.searchParams.get('featuring'));
+
+	// v1.21.17 — "Set up a featured bid" after posting opened this page with
+	// the order ringed and the person then had to find and press its Feature
+	// button: one click too many. The Feature form now opens by itself, scrolled
+	// into view, as soon as the order can be featured (it is still "Posting…"
+	// for about a minute after it was sent: the form opens when it confirms).
+	// Once per visit, and never over a form the person already opened or closed.
+	let featuringHandled = $state(false);
+	const featuringStartedMs = Date.now();
+	const featuringTarget = $derived.by(() => {
+		if (featuringPermlink === null || featuringHandled || phase !== 'ready') return null;
+		return items.find((x) => x.permlink === featuringPermlink) ?? null;
+	});
+	$effect(() => {
+		const o = featuringTarget;
+		if (o === null || !featureFormOpenable(o, isLive(o), paidPermlinks.has(o.permlink))) return;
+		untrack(() => {
+			featuringHandled = true;
+			if (pendingFeaturePermlink !== null) return;
+			pendingFeaturePermlink = o.permlink;
+			void ensureFeatureRateFetched();
+			scrollToFeatureForm(o.permlink);
+		});
+	});
+	// Until then, keep reading the orders (the "Posting…" poll above stops once
+	// the order is confirmed, but its fee may be verified a little later).
+	const featuringWaiting = $derived(
+		featuringPermlink !== null && !featuringHandled && phase === 'ready'
+	);
+	$effect(() => {
+		if (!featuringWaiting) return;
+		let timer: ReturnType<typeof setTimeout> | null = null;
+		const next = (): void => {
+			const wait = featuringNextPollMs(Date.now() - featuringStartedMs);
+			if (wait === null) {
+				featuringHandled = true;
+				return;
+			}
+			timer = setTimeout(() => {
+				void silentRefetch();
+				next();
+			}, wait);
+		};
+		next();
+		return () => {
+			if (timer !== null) clearTimeout(timer);
+		};
+	});
 
 	const visibleItems = $derived.by(() => {
 		switch (filter) {
@@ -1113,9 +1167,14 @@
 										{$_('common.learn_more')}
 									</a>
 								{/if}
-								<span class="text-ink-500">
-									{$_('my_orders.order.posted_prefix')}
-									<RelativeTime iso={o.created_at} format="terse" ago />
+								<!-- v1.21.17: the exact day it was posted on hover anywhere on
+								     the line, and for a screen reader. -->
+								<span class="text-ink-500" title={postedOn(o)}>
+									<span aria-hidden="true">
+										{$_('my_orders.order.posted_prefix')}
+										<RelativeTime iso={o.created_at} format="terse" ago title={postedOn(o)} />
+									</span>
+									<span class="sr-only">{postedOn(o)}</span>
 								</span>
 								{#if viewCounts[o.permlink] !== undefined && viewCounts[o.permlink]! > 0}
 									<!-- Task #14 — viewcount badge.  Visible only
@@ -1152,14 +1211,17 @@
 									</div>
 								{/if}
 								{#if o.expires_at}
+									<!-- v1.21.17: an expired order says WHEN it expired, not just
+									     "Expired" (the date is what tells its owner how long ago). -->
+									{@const expiredNow = o.status !== 'cancelled' && isExpired(o)}
 									<div>
-										<dt class="inline text-ink-500">{$_('order_detail.expires_on')}:</dt>
+										<dt class="inline text-ink-500">
+											{expiredNow ? $_('order_detail.expired_on') : $_('order_detail.expires_on')}:
+										</dt>
 										<dd class="inline text-ink-700 dark:text-ink-200">
 											{o.status === 'cancelled'
 												? $_('my_orders.order.state_cancelled')
-												: isExpired(o)
-													? $_('my_orders.order.state_expired')
-													: formatDayMonth(o.expires_at)}
+												: formatDayMonth(o.expires_at)}
 										</dd>
 									</div>
 								{/if}
@@ -1288,6 +1350,16 @@
 											🚀 {$_('my_orders.order.action_feature')}
 										</BusyButton>
 									{/if}
+								{:else if featuringWaiting && o.permlink === featuringPermlink && !paidPermlinks.has(o.permlink)}
+									<!-- v1.21.17 — came from "Set up a featured bid": the form
+									     opens here by itself once the listing fee is confirmed
+									     (a BTC or XMR fee takes a confirmation or more). -->
+									<span
+										class="text-center text-[11px] text-ink-500 dark:text-ink-400"
+										data-testid="featuring-waits-for-fee"
+									>
+										{$_('my_orders.order.feature_opens_when_fee_confirmed')}
+									</span>
 								{/if}
 
 								<!-- Feedback disclosure: user marks this trade

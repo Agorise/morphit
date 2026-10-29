@@ -228,7 +228,8 @@ describe('Part 111 — welcome bonus federation gate (feedback handler)', () => 
 			// Order-ownership gate (different SELECT than the
 			// cited-order operator-tag lookup; both query FROM
 			// orders).
-			{ match: 'FROM orders', rowCount: 1 },
+			// The citation the order gives (reviewCitation.ts returns its kind).
+			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
 			// Trade-completion gate via chat-messages. the
 			// feedback handler now requires a verified counterparty
 			// conversation (≥2 msgs each way, ≥15min span, no reciprocity)

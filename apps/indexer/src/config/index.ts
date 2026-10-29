@@ -14,8 +14,17 @@ import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEF
 import {
 	DEFAULT_BTC_FEE_EXPLORERS,
 	DEFAULT_PRICENODES,
+	explorerOperatorOf,
 	isAcceptableSourceUrl
 } from '@morphit/operator-config/fee-sources';
+
+/** How many distinct explorer OPERATORS a list holds (an operator's .onion and
+ *  clearnet addresses are one; feeSources.ts explorerOperatorOf). A quorum is
+ *  counted in operators (v1.21.17), so it is checked against this, not the
+ *  number of URLs: two addresses of one operator can never make two agree. */
+export function explorerOperatorCount(list: readonly string[]): number {
+	return new Set(list.map(explorerOperatorOf)).size;
+}
 import { hiddenServiceProxyConfigFromEnv, type HiddenServiceProxyConfig } from '@morphit/hidden-transport';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
 import { isValidChatLinkTemplate } from './chatLinkTemplate';
@@ -1797,8 +1806,8 @@ export function resolveBtcQuorum(
 	return {
 		value,
 		note:
-			`[config] MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} BTC explorer(s) configured, ` +
-			`so a Bitcoin fee is accepted on ${value} explorer's word. Add a second explorer to ` +
+			`[config] MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} BTC explorer operator(s) configured, ` +
+			`so a Bitcoin fee is accepted on ${value} operator's word. Add an explorer run by someone else to ` +
 			`MORPHIT_INDEXER_BTC_EXPLORER_URLS (the default list has ${DEFAULT_BTC_FEE_EXPLORERS.length}) to require two to agree.`
 	};
 }
@@ -1823,8 +1832,8 @@ export function resolveXmrQuorum(
 	return {
 		value,
 		note:
-			`[config] MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} XMR explorer(s) configured, ` +
-			`so a Monero fee is accepted on ${value} explorer's word. Add a second explorer to ` +
+			`[config] MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} XMR explorer operator(s) configured, ` +
+			`so a Monero fee is accepted on ${value} operator's word. Add an explorer run by someone else to ` +
 			`MORPHIT_INDEXER_XMR_EXPLORER_URLS (the default list has ${DEFAULT_XMR_EXPLORERS.length}) to require two to agree.`
 	};
 }
@@ -1939,11 +1948,13 @@ export function loadConfig(): Config {
 				.map((s) => s.trim())
 				.filter(Boolean);
 			const explicit = e.MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES;
-			if (explicit !== undefined && explicit > list.length && list.length > 0) {
+			const operators = explorerOperatorCount(list);
+			if (explicit !== undefined && explicit > operators && list.length > 0) {
 				throw new Error(
 					`MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES=${explicit} ` +
-						`exceeds configured BTC explorer URL count (${list.length}). ` +
-						`Quorum can never be met. Reduce the threshold or add more URLs.`
+						`exceeds the number of distinct BTC explorer operators configured (${operators}; ` +
+						`two addresses of one operator count once). ` +
+						`Quorum can never be met. Reduce the threshold or add explorers run by others.`
 				);
 			}
 			return list;
@@ -1952,7 +1963,10 @@ export function loadConfig(): Config {
 			const list = e.MORPHIT_INDEXER_BTC_EXPLORER_URLS.split(',')
 				.map((s) => s.trim())
 				.filter(Boolean);
-			const q = resolveBtcQuorum(e.MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES, list.length);
+			const q = resolveBtcQuorum(
+				e.MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES,
+				explorerOperatorCount(list)
+			);
 			if (q.note !== null && list.length > 0) console.warn(q.note);
 			return q.value;
 		})(),
@@ -1962,18 +1976,23 @@ export function loadConfig(): Config {
 		xmrExplorerUrls: (() => {
 			const list = parseXmrExplorerList(e.MORPHIT_INDEXER_XMR_EXPLORER_URLS) ?? [];
 			const explicit = e.MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES;
-			if (explicit !== undefined && explicit > list.length && list.length > 0) {
+			const operators = explorerOperatorCount(list);
+			if (explicit !== undefined && explicit > operators && list.length > 0) {
 				throw new Error(
 					`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES=${explicit} ` +
-						`exceeds configured XMR explorer URL count (${list.length}). ` +
-						`Quorum can never be met. Reduce the threshold or add more URLs.`
+						`exceeds the number of distinct XMR explorer operators configured (${operators}; ` +
+						`two addresses of one operator count once). ` +
+						`Quorum can never be met. Reduce the threshold or add explorers run by others.`
 				);
 			}
 			return list;
 		})(),
 		xmrMinSuccessfulResponses: (() => {
 			const list = parseXmrExplorerList(e.MORPHIT_INDEXER_XMR_EXPLORER_URLS) ?? [];
-			const q = resolveXmrQuorum(e.MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES, list.length);
+			const q = resolveXmrQuorum(
+				e.MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES,
+				explorerOperatorCount(list)
+			);
 			if (q.note !== null) console.warn(q.note);
 			return q.value;
 		})(),

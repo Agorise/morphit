@@ -60,6 +60,7 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { _ } from 'svelte-i18n';
+	import { relativeAge } from '$lib/utils/relativeAge';
 	import { formatDayMonth } from '$lib/i18n/formatters';
 
 	interface Props {
@@ -202,43 +203,16 @@
 		}) as string;
 	});
 
-	/** Terse "Updated {ago}" for the tooltip. Mirrors RelativeTime's
-	 *  terse ladder (same relative_time.terse.* keys) — kept inline so
-	 *  the chip's native title can carry it without a wrapper element
+	/** Terse "Posted {ago} ago" for the tooltip, from the app's one ladder
+	 *  (relativeAge, same relative_time.terse.* keys as RelativeTime) — kept
+	 *  inline so the chip's native title can carry it without a wrapper element
 	 *  stealing the hover. null when no postedAtIso is supplied. */
 	const postedTooltip = $derived.by(() => {
 		if (!postedAtIso) return null;
 		const ms = Date.parse(postedAtIso);
 		if (!Number.isFinite(ms)) return null;
-		const seconds = Math.max(0, Math.floor((now - ms) / 1000));
-		let rel: string;
-		if (seconds < 60) {
-			rel = $_('relative_time.terse.lt1m') as string;
-		} else {
-			const minutes = Math.floor(seconds / 60);
-			if (minutes < 60) {
-				rel = $_('relative_time.terse.minutes', { values: { n: minutes } }) as string;
-			} else {
-				const hours = Math.floor(minutes / 60);
-				if (hours < 24) {
-					rel = $_('relative_time.terse.hours', { values: { n: hours } }) as string;
-				} else {
-					const days = Math.floor(hours / 24);
-					if (days < 30) {
-						rel = $_('relative_time.terse.days', { values: { n: days } }) as string;
-					} else {
-						const months = Math.floor(days / 30);
-						if (months < 12) {
-							rel = $_('relative_time.terse.months', { values: { n: months } }) as string;
-						} else {
-							rel = $_('relative_time.terse.years', {
-								values: { n: Math.floor(months / 12) }
-							}) as string;
-						}
-					}
-				}
-			}
-		}
+		const { unit, n } = relativeAge(ms, now);
+		const rel = $_(`relative_time.terse.${unit}`, { values: { n } }) as string;
 		return $_('orderbook.order.posted_ago', { values: { age: rel } }) as string;
 	});
 

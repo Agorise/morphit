@@ -29,6 +29,7 @@
 	 */
 
 	import { _ } from 'svelte-i18n';
+	import type { PaymentCheckState } from '$lib/chat/paymentChecks';
 	import type { LocalMessage } from '$lib/chat/chatService';
 	import {
 		CHAT_CONSTANTS,
@@ -68,6 +69,10 @@
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 
 	interface Props {
+		/** v1.21.17 — the live check of a crypto-for-crypto trade's payment
+		 *  (amount reaching the shared address, confirmations), for the receipt
+		 *  card whose txid it is ($lib/chat/paymentChecks). */
+		paymentCheck?: { readonly txid: string; readonly state: PaymentCheckState } | null;
 		message: LocalMessage;
 		/** The local user's account — used to determine whether
 		 *  this message is outgoing (align right, emerald) or
@@ -168,6 +173,7 @@
 	}
 
 	let {
+		paymentCheck = null,
 		message,
 		me,
 		peer,
@@ -1303,6 +1309,48 @@
 					{#if p.amount}
 						<div class="font-mono text-lg font-bold leading-tight">{p.amount}</div>
 					{/if}
+					{#if paymentCheck !== null && paymentCheck.txid === p.txid}
+						{@const c = paymentCheck.state}
+						{@const coin = p.method.toUpperCase()}
+						<!-- v1.21.17: did this payment reach the address that was shared,
+						     with the amount asked, and how far has it confirmed? -->
+						<div
+							class="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs {c.phase === 'seen' &&
+							!c.short &&
+							!c.old &&
+							!c.undated
+								? 'bg-morphit-emerald/15 text-morphit-emerald'
+								: c.phase === 'seen' && (c.short || c.old)
+									? 'bg-red-500/15 text-red-700 dark:text-red-300'
+									: 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300'}"
+							data-testid="payment-check"
+							role="status"
+						>
+							{#if c.phase === 'checking' || (c.phase === 'unavailable' && !c.long) || (c.phase === 'seen' && c.undated && !c.short)}
+								<span class="inline-block h-3 w-3 animate-pulse rounded-full bg-ink-400"></span>
+								{$_('chat.payment_check.checking')}
+							{:else if c.phase === 'not_found'}
+								<span class="inline-block h-3 w-3 animate-pulse rounded-full bg-ink-400"></span>
+								{$_('chat.payment_check.not_found', { values: { coin } })}
+							{:else if c.phase === 'no_key'}
+								{$_('chat.payment_check.no_key')}
+							{:else if c.phase === 'unavailable'}
+								{$_('chat.payment_check.unavailable')}
+							{:else if c.old}
+								{$_('chat.payment_check.old', { values: { coin } })}
+							{:else if c.short && !/[1-9]/.test(c.amount)}
+								{$_('chat.payment_check.wrong_address', { values: { coin } })}
+							{:else if c.short}
+								{$_('chat.payment_check.short', { values: { amount: c.amount, coin } })}
+							{:else if c.confirmations >= c.required}
+								✓ {$_('chat.payment_check.confirmed', { values: { amount: c.amount, coin } })}
+							{:else}
+								{$_('chat.payment_check.seen', {
+									values: { amount: c.amount, coin, n: c.confirmations, required: c.required }
+								})}
+							{/if}
+						</div>
+					{/if}
 					{#if p.method === 'blurt' && verifyResult !== null}
 						<!-- Phase F.4 verification badge, extended in
 						     F.5 audit (F-14) to cover self-verification
@@ -1500,7 +1548,7 @@
 				     button copies the formatted multi-line address.
 				     PRIVACY: address stays in E2E chat only. -->
 				<div
-					class="rounded-lg border border-morphit-emerald/40 bg-emerald-50/40 p-3 dark:border-morphit-emerald/30 dark:bg-emerald-950/20"
+					class="rounded-lg border border-morphit-emerald/40 bg-morphit-emerald/[0.04] p-3 dark:border-morphit-emerald/30 dark:bg-morphit-emerald/[0.05]"
 				>
 					<div class="mb-1 flex items-center gap-2">
 						<span aria-hidden="true">✉️</span>

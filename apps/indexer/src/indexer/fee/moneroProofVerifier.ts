@@ -53,14 +53,16 @@
  * validator and again at construction.
  */
 
-import type { FeeClaim, FeeVerifier, FeeVerifyResult } from './verifier';
+import type { FeeClaim, FeeVerifier, FeeVerifyResult, PaymentLookupResult } from './verifier';
+import { paymentTimeOf } from './verifier';
 import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
 import { minAcceptablePiconero, FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
 import { logger } from '../../log/index';
 import { encryptedPaymentIdsFromExtra, xmrDecryptPaymentId } from './xmrPaymentId';
-import { moneroTxHash, scanRawTxForAddress } from './xmrRawTx';
-import { explorerInit, readExplorerJson, readExplorerText } from './explorerHttp';
+import { moneroTxHash, scanRawTxForAddress, XMR_TX_KEYS } from './xmrRawTx';
+import { blockTimeOf, explorerInit, privateLogContext, readExplorerJson, readExplorerText } from './explorerHttp';
 import { parseXmrAddress } from '@morphit/release-schema';
+import { explorerOperatorOf } from '@morphit/operator-config/fee-sources';
 import { DEFAULT_XMR_EXPLORERS, parseXmrExplorer, type XmrExplorerKind } from '../../config/xmrExplorers';
 
 const log = logger('xmr-verify');
@@ -93,6 +95,10 @@ export interface MoneroProofFeeVerifierConfig {
 	readonly loneAnswerAfterMs?: number;
 	/** (v1.20.2) Depth required for that lone answer. Default 10. */
 	readonly loneAnswerMinConfirmations?: number;
+	/** The txids and tx keys this verifier is asked about are not public (the
+	 *  trade payment check, fee/paymentCheck.ts): its warnings name the
+	 *  explorer and status only (explorerHttp.ts privateLogContext). */
+	readonly privateLookups?: boolean;
 }
 
 /** (v1.20.2) Defaults for the lone-answer rule (see the header). */
@@ -134,6 +140,9 @@ interface ExplorerProofResponse {
 		}[];
 		/** Confirmation count. */
 		readonly tx_confirmations?: number;
+		/** Unix seconds: the block's time once mined, the pool's receive time
+		 *  before (page.h json_outputs, since 2020-08). */
+		readonly tx_timestamp?: number;
 	};
 }
 
@@ -159,7 +168,12 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				);
 			}
 		}
-		this.pool = pool ?? new EndpointPool({ endpoints: [...config.explorerUrls] });
+		// Agreement counts OPERATORS, not URLs (feeSources.ts EXPLORER_OPERATORS):
+		// one operator's onion, I2P and clearnet addresses are one answer. A
+		// tier whose sources are fewer operators than minSuccessfulResponses can
+		// then never agree — pending / no answer, never a verdict.
+		this.pool =
+			pool ?? new EndpointPool({ endpoints: [...config.explorerUrls], operatorOf: explorerOperatorOf });
 	}
 
 	/** The address the verifier was constructed with.  Surfaced
@@ -301,7 +315,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				if (t.extra !== '') {
 					const inExtra = encryptedPaymentIdsFromExtra(t.extra);
 					if (inExtra === null || !inExtra.includes(t.paymentId8)) {
-						log.warn('explorer_payment_id_not_in_extra', { explorer: base });
+						this.warn('explorer_payment_id_not_in_extra', { explorer: base });
 						unusableAnswers++;
 						return null;
 					}
@@ -422,6 +436,220 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		return { kind: 'verified', observedAmount: observed };
 	}
 
+	/**
+	 * A trade payment, by txid and tx key (fee/paymentCheck.ts): how much
+	 * `txid` provably pays to `address` (standard, subaddress or integrated),
+	 * and how deep it is, as `minSuccessfulResponses` sources agree. Every kind
+	 * of source serves the TRANSACTION and this node opens it with the key
+	 * (xmrRawTx.ts) — a txprove explorer through its `/api/rawtransaction`
+	 * (explorerRawTxAnswer), a raw-tx explorer, a node — so the key and the
+	 * seller's address never leave this instance (v1.21.17; a txprove
+	 * explorer's `/api/outputs` would need both). No payment ID is asked
+	 * about: a trade address is the seller's own.
+	 *
+	 * `txKey` is what the wallet shows: the main key, or (a transaction with
+	 * additional keys — a subaddress among several destinations) the main key
+	 * followed by one key per output, 64 hex each (XMR_TX_KEYS).
+	 *
+	 * The agreement key is the amount (0 when the key proves nothing for the
+	 * address). There is no XMR counterpart to BTC's "spends from the address"
+	 * rule (bitcoinExplorerVerifier.ts lookupPayment): an input is a ring of
+	 * decoys, so nobody can see which address it spends from, and an output is
+	 * proven only with the key of the transaction that made it — the buyer
+	 * holds the key of their own payment, never of the seller's own spend, so
+	 * the seller's change cannot be presented as a payment.
+	 *
+	 * The depth is the least the agreeing sources allow, never overstated; a
+	 * source that cannot tell its depth earns no agreement and another is asked
+	 * (one such source must not block every answer), rather than counting as
+	 * "0 confirmations" with no block time — which would let an old payment
+	 * pass for a fresh one. The block time (json_transaction `timestamp`,
+	 * monerod `block_timestamp`, the block header's `timestamp`) comes from
+	 * paymentTimeOf over the sources that put it in a block: the earliest when
+	 * they agree, none when they cannot both be true (`timeDisputed`), none
+	 * when every agreeing source has it in the pool (whose timestamps are
+	 * receive times). "Not found" needs a
+	 * quorum of sources saying so and no usable answer otherwise; for a
+	 * txprove explorer that includes its error answers, which do not tell "no
+	 * such transaction" from "this key proves nothing here". A 429, a 5xx, a
+	 * timeout or a busy / untrusted node is a transport failure: never an
+	 * answer, never "not found". The lone-answer rule is not applied: it is
+	 * for an order that has waited hours, and here one source's word is
+	 * simply no answer yet.
+	 */
+	async lookupPayment(
+		txid: string,
+		address: string,
+		txKey: string,
+		signal?: AbortSignal
+	): Promise<PaymentLookupResult> {
+		if (!/^[0-9a-f]{64}$/i.test(txid) || !XMR_TX_KEYS.test(txKey)) return { kind: 'no_answer' };
+		const key = txKey.toLowerCase();
+		let notFoundCount = 0;
+		type Answer = { sum: bigint; confirmations: number; blockTime: number | null };
+		const depth = (c: unknown): number | null =>
+			typeof c === 'number' && Number.isSafeInteger(c) && c >= 0 ? c : null;
+		const quorum = await this.pool.quorumCall<Answer>(
+			async (spec, signal) => {
+				const ex = parseXmrExplorer(spec);
+				if (ex === null) return null;
+				// PRIVACY (v1.21.17): a TRADE payment's key never leaves
+				// this instance. A txprove explorer is asked for the transaction
+				// only (`/api/rawtransaction/<txid>`, explorerRawTxAnswer) and the
+				// proof is made here — its `/api/outputs?…&viewkey=<tx key>&txprove=1`
+				// would hand a third party the seller's address and a key proving
+				// the amount, for a payment the parties keep in their encrypted
+				// chat. (A LISTING FEE's key is public on chain; fee verification
+				// keeps its own path.)
+				const r =
+					ex.kind === 'raw-tx'
+						? await this.rawTxAnswer(ex.base, txid, address, key, signal)
+						: ex.kind === 'node'
+							? await this.nodeAnswer(ex.base, txid, address, key, signal)
+							: await this.explorerRawTxAnswer(ex.base, txid, address, key, signal);
+				switch (r.kind) {
+					case 'transport_failure':
+						throw new Error('transport_failure');
+					case 'data_not_found':
+						notFoundCount++;
+						return null;
+					case 'data_malformed':
+						return null;
+				}
+				// An answer that cannot say how deep the transaction is earns no
+				// agreement: another source is asked instead, so one source that
+				// leaves the depth out cannot block every answer (v1.21.17).
+				const d = depth(r.confirmations);
+				if (d === null) return null;
+				return { sum: r.amount, confirmations: d, blockTime: r.blockTime };
+			},
+			{
+				equivalenceKey: (a) => a.sum.toString(),
+				minAgree: this.config.minSuccessfulResponses,
+				timeoutMs: this.config.requestTimeoutMs * 2,
+				...(signal !== undefined ? { signal } : {})
+			}
+		);
+		if (quorum.kind === 'no_endpoints') return { kind: 'no_answer' };
+		if (quorum.kind === 'all_responses_in') {
+			return notFoundCount >= this.config.minSuccessfulResponses && quorum.responses.length === 0
+				? { kind: 'not_found' }
+				: { kind: 'no_answer' };
+		}
+		const agreed = quorum.agreedKey!;
+		const agreeing = quorum.responses.filter((a) => a.sum.toString() === agreed);
+		const confirmations = Math.min(...agreeing.map((a) => a.confirmations));
+		// Only a source that puts it in a block gives a block time (in the pool
+		// the explorers' timestamps are receive times), and only times the
+		// agreeing sources agree on are given (paymentTimeOf).
+		const { blockTime, timeDisputed } = paymentTimeOf(
+			agreeing.map((a) => ({ inBlock: a.confirmations > 0, time: a.blockTime })),
+			Math.floor(Date.now() / 1000)
+		);
+		return {
+			kind: 'found',
+			amount: BigInt(agreed),
+			confirmations,
+			blockTime,
+			...(timeDisputed ? { timeDisputed: true } : {})
+		};
+	}
+
+	/**
+	 * A txprove explorer's answer for a tx key WITH additional keys. Its
+	 * `/api/outputs` cannot check one: it parses exactly one 64-hex key there
+	 * (page.h json_outputs → parse_str_secret_key → parse_hash256), so the
+	 * longer form is an `error` answer — which would count as "not found" —
+	 * and in prove mode it derives the additional outputs from the
+	 * transaction's additional PUBLIC keys and the main key, which proves
+	 * nothing. (Its HTML /prove page does take the long form; its JSON API
+	 * does not.) So the transaction itself is taken from
+	 * `/api/rawtransaction/<txid>` — monerod's JSON of it (json_rawtransaction,
+	 * obj_to_json_str) — and verified here exactly like a raw-tx explorer's,
+	 * sending only the txid; its depth comes from `/api/transaction/<txid>`
+	 * (`confirmations`, 0 in the pool; json_transaction). Read in
+	 * moneroexamples/onion-monero-blockchain-explorer, master, 2026-10-26.
+	 */
+	private async explorerRawTxAnswer(
+		base: string,
+		txid: string,
+		address: string,
+		txKey: string,
+		poolSignal?: AbortSignal
+	): Promise<
+		| {
+				kind: 'ok';
+				amount: bigint;
+				encryptedPaymentIds: readonly string[];
+				confirmations: number | null;
+				/** The source's time for the transaction (unix seconds): the block's
+				 *  once mined — in the pool some sources give the receive time, so
+				 *  lookupPayment reads it only at depth >= 1. Null when none. */
+				blockTime: number | null;
+		  }
+		| { kind: 'transport_failure' }
+		| { kind: 'data_not_found' }
+		| { kind: 'data_malformed' }
+	> {
+		const dest = parseXmrAddress(address);
+		if (!dest.ok) return { kind: 'data_malformed' };
+		const got = await this.getJsonFrom(`${base}/api/rawtransaction/${txid}`, poolSignal);
+		if (got.kind !== 'ok') return got;
+		const b = got.body as { status?: unknown; data?: unknown } | null;
+		if (b === null || typeof b !== 'object') return { kind: 'data_malformed' };
+		// 'fail' is how json_rawtransaction answers "Cant find tx hash".
+		if (b.status === 'fail') return { kind: 'data_not_found' };
+		if (b.status !== 'success') return { kind: 'data_malformed' };
+		if (moneroTxHash(b.data) !== txid.toLowerCase()) {
+			this.warn('explorer_tx_content_mismatch', { explorer: base });
+			return { kind: 'data_malformed' };
+		}
+		const scan = scanRawTxForAddress(b.data, txKey, {
+			viewPub: dest.value.viewPub,
+			spendPub: dest.value.spendPub
+		});
+		if ('error' in scan) {
+			if (scan.error === 'commitment_mismatch') this.warn('explorer_commitment_mismatch', { explorer: base });
+			return scan.error === 'bad_key' ? { kind: 'data_not_found' } : { kind: 'data_malformed' };
+		}
+		let confirmations: number | null = null;
+		let blockTime: number | null = null;
+		const t = await this.getJsonFrom(`${base}/api/transaction/${txid}`, poolSignal);
+		if (t.kind === 'ok') {
+			const tb = t.body as {
+				status?: unknown;
+				data?: { tx_hash?: unknown; confirmations?: unknown; timestamp?: unknown };
+			} | null;
+			const c = tb?.data?.confirmations;
+			if (
+				tb?.status === 'success' &&
+				typeof tb.data?.tx_hash === 'string' &&
+				tb.data.tx_hash.toLowerCase() === txid.toLowerCase() &&
+				typeof c === 'number'
+			) {
+				// lookupPayment's depth() refuses a negative or fractional one.
+				confirmations = c;
+				// json_transaction's `timestamp`: the block's time once mined, the
+				// pool's receive time before — lookupPayment uses a time only when
+				// every agreeing source puts the transaction in a block.
+				blockTime = blockTimeOf(tb.data.timestamp);
+			}
+		}
+		return {
+			kind: 'ok',
+			amount: scan.amount,
+			encryptedPaymentIds: scan.encryptedPaymentIds,
+			confirmations,
+			blockTime
+		};
+	}
+
+	/** log.warn, reduced for a verifier that does private lookups. */
+	private warn(event: string, ctx: Record<string, unknown>, err?: unknown): void {
+		if (this.config.privateLookups === true) log.warn(event, privateLogContext(ctx, err));
+		else log.warn(event, ctx, err);
+	}
+
 	/** (wave 4) A raw-tx explorer's answer, verified here (xmrRawTx.ts). */
 	private async rawTxAnswer(
 		base: string,
@@ -430,7 +658,16 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		txKey: string,
 		poolSignal?: AbortSignal
 	): Promise<
-		| { kind: 'ok'; amount: bigint; encryptedPaymentIds: readonly string[]; confirmations: number | null }
+		| {
+				kind: 'ok';
+				amount: bigint;
+				encryptedPaymentIds: readonly string[];
+				confirmations: number | null;
+				/** The source's time for the transaction (unix seconds): the block's
+				 *  once mined — in the pool some sources give the receive time, so
+				 *  lookupPayment reads it only at depth >= 1. Null when none. */
+				blockTime: number | null;
+		  }
 		| { kind: 'transport_failure' }
 		| { kind: 'data_not_found' }
 		| { kind: 'data_malformed' }
@@ -446,7 +683,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		if (b === null || typeof b !== 'object' || b.status !== 'OK') return { kind: 'data_malformed' };
 		// The served content must BE the transaction the payer named.
 		if (moneroTxHash(b.transaction_data) !== txid.toLowerCase()) {
-			log.warn('explorer_tx_content_mismatch', { explorer: base });
+			this.warn('explorer_tx_content_mismatch', { explorer: base });
 			return { kind: 'data_malformed' };
 		}
 		const scan = scanRawTxForAddress(b.transaction_data, txKey, {
@@ -454,11 +691,17 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			spendPub: dest.value.spendPub
 		});
 		if ('error' in scan) {
-			if (scan.error === 'commitment_mismatch') log.warn('explorer_commitment_mismatch', { explorer: base });
+			if (scan.error === 'commitment_mismatch') this.warn('explorer_commitment_mismatch', { explorer: base });
 			return scan.error === 'bad_key' ? { kind: 'data_not_found' } : { kind: 'data_malformed' };
 		}
-		const confirmations = await this.rawTxConfirmations(base, txid, poolSignal);
-		return { kind: 'ok', amount: scan.amount, encryptedPaymentIds: scan.encryptedPaymentIds, confirmations };
+		const { confirmations, blockTime } = await this.rawTxConfirmations(base, txid, poolSignal);
+		return {
+			kind: 'ok',
+			amount: scan.amount,
+			encryptedPaymentIds: scan.encryptedPaymentIds,
+			confirmations,
+			blockTime
+		};
 	}
 
 	/** (v1.20.2) A public Monero node's answer (monerod restricted RPC),
@@ -474,7 +717,16 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		txKey: string,
 		poolSignal?: AbortSignal
 	): Promise<
-		| { kind: 'ok'; amount: bigint; encryptedPaymentIds: readonly string[]; confirmations: number | null }
+		| {
+				kind: 'ok';
+				amount: bigint;
+				encryptedPaymentIds: readonly string[];
+				confirmations: number | null;
+				/** The source's time for the transaction (unix seconds): the block's
+				 *  once mined — in the pool some sources give the receive time, so
+				 *  lookupPayment reads it only at depth >= 1. Null when none. */
+				blockTime: number | null;
+		  }
 		| { kind: 'transport_failure' }
 		| { kind: 'data_not_found' }
 		| { kind: 'data_malformed' }
@@ -531,7 +783,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		}
 		const prunableHash = typeof entry.prunable_hash === 'string' ? entry.prunable_hash : undefined;
 		if (moneroTxHash(tx, prunableHash) !== want) {
-			log.warn('explorer_tx_content_mismatch', { explorer: base });
+			this.warn('explorer_tx_content_mismatch', { explorer: base });
 			return { kind: 'data_malformed' };
 		}
 		const scan = scanRawTxForAddress(tx, txKey, {
@@ -539,7 +791,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			spendPub: dest.value.spendPub
 		});
 		if ('error' in scan) {
-			if (scan.error === 'commitment_mismatch') log.warn('explorer_commitment_mismatch', { explorer: base });
+			if (scan.error === 'commitment_mismatch') this.warn('explorer_commitment_mismatch', { explorer: base });
 			return scan.error === 'bad_key' ? { kind: 'data_not_found' } : { kind: 'data_malformed' };
 		}
 		let confirmations: number | null;
@@ -551,7 +803,16 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		) {
 			confirmations = entry.confirmations;
 		} else confirmations = null;
-		return { kind: 'ok', amount: scan.amount, encryptedPaymentIds: scan.encryptedPaymentIds, confirmations };
+		// `block_timestamp`: the block's time, sent only for a mined transaction
+		// (core_rpc_server.cpp on_get_transactions).
+		const blockTime = blockTimeOf(entry.block_timestamp);
+		return {
+			kind: 'ok',
+			amount: scan.amount,
+			encryptedPaymentIds: scan.encryptedPaymentIds,
+			confirmations,
+			blockTime
+		};
 	}
 
 	/** (v1.20.2) POST JSON with the verifier's timeout; never follows redirects. */
@@ -587,7 +848,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				return { kind: 'data_malformed' };
 			}
 		} catch (err) {
-			log.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
+			this.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
 			return { kind: 'transport_failure' };
 		} finally {
 			clearTimeout(timer);
@@ -600,26 +861,35 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 	 *  (`/tx/<txid>` links `/block/<height>`), and is then CHECKED in the
 	 *  block's JSON: `get_block_data/<height>` must list the txid and gives
 	 *  the block's depth (confirmations = depth + 1, as monerod counts). 0 when
-	 *  the page names no block (still in the pool); null when it cannot tell. */
-	private async rawTxConfirmations(base: string, txid: string, poolSignal?: AbortSignal): Promise<number | null> {
+	 *  the page names no block (still in the pool); null when it cannot tell.
+	 *  `blockTime`: that block's header `timestamp` (monerod get_block, as
+	 *  moneroblocks.info serves it), null without a block. */
+	private async rawTxConfirmations(
+		base: string,
+		txid: string,
+		poolSignal?: AbortSignal
+	): Promise<{ confirmations: number | null; blockTime: number | null }> {
+		const unknown = { confirmations: null, blockTime: null };
 		let page: string;
 		try {
 			const res = await this.fetchImpl(
 				`${base}/tx/${txid}`,
 				explorerInit({ method: 'GET', accept: 'text/html' }, poolSignal ?? null)
 			);
-			if (!res.ok) return null;
+			if (!res.ok) return unknown;
 			page = await readExplorerText(res);
 		} catch {
-			return null;
+			return unknown;
 		}
 		const heights = [...new Set([...page.matchAll(/\/block\/(\d{1,9})(?!\d)/g)].map((m) => Number(m[1])))].slice(0, 3);
-		if (heights.length === 0) return /\bconfirmations\b/i.test(page) ? 0 : null;
+		if (heights.length === 0) {
+			return /\bconfirmations\b/i.test(page) ? { confirmations: 0, blockTime: null } : unknown;
+		}
 		for (const h of heights) {
 			const got = await this.getJsonFrom(`${base}/api/get_block_data/${h}`, poolSignal);
 			if (got.kind !== 'ok') continue;
 			const result = (got.body as { block_data?: { result?: Record<string, unknown> } } | null)?.block_data?.result;
-			const header = result?.block_header as { height?: unknown; depth?: unknown } | undefined;
+			const header = result?.block_header as { height?: unknown; depth?: unknown; timestamp?: unknown } | undefined;
 			const hashes = result?.tx_hashes;
 			if (
 				header?.height === h &&
@@ -629,10 +899,10 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				Array.isArray(hashes) &&
 				hashes.some((x) => typeof x === 'string' && x.toLowerCase() === txid.toLowerCase())
 			) {
-				return header.depth + 1;
+				return { confirmations: header.depth + 1, blockTime: blockTimeOf(header.timestamp) };
 			}
 		}
-		return null;
+		return unknown;
 	}
 
 	/** GET JSON with the verifier's timeout; never follows redirects. */
@@ -659,7 +929,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				return { kind: 'data_malformed' };
 			}
 		} catch (err) {
-			log.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
+			this.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
 			return { kind: 'transport_failure' };
 		} finally {
 			clearTimeout(timer);
@@ -718,7 +988,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			const extra = typeof d.extra === 'string' ? d.extra.toLowerCase() : '';
 			return { kind: 'ok', paymentId8: pid8, extra };
 		} catch (err) {
-			log.warn('explorer_fetch_failed', { explorer: baseUrl, txid }, err);
+			this.warn('explorer_fetch_failed', { explorer: baseUrl, txid }, err);
 			return { kind: 'transport_failure' };
 		} finally {
 			clearTimeout(timer);
@@ -769,11 +1039,11 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				// software answers an unknown transaction or a bad proof with a JSON
 				// error (below); a 404 is a route it does not serve (its JSON API
 				// off) or a page in front of it — no verdict on the payment.
-				log.warn('explorer_404_without_not_found', { explorer: baseUrl, txid });
+				this.warn('explorer_404_without_not_found', { explorer: baseUrl, txid });
 				return { kind: 'data_malformed' };
 			}
 			if (res.status >= 500) {
-				log.warn('explorer_5xx', {
+				this.warn('explorer_5xx', {
 					explorer: baseUrl,
 					txid,
 					status: res.status
@@ -781,7 +1051,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				return { kind: 'transport_failure' };
 			}
 			if (!res.ok) {
-				log.warn('explorer_bad_status', {
+				this.warn('explorer_bad_status', {
 					explorer: baseUrl,
 					txid,
 					status: res.status
@@ -792,11 +1062,11 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			try {
 				body = await readExplorerJson(res, ac);
 			} catch {
-				log.warn('explorer_non_json', { explorer: baseUrl, txid });
+				this.warn('explorer_non_json', { explorer: baseUrl, txid });
 				return { kind: 'data_malformed' };
 			}
 			if (!isExplorerProofResponse(body)) {
-				log.warn('explorer_bad_shape', {
+				this.warn('explorer_bad_shape', {
 					explorer: baseUrl,
 					txid,
 					keys: typeof body === 'object' && body !== null ? Object.keys(body) : []
@@ -808,7 +1078,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				// "tx not found" or "invalid proof" or "proof did not
 				// decode for this address".  All map to data_not_found:
 				// the explorer is healthy, the user's claim is wrong.
-				log.warn('explorer_status_error', {
+				this.warn('explorer_status_error', {
 					explorer: baseUrl,
 					txid,
 					status: body.status
@@ -828,7 +1098,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				typeof echoedTxHash === 'string' &&
 				echoedTxHash.toLowerCase() !== txid.toLowerCase()
 			) {
-				log.warn('explorer_txid_mismatch', {
+				this.warn('explorer_txid_mismatch', {
 					explorer: baseUrl,
 					expected: txid,
 					got: echoedTxHash
@@ -837,7 +1107,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			}
 			return { kind: 'ok', body };
 		} catch (err) {
-			log.warn('explorer_fetch_failed', { explorer: baseUrl, txid }, err);
+			this.warn('explorer_fetch_failed', { explorer: baseUrl, txid }, err);
 			return { kind: 'transport_failure' };
 		} finally {
 			clearTimeout(timer);

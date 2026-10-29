@@ -310,6 +310,18 @@ export const QUORUM_DISSENT_COOLDOWN_MAX_MS = 6 * 60 * 60 * 1000;
  *  is decided against it. */
 export const QUORUM_WIDEN_TO = 5;
 
+/** How long a trusted read may take, for one a person is waiting on (the
+ *  account-keys route). Unset: background priority, no deadline. */
+export interface TrustedReadBudget {
+	/** Per-endpoint timeout (rpc-pool raises it to the hidden floor). */
+	readonly timeoutMs?: number;
+	/** The hidden floor is the user-facing one, not the background one. */
+	readonly userFacing?: boolean;
+	/** Fires at the deadline: nobody more is asked, and the read decides from
+	 *  what is in only where its rules allow (see majorityRead). */
+	readonly signal?: AbortSignal;
+}
+
 /** A LONE dissent — one operator, never joined by a second — on mutable state
  *  is overruled only after it has stood alone on this many earlier reads AND
  *  this long since the first (VT5-1, VT1-3). Until then it blocks the read:
@@ -540,9 +552,11 @@ export class BlurtClient {
 		items: readonly string[],
 		voteOf: (answer: A, index: number) => ItemVote | null,
 		minAgree: number,
-		mutable: boolean
+		mutable: boolean,
+		budget: TrustedReadBudget = {}
 	): Promise<{ key: string; answer: A }[] | null> {
 		const need = Math.max(1, minAgree);
+		const stop = budget.signal;
 		const now = Date.now();
 		const votes: { operator: string; items: (ItemVote | null)[]; answer: A }[] = [];
 		const heard = new Set<string>();
@@ -621,7 +635,7 @@ export class BlurtClient {
 						asked--;
 						return null;
 					}
-					if (done || heard.has(operator)) return null;
+					if (done || heard.has(operator) || stop?.aborted === true) return null;
 					heard.add(operator);
 					votes.push({ operator, items: items.map((_, i) => safeVote(answer, i)), answer });
 					if (earlyDecide && allDecidedClean()) {
@@ -630,7 +644,14 @@ export class BlurtClient {
 					}
 					return null;
 				},
-				{ equivalenceKey: () => 'done', minAgree: 1, maxOperators: Math.max(1, window) }
+				{
+					equivalenceKey: () => 'done',
+					minAgree: 1,
+					maxOperators: Math.max(1, window),
+					...(budget.timeoutMs !== undefined ? { timeoutMs: budget.timeoutMs } : {}),
+					...(budget.userFacing === true ? { userFacing: true } : {}),
+					...(stop !== undefined ? { signal: stop } : {})
+				}
 			);
 		};
 
@@ -640,10 +661,21 @@ export class BlurtClient {
 		} else {
 			const first = Math.max(need, Math.min(QUORUM_MAX_OPERATORS, this.pool.operatorCount()));
 			await collect(first, first, false);
-			if (!allDecidedClean() && heard.size < QUORUM_WIDEN_TO) {
+			// Out of time before the first round was heard in full: the rule is
+			// that this many operators are heard before anything is decided, so
+			// nothing is (and no standing dissent is counted from a partial read).
+			if (stop?.aborted === true && heard.size < first) return null;
+			if (!allDecidedClean() && heard.size < QUORUM_WIDEN_TO && stop?.aborted !== true) {
 				const more = QUORUM_WIDEN_TO - heard.size;
 				await collect(more, more, false);
 			}
+			// Out of time while the operators still disagreed (before or during
+			// the widening): the widening is what lets a second up-to-date
+			// operator back a lone dissent, so a cut-short read decides nothing
+			// and counts nothing — no standing read, no overrule, no cooldown.
+			// Otherwise repeated requests racing the deadline could wear an
+			// honest operator down to "overruled" (v1.21.17 review).
+			if (stop?.aborted === true && !allDecidedClean()) return null;
 		}
 
 		// Decide, applying the standing rule to lone dissents on mutable state.
@@ -1066,7 +1098,8 @@ export class BlurtClient {
 	 */
 	async getAccountsAgreed(
 		names: readonly string[],
-		agreeOn: (account: ChainAccount | undefined) => string
+		agreeOn: (account: ChainAccount | undefined) => string,
+		budget: TrustedReadBudget = {}
 	): Promise<ReadonlyMap<string, ChainAccount> | null> {
 		if (names.length === 0) return new Map();
 		const unique = Array.from(new Set(names)).sort();
@@ -1100,7 +1133,8 @@ export class BlurtClient {
 				};
 			},
 			this.trustedQuorumSize(),
-			true
+			true,
+			budget
 		);
 		if (decided === null) return null;
 		const out = new Map<string, ChainAccount>();

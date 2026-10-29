@@ -145,6 +145,10 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	// Local copy of the on-chain profile's preferred_langs (primary first). Not in the settings
 	// blob and not re-seeded from the chain, so only the sign-out sweep protects it.
 	{ key: 'morphit.preferredLangs.v1', tier: 'account', protection: 'sweep-only' },
+	// v1.21.17 — reviews sent from this device (stars, words, the trade), kept
+	// so a reload neither loses them nor asks for them again. The person's: swept
+	// at sign-out (the instance still knows what became of each, on chain).
+	{ key: 'morphit.sentReviews.v1', tier: 'account', protection: 'sweep-only' },
 	// v1.21.1 — the orderbook language filter as the user last left it on the orderbook (empty =
 	// all languages). It says which languages the person reads, so it goes with the sign-out sweep;
 	// a Settings save re-seeds it.
@@ -250,6 +254,9 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	{ key: 'morphit.chat.read_state', tier: 'account', protection: 'sweep-only' },
 	// Names peers directly.
 	{ key: 'morphit.chat.recent_peers', tier: 'account', protection: 'sweep-only' },
+	// v1.21.17: payments made from this device per order and peer, so a receipt that failed to post
+	// does not bring "Send" back. Names peers.
+	{ key: 'morphit.chat.leg_ledger.v1', tier: 'account', protection: 'sweep-only' },
 	// One-shot UI nudge.
 	{ key: 'morphit.chatNotifNudge.dismissed', tier: 'account', protection: 'sweep-only' },
 	// One-shot UI nudge.

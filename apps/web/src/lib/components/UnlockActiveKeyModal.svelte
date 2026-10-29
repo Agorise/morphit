@@ -37,7 +37,7 @@
 	import { resolveActiveKey, type AccountAuthorityKeys } from '$crypto/activeKeyUnlock';
 	import { keepActiveKeyOnThisDevice } from '$crypto/keepActiveKey';
 	import sodium from 'libsodium-wrappers-sumo';
-	import { fetchAccountKeys } from '$blurt/accountKeys';
+	import { fetchAccountKeysForSigning } from '$blurt/accountKeys';
 	import PasswordScope from '$components/PasswordScope.svelte';
 	import { keyField } from '$lib/ui/keyField';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
@@ -85,7 +85,11 @@
 		busy = true;
 		errorKey = '';
 		try {
-			const keys = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetch);
+			const keys = await fetchAccountKeysForSigning(
+				resolveOrigin(MORPHIT_INDEXER_ORIGIN),
+				account,
+				fetch
+			);
 			if (!keys) {
 				errorKey = 'unlock_active.error.lookup_failed';
 				return;
