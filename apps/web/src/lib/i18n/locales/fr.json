@@ -56,19 +56,20 @@
 			"type_warning_body": "Si tu soupçonnes que cette instance est malveillante, tu ne peux pas non plus faire confiance aux liens — une instance hostile peut afficher le texte \"morphit.io\" pendant que l'URL pointe ailleurs. Tape les adresses à la main dans un onglet propre."
 		},
 		"asset_stance": {
-			"explain": "Morphit est un marché fédéré. Chaque opérateur choisit pour quels actifs négociables son instance accepte de nouveaux ordres — par défaut tout le registre canonique est accepté, mais un opérateur peut désactiver tout actif uniquement-échangeable (p. ex. USDT) s'il préfère spécialiser son instance sur des actifs privacy-first ou decentralization-first. C'est la posture actuelle de VOTRE instance. Note de fédération : les ordres postés sur d'autres instances apparaissent toujours dans votre orderbook quoi qu'il en soit — le blocage ne s'applique qu'aux nouveaux ordres postés D'ICI.",
+			"explain": "Morphit est un marché fédéré. Chaque opérateur choisit quels actifs négociables son instance propose — par défaut tout le registre canonique est accepté, mais un opérateur peut désactiver tout actif uniquement-échangeable (p. ex. USDT) s'il préfère spécialiser son instance sur des actifs privacy-first ou decentralization-first. C'est la posture actuelle de VOTRE instance. Note de fédération : les ordres d'un actif désactivé ne sont pas affichés sur cette instance, y compris ceux postés sur d'autres instances. Les instances qui proposent cet actif continuent de les afficher.",
 			"disabled_label": "Actifs désactivés",
 			"disabled_none": "Aucun — cette instance accepte tous les actifs négociables.",
-			"disabled_suffix": "(désactivé par l'opérateur sur cette instance ; négociable sur les instances pairs)",
+			"disabled_suffix": "(désactivé sur cette instance : non proposé ici, et ses ordres ne sont pas affichés ici)",
 			"federation_note": "Vous voulez une posture différente ? Parcourez /operators pour trouver une instance dont la politique correspond à votre préférence, ou exécutez la vôtre — voir /run-a-node."
 		},
 		"payment_stance": {
-			"explain": "Chaque opérateur choisit aussi quels moyens de paiement son instance propose. Par défaut, tous les moyens du registre canonique sont activés ; un opérateur peut en désactiver n'importe lequel — le plus souvent le troc (biens/services) — pour garder son instance uniquement monétaire ou ciblée. Voici la position actuelle de VOTRE instance. Note sur la fédération : les ordres d'autres instances utilisant un moyen désactivé apparaissent quand même dans votre carnet d'ordres ; la restriction ne concerne que les nouveaux ordres publiés ici.",
+			"explain": "Chaque opérateur choisit aussi quels moyens de paiement son instance propose. Par défaut, tous les moyens du registre canonique sont activés ; un opérateur peut en désactiver n'importe lequel — le plus souvent le troc (biens/services) — pour garder son instance uniquement monétaire ou ciblée. Voici la position actuelle de VOTRE instance. Note sur la fédération : un ordre dont tous les moyens de paiement sont désactivés ici n'est pas affiché sur cette instance, même s'il a été publié sur une autre instance ; un ordre qui propose encore un moyen que cette instance propose est affiché. Les instances qui proposent ces moyens continuent de l'afficher.",
 			"disabled_label": "Moyens désactivés",
 			"disabled_none": "Aucun — cette instance propose tous les moyens de paiement.",
-			"disabled_suffix": "(désactivé par l'opérateur sur cette instance ; utilisable sur les instances pairs)"
+			"disabled_suffix": "(désactivé sur cette instance : non proposé ici, et les ordres qui ne proposent que des moyens désactivés ne sont pas affichés ici)"
 		},
-		"fee_recipient_unregistered": "Le compte de frais de cette instance, @{account}, ne figure pas encore dans l’enregistrement on-chain de son opérateur : les autres instances de la fédération masquent donc les ordres payés ici en BLURT et ne remettent pas à leurs utilisateurs les premiers messages envoyés d’ici. L’opérateur corrige cela en exécutant sudo morphit-ops register sur le serveur."
+		"fee_recipient_unregistered": "Le compte de frais de cette instance, @{account}, ne figure pas encore dans l’enregistrement on-chain de son opérateur : les autres instances de la fédération masquent donc les ordres payés ici en BLURT et ne remettent pas à leurs utilisateurs les premiers messages envoyés d’ici. L’opérateur corrige cela en exécutant sudo morphit-ops register sur le serveur. À partir du 1er novembre 2026, tant qu’il n’est pas enregistré, les frais payés sur ce site vont à la trésorerie de Morphit.",
+		"fee_recipient_unregistered_to_treasury": "Le compte de frais de cette instance ne figure pas encore dans l’enregistrement on-chain de son opérateur : les frais payés sur ce site vont donc à la trésorerie de Morphit (@{treasury}). L’opérateur corrige cela en exécutant sudo morphit-ops register sur le serveur."
 	},
 	"admin": {
 		"setup_wizard": {
@@ -3896,7 +3897,7 @@
 			"title": "Échec de la vérification d'intégrité de la build",
 			"pubkey_mismatch_body": "La dernière annonce de version de Morphit sur la blockchain Blurt est signée par une autre clé que la clé @morphit à laquelle cette version fait confiance. Soit @morphit a changé de clé, soit le compte @morphit a été pris. Rien de cette annonce n'est utilisé — pas même les adresses des frais de publication. Ne payez pas de frais de publication avant que ce soit résolu.",
 			"invalid_payload_body": "La payload de release on-chain est malformée. L'opérateur est peut-être en plein déploiement, ou la page t'est servie par un attaquant.",
-			"asset_mismatch_body": "Des fichiers servis par ce site ne correspondent pas aux hashs de la version signée par @morphit sur la blockchain Blurt. Une page ancienne en cache peut en être la cause (essayez un rechargement complet). Sinon, ce site sert du code modifié — par accident, après une intrusion ou volontairement.",
+			"asset_mismatch_body": "Des fichiers servis par ce site ne correspondent pas aux hashs de la version signée par @morphit sur la blockchain Blurt. Une page ancienne en cache peut en être la cause (essayez un rechargement complet). Sinon, ce site sert du code ancien ou modifié — par accident, après une intrusion ou volontairement.",
 			"show_files": "Afficher les détails",
 			"hide_files": "Masquer les détails",
 			"what_to_do": "Que faire",
@@ -3929,7 +3930,7 @@
 		"asset_policy_heading": "Votre instance, vos règles pour les actifs et les moyens de paiement",
 		"asset_policy_body": "La fédération permet à chaque opérateur de choisir les actifs échangeables que son site prend en charge. Vous pouvez exclure des actifs un par un et même configurer les moyens de paiement que votre site doit accepter, comme les espèces, PayPal, Klarna, etc.",
 		"asset_policy_federation_label": "La fédération reste intacte.",
-		"asset_policy_federation_body": "Désactiver un actif sur votre instance ne cache pas à vos utilisateurs les ordres des autres instances — l'historique de la chaîne est partagé, votre carnet d'ordres peut donc toujours les afficher.",
+		"asset_policy_federation_body": "Désactiver un actif sur votre instance masque ses ordres sur votre propre site uniquement, y compris ceux postés sur d'autres instances. Les instances qui proposent cet actif continuent de les afficher à leurs utilisateurs.",
 		"requirements_heading": "Exigences en ressources",
 		"req_hw_label": "Matériel",
 		"req_hw_value": "2+ CPU, 4+ Go RAM, 80+ Go d'espace disque (SSD de préférence)",

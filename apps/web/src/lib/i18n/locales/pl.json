@@ -56,19 +56,20 @@
 			"type_warning_body": "Jeśli podejrzewasz, że ta instancja jest złośliwa, nie ufaj też linkom tutaj — wroga instancja może pokazać tekst \"morphit.io\", podczas gdy URL prowadzi gdzie indziej. Wpisz adresy ręcznie w czystej karcie."
 		},
 		"asset_stance": {
-			"explain": "Morphit jest sfederowanym marketplace. Każdy operator wybiera, dla których aktywów handlowych jego instancja przyjmuje nowe zlecenia — domyślnie cały kanoniczny rejestr jest akceptowany, ale operator może wyłączyć dowolny aktyw tylko-handlowy (np. USDT), jeśli woli wyspecjalizować swoją instancję w aktywach privacy-first lub decentralization-first. To aktualna postawa TWOJEJ instancji. Uwaga federacyjna: zlecenia opublikowane na innych instancjach nadal pojawiają się w Twoim orderbooku niezależnie — blokada dotyczy tylko nowych zleceń publikowanych STĄD.",
+			"explain": "Morphit jest sfederowanym marketplace. Każdy operator wybiera, jakie aktywa handlowe oferuje jego instancja — domyślnie cały kanoniczny rejestr jest akceptowany, ale operator może wyłączyć dowolny aktyw tylko-handlowy (np. USDT), jeśli woli wyspecjalizować swoją instancję w aktywach privacy-first lub decentralization-first. To aktualna postawa TWOJEJ instancji. Uwaga federacyjna: zlecenia na wyłączone aktywo nie są pokazywane na tej instancji, również te opublikowane na innych instancjach. Instancje, które oferują to aktywo, nadal je pokazują.",
 			"disabled_label": "Wyłączone aktywa",
 			"disabled_none": "Brak — ta instancja akceptuje wszystkie aktywa handlowe.",
-			"disabled_suffix": "(wyłączone przez operatora na tej instancji; handlowalne na instancjach partnerskich)",
+			"disabled_suffix": "(wyłączone na tej instancji: nie jest tu oferowane, a jego zlecenia nie są tu pokazywane)",
 			"federation_note": "Chcesz innej postawy? Przeglądaj /operators, aby znaleźć instancję, której polityka odpowiada Twoim preferencjom, lub uruchom własną — zobacz /run-a-node."
 		},
 		"payment_stance": {
-			"explain": "Każdy operator wybiera również, które metody płatności oferuje jego instancja. Domyślnie włączone są wszystkie metody z kanonicznego rejestru; operator może wyłączyć dowolną z nich — najczęściej barter (towary/usługi) — aby zachować instancję wyłącznie pieniężną lub wyspecjalizowaną. To jest bieżące stanowisko TWOJEJ instancji. Uwaga o federacji: zlecenia z innych instancji korzystające z wyłączonej metody nadal pojawiają się w Twojej księdze zleceń; ograniczenie dotyczy tylko nowych zleceń publikowanych stąd.",
+			"explain": "Każdy operator wybiera również, które metody płatności oferuje jego instancja. Domyślnie włączone są wszystkie metody z kanonicznego rejestru; operator może wyłączyć dowolną z nich — najczęściej barter (towary/usługi) — aby zachować instancję wyłącznie pieniężną lub wyspecjalizowaną. To jest bieżące stanowisko TWOJEJ instancji. Uwaga o federacji: zlecenie, którego wszystkie metody płatności są tu wyłączone, nie jest pokazywane na tej instancji, nawet jeśli opublikowano je na innej instancji; zlecenie, które nadal oferuje metodę oferowaną przez tę instancję, jest pokazywane. Instancje, które oferują te metody, nadal je pokazują.",
 			"disabled_label": "Wyłączone metody",
 			"disabled_none": "Brak — ta instancja oferuje wszystkie metody płatności.",
-			"disabled_suffix": "(wyłączone przez operatora na tej instancji; dostępne na instancjach równorzędnych)"
+			"disabled_suffix": "(wyłączone na tej instancji: nie jest tu oferowane, a zlecenia oferujące tylko wyłączone metody nie są tu pokazywane)"
 		},
-		"fee_recipient_unregistered": "Konto opłat tej instancji, @{account}, nie jest jeszcze w rejestracji on-chain jej operatora, więc pozostałe instancje federacji ukrywają zlecenia opłacone tutaj w BLURT i nie doręczają swoim użytkownikom pierwszych wiadomości wysłanych stąd. Operator naprawia to, uruchamiając na serwerze sudo morphit-ops register."
+		"fee_recipient_unregistered": "Konto opłat tej instancji, @{account}, nie jest jeszcze w rejestracji on-chain jej operatora, więc pozostałe instancje federacji ukrywają zlecenia opłacone tutaj w BLURT i nie doręczają swoim użytkownikom pierwszych wiadomości wysłanych stąd. Operator naprawia to, uruchamiając na serwerze sudo morphit-ops register. Od 1 listopada 2026 r., dopóki nie zostanie zarejestrowane, opłaty wnoszone na tej stronie trafiają do skarbca Morphit.",
+		"fee_recipient_unregistered_to_treasury": "Konto opłat tej instancji nie jest jeszcze w rejestracji on-chain jej operatora, więc opłaty wnoszone na tej stronie trafiają do skarbca Morphit (@{treasury}). Operator naprawia to, uruchamiając na serwerze sudo morphit-ops register."
 	},
 	"admin": {
 		"setup_wizard": {
@@ -3896,7 +3897,7 @@
 			"title": "Sprawdzenie integralności buildu nie powiodło się",
 			"pubkey_mismatch_body": "Najnowsze ogłoszenie wydania Morphit na blockchainie Blurt jest podpisane innym kluczem niż klucz @morphit, któremu ufa ta wersja. Albo @morphit zmienił klucz, albo ktoś przejął konto @morphit. Nic z tego ogłoszenia nie jest używane — nawet adresy opłaty za ogłoszenie. Nie płać opłat za ogłoszenia, dopóki to się nie wyjaśni.",
 			"invalid_payload_body": "Payload wydania on-chain jest zniekształcony. Operator może być w trakcie wdrożenia, albo atakujący serwuje stronę.",
-			"asset_mismatch_body": "Pliki serwowane przez tę stronę nie zgadzają się z hashami wydania podpisanego przez @morphit na blockchainie Blurt. Przyczyną może być stara strona w pamięci podręcznej (spróbuj pełnego odświeżenia). W przeciwnym razie ta strona serwuje zmieniony kod — przypadkiem, po włamaniu albo celowo.",
+			"asset_mismatch_body": "Pliki serwowane przez tę stronę nie zgadzają się z hashami wydania podpisanego przez @morphit na blockchainie Blurt. Przyczyną może być stara strona w pamięci podręcznej (spróbuj pełnego odświeżenia). W przeciwnym razie ta strona serwuje stary lub zmieniony kod — przypadkiem, po włamaniu albo celowo.",
 			"show_files": "Pokaż szczegóły",
 			"hide_files": "Ukryj szczegóły",
 			"what_to_do": "Co robić",
@@ -3929,7 +3930,7 @@
 		"asset_policy_heading": "Twoja instancja, twoje zasady dotyczące aktywów i metod płatności",
 		"asset_policy_body": "Federacja pozwala każdemu operatorowi wybrać, które aktywa handlowe obsługuje jego strona. Możesz wyłączać pojedyncze aktywa, a nawet ustawić, które metody płatności ma obsługiwać twoja strona, np. gotówkę, PayPal, Klarnę itd.",
 		"asset_policy_federation_label": "Federacja pozostaje niezmienna.",
-		"asset_policy_federation_body": "Wyłączenie aktywa na twojej instancji nie ukrywa przed twoimi użytkownikami zleceń innych instancji — historia łańcucha jest wspólna, więc twój arkusz zleceń nadal może je pokazywać.",
+		"asset_policy_federation_body": "Wyłączenie aktywa na twojej instancji ukrywa jego zlecenia tylko na twojej własnej stronie, także te opublikowane na innych instancjach. Instancje, które oferują to aktywo, nadal pokazują je swoim użytkownikom.",
 		"requirements_heading": "Wymagania sprzętowe",
 		"req_hw_label": "Sprzęt",
 		"req_hw_value": "2+ CPU, 4+ GB RAM, 80+ GB miejsca na dysku (najlepiej SSD)",

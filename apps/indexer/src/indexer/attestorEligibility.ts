@@ -21,7 +21,10 @@
  *     (proxy for not being farmed specifically for the
  *     attack).
  *
- * Two-phase rollout controlled by config:
+ * Two phases. Before CONSENSUS_V2_ACTIVATION_TIME each node applies the one
+ * set in its config (MORPHIT_INDEXER_ATTESTATION_PHASE); from it on every node
+ * applies FEDERATION_ATTESTATION_PHASE (attestationPhaseAt), because whether
+ * an attestation counts decides an order's fee_status on every node:
  *   - 'launch' — OR gate. Either loyalty OR age qualifies.
  *     Runs during ecosystem bootstrap when most accounts are
  *     too new to satisfy both.
@@ -55,6 +58,41 @@ export const ATTESTOR_AGE_THRESHOLD_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type AttestationPhase = 'launch' | 'steady';
+
+/** The phase every node applies to attestations in blocks stamped at or after
+ *  CONSENSUS_V2_ACTIVATION_TIME. Whether an attestation is recorded decides
+ *  which attestations the quorum counts, and so an order's fee_status, which
+ *  every node must agree on: it cannot follow each node's own
+ *  MORPHIT_INDEXER_ATTESTATION_PHASE setting. 'launch' is what every install
+ *  ships with, so a node that never changed the setting judges exactly as
+ *  before. Moving the federation to 'steady' is a change to this constant,
+ *  released with its own activation time. */
+export const FEDERATION_ATTESTATION_PHASE: AttestationPhase = 'launch';
+
+/** The phase an attestation in a block stamped `blockTime` is judged by: the
+ *  node's configured phase before the activation time (history keeps its
+ *  verdicts), the federation-wide one from it on. */
+export function attestationPhaseAt(
+	blockTime: Date,
+	configured: AttestationPhase
+): AttestationPhase {
+	return consensusV2Active(blockTime) ? FEDERATION_ATTESTATION_PHASE : configured;
+}
+
+/** The phase the NEXT attestation will be judged by, for the eligibility API:
+ *  attestationPhaseAt the time of the newest block this indexer has applied an
+ *  op from (chain data, never the wall clock; the next attestation's block is
+ *  no earlier). */
+export async function nextAttestationPhase(
+	db: Queryable,
+	configured: AttestationPhase
+): Promise<AttestationPhase> {
+	const r = await db.query<{ block_time: Date }>(
+		'SELECT block_time FROM ops ORDER BY block_num DESC LIMIT 1'
+	);
+	const latest = r.rows[0]?.block_time;
+	return latest === undefined ? configured : attestationPhaseAt(new Date(latest), configured);
+}
 
 /** Minimal shape the helper needs — accepts both a
  *  PoolClient (inside handler transactions) and a Database

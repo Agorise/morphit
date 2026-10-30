@@ -43,7 +43,7 @@
 
 import { readFileSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { withSpinner } from '../init/spinner.ts';
+import { startDotsSpinner, withSpinner } from '../init/spinner.ts';
 import { spawnSync } from 'node:child_process';
 import {
 	ask,
@@ -66,10 +66,19 @@ import {
 	tagImpersonatesReserved
 } from '../../../indexer/src/indexer/confusables.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
-import { loadInstanceEnv } from '../lib/instanceEnv.ts';
-import { operatorTagConflict, fetchRegisteredTag } from '../lib/operatorTagGuard.ts';
+import { loadInstanceEnv, type InstanceEnvResult } from '../lib/instanceEnv.ts';
+import { operatorTagConflict } from '../lib/operatorTagGuard.ts';
 import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
-import { CANONICAL_BLURT_TREASURY, configuredFeeRecipient } from '../lib/operatorFeeRecipient.ts';
+import {
+	CANONICAL_BLURT_TREASURY,
+	acceptedRegistration,
+	configuredFeeRecipient,
+	localRegistration,
+	otherRegistrationChanges,
+	type LocalRegistration
+} from '../lib/operatorFeeRecipient.ts';
+import { checkKeyOnChain, describeKeyOnChain, publicKeyOf } from '../lib/relayKeyChain.ts';
+import { BroadcastOutcomeUnknownError } from '../lib/chainAccess.ts';
 import { RELAY_ENV_FILES, readEffectiveEnv } from '../lib/relayHiddenHeal.ts';
 
 export interface RegisterCtx {
@@ -97,19 +106,18 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	// Load the instance env so MORPHIT_RELAY_ACCOUNT / posting-key file are
 	// available on a systemd deploy (the unit sources morphit.env, the
 	// operator's interactive shell does not). OS env wins; best-effort.
-	loadInstanceEnv(defaultRepoRoot());
+	const loaded = loadInstanceEnv(defaultRepoRoot());
 	printHeader();
 
 	// ─── 1. Validate env ────
 	const env = readEnv();
 	if ('error' in env) {
-		// env.error is built from env-var validation
-		// failures; it can include the offending env-var VALUE
-		// in the error message ("MORPHIT_INSTANCE_ORIGIN must
-		// be https://, got 'http://attacker$\x1b[2J/'").  Strip
-		// terminal escapes from the operator's screen at
-		// display.
-		console.log(`✗ ${sanitizeForTerm(env.error)}`);
+		// Each missing setting by name, with where it lives and the one command
+		// that sets it on this server (review, 2026-10-29: the old text told the
+		// operator to "source the files" — the files this command had just read).
+		for (const line of missingSettingsHelp(env.missing, loaded, 'register')) {
+			console.log(sanitizeForTerm(line));
+		}
 		return 1;
 	}
 	const {
@@ -213,9 +221,17 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	// valid-looking op but their display_name / origin / contact never update
 	// (the trap that left morphitlat's title stale for 10 hours). Catch it here,
 	// against the local indexer, before the irreversible confirm + any mana.
-	const registeredTag = await withSpinner('Checking your existing on-chain registration…', () =>
-		fetchRegisteredTag(account)
+	// Read from this node's own indexer at whichever local address it listens
+	// on (localIndexerBases — the old fixed 127.0.0.1:8081 missed an indexer
+	// configured elsewhere, and then no conflict could ever be seen).
+	// Capped as a whole (REGISTRATION_READ_MS): an indexer on loopback answers
+	// at once, and a Docker-bridge address that drops packets must not hold the
+	// operator up — "could not tell" proceeds, as it always did.
+	const registration: LocalRegistration = await withSpinner(
+		'Checking your existing on-chain registration…',
+		() => readRegistrationCapped(account)
 	);
+	const registeredTag = registration.state === 'registered' ? registration.tag : null;
 	if (operatorTagConflict(registeredTag, tag)) {
 		console.log(
 			`✗ @${sanitizeForTerm(account)} is already registered under the tag "${sanitizeForTerm(registeredTag as string)}".`
@@ -246,6 +262,33 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log('  identifies YOUR node — your domain is a good choice — with');
 		console.log('  `sudo morphit-ops edit` (Operator tag), then re-run register.');
 		return 1;
+	}
+
+	// Re-publishing what the chain already says changes nothing and still costs
+	// the account a small BLURT fee. Say so, and ask (default: No).
+	if (!nonInteractive && registration.state === 'registered') {
+		const sameAsChain = await withSpinner('Comparing with what the chain already says…', () =>
+			registrationUnchanged(account, registration, buildRegisterPayload(env, tag))
+		);
+		if (sameAsChain.state === 'same') {
+			console.log(
+				`  Your registration on the chain already says exactly this (read from ${sameAsChain.source}).`
+			);
+			console.log(
+				`  Publishing it again changes nothing and costs @${sanitizeForTerm(account)} a small BLURT fee.`
+			);
+			const again = await askYesNo('Publish it again anyway?', false);
+			if (!again) {
+				console.log('  Nothing published — your registration is already up to date.');
+				return 0;
+			}
+		} else if (sameAsChain.state === 'changed') {
+			console.log('  This changes your registration on the chain:');
+			for (const [label, was, now] of sameAsChain.changes) {
+				console.log(`    ${label}: ${sanitizeForTerm(was)}  →  ${sanitizeForTerm(now)}`);
+			}
+			console.log('');
+		}
 	}
 
 	// ─── 2. Confirm ────
@@ -289,31 +332,44 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 			return 1;
 		}
 
-		// On the first attempt only, show which key will sign (public
-		// key only) so the operator can eyeball that the right key is
-		// in play.  Never prints the private key.
+		// On the first attempt only, check the key against the chain BEFORE
+		// anything is signed: a key that is not the account's cannot register,
+		// and broadcasting it anyway costs a fee for a certain rejection. The
+		// public key is compared with the account's keys as the chain lists them
+		// (this node's indexer first, then the RPC pool — lib/relayKeyChain.ts);
+		// the operator is no longer sent to a clearnet explorer to compare by eye.
 		if (attempt === 1) {
+			let pub: string | null = null;
 			try {
-				const dblurtPk = (await import('@beblurt/dblurt')) as unknown as {
-					PrivateKey: {
-						fromString(wif: string): { createPublic(prefix?: string): { toString(): string } };
-					};
-				};
-				const pub = dblurtPk.PrivateKey.fromString(wif).createPublic('BLT').toString();
-				console.log(`  Signing with the active key for @${sanitizeForTerm(account)} →`);
-				console.log(`    public key: ${pub}`);
-				console.log('');
-				console.log('    Verify this key is listed under the "Active Auth" (active');
-				console.log(`    authority) for @${sanitizeForTerm(account)} on a Blurt block explorer.`);
-				console.log('    Open this URL and look at the Active Auth public key —');
-				console.log('    it should match the line above exactly:');
-				console.log(`      https://blocks.blurtwallet.com/#/@${sanitizeForTerm(account)}`);
-				console.log('    (Run `sudo morphit-ops show-key` anytime to re-check.  A');
-				console.log('     wrong key here is the #1 cause of failure.)');
-				console.log('');
+				pub = await publicKeyOf(wif);
 			} catch {
-				// Non-fatal: a derivation failure will resurface as a
-				// key error from the broadcast, with full diagnostics.
+				pub = null; // a malformed key resurfaces from the broadcast, with diagnostics
+			}
+			if (pub !== null) {
+				console.log(
+					`  Signing with the key saved for @${sanitizeForTerm(account)} — public key ${pub}`
+				);
+				const verdict = await withSpinner('Checking that key against the Blurt chain…', () =>
+					checkKeyOnChain(account, pub as string)
+				);
+				for (const line of describeKeyOnChain(verdict, account, pub)) {
+					console.log(`  ${sanitizeForTerm(line)}`);
+				}
+				console.log('');
+				// Refused only when two RPC operators agree (lib/relayKeyChain): one
+				// lagging node's "no such account" must not stop a registration — the
+				// unattended one when the node first comes online included.
+				if (verdict.kind === 'wrong' || verdict.kind === 'weak' || verdict.kind === 'no-account') {
+					wif = '';
+					console.log('  Nothing was published (it would only have been rejected, at a fee).');
+					console.log(
+						verdict.kind !== 'no-account'
+							? '  Put the right key in place on this server:  sudo morphit-ops edit-active-key'
+							: `  The name comes from MORPHIT_RELAY_ACCOUNT in ${loaded.infraPath} (set at install).` +
+									`\n  Check it on this server:  sudo nano ${loaded.infraPath}`
+					);
+					return 1;
+				}
 			}
 		}
 
@@ -339,6 +395,33 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 
 		if (broadcastErr === null) break; // success
 
+		// No answer in time — register's own limit, or the broadcast's own wait
+		// after the signed transaction may have reached a node (the indexer took
+		// it, or a node was being sent it): it may already be on its way. Say so,
+		// and look for it rather than telling the operator it failed or nothing
+		// changed (review, 2026-10-29).
+		if (
+			broadcastErr instanceof RegisterTimeoutError ||
+			broadcastErr instanceof BroadcastOutcomeUnknownError
+		) {
+			console.log(`✗ ${sanitizeForTerm(broadcastErr.message)}`);
+			const landed = await registrationLanded(account, buildRegisterPayload(env, tag));
+			console.log('');
+			if (landed) {
+				console.log(
+					'  ✓ Your registration on the chain now matches what was sent — it is published.'
+				);
+				return 0;
+			}
+			console.log("  It has not shown up on this node's indexer (which can also mean the indexer");
+			console.log('  is behind the chain). Before publishing again, run on this server:');
+			console.log('    sudo morphit-ops register');
+			console.log(
+				'  It compares with what the chain holds first and says when it is already there.'
+			);
+			return 1;
+		}
+
 		// Classify.  Only 'insufficient_fee' is retryable in place; for
 		// everything else we print full guidance and exit.
 		const kind = classifyChainError(errMsg(broadcastErr));
@@ -348,7 +431,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 				account,
 				tag,
 				keyFile,
-				nameEnvVar: 'MORPHIT_INSTANCE_NAME'
+				nameEnvVar: 'MORPHIT_INSTANCE_OPERATOR_TAG'
 			});
 			return 1;
 		}
@@ -361,7 +444,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 			account,
 			tag,
 			keyFile,
-			nameEnvVar: 'MORPHIT_INSTANCE_NAME'
+			nameEnvVar: 'MORPHIT_INSTANCE_OPERATOR_TAG'
 		});
 		console.log('');
 		const retry = await askYesNo(
@@ -400,13 +483,12 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	console.log('   to show at broadcast time — look the transaction up on a');
 	console.log('   Blurt explorer to see the block it lands in.)');
 	console.log('');
-	console.log('Within roughly a minute every Morphit indexer will see your');
-	console.log('registration and add your instance to their /instances');
-	console.log('directory.  Each will probe your origin to verify it is');
-	console.log('serving correctly.');
+	console.log('Every Morphit indexer adds your instance to its /instances');
+	console.log('directory once it reads this transaction from the chain,');
+	console.log('and checks that your site answers.');
 	console.log('');
-	console.log('Check your own /instances page after a minute or two —');
-	console.log("you should see yourself listed with status 'good'.");
+	console.log("Your own site's /instances page then lists you with the");
+	console.log("status 'good'.");
 	console.log('');
 
 	return 0;
@@ -446,6 +528,14 @@ export function buildRegisterPayload(env: ValidEnv, tag: string): Record<string,
 	return payload;
 }
 
+/** The broadcast did not answer in time. The transaction may still land. */
+export class RegisterTimeoutError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'RegisterTimeoutError';
+	}
+}
+
 /**
  * Sign once and broadcast a register op, with a spinner and a hard limit.
  * a hidden-only node broadcasts through its own indexer
@@ -463,8 +553,9 @@ export async function broadcastRegistration(
 ): Promise<{ trx_id: string }> {
 	const hiddenOnly = isHiddenOnlyNode();
 	const limitMs = Math.min(hiddenOnly ? 200_000 : 15_000, maxLimitMs ?? Number.POSITIVE_INFINITY);
-	// Nothing is signed or sent after the limit: the message below tells the
-	// operator the registration is unchanged, so it must stay unchanged.
+	// Nothing is signed or sent after the limit. A transaction already handed to
+	// the indexer before it may still land (review, 2026-10-29: the message used
+	// to say "Your registration is unchanged" — not known): the caller checks.
 	const deadlineAt = Date.now() + limitMs;
 	let timer: NodeJS.Timeout | undefined;
 	try {
@@ -485,12 +576,11 @@ export async function broadcastRegistration(
 						timer = setTimeout(
 							() =>
 								reject(
-									new Error(
+									new RegisterTimeoutError(
 										(hiddenOnly
 											? `No answer from this node's own indexer over Tor/I2P after ${Math.round(limitMs / 1000)}s — the hidden route may still be warming up. `
 											: `Timed out reaching a Blurt RPC after ${Math.round(limitMs / 1000)}s — this box may not be online yet. `) +
-											'Your registration is unchanged; re-run `sudo morphit-ops register` once you are online ' +
-											'(a fresh install also lists itself automatically on first connection).'
+											'The signed registration may already have been handed to the network, so it can still land on the chain.'
 									)
 								),
 							limitMs
@@ -500,6 +590,104 @@ export async function broadcastRegistration(
 		);
 	} finally {
 		if (timer !== undefined) clearTimeout(timer);
+	}
+}
+
+/** How long register waits, in all, for this node's indexer to say how the
+ *  account is registered. */
+export const REGISTRATION_READ_MS = 4_000;
+
+/** localRegistration, given up as 'unknown' after REGISTRATION_READ_MS. */
+async function readRegistrationCapped(account: string): Promise<LocalRegistration> {
+	let timer: NodeJS.Timeout | undefined;
+	try {
+		return await Promise.race([
+			localRegistration(account, { timeoutMs: REGISTRATION_READ_MS }),
+			new Promise<LocalRegistration>((resolve) => {
+				timer = setTimeout(
+					() => resolve({ state: 'unknown', why: "this node's indexer did not answer in time" }),
+					REGISTRATION_READ_MS
+				);
+			})
+		]);
+	} finally {
+		if (timer !== undefined) clearTimeout(timer);
+	}
+}
+
+/** After a broadcast that did not answer in time: watch this node's indexer,
+ *  under the spinner, until the registration it holds matches `payload`, or
+ *  until the transaction could no longer show up there. The watch starts after
+ *  the transaction was signed, so it must cover, from then: the transaction's
+ *  life (it expires 60 s after the chain head it was built on), the time until
+ *  the block holding it is final (the indexer applies only irreversible
+ *  blocks, about 45 s behind the head on Blurt), and the indexer's own read
+ *  and apply. It was 90 s: a transaction taken near its expiry became final
+ *  after the watch had ended, and register said it had not landed (review,
+ *  2026-10-29). Never throws. */
+export const LANDED_WATCH_MS = 60_000 + 45_000 + 30_000;
+export async function registrationLanded(
+	account: string,
+	payload: Record<string, unknown>,
+	deps: {
+		readonly local?: typeof localRegistration;
+		readonly accepted?: typeof acceptedRegistration;
+		readonly watchMs?: number;
+		readonly pollMs?: number;
+	} = {}
+): Promise<boolean> {
+	const until = Date.now() + (deps.watchMs ?? LANDED_WATCH_MS);
+	const stop = startDotsSpinner('Checking whether it reached the chain anyway…');
+	try {
+		for (;;) {
+			const reg = await (deps.local ?? localRegistration)(account).catch(
+				(): LocalRegistration => ({ state: 'unknown', why: 'unreadable' })
+			);
+			if (reg.state === 'registered') {
+				const same = await registrationUnchanged(account, reg, payload, deps.accepted);
+				if (same.state === 'same') return true;
+			}
+			if (Date.now() >= until) return false;
+			await new Promise((r) =>
+				setTimeout(r, Math.min(deps.pollMs ?? 5_000, Math.max(0, until - Date.now())))
+			);
+		}
+	} finally {
+		stop();
+	}
+}
+
+/** Whether the payload about to be sent is what the chain already holds for
+ *  `account` (as this node's indexer applied it): 'same', 'changed' (with the
+ *  differing fields), or 'unknown' when that cannot be told. Never throws. */
+export async function registrationUnchanged(
+	account: string,
+	applied: Extract<LocalRegistration, { state: 'registered' }>,
+	next: Record<string, unknown>,
+	accepted: typeof acceptedRegistration = acceptedRegistration
+): Promise<
+	| { readonly state: 'same'; readonly source: string }
+	| { readonly state: 'changed'; readonly changes: ReadonlyArray<[string, string, string]> }
+	| { readonly state: 'unknown' }
+> {
+	try {
+		const r = await accepted(account, {
+			tag: applied.tag,
+			displayName: applied.displayName,
+			contactUrl: applied.contactUrl
+		});
+		if (r.state !== 'ok') return { state: 'unknown' };
+		const changes = otherRegistrationChanges(r.payload, next);
+		const show = (v: unknown): string => (typeof v === 'string' && v !== '' ? v : '(none)');
+		if (show(r.payload.tag) !== show(next.tag))
+			changes.unshift(['tag', show(r.payload.tag), show(next.tag)]);
+		if (show(r.payload.fee_recipient) !== show(next.fee_recipient))
+			changes.push(['fees account', show(r.payload.fee_recipient), show(next.fee_recipient)]);
+		return changes.length === 0
+			? { state: 'same', source: r.source }
+			: { state: 'changed', changes };
+	} catch {
+		return { state: 'unknown' };
 	}
 }
 
@@ -544,7 +732,7 @@ export interface ValidEnv {
 }
 
 /** The register inputs from the environment (exported for the upgrade heal). */
-export function readRegisterEnv(): ValidEnv | { error: string } {
+export function readRegisterEnv(): ValidEnv | { error: string; missing: readonly string[] } {
 	return readEnv();
 }
 
@@ -561,7 +749,7 @@ export function registerOrigin(env: NodeJS.ProcessEnv): string | undefined {
 	return /^[a-z2-7]{56}\.onion$/.test(onion) ? `http://${onion}` : undefined;
 }
 
-function readEnv(): ValidEnv | { error: string } {
+function readEnv(): ValidEnv | { error: string; missing: readonly string[] } {
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
 	const keyFile = process.env.MORPHIT_RELAY_ACTIVE_KEY_FILE;
 	const instanceName = process.env.MORPHIT_INSTANCE_NAME;
@@ -579,16 +767,7 @@ function readEnv(): ValidEnv | { error: string } {
 	if (!instanceName) missing.push('MORPHIT_INSTANCE_NAME');
 	if (!origin) missing.push('MORPHIT_INSTANCE_ORIGIN');
 	if (missing.length > 0) {
-		return {
-			error:
-				`Missing required environment variables: ${missing.join(', ')}.\n` +
-				'  These live in your instance env files. On a DEFAULT install they are in\n' +
-				'  /opt/morphit and owned by root, so source them and register in ONE root\n' +
-				'  shell (a plain `. ./morphit.env` fails there — wrong dir / no permission):\n' +
-				"    sudo bash -c 'set -a; . /opt/morphit/morphit.env; . /opt/morphit/morphit.config.env; set +a; cd /opt/morphit && morphit-ops register'\n" +
-				'  (Running from your OWN checkout instead? cd there first, then:\n' +
-				'    set -a; . ./morphit.env; . ./morphit.config.env; set +a )'
-		};
+		return { error: `missing settings: ${missing.join(', ')}`, missing };
 	}
 	return {
 		account: account!,
@@ -717,40 +896,156 @@ export async function loadRelayKeyUnattended(keyFile: string): Promise<string> {
 	return decryptEnvelope(envelope, passphrase);
 }
 
-async function loadKeyWif(keyFile: string): Promise<string> {
-	const raw = readFileSync(keyFile, 'utf8').trim();
-	// Heuristic: encrypted envelopes are JSON.  Plaintext WIFs start
-	// with '5'.  This matches the relay's looksLikeEnvelope check.
-	if (!raw.startsWith('{')) {
-		// Plaintext WIF.  No prompt needed.
-		return raw;
-	}
-	const envelope = JSON.parse(raw);
-	// Lazy import — relay's keyEnvelope module decrypts.
-	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');
+/** How many passphrase tries the operator gets before the unlock gives up. */
+export const UNLOCK_TRIES = 3;
 
-	// Interactive.  FIRST try the relay's own host-sealed credential: an operator
-	// running this ON the box should never have to re-type a passphrase the relay
-	// already holds sealed (and re-typing/​pasting it is exactly what failed —
-	// v1.15.6).  Only if that credential is absent or doesn't unlock THIS envelope
-	// do we fall back to prompting.
-	const sealed = trySealedRelayPassphrase();
-	if (sealed !== null) {
+/**
+ * Unlock the relay's active key at the terminal (register, show-key).
+ *
+ * A plaintext key file is read as is. An encrypted one is opened FIRST with the
+ * relay's own host-sealed passphrase — an operator on this server never has to
+ * type a passphrase the relay already holds (re-typing it is exactly what
+ * failed, v1.15.6) — and only when that is absent or does not open THIS file is
+ * the passphrase asked, up to UNLOCK_TRIES times. A wrong one is said in plain
+ * words ("That passphrase does not open the relay key file"), never the
+ * envelope's "decryption failed — … tampered with". The key derivation runs off
+ * the event loop, under the braille spinner. Ctrl+C at the question is thrown
+ * on as the abort it is.
+ */
+export async function unlockRelayKey(
+	keyFile: string,
+	deps: {
+		readonly ask?: (prompt: string) => Promise<string>;
+		readonly sealed?: () => string | null;
+		readonly print?: (line: string) => void;
+	} = {}
+): Promise<string> {
+	const print = deps.print ?? ((l: string) => console.log(l));
+	let raw: string;
+	try {
+		raw = readFileSync(keyFile, 'utf8').trim();
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException).code;
+		throw new Error(
+			code === 'ENOENT'
+				? `the relay key file ${keyFile} does not exist`
+				: code === 'EACCES'
+					? `the relay key file ${keyFile} can only be read as root — run this with sudo`
+					: `the relay key file ${keyFile} could not be read (${errMsg(err)})`
+		);
+	}
+	// Heuristic: encrypted envelopes are JSON. Plaintext WIFs start with '5'.
+	// This matches the relay's looksLikeEnvelope check.
+	if (!raw.startsWith('{')) return raw;
+	let envelope: unknown;
+	try {
+		envelope = JSON.parse(raw);
+	} catch {
+		throw new Error(`the relay key file ${keyFile} is damaged (it is not a readable key file)`);
+	}
+	const { decryptEnvelopeAsync, KeyEnvelopeError } = await import(
+		'../../../relay/src/crypto/keyEnvelope.ts'
+	);
+	const open = async (pass: string): Promise<string | 'wrong'> => {
+		const stop = startDotsSpinner('Unlocking the relay key…');
 		try {
-			const wif = decryptEnvelope(envelope, sealed);
-			console.log("  \u2713 Unlocked from the relay's sealed credential — no passphrase needed.");
+			return await decryptEnvelopeAsync(envelope, pass);
+		} catch (err) {
+			if (err instanceof KeyEnvelopeError && err.code === 'decryption_failed') return 'wrong';
+			throw new Error(
+				`the relay key file ${keyFile} is damaged or is not a Morphit key file (${errMsg(err)})`
+			);
+		} finally {
+			stop();
+		}
+	};
+
+	const sealed = (deps.sealed ?? trySealedRelayPassphrase)();
+	if (sealed !== null) {
+		const wif = await open(sealed);
+		if (wif !== 'wrong') {
+			print("  ✓ Unlocked with the relay's sealed passphrase — nothing to type.");
 			return wif;
-		} catch {
-			// The sealed passphrase didn't match THIS keystore (unusual). Fall
-			// through to the manual prompt rather than failing outright.
+		}
+		// The sealed passphrase does not open THIS file (unusual): ask instead.
+		print("  The relay's sealed passphrase does not open this key file, so it is asked for.");
+	}
+	for (let attempt = 1; attempt <= UNLOCK_TRIES; attempt++) {
+		const passphrase = await (deps.ask ?? askPassword)(RELAY_KEY_UNLOCK_PROMPT);
+		if (passphrase.length === 0)
+			throw new Error('no passphrase was given, so the key stays locked');
+		const wif = await open(passphrase);
+		if (wif !== 'wrong') return wif;
+		print(
+			attempt < UNLOCK_TRIES
+				? `  ✗ That passphrase does not open the relay key file. Try again (${attempt} of ${UNLOCK_TRIES} tries used).`
+				: '  ✗ That passphrase does not open the relay key file either.'
+		);
+	}
+	throw new Error(
+		`the passphrase did not open the relay key file in ${UNLOCK_TRIES} tries. It is the one chosen ` +
+			'at install (or at the last edit-active-key), not your SSH or system password'
+	);
+}
+
+const loadKeyWif = (keyFile: string): Promise<string> => unlockRelayKey(keyFile);
+
+/**
+ * What to tell an operator for each required setting that is missing (register,
+ * show-key): the setting in plain words, where it lives on this server, and the
+ * one command that sets it. `loaded` says where morphit.env was looked for and
+ * whether it could be read.
+ */
+export function missingSettingsHelp(
+	missing: readonly string[],
+	loaded: InstanceEnvResult,
+	command: 'register' | 'show-key'
+): string[] {
+	const infra = loaded.infraPath;
+	const out = [
+		missing.length === 1
+			? '✗ A setting this needs is not set:'
+			: '✗ Some settings this needs are not set:'
+	];
+	const infraUnreadable = !loaded.infraLoaded && existsSync(infra);
+	for (const key of missing) {
+		if (key === 'MORPHIT_RELAY_ACCOUNT' || key === 'MORPHIT_RELAY_ACTIVE_KEY_FILE') {
+			const what =
+				key === 'MORPHIT_RELAY_ACCOUNT'
+					? 'the relay account name'
+					: "where the relay's key file is";
+			out.push(`  • ${what} (${key}, in ${infra})`);
+			if (infraUnreadable) {
+				out.push(
+					`      ${infra} can only be read as root. On this server: sudo morphit-ops ${command}`
+				);
+			} else if (!existsSync(infra)) {
+				out.push(
+					`      ${infra} does not exist, so Morphit is not installed there. On this server: sudo morphit-ops install`
+				);
+			} else {
+				out.push(
+					`      The install writes this line. Add it on this server with: sudo nano ${infra}` +
+						(key === 'MORPHIT_RELAY_ACCOUNT'
+							? '  (the line: MORPHIT_RELAY_ACCOUNT=<your relay account>)'
+							: '  (the line: MORPHIT_RELAY_ACTIVE_KEY_FILE=<path of the key file>)')
+				);
+			}
+		} else if (key === 'MORPHIT_INSTANCE_NAME') {
+			out.push(`  • your instance's display name (MORPHIT_INSTANCE_NAME, in ${loaded.configPath})`);
+			out.push('      On this server: sudo morphit-ops edit  → Branding & SEO (instance name)');
+		} else if (key === 'MORPHIT_INSTANCE_ORIGIN') {
+			out.push(`  • your site's public address (MORPHIT_INSTANCE_ORIGIN, in ${loaded.configPath})`);
+			out.push('      On this server: sudo morphit-ops edit  → Primary origin');
+			out.push(
+				'      (a Tor-only site uses its .onion instead — set it with: sudo morphit-ops alt-address)'
+			);
+		} else {
+			out.push(`  • ${key}`);
 		}
 	}
-
-	const passphrase = await askPassword(RELAY_KEY_UNLOCK_PROMPT);
-	if (passphrase.length === 0) {
-		throw new Error('passphrase required to unlock encrypted keystore');
-	}
-	return decryptEnvelope(envelope, passphrase);
+	out.push(`  Then, on this server: sudo morphit-ops ${command}`);
+	return out;
 }
 
 /** Convert a free-form instance name to a tag.  Tag rules:

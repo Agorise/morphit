@@ -42,7 +42,9 @@
  * All signals write to tables established by migration v2/v31/v34.
  * Write semantics are ON CONFLICT DO NOTHING — once a pair/subject
  * is flagged, it stays flagged.  A false-positive's recovery path
- * is operator-side (DELETE the row), not automated.
+ * is operator-side (delete the row and record a clearance in
+ * moderation_flag_clearances, which this node's detectors then
+ * honour), not automated — and it changes this node's display only.
  *
  * WHEN THEY RUN — on chain time, never the wall clock. Signals B, C
  * and D are evaluated when a review is applied, and Signal E when an
@@ -54,35 +56,46 @@
  * history later never raised flags a live node had, and the review
  * gate that read them admitted different reviews on different nodes.
  * Signal A (related accounts) has no time window; the poller runs it
- * periodically.
+ * on this node's own hourly timer.
  *
- * The review and trade-credit GATES never read these tables: they
- * call reciprocityEverHeld, a pure function of the chain-derived
- * feedback rows up to the op's block time, so an operator's local
- * clearance (moderation_flag_clearances) can never change a verdict.
- * The tables are what reputation display reads.
+ * WHAT THE TABLES ARE — this node's view, for reputation DISPLAY. Their
+ * rows are not a pure function of the chain: Signals A to D skip pairs this
+ * operator cleared (moderation_flag_clearances, a local-only table), Signal A
+ * also skips this node's own relay (`excludeCreators`, a local setting) and
+ * runs whenever this node's timer fires.
+ *
+ * WHO MAY READ THEM. Reputation display (the API). No rule that decides
+ * chain-derived state does: the review and trade-credit gates call
+ * reciprocityEverHeld, and the fee-attestation quorum calls
+ * reciprocityEverHeld and relatedEverHeld — pure functions of chain-derived
+ * rows up to a block (signalVerdicts.ts) — so a local clearance or setting
+ * can never change a verdict. One exception, kept so history keeps its
+ * verdicts: for an order whose newest attestation is in a block stamped
+ * before CONSENSUS_V2_ACTIVATION_TIME the quorum still reads related_accounts
+ * as it always did (fee/attestationQuorumLegacy.ts).
  */
 
 import type pg from 'pg';
 import type { Database } from '$db/pool';
 import { consensusV2Active } from '$indexer/consensusActivation';
+import {
+	SIGNAL_A_EXEMPT_RESERVED_CREATORS,
+	SIGNAL_A_PROXIMITY_MINUTES,
+	SIGNAL_B_MIN_AVG_RATING,
+	SIGNAL_B_MIN_COUNT,
+	SIGNAL_B_WINDOW_DAYS
+} from '$indexer/signalVerdicts';
 
-/** Minimum reviews in each direction to trigger Signal B. */
-const SIGNAL_B_MIN_COUNT = 3;
-/** Minimum average rating to consider a review cluster "high-star." */
-const SIGNAL_B_MIN_AVG_RATING = 4.8;
+/** The verdicts consensus code uses live in signalVerdicts.ts; re-exported for
+ *  the modules that import them from here. */
+export { reciprocityEverHeld, relatedEverHeld } from '$indexer/signalVerdicts';
+
 /** How much NEW mutual-review activity re-arms a cleared Signal B pair.
  *  A fresh trigger needs SIGNAL_B_MIN_COUNT reviews in EACH direction, so a
  *  whole signal's worth is twice that — i.e. a cleared pair must earn the flag
  *  all over again from scratch, rather than on any single stray review. */
 const SIGNAL_B_CLEARANCE_GROWTH = 2 * SIGNAL_B_MIN_COUNT;
-/** Time window for the reciprocity check (ADR-0009 §5). */
-const SIGNAL_B_WINDOW_DAYS = 7;
 
-/** Temporal-proximity window for Signal A. Two accounts created
- *  by the same creator whose first Morphit activities fall within
- *  this window are candidates for flagging. */
-const SIGNAL_A_PROXIMITY_MINUTES = 5;
 /** Upper bound on one Signal A statement. */
 export const SIGNAL_A_STATEMENT_TIMEOUT_MS = 30_000;
 
@@ -221,60 +234,6 @@ export async function detectSuspiciousReciprocityInTx(
 	return result.rowCount ?? 0;
 }
 
-/** The minimal read surface (a PoolClient inside a handler, the pool outside). */
-interface Queryable {
-	query<R extends pg.QueryResultRow = pg.QueryResultRow>(
-		text: string,
-		params?: readonly unknown[]
-	): Promise<pg.QueryResult<R>>;
-}
-
-/**
- * Did the Signal B pattern (suspicious reciprocity) EVER hold for the pair
- * (a, b) at or before `asOf`? Evaluated over the 7-day window ending at each of
- * the pair's own review times up to `asOf` — the moments the pattern can come
- * into being — from the chain-derived feedback rows alone.
- *
- * This is what the consensus gates use (the verified-chat bar for reviews and
- * order-complete counterparties, and the fee-attestation quorum): the same
- * answer on every node for the same chain history, whenever it is asked, and
- * independent of an operator's local clearances.
- */
-export async function reciprocityEverHeld(
-	db: Queryable,
-	args: { a: string; b: string; asOf: Date }
-): Promise<boolean> {
-	if (args.a === args.b) return false;
-	const r = await db.query<{ held: boolean }>(
-		`WITH moments AS (
-		   SELECT DISTINCT created_at AS t FROM feedback
-		    WHERE ((reviewer = $1 AND subject = $2) OR (reviewer = $2 AND subject = $1))
-		      AND created_at <= $3
-		 )
-		 SELECT EXISTS (
-		   SELECT 1 FROM moments m
-		    CROSS JOIN LATERAL (
-		      SELECT
-		        COUNT(*) FILTER (WHERE f.reviewer = $1 AND f.subject = $2) AS ab,
-		        COUNT(*) FILTER (WHERE f.reviewer = $2 AND f.subject = $1) AS ba,
-		        AVG(f.rating) FILTER (WHERE f.reviewer = $1 AND f.subject = $2) AS ab_avg,
-		        AVG(f.rating) FILTER (WHERE f.reviewer = $2 AND f.subject = $1) AS ba_avg,
-		        COUNT(DISTINCT f.subject) FILTER (WHERE f.reviewer = $1) AS a_subjects,
-		        COUNT(DISTINCT f.subject) FILTER (WHERE f.reviewer = $2) AS b_subjects
-		        FROM feedback f
-		       WHERE f.reviewer IN ($1, $2)
-		         AND f.created_at > m.t - INTERVAL '${SIGNAL_B_WINDOW_DAYS} days'
-		         AND f.created_at <= m.t
-		    ) w
-		    WHERE w.ab >= $4 AND w.ba >= $4
-		      AND w.ab_avg::NUMERIC(3,2) >= $5 AND w.ba_avg::NUMERIC(3,2) >= $5
-		      AND w.a_subjects = 1 AND w.b_subjects = 1
-		 ) AS held`,
-		[args.a, args.b, args.asOf, SIGNAL_B_MIN_COUNT, SIGNAL_B_MIN_AVG_RATING]
-	);
-	return r.rows[0]?.held === true;
-}
-
 /**
  * Run Signal A — related-accounts detection.
  *
@@ -295,10 +254,18 @@ export async function reciprocityEverHeld(
  * Creators that do NOT trigger the signal: every REGISTERED operator
  * account (each instance's relay creates its users' accounts, so two
  * friends signing up back-to-back through any instance are not related —
- * Finding N28; only this instance's relay used to be excluded) plus
- * `excludeCreators` (this instance's relay, also before it registers).
- * "Same creator" is meaningful only for some other creator, e.g. a
- * custom blurt-cli onboarding pipeline.
+ * Finding N28; only this instance's relay used to be excluded), the
+ * project's reserved accounts (the canonical instance relays from one of
+ * them; signalVerdicts.SIGNAL_A_EXEMPT_RESERVED_CREATORS), the '' creator of
+ * a placeholder row (an account created before indexing began, whose
+ * creator is unknown), plus `excludeCreators` (this instance's relay, also
+ * before it registers). "Same creator" is meaningful only for some other
+ * creator, e.g. a custom blurt-cli onboarding pipeline.
+ *
+ * DISPLAY ONLY. What this writes is shaped by this node (its clearances, its
+ * `excludeCreators`, when its timer ran), so no consensus rule reads it: the
+ * fee-attestation quorum asks signalVerdicts.relatedEverHeld, the same rule
+ * from chain rows alone (from the consensus activation time).
  *
  * Cost: a RANGE join — each account is compared only with same-creator
  * accounts whose first activity falls within the window, served by the
@@ -318,7 +285,10 @@ export async function detectRelatedAccountsInTx(
 	client: pg.PoolClient,
 	options: { excludeCreators?: readonly string[] } = {}
 ): Promise<number> {
-	const excludeCreators = options.excludeCreators ?? [];
+	const excludeCreators = [
+		...SIGNAL_A_EXEMPT_RESERVED_CREATORS,
+		...(options.excludeCreators ?? [])
+	];
 	await client.query(`SET LOCAL statement_timeout = ${SIGNAL_A_STATEMENT_TIMEOUT_MS}`);
 	// Same-creator pairs whose first activities are within the window,
 	// found with a range join (see above). Canonical (a < b) ordering dedupes.
@@ -338,6 +308,7 @@ export async function detectRelatedAccountsInTx(
 			                               AND a.first_activity_at + make_interval(secs => $1)
 			   AND a.name < b.name
 			WHERE a.first_activity_at IS NOT NULL
+			  AND a.creator <> ''
 			  AND a.creator <> ALL($2::text[])
 			  AND NOT EXISTS (SELECT 1 FROM operators o WHERE o.account = a.creator)
 		)
@@ -459,6 +430,16 @@ export async function detectOneWayPileOnInTx(
 			WHERE ast.avg_rating <= $1
 			  AND ad.distinct_subjects <= $2
 			  AND acc.first_activity_at IS NOT NULL
+			  -- An operator's clearance of this (subject, attacker) pair is
+			  -- permanent for the pair, like Signal A's: without this the next
+			  -- detection day put the cleared attacker straight back (review,
+			  -- 2026-10-29). Display only — the gates never read this table.
+			  AND NOT EXISTS (
+				SELECT 1 FROM moderation_flag_clearances c
+				 WHERE c.signal = 'pile_on'
+				   AND c.account_a = LEAST(ast.reviewer, ast.subject)
+				   AND c.account_b = GREATEST(ast.reviewer, ast.subject)
+			  )
 		),
 		subject_clusters AS (
 			-- Aggregate per subject: count of attackers + their

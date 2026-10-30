@@ -31,9 +31,14 @@ describe('doctor: active key permissions', () => {
 		] as const) {
 			const r = f(mode, uid, gid);
 			expect(r.level, `0${mode.toString(8)} ${uid}:${gid}`).toBe('warn');
-			expect(r.detail).toMatch(/chown root:morphit-relay .* && chmod 0640/);
+			// The exact command, with sudo, on the server (review, 2026-10-29: no sudo).
+			expect(r.detail).toContain(
+				'Fix, on this server: sudo chown root:morphit-relay /etc/morphit/relay-active.key && sudo chmod 0640 /etc/morphit/relay-active.key'
+			);
 		}
 		expect(f(0o640, 0, RELAY_GID, null).level).toBe('warn');
-		expect(f(0o640, 0, RELAY_GID, null).detail).toMatch(/chmod 0600/);
+		expect(f(0o640, 0, RELAY_GID, null).detail).toContain(
+			'sudo chmod 0600 /etc/morphit/relay-active.key'
+		);
 	});
 });

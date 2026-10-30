@@ -60,6 +60,14 @@ export interface WebHealState {
 	readonly detail?: string;
 	/** Warnings the run printed (into the web-heal log). */
 	readonly warnings?: number;
+	/** What is NOT in place although the settings heal itself ended well (the
+	 *  www address, which its own warning explains), so "already in place" is
+	 *  never claimed for it. */
+	readonly except?: string;
+	/** The upgrade's heal phase has already shown this run's end (its warnings
+	 *  relayed, and its outcome when there was anything more to say), so the
+	 *  upgrade's last lines do not repeat it. */
+	readonly shown?: boolean;
 }
 
 export function readWebHealState(path = webHealStatePath()): WebHealState | null {
@@ -106,9 +114,13 @@ function describeOutcome(s: WebHealState, ago: (iso: string | undefined) => stri
 	const d = s.detail;
 	switch (s.result) {
 		case 'applied':
-			return `applied and checked (${when})`;
+			return s.except
+				? `applied and checked, except ${s.except} (${when})`
+				: `applied and checked (${when})`;
 		case 'already':
-			return `already in place (checked ${when})`;
+			return s.except
+				? `in place, except ${s.except} (checked ${when})`
+				: `already in place (checked ${when})`;
 		case 'no-proxy':
 			return `no web containers to change (checked ${when})`;
 		case 'country-list':
@@ -146,9 +158,13 @@ export function webHealStatusRow(s: WebHealState): {
 		case 'applied':
 		case 'already':
 		case 'no-proxy':
-			return warned
+			return warned || s.except
 				? {
-						value: s.result === 'applied' ? 'applied, with warnings' : 'in place, with warnings',
+						value: s.except
+							? `in place, except ${s.except}`
+							: s.result === 'applied'
+								? 'applied, with warnings'
+								: 'in place, with warnings',
 						status: 'warn'
 					}
 				: { value: 'ok', status: 'ok' };
@@ -265,6 +281,12 @@ export function isProgressLabel(line: string): boolean {
 	return /^ {2}\S.*\u2026$/.test(line);
 }
 
+/** PURE. A detail line kept for the log ("  · …"): the line that sums it up
+ *  is what the upgrade shows. */
+export function isLogDetail(line: string): boolean {
+	return /^ {2}\u00b7 /.test(line);
+}
+
 export async function followWebHeal(
 	untilMs: number,
 	sinceMs: number,
@@ -290,7 +312,9 @@ export async function followWebHeal(
 			// A wait label the background unit printed (its spinner has no
 			// terminal) is progress, not a result: the log keeps it; the
 			// upgrade's own spinner already shows that work goes on.
-			if (clean.trim() === '' || isProgressLabel(clean)) continue;
+			// A check's detail ("  · …", the WAF heal's) stays in the log too: the
+			// heal's one ✓ line says it in the upgrade (v1.21.17 audit, L1).
+			if (clean.trim() === '' || isProgressLabel(clean) || isLogDetail(clean)) continue;
 			// A warning or error the unit printed (NO_COLOR: "[WARN] …" / "[ERR] …")
 			// stays one here: it is counted for the upgrade's last word.
 			const w = /^\s*(?:\[WARN\]|\[ERR\]|⚠|✗)\s+(.*)$/.exec(clean);

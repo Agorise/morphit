@@ -24,6 +24,7 @@ import {
 } from '../src/lib/releaseMonitorHeal.ts';
 import { installAndEnableUnits, type UnitsExec } from '../src/lib/installUnits.ts';
 import { afterRestartHealSteps } from '../src/commands/upgrade.ts';
+import { MENU_GROUPS } from '../src/commands/mainMenu.ts';
 
 const REPO = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const TEMPLATES = join(REPO, 'ops', 'systemd');
@@ -93,6 +94,13 @@ describe('the release check heal', () => {
 		expect(r.verified).toBe(true);
 		expect(r.strategy).toBe('installed');
 		expect(r.detail).toMatch(/Release check: turned on .*ran once and succeeded/);
+		// Where Matrix alerts are set up: the command and the menu item's own
+		// label, never a menu number (option 17 is the MCP switch).
+		expect(r.detail).not.toMatch(/option \d+/);
+		const cmd = /sudo morphit-ops (\w+) — "([^"]+)" in the menu/.exec(r.detail);
+		const item = MENU_GROUPS.flatMap((g) => g.items).find((i) => i.subcommand === cmd?.[1]);
+		expect(item?.label.startsWith(cmd?.[2] ?? '?')).toBe(true);
+		expect(cmd?.[1]).toBe('matrix');
 		// The run is under the spinner.
 		expect(calls.indexOf('run once')).toBeGreaterThan(
 			calls.findIndex((c) => c.startsWith('spinner: '))

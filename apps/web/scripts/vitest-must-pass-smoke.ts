@@ -44,6 +44,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
+/** How long one workspace's vitest may run (20 minutes; MORPHIT_VITEST_WORKSPACE_TIMEOUT_MS
+ *  overrides it, in milliseconds). */
+const WORKSPACE_TIMEOUT_MS = /^\d+$/.test(process.env.MORPHIT_VITEST_WORKSPACE_TIMEOUT_MS ?? '')
+	? Number(process.env.MORPHIT_VITEST_WORKSPACE_TIMEOUT_MS)
+	: 20 * 60_000;
+
 interface WorkspaceBaseline {
 	readonly path: string;
 	readonly minPassing: number;
@@ -159,24 +165,44 @@ function runVitest(workspacePath: string): {
 	delete childEnv.TSX_TSCONFIG_PATH;
 	let output: string;
 	try {
-		output = execSync('npx vitest run --reporter=basic', {
-			cwd: fullPath,
-			encoding: 'utf-8',
-			stdio: ['ignore', 'pipe', 'pipe'],
-			// 10 minutes max per workspace. apps/ops-cli's suite (real child
-			// processes, PTY spinner checks, fake docker/systemctl) takes ~170 s
-			// on an idle 2-CPU host and ~290 s with the CPUs busy (2026-10-06):
-			// 5 minutes cut it off mid-run, which read as "could not parse".
-			// The whole smoke is still bounded by the runner's slow-smoke cap.
-			timeout: 10 * 60_000,
-			// CI=1 forces the basic reporter (defensive — `--reporter=basic` on
-			// the CLI takes precedence but VITEST_REPORTERS in env could override it).
-			env: childEnv
-		});
+		// coreutils `timeout` stops vitest's whole process group: execSync's own
+		// timeout signals only the shell, and vitest's workers ran on after it
+		// (2026-10-30), loading the CPUs for every workspace after this one.
+		output = execSync(
+			`timeout --kill-after=15 ${Math.ceil(WORKSPACE_TIMEOUT_MS / 1000)} npx vitest run --reporter=basic`,
+			{
+				cwd: fullPath,
+				encoding: 'utf-8',
+				stdio: ['ignore', 'pipe', 'pipe'],
+				// WORKSPACE_TIMEOUT_MS per workspace. apps/ops-cli's suite (real child
+				// processes, PTY spinner checks, fake docker/systemctl) took ~290 s
+				// with the CPUs busy on 2026-10-06 and 676 s on an idle 2-CPU host on
+				// 2026-10-30 (2,458 tests): 10 minutes cut it off mid-run. The whole
+				// smoke is still bounded by the runner's slow-smoke cap.
+				// A backstop only: `timeout` above ends the run first.
+				timeout: WORKSPACE_TIMEOUT_MS + 60_000,
+				// CI=1 forces the basic reporter (defensive — `--reporter=basic` on
+				// the CLI takes precedence but VITEST_REPORTERS in env could override it).
+				env: childEnv
+			}
+		);
 	} catch (e) {
 		// vitest exits non-zero when tests fail.  We still want to parse
 		// stdout to learn the counts.
-		const errObj = e as { stdout?: string | Buffer; stderr?: string | Buffer; message?: string };
+		const errObj = e as {
+			stdout?: string | Buffer;
+			stderr?: string | Buffer;
+			message?: string;
+			code?: string;
+			status?: number | null;
+		};
+		// Cut off by the time limit (`timeout` exits 124): say so, not "could
+		// not parse".
+		if (errObj.code === 'ETIMEDOUT' || errObj.status === 124) {
+			throw new Error(
+				`vitest for ${workspacePath} did not finish within ${Math.round(WORKSPACE_TIMEOUT_MS / 1000)} s and was stopped`
+			);
+		}
 		const stdout = errObj.stdout?.toString() ?? '';
 		const stderr = errObj.stderr?.toString() ?? '';
 		output = stdout + '\n' + stderr;

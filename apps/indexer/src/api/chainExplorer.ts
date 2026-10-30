@@ -35,7 +35,13 @@ import type { BlurtClient } from '$blurt/client';
 import { isTransportError } from '$blurt/client';
 import type { Database } from '$db/pool';
 import { errorBody } from '$api/shared';
-import { blockAgreementKey, findTransaction } from '$blurt/snapshotOpTrust';
+import {
+	agreedHistoryPages,
+	blockAgreementKey,
+	findTransaction,
+	HIDDEN_HISTORY_PAGE_SIZE,
+	readsOnlyHiddenNodes
+} from '$blurt/snapshotOpTrust';
 import { logger } from '$log';
 
 const log = logger('chain-agreed');
@@ -59,6 +65,10 @@ export const AGREED_FAIL_CACHE_MS = 30_000;
 /** A block may be asked for only while an agreed history named it, and this
  *  long after. */
 export const AGREED_NAMED_BLOCK_MS = 10 * 60_000;
+/** v1.21.18: how deep the paged history read goes when every RPC node is a
+ *  Tor/I2P service (20 pages): a deeper window answers "could not read"
+ *  instead of a claim about what is not there. */
+export const AGREED_HIDDEN_MAX_DEPTH = 200;
 /** A visitor waits at most this long; the read goes on and fills the cache
  *  (shorter than a proxy's default 60 s read timeout and the browser's own). */
 export const AGREED_ANSWER_DEADLINE_MS = 45_000;
@@ -506,26 +516,54 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 		trxId: string | null
 	): AgreedEntry => {
 		const history = req.method === 'get_account_history';
-		const value = blurt
-			.condenserAgreed<unknown>(
-				req.method,
-				req.params,
-				history ? historyKey : (b) => blockAgreementKey(b, trxId!),
-				AGREED_MIN_OPERATORS,
-				history ? { mutable: true, freshOf: historyFreshness } : {}
-			)
-			.then((r) => {
-				if (r === null) throw new Error('no agreement');
-				if (history) {
-					noteNamed(r.value);
-					const sel = newestReleaseEntry(r.value);
-					return sel ? [sel.entry] : [];
-				}
-				const tx = findTransaction(r.value, trxId!);
-				if (tx === null) throw new Error('no agreement');
-				const id = (r.value as { block_id?: unknown }).block_id;
-				return { ...(typeof id === 'string' ? { block_id: id } : {}), transactions: [tx] };
-			});
+		// v1.21.18: on a node whose every RPC node is a Tor/I2P service, one read
+		// of the newest 100 positions of @morphit's history never arrived
+		// (morphitlat: 10 took 33.7 s, 100 none within 240 s). There the same
+		// window is read in small agreed pages, newest first, and the first page
+		// that names a release op answers (agreedHistoryPages: the same quorum and
+		// the same mutable-state rule, on each page). Only so deep, so a window
+		// the pages cannot cover is a failure ("could not read"), never "no
+		// release".
+		const pagedHistory = history && readsOnlyHiddenNodes(blurt);
+		const read: Promise<{ readonly value: unknown; readonly key: string } | null> = pagedHistory
+			? agreedHistoryPages(blurt, {
+					account: req.params[0] as string,
+					depth: Math.min(req.params[2] as number, AGREED_HIDDEN_MAX_DEPTH),
+					pageSize: HIDDEN_HISTORY_PAGE_SIZE,
+					minAgree: AGREED_MIN_OPERATORS,
+					pick: (page) => {
+						const sel = newestReleaseEntry(page);
+						return sel ? { key: `${sel.blockNum}|${sel.trxId}`, value: sel } : null;
+					}
+				}).then((r) => {
+					if (r === null) return null;
+					if (
+						r.found === null &&
+						!r.complete &&
+						(req.params[2] as number) > AGREED_HIDDEN_MAX_DEPTH
+					)
+						return null;
+					return { value: r.found ? [r.found.entry] : [], key: 'paged' };
+				})
+			: blurt.condenserAgreed<unknown>(
+					req.method,
+					req.params,
+					history ? historyKey : (b) => blockAgreementKey(b, trxId!),
+					AGREED_MIN_OPERATORS,
+					history ? { mutable: true, freshOf: historyFreshness } : {}
+				);
+		const value = read.then((r) => {
+			if (r === null) throw new Error('no agreement');
+			if (history) {
+				noteNamed(r.value);
+				const sel = newestReleaseEntry(r.value);
+				return sel ? [sel.entry] : [];
+			}
+			const tx = findTransaction(r.value, trxId!);
+			if (tx === null) throw new Error('no agreement');
+			const id = (r.value as { block_id?: unknown }).block_id;
+			return { ...(typeof id === 'string' ? { block_id: id } : {}), transactions: [tx] };
+		});
 		const entry: AgreedEntry = {
 			settledAt: null,
 			ttl: history ? AGREED_HISTORY_CACHE_MS : AGREED_BLOCK_CACHE_MS,

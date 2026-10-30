@@ -236,18 +236,25 @@ async function main(): Promise<void> {
 	} {
 		const writes: string[] = [];
 		const syncs: Array<{ run: boolean; restart: boolean }> = [];
+		// The unit's state as systemd would report it: what the scenario starts
+		// with, then running after a start and stopped after a stop — runMatrix
+		// now reads it back after each change instead of trusting the exit code.
+		let state: ServiceState = opts.state ?? 'inactive';
 		return {
 			writes,
 			syncs,
 			deps: {
 				readEnv: () => opts.readEnv,
-				readState: (_u) => opts.state ?? 'inactive',
+				readState: (_u) => state,
+				settleMs: 0,
+				writeConfig: () => true,
 				writeMxid: (v) => {
 					writes.push(v);
 					return opts.writeOk ?? true;
 				},
 				sync: (run, restart) => {
 					syncs.push({ run, restart });
+					state = run ? 'active' : 'inactive';
 					return { action: run ? 'enable-restart' : 'disable-stop', ok: true };
 				},
 				confirm: async () => opts.confirmYes ?? true,

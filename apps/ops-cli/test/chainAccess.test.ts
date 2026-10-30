@@ -16,9 +16,21 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { lookupBlurtAccount } from '../src/init/chainCheck.ts';
 import { broadcastCustomJson } from '../src/commands/chainErrors.ts';
-import { chainRead } from '../src/lib/chainAccess.ts';
+import { BroadcastOutcomeUnknownError, chainRead } from '../src/lib/chainAccess.ts';
 
-type Mode = 'ok' | 'down503' | 'duplicate' | 'flaky' | 'rpcerror' | 'slow' | 'bad400' | 'err502';
+type Mode =
+	| 'ok'
+	| 'down503'
+	| 'duplicate'
+	| 'flaky'
+	| 'rpcerror'
+	| 'slow'
+	| 'bad400'
+	| 'err502'
+	| 'hangBroadcast'
+	| 'broadcast503';
+/** 'hangBroadcast': a broadcast is taken and not answered for this long. */
+const HANG_MS = 40_000;
 /** 'slow' indexer: answers after this many ms (a chain read over Tor). */
 const SLOW_MS = 1500;
 /** 'flaky' nodes: the FIRST broadcast any of them receives gets HTTP 503. */
@@ -75,7 +87,19 @@ async function startNode(): Promise<Mock> {
 		if (method === 'condenser_api.get_dynamic_global_properties')
 			return send(res, 200, { result: HEAD });
 		if (method === 'condenser_api.broadcast_transaction_synchronous') {
+			if (m.mode === 'hangBroadcast') await new Promise((r) => setTimeout(r, HANG_MS));
 			if (m.mode === 'flaky' && broadcastsSeen++ === 0) return send(res, 503, { error: 'busy' });
+			if (m.mode === ('rejectAuthority' as Mode))
+				return send(res, 200, {
+					jsonrpc: '2.0',
+					id: 1,
+					error: {
+						code: -32000,
+						message: 'missing required active authority: Missing Active Authority alice'
+					}
+				});
+			// Reads answered; every broadcast turned away unread.
+			if (m.mode === 'broadcast503') return send(res, 503, { error: 'busy' });
 			if (m.mode === 'duplicate')
 				return send(res, 200, { error: { message: 'Duplicate transaction check failed' } });
 			return send(res, 200, { result: { id: 'node-trx', block_num: 60_000_124 } });
@@ -109,7 +133,10 @@ async function startIndexer(): Promise<Mock> {
 				return send(res, 200, { result: [{ name: 'alice', balance: '9.000 BLURT' }] });
 			if (body?.method === 'get_dynamic_global_properties') return send(res, 200, { result: HEAD });
 		}
-		if (path === '/v1/broadcast') return send(res, 200, { trx_id: 'indexer-trx' });
+		if (path === '/v1/broadcast') {
+			if (m.mode === 'hangBroadcast') await new Promise((r) => setTimeout(r, HANG_MS));
+			return send(res, 200, { trx_id: 'indexer-trx' });
+		}
 		return send(res, 404, { message: 'no' });
 	});
 	await new Promise<void>((r) => m.server.listen(0, '127.0.0.1', () => r()));
@@ -140,8 +167,10 @@ beforeAll(async () => {
 	WIF = dblurt.PrivateKey.fromSeed('morphit-d12-test-key').toString();
 });
 afterAll(async () => {
-	for (const m of [nodeA, nodeB, indexer])
+	for (const m of [nodeA, nodeB, indexer]) {
+		m.server.closeAllConnections(); // a 'hangBroadcast' request may still be open
 		await new Promise<void>((r) => m.server.close(() => r()));
+	}
 });
 
 beforeEach(() => {
@@ -362,6 +391,176 @@ describe('a broadcast with a deadline', { timeout: 60_000 }, () => {
 		).rejects.toThrow(/gave up before signing/);
 		expect(indexer.requests.filter((r) => r.method === '/v1/broadcast').length).toBe(0);
 		expect(nodeA.requests.length + nodeB.requests.length).toBe(0);
+	});
+
+	/** Settles with the broadcast's outcome, or 'still waiting' after `ms`. */
+	async function settleWithin(p: Promise<unknown>, ms: number): Promise<unknown> {
+		let t: NodeJS.Timeout | undefined;
+		try {
+			return await Promise.race([
+				p.then(
+					() => 'resolved',
+					(e: unknown) => e
+				),
+				new Promise((r) => (t = setTimeout(() => r('still waiting'), ms)))
+			]);
+		} finally {
+			clearTimeout(t);
+		}
+	}
+
+	it("the indexer takes the broadcast and does not answer → the wait ends with the caller's deadline", async () => {
+		indexer.mode = 'hangBroadcast';
+		const started = Date.now();
+		const out = await settleWithin(
+			broadcastCustomJson({
+				account: 'alice',
+				wif: WIF,
+				opId: 'x',
+				payload: {},
+				deps: deps(),
+				deadlineAt: Date.now() + 2_000
+			}),
+			10_000
+		);
+		// The indexer TOOK it: it may still land, so this is "no final answer"
+		// (the caller looks for it), never a plain failure (review, 2026-10-29).
+		expect(out).toBeInstanceOf(BroadcastOutcomeUnknownError);
+		expect((out as Error).message).toMatch(/may already have reached the Blurt network/);
+		expect((out as BroadcastOutcomeUnknownError).trxId).toMatch(/^[0-9a-f]{40}$/);
+		expect(Date.now() - started).toBeLessThan(6_000);
+		expect(indexer.requests.filter((r) => r.method === '/v1/broadcast').length).toBe(1);
+		// Past the deadline the same signed object is not sent anywhere else.
+		expect(nodeA.requests.length + nodeB.requests.length).toBe(0);
+	});
+
+	it('indexer down, a node takes the broadcast and does not answer → no wait past the deadline, no second node', async () => {
+		nodeA.mode = 'hangBroadcast';
+		nodeB.mode = 'hangBroadcast';
+		const started = Date.now();
+		const out = await settleWithin(
+			broadcastCustomJson({
+				account: 'alice',
+				wif: WIF,
+				opId: 'x',
+				payload: {},
+				deps: deps({ indexerBases: [deadIndexer] }),
+				deadlineAt: Date.now() + 2_500
+			}),
+			10_000
+		);
+		// A node was being sent it when the wait ran out: it may still land.
+		expect(out).toBeInstanceOf(BroadcastOutcomeUnknownError);
+		expect(Date.now() - started).toBeLessThan(6_000);
+		const sent = [...nodeA.requests, ...nodeB.requests].filter(
+			(q) => q.method === 'condenser_api.broadcast_transaction_synchronous'
+		);
+		expect(sent.length).toBe(1);
+	});
+
+	it('hidden-only: the indexer takes it and gives no answer in time → "no final answer", not "could not reach"', async () => {
+		indexer.mode = 'hangBroadcast';
+		const out = await settleWithin(
+			broadcastCustomJson({
+				account: 'alice',
+				wif: WIF,
+				opId: 'x',
+				payload: {},
+				deps: deps({ hiddenOnly: () => true }),
+				deadlineAt: Date.now() + 1_500
+			}),
+			10_000
+		);
+		expect(out).toBeInstanceOf(BroadcastOutcomeUnknownError);
+		expect(nodeA.requests.length + nodeB.requests.length).toBe(0);
+	});
+
+	it('register\'s race, when the broadcast\'s own deadline wins: still "may still land", never a plain failure', async () => {
+		// The shape register uses: Promise.race(broadcast, its own timer). When
+		// the broadcast's abort at the deadline came first (3 of 12 runs in the
+		// review), it ended with a plain error, which register read as "could
+		// not complete the broadcast" and never looked for it. Here the timer is
+		// set a little after the deadline, so the broadcast's own end wins.
+		nodeA.mode = 'hangBroadcast';
+		nodeB.mode = 'hangBroadcast';
+		const outcomes: string[] = [];
+		for (let i = 0; i < 6; i++) {
+			const limitMs = 1_200 + i * 3;
+			let timer: NodeJS.Timeout | undefined;
+			try {
+				await Promise.race([
+					broadcastCustomJson({
+						account: 'alice',
+						wif: WIF,
+						opId: 'x',
+						payload: { i },
+						deps: deps({ indexerBases: [deadIndexer] }),
+						deadlineAt: Date.now() + limitMs
+					}),
+					new Promise<never>((_, rej) => {
+						timer = setTimeout(() => rej(new Error('REGISTER_TIMEOUT')), limitMs + 300);
+					})
+				]);
+				outcomes.push('resolved');
+			} catch (e) {
+				outcomes.push(
+					e instanceof BroadcastOutcomeUnknownError
+						? 'unknown'
+						: (e as Error).message === 'REGISTER_TIMEOUT'
+							? 'timeout'
+							: `plain: ${(e as Error).message}`
+				);
+			} finally {
+				clearTimeout(timer);
+			}
+		}
+		expect(outcomes.filter((o) => o !== 'unknown' && o !== 'timeout')).toEqual([]);
+	}, 60_000);
+
+	it('nothing reached any node (indexer down, every node turns the broadcast away: 503) → a plain failure, not "may still land"', async () => {
+		nodeA.mode = 'broadcast503';
+		nodeB.mode = 'broadcast503';
+		const out = await settleWithin(
+			broadcastCustomJson({
+				account: 'alice',
+				wif: WIF,
+				opId: 'x',
+				payload: {},
+				deps: deps({ indexerBases: [deadIndexer] })
+			}),
+			20_000
+		);
+		expect(out).toBeInstanceOf(Error);
+		expect(out).not.toBeInstanceOf(BroadcastOutcomeUnknownError);
+		expect((out as Error).message).toMatch(/all Blurt RPC endpoints rejected the broadcast/);
+		expect(
+			[...nodeA.requests, ...nodeB.requests].filter(
+				(q) => q.method === 'condenser_api.broadcast_transaction_synchronous'
+			).length
+		).toBeGreaterThan(0);
+	});
+
+	it('the indexer answered that it could not finish (502), and no node took it: it may have handed it on — "may still land"', async () => {
+		indexer.mode = 'err502';
+		nodeA.mode = 'broadcast503';
+		nodeB.mode = 'broadcast503';
+		const out = await settleWithin(
+			broadcastCustomJson({ account: 'alice', wif: WIF, opId: 'x', payload: {}, deps: deps() }),
+			20_000
+		);
+		expect(out).toBeInstanceOf(BroadcastOutcomeUnknownError);
+	});
+
+	it("a node rejecting the transaction itself (missing authority) after another may have taken it: the chain's reason, final", async () => {
+		indexer.mode = 'err502';
+		nodeA.mode = 'rejectAuthority' as Mode;
+		nodeB.mode = 'rejectAuthority' as Mode;
+		const out = await settleWithin(
+			broadcastCustomJson({ account: 'alice', wif: WIF, opId: 'x', payload: {}, deps: deps() }),
+			20_000
+		);
+		expect(out).not.toBeInstanceOf(BroadcastOutcomeUnknownError);
+		expect((out as Error).message).toMatch(/missing required active authority/);
 	});
 });
 

@@ -240,6 +240,13 @@ describe('the indexer and relay come off root on an installed box', () => {
 		expect(fixes.map((f) => f.slice(1))).toEqual(treeFixArgs(INSTALL));
 	});
 
+	it('a second run, nothing to change, is one of the upgrade\'s "other checks" (no line of its own; v1.21.17 audit L1)', async () => {
+		const { isRoutineHeal } = await import('../src/commands/upgrade.ts');
+		const b = new Box();
+		expect(isRoutineHeal(await b.run())).toBe(false);
+		expect(isRoutineHeal(await b.run())).toBe(true);
+	});
+
 	it('a second run changes nothing and restarts nothing', async () => {
 		const b = new Box();
 		await b.run();
@@ -419,6 +426,11 @@ describe('the indexer and relay come off root on an installed box', () => {
 		const onion = `http://${'a'.repeat(56)}.onion`;
 		expect(matrixBotPostureText(env(onion))).toMatch(/^MORPHIT_MATRIX_BOT_ALERT_MXID=configured$/m);
 		expect(matrixBotPostureText(env(onion, ''))).toMatch(/^MORPHIT_MATRIX_BOT_ALERT_MXID=$/m);
+		// The indexer needs the proxy to tell a .onion through Tor from one it
+		// would resolve itself.
+		expect(matrixBotPostureText(env(onion))).toMatch(
+			/^MORPHIT_MATRIX_BOT_SOCKS_PROXY=socks5h:\/\/127\.0\.0\.1:9050$/m
+		);
 		expect(matrixBotPostureText(env('http://127.0.0.1:8008'))).toMatch(
 			/^MORPHIT_MATRIX_BOT_ALERT_MXID=configured$/m
 		);

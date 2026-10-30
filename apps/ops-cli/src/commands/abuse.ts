@@ -2,13 +2,16 @@
  * Morphit ops CLI — `abuse` subcommand.
  *
  * Synthesizes moderation + abuse signals visible to the
- * indexer's database.  Three streams in one report:
+ * indexer's database.  Five streams in one report:
  *
  *   1. Persistent broadcast failures — relay_pending_transfers
  *      with error_count >= 3.  Indicates network issue, key
  *      problem, or bad recipient.
- *   2. New suspicious_reciprocity flags raised in the window.
- *   3. New related_accounts flags raised in the window.
+ *   2-5. New flags of all FOUR reputation signals raised in the window —
+ *      suspicious reciprocity (B), related accounts (A), one-way pile-on (C,
+ *      per subject/attacker pair) and review concentration (D) — with the
+ *      Moderation screen's own queries (lib/moderationSignals.ts). It showed
+ *      only A and B (review, 2026-10-29).
  *
  * Default window: 24h.
  *
@@ -27,6 +30,13 @@ import { applyThreshold } from '../config.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt, error, blank, glyph } from '../render/term.ts';
+import {
+	fetchConcentrationFlags,
+	fetchPileOnFlags,
+	fetchReciprocityFlags,
+	fetchRelatedFlags,
+	type RelatedFlag
+} from '../lib/moderationSignals.ts';
 
 interface PersistentFailureRow {
 	id: string;
@@ -43,15 +53,9 @@ interface ReciprocityRow {
 	account_b: string;
 	detected_at: Date;
 	reason: string | null;
-	score: string | null;
 }
 
-interface RelatedRow {
-	account_a: string;
-	account_b: string;
-	detected_at: Date;
-	reason: string;
-}
+type RelatedRow = RelatedFlag;
 
 const PER_STREAM_HUMAN_LIMIT = 10;
 
@@ -67,64 +71,35 @@ export async function runAbuse(ctx: CommandCtx): Promise<number> {
 
 	const limit = ctx.flags.json === 'true' ? PER_STREAM_HUMAN_LIMIT * 10 : PER_STREAM_HUMAN_LIMIT;
 
-	const [failuresResult, recipResult, relatedResult] = await whileReading(ctx, () =>
-		Promise.all([
-			ctx.db.query<PersistentFailureRow>(
-				`SELECT
-			   id::text,
-			   recipient,
-			   kind,
-			   amount_blurt::text,
-			   last_error,
-			   last_error_at,
-			   error_count
-			 FROM relay_pending_transfers
-			 WHERE last_error_at IS NOT NULL
-			   AND last_error_at >= $1
-			   AND error_count >= 3
-			   AND broadcast_at IS NULL
-			 ORDER BY last_error_at DESC
-			 LIMIT $2`,
-				[cutoff, limit]
-			),
-			ctx.db.query<ReciprocityRow>(
-				// suspicious_reciprocity may not always have these
-				// optional columns; the actual indexer schema uses
-				// suspicious_reciprocity stores the signal as a mutual-review
-				// count + average rating (no free-text reason column — that
-				// lives on related_accounts). Synthesize a human reason +
-				// score from the real columns so the unified row shape holds.
-				`SELECT
-			   account_a,
-			   account_b,
-			   detected_at,
-			   'mutual reviews: ' || mutual_review_count
-			     || ' (avg rating ' || round(avg_rating::numeric, 2) || ')' AS reason,
-			   round(avg_rating::numeric, 2)::text AS score
-			 FROM suspicious_reciprocity
-			 WHERE detected_at >= $1
-			 ORDER BY detected_at DESC
-			 LIMIT $2`,
-				[cutoff, limit]
-			),
-			ctx.db.query<RelatedRow>(
-				`SELECT
-			   account_a,
-			   account_b,
-			   detected_at,
-			   reason
-			 FROM related_accounts
-			 WHERE detected_at >= $1
-			 ORDER BY detected_at DESC
-			 LIMIT $2`,
-				[cutoff, limit]
-			)
-		])
+	const { failures, reciprocity, related, pileOn, concentration } = await whileReading(
+		ctx,
+		async () => ({
+			failures: (
+				await ctx.db.query<PersistentFailureRow>(
+					`SELECT
+				   id::text,
+				   recipient,
+				   kind,
+				   amount_blurt::text,
+				   last_error,
+				   last_error_at,
+				   error_count
+				 FROM relay_pending_transfers
+				 WHERE last_error_at IS NOT NULL
+				   AND last_error_at >= $1
+				   AND error_count >= 3
+				   AND broadcast_at IS NULL
+				 ORDER BY last_error_at DESC
+				 LIMIT $2`,
+					[cutoff, limit]
+				)
+			).rows,
+			reciprocity: (await fetchReciprocityFlags(ctx.db, cutoff, limit)) as ReciprocityRow[],
+			related: await fetchRelatedFlags(ctx.db, cutoff, limit),
+			pileOn: await fetchPileOnFlags(ctx.db, cutoff, limit),
+			concentration: await fetchConcentrationFlags(ctx.db, cutoff, limit)
+		})
 	);
-
-	const failures = failuresResult.rows;
-	const reciprocity = recipResult.rows;
-	const related = relatedResult.rows;
 
 	if (ctx.flags.json === 'true') {
 		emitJson({
@@ -132,7 +107,9 @@ export async function runAbuse(ctx: CommandCtx): Promise<number> {
 			counts: {
 				persistent_failures: failures.length,
 				suspicious_reciprocity: reciprocity.length,
-				related_accounts: related.length
+				related_accounts: related.length,
+				one_way_pile_on: pileOn.length,
+				review_concentration: concentration.length
 			},
 			persistent_failures: failures.map((f: PersistentFailureRow) => ({
 				id: f.id,
@@ -154,12 +131,24 @@ export async function runAbuse(ctx: CommandCtx): Promise<number> {
 				account_b: r.account_b,
 				detected_at: r.detected_at.toISOString(),
 				reason: r.reason
+			})),
+			one_way_pile_on: pileOn.map((r: RelatedRow) => ({
+				subject: r.account_a,
+				reviewer: r.account_b,
+				detected_at: r.detected_at.toISOString(),
+				reason: r.reason
+			})),
+			review_concentration: concentration.map((r: RelatedRow) => ({
+				reviewer: r.account_a,
+				subject: r.account_b,
+				detected_at: r.detected_at.toISOString(),
+				reason: r.reason
 			}))
 		});
 		return 0;
 	}
 
-	renderHuman(ctx, sinceSec, failures, reciprocity, related);
+	renderHuman(ctx, sinceSec, failures, reciprocity, related, pileOn, concentration);
 	return 0;
 }
 
@@ -168,18 +157,23 @@ function renderHuman(
 	sinceSec: number,
 	failures: readonly PersistentFailureRow[],
 	reciprocity: readonly ReciprocityRow[],
-	related: readonly RelatedRow[]
+	related: readonly RelatedRow[],
+	pileOn: readonly RelatedRow[],
+	concentration: readonly RelatedRow[]
 ): void {
 	section(`Abuse signals (last ${formatDuration(sinceSec)})`);
 
-	const total = failures.length + reciprocity.length + related.length;
+	const total =
+		failures.length + reciprocity.length + related.length + pileOn.length + concentration.length;
 	const status = applyThreshold(total, ctx.config.thresholds.abuseAlerts24h);
 	info(
 		`  ${glyph(status)} ${total} total event${total === 1 ? '' : 's'} ` +
 			fmt.dim(
 				`(${failures.length} broadcast failures, ` +
 					`${reciprocity.length} reciprocity, ` +
-					`${related.length} related-account)`
+					`${related.length} related-account, ` +
+					`${pileOn.length} pile-on, ` +
+					`${concentration.length} concentration)`
 			)
 	);
 	blank();
@@ -219,6 +213,24 @@ function renderHuman(
 		for (const r of related) {
 			const age = formatDuration(ageSeconds(r.detected_at));
 			info(`  ${age.padEnd(10)}@${r.account_a} ↔ @${r.account_b}` + `  ${fmt.dim(r.reason)}`);
+		}
+		blank();
+	}
+
+	if (pileOn.length > 0) {
+		info(fmt.bold('New one-way pile-on flags:'));
+		for (const r of pileOn) {
+			const age = formatDuration(ageSeconds(r.detected_at));
+			info(`  ${age.padEnd(10)}@${r.account_b} → @${r.account_a}  ${fmt.dim(r.reason)}`);
+		}
+		blank();
+	}
+
+	if (concentration.length > 0) {
+		info(fmt.bold('New review-concentration flags:'));
+		for (const r of concentration) {
+			const age = formatDuration(ageSeconds(r.detected_at));
+			info(`  ${age.padEnd(10)}@${r.account_a} → @${r.account_b}  ${fmt.dim(r.reason)}`);
 		}
 		blank();
 	}

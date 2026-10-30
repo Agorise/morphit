@@ -56,19 +56,20 @@
 			"type_warning_body": "Se sospetti che questa istanza sia disonesta, non puoi fidarti nemmeno dei link qui — un'istanza ostile può mostrare \"morphit.io\" mentre l'URL reale punta altrove. Scrivi gli indirizzi a mano in una scheda pulita."
 		},
 		"asset_stance": {
-			"explain": "Morphit è un marketplace federato. Ogni operatore sceglie per quali asset negoziabili la sua istanza accetta nuovi ordini — per default tutto il registro canonico è accettato, ma un operatore può disabilitare qualsiasi asset solo-trading (es. USDT) se preferisce specializzare la sua istanza in asset privacy-first o decentralization-first. Questa è la postura attuale della TUA istanza. Nota di federazione: gli ordini pubblicati su altre istanze appaiono comunque nel tuo orderbook — il blocco si applica solo ai nuovi ordini pubblicati DA QUI.",
+			"explain": "Morphit è un marketplace federato. Ogni operatore sceglie quali asset negoziabili offre la sua istanza — per default tutto il registro canonico è accettato, ma un operatore può disabilitare qualsiasi asset solo-trading (es. USDT) se preferisce specializzare la sua istanza in asset privacy-first o decentralization-first. Questa è la postura attuale della TUA istanza. Nota di federazione: gli ordini di un asset disabilitato non sono mostrati su questa istanza, nemmeno quelli pubblicati su altre istanze. Le istanze che offrono quell'asset continuano a mostrarli.",
 			"disabled_label": "Asset disabilitati",
 			"disabled_none": "Nessuno — questa istanza accetta tutti gli asset negoziabili.",
-			"disabled_suffix": "(disabilitato dall'operatore su questa istanza; negoziabile su istanze peer)",
+			"disabled_suffix": "(disabilitato su questa istanza: non offerto qui, e i suoi ordini non sono mostrati qui)",
 			"federation_note": "Vuoi una postura diversa? Esplora /operators per trovare un'istanza la cui politica corrisponda alla tua preferenza, o gestisci la tua — vedi /run-a-node."
 		},
 		"payment_stance": {
-			"explain": "Ogni operatore sceglie anche quali metodi di pagamento offre la propria istanza. L'impostazione predefinita è ogni metodo del registro canonico; un operatore può disattivarne uno qualsiasi — più spesso il baratto (beni/servizi) — per mantenere la propria istanza solo monetaria o focalizzata. Questa è la posizione attuale della TUA istanza. Nota sulla federazione: gli ordini di altre istanze che usano un metodo disattivato compaiono comunque nel tuo book ordini; il blocco riguarda solo i nuovi ordini pubblicati da qui.",
+			"explain": "Ogni operatore sceglie anche quali metodi di pagamento offre la propria istanza. L'impostazione predefinita è ogni metodo del registro canonico; un operatore può disattivarne uno qualsiasi — più spesso il baratto (beni/servizi) — per mantenere la propria istanza solo monetaria o focalizzata. Questa è la posizione attuale della TUA istanza. Nota sulla federazione: un ordine i cui metodi di pagamento sono tutti disattivati qui non è mostrato su questa istanza, anche se pubblicato su un'altra istanza; un ordine che offre ancora un metodo offerto da questa istanza è mostrato. Le istanze che offrono quei metodi continuano a mostrarlo.",
 			"disabled_label": "Metodi disattivati",
 			"disabled_none": "Nessuno — questa istanza offre tutti i metodi di pagamento.",
-			"disabled_suffix": "(disattivato dall'operatore su questa istanza; utilizzabile su istanze peer)"
+			"disabled_suffix": "(disattivato su questa istanza: non offerto qui, e gli ordini che offrono solo metodi disattivati non sono mostrati qui)"
 		},
-		"fee_recipient_unregistered": "L’account delle commissioni di questa istanza, @{account}, non è ancora nella registrazione on-chain del suo operatore, quindi le altre istanze della federazione nascondono gli ordini pagati qui in BLURT e non consegnano ai loro utenti i primi messaggi inviati da qui. L’operatore risolve eseguendo sudo morphit-ops register sul server."
+		"fee_recipient_unregistered": "L’account delle commissioni di questa istanza, @{account}, non è ancora nella registrazione on-chain del suo operatore, quindi le altre istanze della federazione nascondono gli ordini pagati qui in BLURT e non consegnano ai loro utenti i primi messaggi inviati da qui. L’operatore risolve eseguendo sudo morphit-ops register sul server. Dal 1° novembre 2026, finché non è registrato, le commissioni pagate su questo sito vanno alla tesoreria di Morphit.",
+		"fee_recipient_unregistered_to_treasury": "L’account delle commissioni di questa istanza non è ancora nella registrazione on-chain del suo operatore, quindi le commissioni pagate su questo sito vanno alla tesoreria di Morphit (@{treasury}). L’operatore risolve eseguendo sudo morphit-ops register sul server."
 	},
 	"admin": {
 		"setup_wizard": {
@@ -3896,7 +3897,7 @@
 			"title": "Controllo integrità build fallito",
 			"pubkey_mismatch_body": "L'ultimo annuncio di versione di Morphit sulla blockchain di Blurt è firmato con una chiave diversa dalla chiave di @morphit di cui si fida questa build. O @morphit ha cambiato chiave, o qualcuno si è impadronito dell'account @morphit. Nulla di quell'annuncio viene usato, nemmeno gli indirizzi della commissione di pubblicazione. Non pagare commissioni di pubblicazione finché non è risolto.",
 			"invalid_payload_body": "Il payload del rilascio on-chain è malformato. L'operatore potrebbe essere in pieno deploy, o un attaccante sta servendo la pagina.",
-			"asset_mismatch_body": "Alcuni file serviti da questo sito non corrispondono agli hash della versione firmata da @morphit sulla blockchain di Blurt. Può dipendere da una pagina vecchia in cache (prova a ricaricare completamente). Altrimenti questo sito sta servendo codice modificato: per errore, dopo un'intrusione o di proposito.",
+			"asset_mismatch_body": "Alcuni file serviti da questo sito non corrispondono agli hash della versione firmata da @morphit sulla blockchain di Blurt. Può dipendere da una pagina vecchia in cache (prova a ricaricare completamente). Altrimenti questo sito sta servendo codice vecchio o modificato: per errore, dopo un'intrusione o di proposito.",
 			"show_files": "Mostra dettagli",
 			"hide_files": "Nascondi dettagli",
 			"what_to_do": "Cosa fare",
@@ -3929,7 +3930,7 @@
 		"asset_policy_heading": "La tua istanza, le tue regole su asset e metodi di pagamento",
 		"asset_policy_body": "La federazione permette a ogni operatore di scegliere quali asset negoziabili supporta il proprio sito. Puoi escludere singoli asset e persino configurare quali metodi di pagamento il tuo sito deve supportare, come contanti, PayPal, Klarna, ecc.",
 		"asset_policy_federation_label": "La federazione rimane intatta.",
-		"asset_policy_federation_body": "Disattivare un asset sulla tua istanza non nasconde ai tuoi utenti gli ordini delle altre istanze — la cronologia della catena è condivisa, quindi il tuo libro ordini può continuare a mostrarli.",
+		"asset_policy_federation_body": "Disattivare un asset sulla tua istanza nasconde i suoi ordini solo sul tuo sito, compresi quelli pubblicati su altre istanze. Le istanze che offrono quell'asset continuano a mostrarli ai loro utenti.",
 		"requirements_heading": "Requisiti di risorse",
 		"req_hw_label": "Hardware",
 		"req_hw_value": "2+ CPU, 4+ GB RAM, 80+ GB di spazio su disco (meglio SSD)",

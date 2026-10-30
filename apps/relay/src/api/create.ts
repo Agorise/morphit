@@ -225,7 +225,11 @@ export class CreateEndpoint {
 		 *  Lower = more permissive (allows shorter names). */
 		private readonly highValueShortThreshold: number = 4,
 		/** Layer 8 — sequential signup detector.  Null disables. */
-		private readonly sequentialDetector: SequentialDetector | null = null
+		private readonly sequentialDetector: SequentialDetector | null = null,
+		/** The relay's key check (policy/activeKeyGuard): while the key the
+		 *  relay holds is not on its account's active authority, account_create
+		 *  cannot be signed, so the request is refused before any work. */
+		private readonly signingGate: { signingRefused(): boolean } | null = null
 	) {}
 
 	register(app: Hono): void {
@@ -249,7 +253,7 @@ export class CreateEndpoint {
 		// Runtime kill-switch (file-based).  Same response code as
 		// env-var disable.  See KillSwitch class for operator
 		// procedure (`touch <data-dir>/SIGNUPS_DISABLED` to pause).
-		if (this.killSwitch?.isActive()) {
+		if (this.killSwitch?.isActive() || this.signingGate?.signingRefused() === true) {
 			return c.json(
 				{
 					status: 'rejected',

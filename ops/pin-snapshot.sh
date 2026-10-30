@@ -147,6 +147,9 @@ echo "  1. Copy the payload down:"
 # root@: the payload sits inside the IPFS repo, and the morphit service user has
 # no login shell. -O: hardened boxes turn SSH's SFTP off, which plain scp needs.
 echo "       scp -O root@<this server>:$PAYLOAD ."
+echo "     If this server refuses root logins (PermitRootLogin no), copy it in two steps instead:"
+echo "       on this server:  sudo install -m 0644 $PAYLOAD /tmp/"
+echo "       on your laptop:  scp -O <your-login>@<this server>:/tmp/$(basename "$PAYLOAD") ."
 echo "  2. In the Morphit repo (dry run first, then --broadcast — asks for the @morphit POSTING WIF):"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/chain-snapshot-broadcast.ts snapshot-payload-$SNAP_HEIGHT.json --dry-run"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/chain-snapshot-broadcast.ts snapshot-payload-$SNAP_HEIGHT.json --broadcast"

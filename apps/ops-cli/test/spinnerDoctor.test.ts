@@ -8,20 +8,21 @@
  * `npm` is a stand-in on PATH that copies what the fake terminal shows when it
  * is started, then takes a moment.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { currentLine, fakeTerminal, frameRe, type FakeTerminal } from './helpers/screen.ts';
 import { spinnerFrames } from './helpers/pty.ts';
 
-let dir = '';
-vi.mock('../src/lib/repoRoot.ts', async (orig) => ({
-	...(await orig<typeof import('../src/lib/repoRoot.ts')>()),
-	safeCwd: () => join(dir, 'install')
-}));
+import { runDoctor } from '../src/commands/doctor.ts';
 
-const { runDoctor } = await import('../src/commands/doctor.ts');
+let dir = '';
+/** The install and the system paths doctor reads, in the test's own tree. */
+const where = (): { installDir: string; root: string } => ({
+	installDir: join(dir, 'install'),
+	root: dir
+});
 
 let term: FakeTerminal | null = null;
 const PATH = process.env.PATH;
@@ -57,11 +58,14 @@ afterEach(() => {
 describe("doctor's slow checks show the turning spinner", () => {
 	it('config check of each service and the schema check: spinner on the line, turning', async () => {
 		term = fakeTerminal({ mirror: join(dir, 'screen') });
-		const code = await runDoctor({
-			flags: { 'no-rpc': 'true' },
-			positional: [],
-			colorEnabled: false
-		});
+		const code = await runDoctor(
+			{
+				flags: { 'no-rpc': 'true' },
+				positional: [],
+				colorEnabled: false
+			},
+			where()
+		);
 		const screen = term.out();
 		term.restore();
 		term = null;
@@ -81,11 +85,14 @@ describe("doctor's slow checks show the turning spinner", () => {
 
 	it('--json: stdout is only the JSON document; the spinner went to stderr', async () => {
 		term = fakeTerminal();
-		await runDoctor({
-			flags: { 'no-rpc': 'true', json: 'true' },
-			positional: [],
-			colorEnabled: false
-		});
+		await runDoctor(
+			{
+				flags: { 'no-rpc': 'true', json: 'true' },
+				positional: [],
+				colorEnabled: false
+			},
+			where()
+		);
 		const out = term.out();
 		const err = term.err();
 		term.restore();

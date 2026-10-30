@@ -12,6 +12,7 @@ import {
 	parseContainerState,
 	bunkerwebVerdict,
 	bunkerwebCommands,
+	cpNoClobberFlag,
 	BUNKERWEB_CONTAINERS,
 	BUNKERWEB_IMAGE,
 	currentServerName,
@@ -120,9 +121,29 @@ expect(
 		'commands: bring-up uses docker compose up -d',
 		cmds.bringUp.some((l) => l.includes('docker compose up -d'))
 	);
+	// Absolute, and into the folder's contents without overwriting (`cp -r
+	// --update=none …/.`, `-n` on a cp without it): `cp -r ops/bunkerweb
+	// /etc/bunkerweb` was relative and nested itself into /etc/bunkerweb/bunkerweb
+	// when the folder existed (review 2026-10-29). Ubuntu 24.04's cp warns on
+	// every `-n` (v1.21.18 review), 22.04's refuses `--update=none`.
 	expect(
-		'commands: bring-up copies shipped config',
-		cmds.bringUp.some((l) => l.includes('cp -r ops/bunkerweb /etc/bunkerweb'))
+		'commands: bring-up copies shipped config (absolute, no nesting, no overwrite)',
+		cmds.bringUp.some((l) =>
+			/^sudo cp -r (--update=none|-n) \/opt\/morphit\/ops\/bunkerweb\/\. \/etc\/bunkerweb\/$/.test(
+				l
+			)
+		)
+	);
+	expect(
+		"commands: a cp with --update=none gets it, not -n (24.04's cp warns on -n)",
+		bunkerwebCommands('/opt/morphit', null, '--update=none').bringUp.every(
+			(l) => !/\bcp (-r )?-n\b|cp -rn/.test(l)
+		) &&
+			bunkerwebCommands(
+				'/opt/morphit',
+				null,
+				cpNoClobberFlag('  --update[=UPDATE]  UPDATE={all,none,older(default)}')
+			).bringUp.includes('sudo cp -r --update=none /opt/morphit/ops/bunkerweb/. /etc/bunkerweb/')
 	);
 	// BunkerWeb runs with logging driver `none` (nothing stored), so the only way to
 	// see it is a live attach that never forwards signals/stdin to the container.

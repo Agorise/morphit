@@ -166,6 +166,8 @@ export async function healForwarding(
 	return {
 		strategy: notes.length > 0 && strategy === 'already' ? 'dropin-cleaned' : strategy,
 		verified: ok,
+		// On, forwarded, nothing changed: one of the "other checks" (L1).
+		...(ok && strategy === 'already' && notes.length === 0 ? { routine: true } : {}),
 		detail: [detail, ...notes].join('; ') + '.'
 	};
 }

@@ -23,9 +23,14 @@
  */
 
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
-import { guardDblurtClient } from '@morphit/hidden-transport/rpc-fetch';
+import { guardDblurtClient, guardedRpcFetch } from '@morphit/hidden-transport/rpc-fetch';
 import { Client, PrivateKey, cryptoUtils } from '@beblurt/dblurt';
-import { EndpointPool, isTransportError } from '@morphit/rpc-pool';
+import {
+	DEFAULT_BACKGROUND_TIMEOUT_MS,
+	EndpointPool,
+	isHiddenEndpointUrl,
+	isTransportError
+} from '@morphit/rpc-pool';
 import { rpcEndpointOperator } from '@morphit/operator-config';
 import { VERSION } from '../api/health.ts';
 import { morphitUserAgent } from './userAgent.ts';
@@ -97,6 +102,72 @@ export interface AccountInfo {
 	 *  first key in the authority and document that multi-key
 	 *  authorities aren't fully supported for push subscribe. */
 	readonly posting_pubkey: string | undefined;
+}
+
+/** An account's signing keys, as BlurtClient.activeAuthorityAgreed reports
+ *  them (sorted, so two nodes' answers compare equal).
+ *
+ *  `single`: set by activeAuthorityAgreed (never by a node) when the relay has
+ *  only ONE RPC operator configured, so the answer is that one operator's word:
+ *  it may say the key is fine, never that it is not (policy/activeKeyGuard). */
+export type ActiveAuthorityView =
+	| { readonly absent: true; readonly single?: true }
+	| {
+			readonly absent?: undefined;
+			readonly active: readonly string[];
+			readonly owner: readonly string[];
+			readonly posting: readonly string[];
+			readonly memo: string | null;
+			readonly delegated: boolean;
+			/** Every key on the active authority with its weight (sorted by key),
+			 *  and the authority's threshold: says when a key IS listed but its
+			 *  weight is below the threshold, so it cannot sign alone. Absent in
+			 *  answers built before these were recorded. */
+			readonly activeListed?: ReadonlyArray<readonly [string, number]>;
+			readonly activeThreshold?: number;
+			readonly single?: true;
+	  };
+
+/** The signing keys of one `get_accounts` entry. PURE. */
+export function authorityViewOf(acct: Record<string, unknown>): ActiveAuthorityView {
+	const alone = (auth: unknown): string[] => {
+		const a = auth as { weight_threshold?: unknown; key_auths?: unknown } | undefined;
+		const threshold = Number(a?.weight_threshold ?? 1);
+		const keys = Array.isArray(a?.key_auths) ? a.key_auths : [];
+		return keys
+			.filter(
+				(k): k is [string, number] =>
+					Array.isArray(k) &&
+					typeof k[0] === 'string' &&
+					Number.isFinite(threshold) &&
+					Number(k[1]) >= threshold
+			)
+			.map((k) => k[0])
+			.sort();
+	};
+	const listed = (auth: unknown): string[] => {
+		const a = auth as { key_auths?: unknown } | undefined;
+		return (Array.isArray(a?.key_auths) ? a.key_auths : [])
+			.filter((k): k is [string, number] => Array.isArray(k) && typeof k[0] === 'string')
+			.map((k) => k[0])
+			.sort();
+	};
+	const active = acct.active as
+		| { account_auths?: unknown; key_auths?: unknown; weight_threshold?: unknown }
+		| undefined;
+	const activeListed = (Array.isArray(active?.key_auths) ? active.key_auths : [])
+		.filter((k): k is [string, unknown] => Array.isArray(k) && typeof k[0] === 'string')
+		.map((k): [string, number] => [k[0], Number(k[1])])
+		.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]));
+	return {
+		active: alone(acct.active),
+		owner: alone(acct.owner),
+		posting: listed(acct.posting),
+		memo: typeof acct.memo_key === 'string' ? acct.memo_key : null,
+		delegated: Array.isArray(active?.account_auths) && active.account_auths.length > 0,
+		activeListed,
+		activeThreshold: Number(active?.weight_threshold ?? 1)
+	};
 }
 
 /** Chain properties that change on witness consensus — most
@@ -295,7 +366,33 @@ export interface BlurtClientOptions {
 	readonly expireSeconds?: number;
 	/** How often the outcome check re-asks the chain. Default 3 s. */
 	readonly verifyPollMs?: number;
+	/** How long settleTransfer may spend walking ONE hidden (.onion/.i2p)
+	 *  node's account history, all pages together. Default 5 minutes
+	 *  (SETTLE_HIDDEN_WALK_MS). */
+	readonly settleHiddenWalkMs?: number;
 }
+
+/** Account-history positions asked for per page from a clearnet node, and the
+ *  unit of settleTransfer's `maxPages` depth (20 pages = 20,000 positions). */
+const HISTORY_PAGE_CLEARNET = 1000;
+
+/** Account-history positions asked for per page from a hidden (.onion/.i2p)
+ *  node. Measured on a hidden-only node (2026-10-29, over Tor/I2P): 10
+ *  positions of @morphit's history (about 4 KB per entry, about 24 KB in all)
+ *  came back in about 34 s; 100 positions gave no answer within 240 s, and 1000
+ *  never did. 10 is the largest page seen to answer — with entries as large
+ *  as any account's — inside the hidden per-call budget (60 s by default). */
+const HISTORY_PAGE_HIDDEN = 10;
+
+/** Default for BlurtClientOptions.settleHiddenWalkMs: at the measured pace
+ *  (about 34 s a page) room for the head read and about 8 pages — more than a
+ *  relay account writes in the 15-minute window a settle searches — while a
+ *  settle check still cannot hold the payout queue for long. */
+const SETTLE_HIDDEN_WALK_MS = 5 * 60_000;
+
+/** The pool's per-endpoint timer, set past the walk's own deadline so that the
+ *  walk's deadline is the one that fires (the pool's is only a backstop). */
+const SETTLE_POOL_BACKSTOP_MS = 5_000;
 
 /** Pure analysis function — given a chain-returned
  *  `account_creation_fee` value and the operator's configured
@@ -372,6 +469,7 @@ export class BlurtClient {
 	private readonly broadcastAttemptTimeoutMs: number;
 	private readonly expireSeconds: number;
 	private readonly verifyPollMs: number;
+	private readonly settleHiddenWalkMs: number;
 
 	constructor(
 		endpointUrls: readonly string[],
@@ -402,6 +500,7 @@ export class BlurtClient {
 		this.broadcastAttemptTimeoutMs = options.broadcastAttemptTimeoutMs ?? 10_000;
 		this.expireSeconds = options.expireSeconds ?? 60;
 		this.verifyPollMs = options.verifyPollMs ?? 3_000;
+		this.settleHiddenWalkMs = options.settleHiddenWalkMs ?? SETTLE_HIDDEN_WALK_MS;
 	}
 
 	/** Expose pool snapshot for /v1/health diagnostics. */
@@ -834,6 +933,51 @@ export class BlurtClient {
 	}
 
 	/**
+	 * The keys that can sign for an account's ACTIVE authority on their own, as
+	 * at least two RPC OPERATORS agree: `{ absent: true }` when they agree there
+	 * is no such account, the view below when they agree on it, null when they
+	 * could not be asked or did not agree. For the relay's own key check
+	 * (policy/activeKeyGuard): one node must not be able to stop the relay
+	 * signing by naming other keys, or by answering "no such account" (a node
+	 * still replaying the chain answers `[]` for every account).
+	 *
+	 * With ONE operator configured there is no second word to ask. The view is
+	 * then that operator's answer, marked `single`, and the guard takes it only
+	 * as far as "the key is fine" — never as a reason to stop signing (review,
+	 * 2026-10-29: it used to need just that one answer, so one lagging node's
+	 * `[]` stopped every signup and payout). "Fine" from one is safe there: a
+	 * single-operator relay never holds a refusal it could clear, and a node
+	 * that wrongly says "fine" only lets the relay go on signing, which is what
+	 * an unanswered check does too — the chain itself still judges every
+	 * signature. With two or more operators, "fine" needs two as well: it is
+	 * what ends a refusal, so one node must not be able to end it.
+	 *
+	 * `active` / `owner`: keys that alone meet that authority's threshold (the
+	 * chain accepts an owner signature where active is required). `posting` and
+	 * `memo` only say WHICH key was pasted when it is not an active one.
+	 * `delegated`: the active authority also names other accounts, so a key
+	 * that is not listed may still sign through one of them — undecidable here.
+	 */
+	async activeAuthorityAgreed(name: string): Promise<ActiveAuthorityView | null> {
+		const single = this.pool.operatorCount() < 2;
+		const r = await this.pool.quorumCall<string>(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const accts = (await withSignal(client.condenser.getAccounts([name]), signal)) as unknown;
+				const acct = Array.isArray(accts)
+					? (accts as Array<Record<string, unknown>>).find((a) => a && a.name === name)
+					: undefined;
+				if (acct === undefined) return JSON.stringify({ absent: true });
+				return JSON.stringify(authorityViewOf(acct));
+			},
+			{ equivalenceKey: (v) => v, minAgree: single ? 1 : 2, maxOperators: 3 }
+		);
+		if (r.agreedKey === undefined) return null;
+		const view = JSON.parse(r.agreedKey) as ActiveAuthorityView;
+		return single ? { ...view, single: true } : view;
+	}
+
+	/**
 	 * Did our account_create land? Asked of several OPERATORS at once (a node's
 	 * accounts and head read together, on one connection):
 	 *   'landed' — any node shows the name with OUR owner key;
@@ -883,26 +1027,67 @@ export class BlurtClient {
 	 *               SIGNED expiration searched back past `sinceMs` and found
 	 *               nothing: it can never land;
 	 *   'unknown' — anything else (lagging nodes, no history API anywhere,
-	 *               errors). A node without the history API (or erroring) is
-	 *               failed over to the next operator.
+	 *               errors, a walk that ran out of time). A node without the
+	 *               history API (or erroring) is failed over to the next operator.
+	 *
+	 * HIDDEN NODES (.onion/.i2p) are read in pages of HISTORY_PAGE_HIDDEN
+	 * positions, each read sent once (rpcReadOnce — not through dblurt, whose
+	 * resend ladder cannot wait for a Tor reply) and bounded by the hidden
+	 * per-call budget (MORPHIT_HIDDEN_RPC_TIMEOUT_MS, 60 s by default), the
+	 * whole walk by `settleHiddenWalkMs`. A 1000-position page never answers
+	 * over Tor/I2P (measured), so on a hidden-only relay no outcome-unknown
+	 * payout could ever be settled: every one escalated. Clearnet nodes are read exactly as
+	 * before: 1000-position pages, the whole walk within 10 s. Either way the
+	 * walk goes back to the same depth (`maxPages` × 1000 positions) and stops
+	 * at the same time bound (`sinceMs`); a walk that cannot finish is no
+	 * answer from that node, never "absent".
 	 */
 	async settleTransfer(args: {
 		account: string;
 		sinceMs: number;
 		expirationMs: number;
 		match: (op: string, body: Record<string, unknown>, trxId: string | undefined) => boolean;
+		/** Depth, in units of 1000 positions (the clearnet page). Default 20. */
 		maxPages?: number;
 	}): Promise<'found' | 'absent' | 'unknown'> {
-		const maxPages = args.maxPages ?? 20;
+		const maxPositions = (args.maxPages ?? 20) * HISTORY_PAGE_CLEARNET;
+		const anyHidden = this.pool.snapshot().some((e) => isHiddenEndpointUrl(e.url));
 		const r = await this.pool.quorumCall<string>(
 			async (url, signal) => {
 				const client = clientFor(url);
-				const call = <T>(method: string, params: unknown[]): Promise<T> =>
+				const hidden = isHiddenEndpointUrl(url);
+				const pageSize = hidden ? HISTORY_PAGE_HIDDEN : HISTORY_PAGE_CLEARNET;
+				const maxPages = Math.ceil(maxPositions / pageSize);
+				const walkMs = hidden ? this.settleHiddenWalkMs : DEFAULT_BACKGROUND_TIMEOUT_MS;
+				const walkDeadline = Date.now() + walkMs;
+				const perCallMs = hidden ? hiddenRpcTimeoutMs() : walkMs;
+				const call = async <T>(method: string, params: unknown[]): Promise<T> => {
 					// Any failure of THIS node (no history API, an RPC error) makes the
 					// quorum move on to the next operator. Only a real transport
-					// failure (its own message says so) marks the node unhealthy —
-					// a node without the history API is still a good broadcast node.
-					withSignal(client.call('condenser_api', method, params), signal) as Promise<T>;
+					// failure (its own message says so — "timeout" included) marks the
+					// node unhealthy; a node without the history API is still a good
+					// broadcast node.
+					const left = walkDeadline - Date.now();
+					if (left <= 0) {
+						throw new Error(`account history walk timeout: not finished within ${walkMs} ms`);
+					}
+					const ms = Math.min(left, perCallMs);
+					const deadline = AbortSignal.timeout(ms);
+					const both = AbortSignal.any([signal, deadline]);
+					try {
+						// A hidden node is asked ONCE per read: dblurt cuts a read
+						// attempt off after 500 ms × (attempt + 1) and sends it again,
+						// so over Tor/I2P a reply slower than about 8 s never arrives.
+						return hidden
+							? await rpcReadOnce<T>(url, method, params, both)
+							: ((await withSignal(client.call('condenser_api', method, params), both)) as T);
+					} catch (err) {
+						if (deadline.aborted && !signal.aborted) {
+							throw new Error(`${method} timeout: no answer within ${ms} ms`);
+						}
+						throw err;
+					}
+				};
 				const dgp = await call<Record<string, unknown>>('get_dynamic_global_properties', []);
 				if (typeof dgp.time !== 'string' || typeof dgp.head_block_number !== 'number') {
 					throw new Error('malformed head from this node');
@@ -914,7 +1099,7 @@ export class BlurtClient {
 				let start = -1;
 				let reachedSince = false;
 				for (let page = 0; page < maxPages; page++) {
-					const limit = start === -1 ? 1000 : Math.min(1000, start);
+					const limit = start === -1 ? pageSize : Math.min(pageSize, start);
 					const rows = await call<unknown>('get_account_history', [args.account, start, limit]);
 					if (!Array.isArray(rows) || rows.length === 0) {
 						reachedSince = true;
@@ -950,7 +1135,15 @@ export class BlurtClient {
 				// is past the signed expiration (a lagging node is simply undecided).
 				return reachedSince && libMs > args.expirationMs + 3000 ? 'absent' : null;
 			},
-			{ equivalenceKey: (v) => v, minAgree: 2, maxOperators: 3 }
+			{
+				equivalenceKey: (v) => v,
+				minAgree: 2,
+				maxOperators: 3,
+				// The pool's per-endpoint timer is only a backstop behind each walk's
+				// own deadline. With no hidden node in the pool it stays the default
+				// (10 s), exactly as before.
+				...(anyHidden ? { timeoutMs: this.settleHiddenWalkMs + SETTLE_POOL_BACKSTOP_MS } : {})
+			}
 		);
 		if (r.responses.includes('found')) return 'found';
 		if (r.agreedKey === 'absent') return 'absent';
@@ -1252,6 +1445,64 @@ export function parseBlurtAssetNumber(s: string): number | null {
 	return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * One condenser_api read, sent ONCE and bounded only by `signal`: no resend.
+ *
+ * dblurt (0.17, legacy transport) aborts every non-broadcast read attempt after
+ * 500 ms × (attempt + 1) and sends it again until its own timeout. Measured
+ * against a node that replies after a fixed delay, with the 60 s hidden
+ * timeout: a 3 s reply took 7 requests and 19 s; a 9 s reply was asked 11
+ * times and never got through. Over Tor/I2P a history page takes tens of
+ * seconds (about 34 s measured), so through dblurt it could never be read.
+ *
+ * The reply goes through the same guard as dblurt's (guardedRpcFetch:
+ * redirects refused, size capped by the request's budget, parse bombs
+ * refused). Errors are worded as dblurt words them for the pool: a network
+ * failure stays "fetch failed", an overloaded node "HTTP 5xx: …"; a JSON-RPC
+ * error is the node's own message.
+ */
+async function rpcReadOnce<T>(
+	url: string,
+	method: string,
+	params: unknown[],
+	signal: AbortSignal
+): Promise<T> {
+	const res = await guardedRpcFetch()(url, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json, text/plain, */*',
+			'Content-Type': 'application/json',
+			'User-Agent': morphitUserAgent(VERSION)
+		},
+		body: JSON.stringify({
+			jsonrpc: '2.0',
+			id: 1,
+			method: 'call',
+			params: ['condenser_api', method, params]
+		}),
+		signal
+	});
+	if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+	const body = (await res.json()) as { result?: unknown; error?: unknown } | null;
+	if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+		throw new Error('Malformed JSON-RPC response: expected object');
+	}
+	if (body.error !== undefined && body.error !== null) {
+		const m = (body.error as { message?: unknown }).message;
+		throw new Error(typeof m === 'string' && m !== '' ? m : 'RPC error');
+	}
+	if (!('result' in body)) throw new Error('Malformed JSON-RPC response: missing result');
+	return body.result as T;
+}
+
+/** One call's budget over a hidden network: MORPHIT_HIDDEN_RPC_TIMEOUT_MS, 60 s
+ *  by default. v1.21.15: a value that is not a positive number ("60s", empty)
+ *  falls back to 60 s — as NaN, every hidden call would time out at once. */
+function hiddenRpcTimeoutMs(): number {
+	const hiddenEnv = Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
+	return Number.isFinite(hiddenEnv) && hiddenEnv > 0 ? hiddenEnv : 60_000;
+}
+
 /** Per-endpoint dblurt Client instance cache.  Reuse Clients across
  *  calls so we don't pay the allocation cost per request. */
 const clientCache = new Map<string, Client>();
@@ -1266,15 +1517,7 @@ function clientFor(url: string): Client {
 		// indexer's client, the RPC pool, and the standalone scripts' missing
 		// dispatcher. When one layer is fixed, check the next one down.
 		const hiddenNet = hiddenHostNetworkOf(new URL(url).hostname);
-		// v1.21.15: a value that is not a positive number ("60s", empty) falls
-		// back to 60 s — as NaN, every hidden call would time out at once.
-		const hiddenEnv = Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
-		const timeoutMs =
-			hiddenNet === null
-				? 10_000
-				: Number.isFinite(hiddenEnv) && hiddenEnv > 0
-					? hiddenEnv
-					: 60_000;
+		const timeoutMs = hiddenNet === null ? 10_000 : hiddenRpcTimeoutMs();
 		// Guarded: dblurt followed redirects and read
 		// replies whole, so a directory-listed node could bounce a broadcast to
 		// our own loopback or stream memory into us. See rpcFetch.ts.

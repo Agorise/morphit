@@ -2693,7 +2693,11 @@ const SCENARIOS: readonly Scenario[] = [
 			'apps/relay/keystore.json',
 			'apps/relay/altnet',
 			'copyFileSync',
-			'rollback(installDir, backupDir, tmpDir'
+			// a failure rolls back (undo → rollback(installDir, backupDir, tmpDir, …),
+			// since the v1.21.17 review also on Ctrl+C or a dropped session; since
+			// v1.21.18 a stop then exits with its own code, 130 for Ctrl+C)
+			"warn('Failed to carry config/keys forward; rolling back.');\n\t\treturn undo(err);",
+			'const code = await rollback('
 		]
 	},
 	{

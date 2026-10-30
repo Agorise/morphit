@@ -315,10 +315,26 @@ elif command -v curl >/dev/null 2>&1; then
 fi
 
 hdr "DONE — next: broadcast from your laptop"
-echo "  1. Copy the payload down:"
+# This server's own name for the copy command (a placeholder host
+# left the operator to fill it in): its origin setting, else its hostname.
+_HOST=""
+_REPO_DIR="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)"
+for _f in "$_REPO_DIR/morphit.config.env" "$_REPO_DIR/morphit.env" "$_idxenv"; do
+	[ -r "$_f" ] || continue
+	for _k in MORPHIT_INSTANCE_ORIGIN MORPHIT_INDEXER_PUBLIC_ORIGIN; do
+		[ -n "$_HOST" ] && break
+		_HOST="$(sed -n "s/^[[:space:]]*$_k=//p" "$_f" | tail -1 | tr -d "\"' \t\r" | sed -E 's#^[A-Za-z]+://([^/:]+).*#\1#')"
+	done
+done
+[ -n "$_HOST" ] || _HOST="$(hostname)"
+echo "  1. Copy the payload down (on your laptop):"
 # root@: the payload sits inside the IPFS repo, and the morphit service user has
 # no login shell. -O: hardened boxes turn SSH's SFTP off, which plain scp needs.
-echo "       scp -O root@<this-node>:$PAYLOAD ."
+echo "       scp -O root@$_HOST:$PAYLOAD ."
+echo "     If this server refuses root logins (PermitRootLogin no), copy it in two steps instead:"
+echo "       on this server:  sudo install -m 0644 $PAYLOAD /tmp/"
+echo "       on your laptop:  scp -O <your-login>@$_HOST:/tmp/$(basename "$PAYLOAD") ."
+echo "     (the payload holds only public data: the snapshot's CID, hash and block.)"
 echo "  2. In the Morphit repo (dry run first, then --broadcast — asks for the @morphit POSTING WIF):"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json --dry-run"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json --broadcast"

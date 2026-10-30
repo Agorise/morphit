@@ -411,6 +411,29 @@ describe('upgrade heal: publish the fees account when the chain lacks it', () =>
 		expect(h.lines.at(-1)).toMatch(/was broadcast .* but was not seen on chain in time/);
 	});
 
+	it('a broadcast with no final answer may still land: it is looked for, not called a failure', async () => {
+		const { BroadcastOutcomeUnknownError } = await import('../src/lib/chainAccess.ts');
+		const h = harness({
+			broadcast: async () => {
+				throw new BroadcastOutcomeUnknownError('new-trx', 'the indexer did not answer in time');
+			}
+		});
+		expect(await healFeeRecipientRegistration(h.deps as never)).toBe('published_verified');
+		expect(h.lines.join('\n')).not.toMatch(/publishing it failed/);
+		expect(h.lines.at(-1)).toMatch(/✓ Fees account @b-fees published .*new-trx/);
+	});
+
+	it('a register timeout (no transaction id) is looked for by its content', async () => {
+		const { RegisterTimeoutError } = await import('../src/commands/register.ts');
+		const h = harness({
+			broadcast: async () => {
+				throw new RegisterTimeoutError('no answer in time');
+			}
+		});
+		expect(await healFeeRecipientRegistration(h.deps as never)).toBe('published_verified');
+		expect(h.lines.at(-1)).toMatch(/✓ Fees account @b-fees published .*id not known/);
+	});
+
 	it('is one of the upgrade self-heal steps', () => {
 		expect(selfHealSteps().map(([n]) => n)).toContain('the fees-account registration heal');
 	});

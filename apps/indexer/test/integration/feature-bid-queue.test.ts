@@ -50,6 +50,32 @@ const ACTIVATION = Date.parse(CONSENSUS_V2_ACTIVATION_TIME);
 /** The old rule's chain starts a month before the activation time. */
 const EARLIER = ACTIVATION - 30 * 86_400_000;
 
+/**
+ * The treasury pin in force for the whole chain: a 62.5 BLURT listing-fee base
+ * (the canonical on-target value the fixtures pay) and an XMR amount. From the
+ * consensus activation time a fee is judged by the pin at its block, and an
+ * unpinned base is the federation default 125 (fee/feeRulesAtBlock.ts) — before
+ * it, by this node's live pin / env base (62.5 in the config below), so both
+ * runs judge the same amounts.
+ */
+async function pinTreasury(fx: IntegrationFixture, base: number, t0: number): Promise<void> {
+	await fx.db.query(
+		`INSERT INTO releases (version, hash_manifest, endpoints, signature, source_block_num,
+		                       source_trx_id, signer, valid, created_at, treasury)
+		 VALUES ('1.22.0', '{}'::jsonb, '{}'::jsonb, '', $1, $2, 'morphit', true, $3, $4::jsonb)`,
+		[
+			base - 1,
+			`pin-${base}-${Math.random()}`,
+			new Date(t0 - 3000),
+			JSON.stringify({
+				btc: null,
+				xmr: { address: '8'.repeat(95), piconero: '781250000' },
+				blurt: { base: 62.5 }
+			})
+		]
+	);
+}
+
 async function run(
 	fx: IntegrationFixture,
 	base: number,
@@ -58,6 +84,7 @@ async function run(
 	/** Runs just before the given block: a write that is not chain data. */
 	offChain?: { beforeBlock: number; sql: string }
 ) {
+	await pinTreasury(fx, base, t0);
 	const blocks: [number, Op[][]][] = [
 		[base, [listed('alice'), listed('bob'), listed('carol'), listed('dave')]],
 		[base + 1, [bid('alice', '300.000 BLURT')]],

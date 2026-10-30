@@ -115,7 +115,7 @@ and `docs/OPERATIONS.md`.
 
 | `code` | Meaning |
 | --- | --- |
-| `signups_disabled` (503) | Signups are paused: `/var/lib/morphit-relay/SIGNUPS_DISABLED` exists, or `MORPHIT_RELAY_SIGNUP_ENABLED=false` |
+| `signups_disabled` (503) | Signups are paused: `/var/lib/morphit-relay/SIGNUPS_DISABLED` exists, `MORPHIT_RELAY_SIGNUP_ENABLED=false`, or the key the relay holds is not its account's active key on the chain (it then signs nothing; on the server, the line **Relay key:** of `sudo morphit-ops status` says what is wrong and the fix). `POST /v1/account/invite` answers the same |
 | `daily_ceiling_reached` (503) | Today's `MORPHIT_RELAY_SIGNUP_DAILY_CEILING` is used up (resets at UTC midnight; survives restarts) |
 | `relay_out_of_funds` (503) | The relay can't cover the live fee + 3 BLURT, or its last balance poll is over 90 s old |
 | `relay_fee_spike` (503) | The chain's live `account_creation_fee` is more than 1.5× `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT`; nothing is broadcast or spent until you confirm the new fee and set it |
@@ -127,7 +127,11 @@ although the node's reply was lost) or `note: "already_created"`.
 Verbose `/v1/health` also reports `transfer_queue: { unsettled, escalated }`
 for the payout queue (welcome bonus, dust, BP): non-zero `escalated` means a
 payout could not be settled from the account history and needs a manual
-check (see OPERATIONS.md §5).
+check (see OPERATIONS.md §5). It also reports `active_key`, the relay's own
+check of its key against the chain (`state`: `ok`, `mismatch`, `unknown` or
+`unchecked`); on `mismatch` the relay signs nothing, so signups are refused
+and payouts wait (none are lost), until the key is fixed
+([`docs/RECOVERING-FROM-WRONG-RELAY-KEY.md`](../../docs/RECOVERING-FROM-WRONG-RELAY-KEY.md)).
 
 ## Observability
 
@@ -140,8 +144,9 @@ check (see OPERATIONS.md §5).
 
 | Symptom                                                                  | Cause                                         | Fix                                                  |
 | ------------------------------------------------------------------------ | --------------------------------------------- | ---------------------------------------------------- |
-| `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "..." has permissions 0640` | Key file readable by group                    | `sudo chmod 0600` the file named in `MORPHIT_RELAY_ACTIVE_KEY_FILE` |
-| `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "...": no such file`        | Typo in env or file not created yet           | `sudo grep -h MORPHIT_RELAY_ACTIVE_KEY_FILE /etc/morphit/relay.env /opt/morphit/morphit.env` |
+| `[relay-config] load_failed`, then `MORPHIT_RELAY_ACTIVE_KEY_FILE "..." has permissions …` | The key file can be read by others, written by its group, or is group-readable without being `root:morphit-relay` | On the server: `sudo chown root:morphit-relay <file> && sudo chmod 0640 <file>` (the shape the install sets; owner-only `0600` also works when the relay's own user owns the file) |
+| `[relay-config] load_failed`, then `MORPHIT_RELAY_ACTIVE_KEY_FILE "...": ENOENT…` | Typo in env or file not created yet           | `sudo grep -h MORPHIT_RELAY_ACTIVE_KEY_FILE /etc/morphit/relay.env /opt/morphit/morphit.env` |
+| Log line `active_key_not_on_chain`; signups answer `signups_disabled` | The key the relay holds is not its account's active key | On the server: `sudo morphit-ops edit-active-key`, then `sudo systemctl restart morphit-relay` ([`docs/RECOVERING-FROM-WRONG-RELAY-KEY.md`](../../docs/RECOVERING-FROM-WRONG-RELAY-KEY.md)) |
 | Relay starts but `/` returns 404                                         | Expected — only `/v1/*` paths are served      | Use `/v1/health`                                     |
 | CORS error in browser console                                            | Origin not in `MORPHIT_RELAY_ALLOWED_ORIGINS` | Edit env, `sudo systemctl restart morphit-relay`     |
 | 502 from nginx                                                           | Relay not running                             | `sudo systemctl status morphit-relay`, check journal |
@@ -163,13 +168,17 @@ Quarterly or on suspicion of compromise, on the server:
 1. Generate a new key pair offline and set it as the relay account's
    active authority with an `account_update` op (signed with the account's
    owner or current active key, from your own computer — not the server).
-2. `sudo morphit-ops edit-active-key` — replaces the saved keystore with the
-   new key (keeping a timestamped backup of the old one — delete it once
-   the relay runs on the new key) and re-seals
-   `/etc/morphit/relay_passphrase.cred` with the passphrase, so the relay
-   still unlocks unattended (if it cannot, it prints the one
-   `systemd-creds encrypt` command to run).
+2. `sudo morphit-ops edit-active-key` — checks the new key against the
+   chain before anything is written, then replaces the saved keystore with
+   it. It keeps the unlock passphrase by default (the relay's sealed
+   `/etc/morphit/relay_passphrase.cred` still opens it, so the relay still
+   unlocks unattended), and asks whether to keep a copy of the old key file
+   (default Yes, `<file>.bak-<number>` — delete it once the relay runs on
+   the new key; answer No when the old key was exposed: it is then
+   overwritten and no copy stays).
 3. `sudo systemctl restart morphit-relay`. There is no passphrase prompt.
+   Then `sudo morphit-ops status`: its line **Relay key:** should say
+   "matches the chain".
 
 Full procedure, including the "wrong key was installed" case:
 [`docs/RECOVERING-FROM-WRONG-RELAY-KEY.md`](../../docs/RECOVERING-FROM-WRONG-RELAY-KEY.md).

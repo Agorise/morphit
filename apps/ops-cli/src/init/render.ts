@@ -387,6 +387,12 @@ export interface HardeningChecklistInput {
 	readonly instanceName: string;
 	readonly origin: string | null;
 	readonly bunkerWebEnabled: boolean;
+	/** BunkerWeb is ALREADY running on this server (`morphit-ops harden` on a
+	 *  live node checks): it holds port 80, so the certificate comes through
+	 *  it (certbot's webroot), and its settings must not be copied over. */
+	readonly bunkerWebRunning?: boolean;
+	/** Where Morphit is installed (default /opt/morphit), for the commands. */
+	readonly installDir?: string;
 	/** the operator's hardening-pillar confirmations from the
 	 *  wizard.  When present, the checklist opens with a short "you
 	 *  confirmed" summary.  Optional. */
@@ -401,7 +407,9 @@ export interface HardeningChecklistInput {
 
 export function renderHardeningChecklist(input: HardeningChecklistInput): string {
 	const domain = deriveDomain(input.origin);
-	const bw = input.bunkerWebEnabled;
+	const bw = input.bunkerWebEnabled || input.bunkerWebRunning === true;
+	const bwRunning = input.bunkerWebRunning === true;
+	const installDir = input.installDir ?? '/opt/morphit';
 	const L: string[] = [];
 
 	L.push(`# Hardening checklist — ${input.instanceName}`);
@@ -490,9 +498,19 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 			L.push(`      here, \`sudo morphit-ops upgrade\` sets it up: BunkerWeb sends ${www} to`);
 			L.push(`      https://${domain}, and the certificate names it.`);
 		}
-		L.push("- [ ] **Issue a Let's Encrypt certificate with this server's certbot**, before");
-		L.push('      BunkerWeb starts (it needs port 80 free):');
-		L.push(`      \`sudo certbot certonly --standalone -d ${domain}\``);
+		if (bwRunning) {
+			L.push("- [ ] **The Let's Encrypt certificate, through BunkerWeb.**  BunkerWeb already");
+			L.push('      holds port 80 on this server, so certbot answers the check from the web');
+			L.push('      build BunkerWeb serves (nothing is stopped). Check what you have first:');
+			L.push('      `sudo morphit-ops ssl`; to get one, on this server:');
+			L.push(
+				`      \`sudo certbot certonly --webroot --webroot-path ${installDir}/apps/web/build -d ${domain}\``
+			);
+		} else {
+			L.push("- [ ] **Issue a Let's Encrypt certificate with this server's certbot**, before");
+			L.push('      BunkerWeb starts (it needs port 80 free):');
+			L.push(`      \`sudo certbot certonly --standalone -d ${domain}\``);
+		}
 		L.push("      BunkerWeb serves it from `/etc/letsencrypt` (its own Let's Encrypt client");
 		L.push('      stays off: `AUTO_LETS_ENCRYPT=no` in the shipped `bunkerweb.env`).  certbot');
 		L.push('      renews it by itself — verify with `systemctl list-timers certbot.timer`.');
@@ -508,10 +526,17 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 	L.push('');
 	L.push('## 3. Web edge');
 	L.push('');
-	if (bw) {
+	if (bwRunning) {
+		L.push('- [x] **BunkerWeb fronts the stack** (OWASP Top-10, bot detection, rate');
+		L.push('      limiting, DDoS mitigation) — it is already running on this server.');
+		L.push('      Check it any time: `sudo morphit-ops bunkerweb`.  Do NOT copy');
+		L.push('      ops/bunkerweb over /etc/bunkerweb: that would replace its settings.');
+		L.push('      (Reference: `ops/bunkerweb/README.md`, OPERATIONS.md §32)');
+	} else if (bw) {
 		L.push('- [ ] **BunkerWeb fronts the stack** (OWASP Top-10, bot detection,');
-		L.push('      rate limiting, DDoS mitigation):');
+		L.push('      rate limiting, DDoS mitigation), on this server:');
 		L.push('      ```');
+		L.push(`      cd ${installDir}`);
 		L.push('      sudo mkdir -p /etc/bunkerweb');
 		L.push(
 			'      sudo cp -r ops/bunkerweb/frontend ops/bunkerweb/docker-compose.yml /etc/bunkerweb/'
@@ -525,13 +550,16 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 		);
 		L.push('      cd /etc/bunkerweb && sudo docker compose up -d');
 		L.push('      ```');
-		L.push('      The wizard already set `MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16`');
-		L.push('      so the relay honours the real client IP BunkerWeb forwards.');
+		L.push('      The relay honours the real client IP BunkerWeb forwards: it trusts');
+		L.push("      Docker's networks (172.16.0.0/12) unless MORPHIT_RELAY_TRUSTED_PROXY_IPS");
+		L.push("      is set, and then that value must include BunkerWeb's 172.20.0.0/16.");
 		L.push('      (Reference: `ops/bunkerweb/README.md`, OPERATIONS.md §32)');
 	} else {
 		L.push('- [ ] **Place the shipped nginx server block** and reload:');
 		L.push('      ```');
-		L.push('      sudo cp ops/nginx/web.conf /etc/nginx/sites-available/morphit-web.conf');
+		L.push(
+			`      sudo cp ${installDir}/ops/nginx/web.conf /etc/nginx/sites-available/morphit-web.conf`
+		);
 		L.push('      ```');
 		L.push(`      Edit it to set \`server_name ${domain};\` — ONE domain. It serves`);
 		L.push('      `apps/web/build` and reverse-proxies `/relay/`, `/v1/`, `/rss/`, `/mcp`');
@@ -732,7 +760,7 @@ function renderConfig(answers: WizardAnswers): string {
 	lines.push('# the unit if you want to turn it off:');
 	lines.push('#   sudo systemctl disable --now morphit-mcp.service');
 	lines.push('#');
-	lines.push('# Default bind: 127.0.0.1:8124 (loopback).  Reverse-proxy');
+	lines.push("# The program's default bind is 127.0.0.1:8124 (loopback).  Reverse-proxy");
 	lines.push('# via nginx at /mcp/* if you want public exposure.');
 	lines.push('# See docs/OPERATIONS.md §45 for the full setup.');
 	if (answers.mcpServer.enabled) {
@@ -1328,9 +1356,19 @@ function quote(value: string, consumer: EnvFileConsumer = 'bash'): string {
 	return `'${escaped}'`;
 }
 
-/** Resolve --out=PATH to an absolute path.  PATH may be relative
- *  (resolved against cwd) or absolute. */
-export function resolveOutputPath(outFlag: string | undefined, defaultRoot: string): string {
+/** Resolve --out=PATH to an absolute path.  PATH may be absolute, or relative
+ *  to the directory the operator ran `morphit-ops` from: the installed launcher
+ *  `cd`s into the install and runs this CLI from apps/ops-cli, so it passes
+ *  that directory as MORPHIT_OPS_CALLER_CWD (a plain `--out=x` used to land
+ *  under /opt/morphit/apps/ops-cli). */
+export function resolveOutputPath(
+	outFlag: string | undefined,
+	defaultRoot: string,
+	env: NodeJS.ProcessEnv = process.env
+): string {
 	if (outFlag === undefined || outFlag === '') return defaultRoot;
-	return isAbsolute(outFlag) ? outFlag : resolve(safeCwd() ?? defaultRoot, outFlag);
+	if (isAbsolute(outFlag)) return outFlag;
+	const caller = env.MORPHIT_OPS_CALLER_CWD;
+	const base = caller !== undefined && isAbsolute(caller) ? caller : (safeCwd() ?? defaultRoot);
+	return resolve(base, outFlag);
 }

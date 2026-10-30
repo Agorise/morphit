@@ -187,7 +187,12 @@ export class RelayQueueDrainer {
 	constructor(
 		private readonly config: UnlockedConfig,
 		private readonly db: Database,
-		private readonly blurt: BlurtClient
+		private readonly blurt: BlurtClient,
+		/** The relay's key check (policy/activeKeyGuard): while the key the
+		 *  relay holds is not on its account's active authority, every payment
+		 *  would be rejected by the chain — so none is sent; the rows stay
+		 *  queued untouched and go out once the key is right. */
+		private readonly signingGate: { signingRefused(): boolean } | null = null
 	) {}
 
 	/** Start the continuous drain loop. Resolves when stop() is
@@ -223,10 +228,19 @@ export class RelayQueueDrainer {
 	 *  row (Finding N23), and a crash leaves a durable "we were sending this"
 	 *  mark (D1). */
 	async drainOnce(): Promise<QueueDrainResult> {
+		if (this.signingGate?.signingRefused() === true) {
+			await this.refreshStats();
+			return { attempted: 0, succeeded: 0, failed: 0 };
+		}
 		let succeeded = 0;
 		let failed = 0;
 		const rows = await this.selectPending();
+		let attempted = 0;
 		for (const row of rows) {
+			// The key check can turn to "refused" while a batch is going out:
+			// stop there, the rest stays queued untouched (no retry used up).
+			if (this.signingGate?.signingRefused() === true) break;
+			attempted++;
 			try {
 				const outcome = await this.processRow(row);
 				if (outcome === 'done') succeeded++;
@@ -237,7 +251,7 @@ export class RelayQueueDrainer {
 			}
 		}
 		await this.refreshStats();
-		return { attempted: rows.length, succeeded, failed };
+		return { attempted, succeeded, failed };
 	}
 
 	/** Latest queue counts (null before the first cycle). */

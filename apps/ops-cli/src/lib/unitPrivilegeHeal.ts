@@ -132,7 +132,8 @@ export function matrixBotPostureText(botEnv: string): string {
 	// On a tor-only node the bot refuses a homeserver it could reach only over
 	// clearnet (it does not start), so it makes no clearnet contact: say so.
 	const torOnly = envFlagOn(envValue([botEnv], 'MORPHIT_MATRIX_BOT_TOR_ONLY') ?? '');
-	const socks = (envValue([botEnv], 'MORPHIT_MATRIX_BOT_SOCKS_PROXY') ?? '').trim() !== '';
+	const socksProxy = (envValue([botEnv], 'MORPHIT_MATRIX_BOT_SOCKS_PROXY') ?? '').trim();
+	const socks = socksProxy !== '';
 	const route = homeserverRoute(hs);
 	const refused = torOnly && !(route === 'loopback' || (route === 'onion' && socks));
 	const mxid = refused ? '' : (envValue([botEnv], 'MORPHIT_MATRIX_BOT_ALERT_MXID') ?? '');
@@ -141,7 +142,9 @@ export function matrixBotPostureText(botEnv: string): string {
 		'# Whether the Matrix alert bot runs and which homeserver it talks to, for the\n' +
 		"# indexer's clearnet check (the indexer cannot read matrix-bot.env).\n" +
 		`MORPHIT_MATRIX_BOT_ALERT_MXID=${mxid.trim() === '' ? '' : 'configured'}\n` +
-		`MORPHIT_MATRIX_BOT_HOMESERVER=${hs.replace(/[\r\n]/g, '')}\n`
+		`MORPHIT_MATRIX_BOT_HOMESERVER=${hs.replace(/[\r\n]/g, '')}\n` +
+		// The proxy the bot reaches a .onion homeserver through (no secret).
+		`MORPHIT_MATRIX_BOT_SOCKS_PROXY=${socksProxy.replace(/[\r\n]/g, '')}\n`
 	);
 }
 
@@ -582,15 +585,19 @@ export async function healServicePrivileges(
 	const fellBack = results.some((r) => r.how === 'fallback');
 	const allOk = results.every((r) => r.ok) && userProblems.length === 0;
 	const pending = results.some((r) => r.how === 'deferred' || r.how === 'unconfirmed');
+	const strategy = fellBack
+		? 'fallback-root'
+		: pending
+			? 'partial'
+			: results.every((r) => r.how === 'already') && treeFixed === 0
+				? 'already'
+				: 'applied';
 	return {
-		strategy: fellBack
-			? 'fallback-root'
-			: pending
-				? 'partial'
-				: results.every((r) => r.how === 'already') && treeFixed === 0
-					? 'already'
-					: 'applied',
+		strategy,
 		verified: allOk && !fellBack,
+		// Every service already runs as its own user, nothing changed and
+		// nothing to note: one of the "other checks" (v1.21.17 audit, L1).
+		...(strategy === 'already' && notes.length === 0 ? { routine: true } : {}),
 		detail: `Service users: ${parts.join('; ')}.`
 	};
 }

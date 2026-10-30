@@ -551,7 +551,7 @@ describe('the whole zero-clearnet upgrade', () => {
 		});
 		expect(out()).toMatch(/✓ Got v1\.18\.0 from Morphit/);
 		expect(out()).toMatch(/Apply upgrade from v1\.17\.15 to v1\.18\.0\?/);
-		expect(out()).toMatch(/Upgrade declined/); // no answer on this test's stdin
+		expect(out()).toMatch(/Not upgraded; nothing was changed/); // no answer on this test's stdin
 		expect(code).toBe(2);
 		expect(installed()).toMatch(/v1\.17\.15/);
 	}, 40_000);

@@ -61,7 +61,15 @@ expect('domain: non-http scheme → null', domainFromOrigin('ftp://x.example.com
 // buildCertbotCommands
 {
 	const cmds = buildCertbotCommands('morphit.example.com');
-	expect('certbot: nginx plugin targets the domain', cmds.nginxPlugin.includes('--nginx -d morphit.example.com'));
+	expect('certbot: nginx plugin targets the domain', cmds.nginxPlugin.includes('--nginx --cert-name morphit.example.com -d morphit.example.com'));
+	// v1.21.18 review: without --cert-name, a certificate certbot already keeps
+	// for the domain (expired, or naming www too) got a second "-0001" beside it.
+	expect(
+		'certbot: every obtain command names the certificate (--cert-name)',
+		[cmds.nginxPlugin, cmds.standalone, cmds.standaloneFree, cmds.webroot].every((c) =>
+			c.includes('--cert-name morphit.example.com -d morphit.example.com')
+		)
+	);
 	expect('certbot: includes --agree-tos + --no-eff-email', cmds.nginxPlugin.includes('--agree-tos') && cmds.nginxPlugin.includes('--no-eff-email'));
 	expect('certbot: email placeholder present for operator to fill', cmds.nginxPlugin.includes('<your-email>'));
 	expect('certbot: install command present', cmds.install.includes('certbot') && cmds.install.includes('python3-certbot-nginx'));

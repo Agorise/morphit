@@ -267,6 +267,16 @@ linking to an ENS gateway.
 `operator_tag` is the operator-attribution tag written into orders
 posted through this instance.  Null on untagged instances.
 
+`fee_recipient` is the BLURT account this site tells its users to pay
+the 90% share of a BLURT fee to. `fee_recipient_registered` says
+whether the instance's CONFIGURED fees account is in its operator's
+on-chain registration (`null`: could not tell). From 1 November 2026
+(by block time), while it is verifiably not registered,
+`fee_recipient` is the Morphit treasury (`morphit-fees`): the users'
+fees go there whole until the operator registers the account. The
+configured account itself (`configured_fee_recipient`) is returned
+only to the operator's local tools.
+
 `clearnet_eliminated` is the instance's **own claim** that it uses
 no clearnet internet (all its private-transport legs pass on its
 own checks). Other instances accept it only from an instance

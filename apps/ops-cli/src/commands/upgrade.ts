@@ -106,6 +106,7 @@ import {
 	tryResolveHiddenUpgrade,
 	readHiddenReleaseTarget,
 	readOnchainReleaseTag,
+	readReleaseRecordHint,
 	isHiddenOnly,
 	type HiddenUpgradeResolution,
 	RELEASE_VERSION_RE
@@ -137,6 +138,9 @@ import {
 } from '@morphit/operator-config';
 import {
 	findSignedReleaseAnchor,
+	RECORD_MAX_PAGES_HIDDEN,
+	RECORD_PAGE_SIZE_HIDDEN,
+	RECORD_READ_TIMEOUT_HIDDEN_MS,
 	type CondenserRead,
 	type ReleaseAnchor
 } from '../lib/releaseAnchor.ts';
@@ -166,7 +170,10 @@ import {
 	healBunkerWebWww,
 	applyWaitMs,
 	upstreamResolvers,
+	WWW_DB_PY,
+	WWW_RULE_FILE,
 	type ApplyResult,
+	type SiteList,
 	type WwwRuntime
 } from '../lib/bunkerwebWww.ts';
 import type { HealCtx, HealResult } from '../lib/healTypes.ts';
@@ -382,6 +389,8 @@ interface RunUpgradeOptions {
 		readonly now?: () => number;
 		readonly sleep?: (ms: number) => Promise<void>;
 	};
+	/** The account it runs as (default: this process's uid). Tests only. */
+	readonly uid?: number;
 	/** v1.21.6: a zero-clearnet wait — whether it may ask, how it asks, and the
 	 *  pause between "keep trying" tries. Tests only. */
 	readonly hiddenWait?: {
@@ -1144,10 +1153,9 @@ async function probeMcpHealth(
  *  address) — a warning, never a ✓ after those lines; anything else did not
  *  finish. Exported for its test. */
 export function reportSeedResult(tag: string, code: number): void {
-	if (code === 0) {
-		info(`✓ Seeded ${tag} to IPFS.`);
-		return;
-	}
+	// Its own last line already says "✓ Seeded <tag> to IPFS: …" with what was
+	// checked (v1.21.17 audit, L1: one line, not five).
+	if (code === 0) return;
 	if (code === 3) {
 		warn(
 			`Seeded ${tag} to IPFS, but its checks above (the lines marked ⚠) found something to fix on this server: ` +
@@ -1680,6 +1688,24 @@ async function readNotesFromTarballAsync(
 	return { body: r.stdout.trim(), member };
 }
 
+/** PURE. One line of Markdown as plain text for a terminal (v1.21.17 audit,
+ *  L6: "**Operators: …**" and `sudo …` were printed with their marks):
+ *  headings without their #, bold/italic and code marks dropped, a link as
+ *  "text (address)", a list item with a bullet. */
+export function plainMarkdown(line: string): string {
+	return (
+		line
+			.replace(/^(\s*)#{1,6}\s+/, '$1')
+			.replace(/^(\s*)[-*+]\s+/, '$1• ')
+			.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1 ($2)')
+			.replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, '$1')
+			// bold that runs over two lines leaves one ** on each
+			.replace(/\*\*/g, '')
+			.replace(/(^|[^\w*])\*(?=\S)([^*]+?)(?<=\S)\*(?!\w)/g, '$1$2')
+			.replace(/`([^`]+)`/g, '$1')
+	);
+}
+
 /** Print the release notes' summary before the upgrade question, and where
  *  the rest is. Exported for its test. */
 export function showReleaseNotes(notesBody: string, fullNotes: () => string | null): void {
@@ -1692,7 +1718,7 @@ export function showReleaseNotes(notesBody: string, fullNotes: () => string | nu
 		// publishing account could plant terminal escapes here).
 		// Plain text: no control sequence, and no colour or style either
 		// (conceal, SGR 8, would hide the lines after it).
-		console.log(`  ${plainText(line)}`);
+		console.log(`  ${plainText(plainMarkdown(line))}`.trimEnd());
 	}
 	if (summary.more) {
 		const where = fullNotes();
@@ -1733,6 +1759,11 @@ export function stepWarnings(output: string): string {
 	}
 	return out.join('\n');
 }
+
+/** Where the step that ran last keeps its full output when it failed (null
+ *  when it worked): read at once by stepFailed(), which carries it on the
+ *  error a rollback is given. */
+let lastFailedStepLog: string | null = null;
 
 /** Where a step that failed keeps its full output: root's log directory
  *  (root:morphit 0750), one root-only file per failure. MORPHIT_STEP_LOG_DIR
@@ -1823,8 +1854,12 @@ export async function runStepWithSpinner(
 		/** Exit codes that are a result the caller reports, not a failure of
 		 *  the step (shown like success, returned as they are). */
 		alsoFine?: readonly number[];
+		/** How the step's process ended (a signal included). */
+		onEnd?: (end: StepEnd) => void;
 	} = {}
 ): Promise<number> {
+	// Only THIS step's output, when it fails: never an earlier step's (M3).
+	lastFailedStepLog = null;
 	const name =
 		opts.name ??
 		`${basename(cmd)}${args[0] !== undefined && !args[0].startsWith('-') ? ` ${args[0]}` : ''}`;
@@ -1889,6 +1924,7 @@ export async function runStepWithSpinner(
 		closeSync(fd);
 		fd = null;
 		stop();
+		opts.onEnd?.(end);
 		const text = (): string => {
 			try {
 				return readFileSync(log, 'utf8');
@@ -1917,6 +1953,7 @@ export async function runStepWithSpinner(
 			keepTemp = true;
 			kept = log;
 		}
+		lastFailedStepLog = kept;
 		info(`${describeStepEnd(name, end)}. Its full output is kept on this server: sudo cat ${kept}`);
 		return end.code !== null && end.code !== 0 ? end.code : end.timedOutAfterMs !== null ? 124 : 1;
 	} catch (e) {
@@ -1944,18 +1981,40 @@ export async function runShowingOutputOnFailure(
 	label: string,
 	cmd: string,
 	args: readonly string[],
-	timeoutMs: number
+	timeoutMs: number,
+	onEnd?: (end: StepEnd) => void
 ): Promise<boolean> {
 	return (
 		(await runStepWithSpinner(label, cmd, args, {
 			timeoutMs,
 			quietOnSuccess: true,
-			warningsOnSuccess: false
+			warningsOnSuccess: false,
+			...(onEnd !== undefined ? { onEnd } : {})
 		})) === 0
 	);
 }
 
-export async function restartFrontendContainer(name: string, installDir: string): Promise<void> {
+/** How many earlier copies of the frontend container's nginx.conf are kept
+ *  (nginx.conf.bak-<time>): the newest ones; older ones are removed. */
+export const FRONTEND_CONF_BACKUPS_KEPT = 2;
+
+/** The nginx.conf.bak-<time> copies this upgrade makes, in a folder. PURE. */
+function isConfBackupName(n: string): boolean {
+	return /^nginx\.conf\.bak-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z$/.test(n);
+}
+
+export async function restartFrontendContainer(
+	name: string,
+	installDir: string,
+	o: {
+		/** A rollback puts the previous release back: its settings, not "this release's". */
+		readonly restoring?: boolean;
+		/** The upgrade was stopped (Ctrl+C, a closed session): no second way is tried. */
+		readonly stopped?: () => boolean;
+	} = {}
+): Promise<void> {
+	const whose =
+		o.restoring === true ? "the restored release's settings" : "this release's settings";
 	// The frontend nginx.conf is BAKED into the image at build time, so a plain
 	// restart keeps a STALE config (timeapp: the `/v1/` 4 KB body cap that
 	// 413'd every avatar upload survived every restart + every backend upgrade).
@@ -1990,9 +2049,47 @@ export async function restartFrontendContainer(name: string, installDir: string)
 				'frontend',
 				'nginx.conf'
 			);
-			if (existsSync(srcConf) && existsSync(dirname(dstConf))) {
-				copyFileSync(srcConf, dstConf);
-				info('Refreshed the frontend nginx.conf from the upgraded release.');
+			// Only when it differs, and the previous copy is kept first (it is the
+			// operator's Compose project, not the release's: v1.21.17 audit, L10).
+			const incoming = existsSync(srcConf) ? readFileSync(srcConf) : null;
+			const current = existsSync(dstConf) ? readFileSync(dstConf) : null;
+			if (
+				incoming !== null &&
+				existsSync(dirname(dstConf)) &&
+				(current === null || !current.equals(incoming))
+			) {
+				let kept: string | null = null;
+				let step: 'copy' | 'write' = 'copy';
+				try {
+					if (current !== null) {
+						kept = `${dstConf}.bak-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+						copyFileSync(dstConf, kept, fsConstants.COPYFILE_EXCL);
+					}
+					step = 'write';
+					copyFileSync(srcConf, dstConf);
+					info(
+						`The frontend container's nginx.conf (${dstConf}) now has ${whose}` +
+							(kept !== null ? `; the previous one is kept at ${kept}.` : '.')
+					);
+				} catch (e) {
+					// Never silent: the container is rebuilt with the file as it was
+					// (v1.21.18 audit, L5).
+					const why = e instanceof Error ? e.message : String(e);
+					warn(
+						step === 'copy'
+							? `The frontend container's nginx.conf (${dstConf}) was left as it was: a copy of it could not be kept first (${why}), so ${whose} were not put in it. On this server: sudo cp ${dstConf} ${dstConf}.bak && sudo cp ${srcConf} ${dstConf} && sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--build', '--force-recreate', ref.service])}`
+							: `The frontend container's nginx.conf (${dstConf}) could not be written (${why}), so ${whose} were not put in it${kept !== null ? ` (the previous one is kept at ${kept})` : ''}. On this server: sudo cp ${srcConf} ${dstConf} && sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--build', '--force-recreate', ref.service])}`
+					);
+				}
+				// Only the newest copies stay (one per upgrade piled up).
+				try {
+					const dir = dirname(dstConf);
+					const old = readdirSync(dir).filter(isConfBackupName).sort();
+					for (const n of old.slice(0, Math.max(0, old.length - FRONTEND_CONF_BACKUPS_KEPT)))
+						rmSync(join(dir, n), { force: true });
+				} catch {
+					/* an old copy left is harmless */
+				}
 			}
 		} catch {
 			/* best-effort — the rebuild still recreates the container */
@@ -2015,13 +2112,24 @@ export async function restartFrontendContainer(name: string, installDir: string)
 		// Up to 5 minutes each, its output only on failure: the spinner turns
 		// meanwhile (the label is printed once when there is no terminal).
 		const label = `Rebuilding the frontend container "${name}" so it serves the current config + build (this can take a few minutes)…`;
+		// A stop (Ctrl+C, a closed session) ends the rebuild: no second way is
+		// tried after it (v1.21.18 audit, M2: the docker-compose build, up to
+		// 300 s, and a restart ran after a Ctrl+C).
+		let bySignal = false;
+		const first = await runShowingOutputOnFailure(label, 'docker', up, 300_000, (e) => {
+			bySignal = isStopSignal(e.signal);
+		});
+		if (!first && o.stopped !== undefined) await settleSignals();
+		const stopped = (): boolean => bySignal || (o.stopped?.() ?? false);
+		if (!first && stopped()) return;
 		const rebuilt =
-			(await runShowingOutputOnFailure(label, 'docker', up, 300_000)) ||
-			(await runShowingOutputOnFailure(label, 'docker-compose', up.slice(1), 300_000));
+			first || (await runShowingOutputOnFailure(label, 'docker-compose', up.slice(1), 300_000));
 		if (rebuilt) {
 			info(`\u2713 Frontend container "${name}" rebuilt (config changes applied).`);
 			return;
 		}
+		if (o.stopped !== undefined) await settleSignals();
+		if (stopped()) return;
 		warn('Could not rebuild the frontend via compose; falling back to a restart.');
 	}
 
@@ -2178,7 +2286,7 @@ export async function installDepsWithNpmCi(installDir: string, backupDir: string
 		['ci', '--ignore-scripts', '--no-audit', '--no-fund'],
 		{ cwd: installDir, quietOnSuccess: true }
 	);
-	if (ciCode !== 0) throw new Error(`npm ci exited ${ciCode}`);
+	if (ciCode !== 0) throw stepFailed(`npm ci exited ${ciCode}`);
 	const lockText = readFileSync(join(installDir, 'package-lock.json'), 'utf8');
 	const problems = lockedTreeProblems(installDir, lockText);
 	if (problems.length > 0) {
@@ -2186,9 +2294,9 @@ export async function installDepsWithNpmCi(installDir: string, backupDir: string
 			`the installed dependencies do not match the lockfile (${problems.slice(0, 3).join('; ')})`
 		);
 	}
-	const natives = carryNativeAddons(backupDir, installDir, lockText);
-	if (natives.length > 0)
-		info(`Reused the native add-ons of ${natives.join(', ')} from the previous install.`);
+	// The native add-ons of the previous install are reused when their version
+	// did not change: routine, nothing to say (v1.21.17 audit, L1).
+	carryNativeAddons(backupDir, installDir, lockText);
 }
 
 /**
@@ -2232,8 +2340,8 @@ export async function verifyServedFrontend(
 				frontendVerified = true;
 				info(
 					`\u2713 Verified the live frontend is serving this build ` +
-						`(version ${builtVersion}). Returning visitors get the ` +
-						`"Load it now" update prompt within ~60s.`
+						`(version ${builtVersion}). Visitors who have the site open ` +
+						`see the "Load it now" prompt within a few minutes.`
 				);
 			} else if (verdict === 'stale') {
 				// Actively self-heal before giving up. The usual cause is a running
@@ -2269,8 +2377,8 @@ export async function verifyServedFrontend(
 						frontendVerified = true;
 						info(
 							`\u2713 Verified the live frontend is serving this build ` +
-								`(version ${builtVersion}) after a restart. Returning visitors ` +
-								`get the "Load it now" prompt within ~60s.`
+								`(version ${builtVersion}) after a restart. Visitors who have ` +
+								`the site open see the "Load it now" prompt within a few minutes.`
 						);
 					}
 				}
@@ -2304,6 +2412,310 @@ export async function verifyServedFrontend(
 	return frontendVerified;
 }
 
+/** Step 12b's timers: the snapshot units installed from this release, the
+ *  weekly mirror timer on, and — only where the operator opted in with the
+ *  env file — the daily publish timer; each READ BACK from systemd and said
+ *  as it is. `o` relocates the paths (tests). Exported for its test. */
+export async function armSnapshotTimers(
+	installDir: string,
+	o: { readonly systemdDir?: string; readonly publishEnv?: string } = {}
+): Promise<void> {
+	// Install the PUBLISH units too. Only the canonical box should ever
+	// publish, so they stay inert until enabled — but they have to be
+	// PRESENT to be enableable, and morphit.io is a manual install Ansible
+	// never touches. Without this, even a first hand-made publish would
+	// never get a recurring timer, and the snapshot would go stale again.
+	const units = [
+		'morphit-snapshot-mirror.service',
+		'morphit-snapshot-mirror.timer',
+		'morphit-snapshot-publish.service',
+		'morphit-snapshot-publish.timer'
+	];
+	const changed: string[] = [];
+	for (const u of units) {
+		const src = join(installDir, 'ops', 'systemd', u);
+		if (!existsSync(src)) continue;
+		const dest = join(o.systemdDir ?? '/etc/systemd/system', u);
+		const incoming = readFileSync(src, 'utf8');
+		if (existsSync(dest) && readFileSync(dest, 'utf8') === incoming) continue;
+		writeFileSync(dest, incoming);
+		changed.push(u);
+	}
+	if (changed.length > 0) {
+		await runSpinning('Reloading systemd…', 'systemctl', ['daemon-reload'], {
+			timeoutMs: 60_000
+		});
+	}
+	// A timer whose schedule changed is restarted, so its new schedule is
+	// the one it runs.
+	const arm = async (timer: string, label: string): Promise<void> => {
+		await runSpinning(label, 'systemctl', ['enable', '--now', timer], { timeoutMs: 60_000 });
+		if (changed.includes(timer))
+			await runSpinning(label, 'systemctl', ['restart', timer], { timeoutMs: 60_000 });
+	};
+	await arm('morphit-snapshot-mirror.timer', 'Turning on the snapshot mirror timer…');
+	const mirrorTimer = readTimer('morphit-snapshot-mirror.timer');
+	// It was just turned on with `enable --now`: saying that again is circular
+	// (v1.21.18 audit, M7); what systemd says about it is the next step.
+	if (!mirrorTimer.active)
+		warn(
+			'The weekly snapshot mirror timer did not start (it was just turned on, and systemd does not show it running), so this box only refreshes its mirror when it upgrades. To see why, on this server: sudo systemctl status morphit-snapshot-mirror.timer and sudo journalctl -u morphit-snapshot-mirror.service -n 50 --no-pager'
+		);
+	// Enable publishing ONLY where the operator has opted in by dropping the
+	// env file. Explicit and reversible: exactly one instance in the
+	// federation should publish, and an upgrade must never make a box start
+	// signing snapshots under its own account by surprise.
+	if (existsSync(o.publishEnv ?? '/etc/morphit/snapshot-publish.env')) {
+		await arm('morphit-snapshot-publish.timer', 'Turning on the snapshot publish timer…');
+		// Read back, not assumed (v1.21.17 audit, M4: "timer armed" was
+		// printed whatever systemctl did).
+		const t = readTimer('morphit-snapshot-publish.timer');
+		// Promises nothing about the mirror's line below (v1.21.18 audit, L7: it
+		// said that line gives the anchored snapshot's age, which it does not
+		// always).
+		if (t.active)
+			info(
+				`  This box publishes the federation snapshot: its daily job is on (checked; next run ${t.next ?? 'not scheduled yet'}). Anchoring each one on chain is done on your laptop.`
+			);
+		else
+			warn(
+				'This box is set up to publish the federation snapshot (/etc/morphit/snapshot-publish.env), but its daily timer did not start (it was just turned on, and systemd does not show it running), so no new snapshot is exported. To see why, on this server: sudo systemctl status morphit-snapshot-publish.timer and sudo journalctl -u morphit-snapshot-publish.service -n 50 --no-pager'
+			);
+	}
+}
+
+/** Step 10b: the MCP server's own tree (/opt/morphit-mcp) gets this release's
+ *  code. It is started or restarted only when the operator has it ON: menu 17
+ *  turns it off with `systemctl disable --now`, and an upgrade used to start
+ *  it again ("Started morphit-mcp (it was not previously active)", v1.21.17
+ *  audit D-H3). A started one is checked to stay running (a Type=simple unit's
+ *  restart "succeeds" even when it crashes at once) and to answer its health
+ *  check. False when it should run and does not. Exported for its test. */
+export async function redeployMcpOnUpgrade(
+	installDir: string,
+	o: {
+		readonly settleMs?: number;
+		/** The upgrade was stopped: its own last lines say what is left. */
+		readonly stopped?: () => boolean;
+	} = {}
+): Promise<boolean> {
+	const mcpUnitPath = join(
+		process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system',
+		'morphit-mcp.service'
+	);
+	// (No MCP unit on this server: nothing to redeploy, nothing to say.)
+	if (!existsSync(mcpUnitPath)) return true;
+	const mcpDest = process.env.MORPHIT_MCP_DEPLOY_DIR ?? '/opt/morphit-mcp';
+	const mcpUser = process.env.MORPHIT_MCP_DEPLOY_USER ?? 'morphit-mcp';
+	const deployScript = join(installDir, 'ops', 'scripts', 'deploy-mcp.sh');
+	const wasActive =
+		spawnSync('systemctl', ['is-active', '--quiet', 'morphit-mcp.service'], { timeout: 10_000 })
+			.status === 0;
+	const enabled = (
+		spawnSync('systemctl', ['is-enabled', 'morphit-mcp.service'], {
+			encoding: 'utf8',
+			timeout: 10_000
+		}).stdout ?? ''
+	).trim();
+	// On: enabled (or running anyway, e.g. started by hand). Off: menu 17's
+	// `disable --now`, or never turned on.
+	const on = wasActive || enabled === 'enabled' || enabled === 'enabled-runtime';
+	// The new code is put in place either way, so turning it on later runs it.
+	const depCode = await runStepWithSpinner(
+		'Redeploying the MCP server…',
+		'bash',
+		[deployScript, installDir, mcpDest, mcpUser],
+		{ quietOnSuccess: true, warningsOnSuccess: false, name: 'deploy-mcp.sh' }
+	);
+	if (depCode !== 0 && o.stopped !== undefined) await settleSignals();
+	// Stopped (the deploy got the signal too): the upgrade's last lines name it.
+	if (depCode !== 0 && o.stopped?.() === true) return true;
+	if (depCode !== 0) {
+		warn(
+			`The MCP server's new code could not be put in place (deploy-mcp.sh exit ${depCode}), so ${on ? 'it may keep running the previous release' : 'it has the previous release'}. ` +
+				`On this server: sudo bash ${deployScript} ${installDir} ${mcpDest} ${mcpUser}` +
+				(on ? ' && sudo systemctl restart morphit-mcp' : '')
+		);
+		return !on;
+	}
+	if (!on) {
+		info(
+			'✓ MCP server: this release is in place, and the server stays off as you set it (menu 17 turns it on).'
+		);
+		return true;
+	}
+	const rs = await runStepWithSpinner(
+		wasActive ? 'Restarting the MCP server…' : 'Starting the MCP server…',
+		'systemctl',
+		[wasActive ? 'restart' : 'start', 'morphit-mcp.service'],
+		{ quietOnSuccess: true, warningsOnSuccess: false }
+	);
+	let running = false;
+	if (rs === 0)
+		await withSpinner('Checking the MCP server stays up…', async () => {
+			await new Promise((r) => setTimeout(r, o.settleMs ?? 3_000));
+			running =
+				spawnSync('systemctl', ['is-active', '--quiet', 'morphit-mcp.service'], {
+					timeout: 10_000
+				}).status === 0;
+		});
+	if (!running) {
+		warn(
+			`The MCP server ${rs === 0 ? 'stopped again right after it was started' : 'could not be started'} on this release. ` +
+				'On this server: sudo journalctl -u morphit-mcp -n 50'
+		);
+		return false;
+	}
+	// ─── 10b-reach. Post-restart MCP reachability probe ──
+	// Its CONFIGURED LOCAL bind (/etc/morphit/mcp.env), not the public site:
+	// behind BunkerWeb the bind is often the Docker-bridge gateway (172.18.0.1),
+	// which a loopback-only probe would miss. A miss WARNS (the MCP is isolated,
+	// read-only and non-critical), never rolls back.
+	const { host: mcpHost, port: mcpPort } = resolveMcpHttpBind(mcpEnvFile());
+	return await checkMcpAnswers(mcpHost, mcpPort);
+}
+
+/** A timer as systemd has it now: running, and when it fires next. */
+function readTimer(unit: string): { readonly active: boolean; readonly next: string | null } {
+	const active =
+		spawnSync('systemctl', ['is-active', '--quiet', unit], { timeout: 10_000 }).status === 0;
+	const r = spawnSync('systemctl', ['show', '-p', 'NextElapseUSecRealtime', '--value', unit], {
+		encoding: 'utf8',
+		timeout: 10_000
+	});
+	const next = r.status === 0 ? (r.stdout ?? '').trim() : '';
+	return { active, next: next !== '' && next !== 'n/a' ? next : null };
+}
+
+/** Why an upgrade stopped on a signal, in plain words. PURE. */
+export function stoppedWhy(sig: NodeJS.Signals): string {
+	return sig === 'SIGINT'
+		? 'you pressed Ctrl+C'
+		: sig === 'SIGHUP'
+			? 'the connection to this server closed (the terminal or SSH session ended)'
+			: `it was asked to stop (${sig})`;
+}
+
+/** The error a rollback is given when a signal stopped the install. */
+export class UpgradeStopped extends Error {
+	constructor(readonly sig: NodeJS.Signals) {
+		super(stoppedWhy(sig));
+	}
+}
+
+/** A step failed; `log` is where THAT step's full output is kept (or null).
+ *  A rollback names only this log (v1.21.18 audit, M3: it named whatever
+ *  step had failed last, a non-fatal one included). */
+export class StepFailed extends Error {
+	constructor(
+		message: string,
+		readonly log: string | null
+	) {
+		super(message);
+	}
+}
+
+/** The error for a step that just failed, carrying its own kept output. */
+function stepFailed(message: string): StepFailed {
+	return new StepFailed(message, lastFailedStepLog);
+}
+
+/** The exit code of an upgrade a signal stopped: 128 + the signal's number,
+ *  as a shell reports it (Ctrl+C 130, a closed session 129, SIGTERM 143).
+ *  PURE. */
+export function signalExitCode(sig: NodeJS.Signals): number {
+	return sig === 'SIGINT' ? 130 : sig === 'SIGHUP' ? 129 : sig === 'SIGTERM' ? 143 : 130;
+}
+
+/** Is this how a stop reaches a child (the terminal's Ctrl+C, a closed
+ *  session, a SIGTERM)? A step's own time limit kills with SIGKILL. PURE. */
+export function isStopSignal(
+	sig: string | null | undefined
+): sig is 'SIGINT' | 'SIGHUP' | 'SIGTERM' {
+	return sig === 'SIGINT' || sig === 'SIGHUP' || sig === 'SIGTERM';
+}
+
+/** Let a signal that arrived while a blocking spawnSync held the event loop
+ *  reach its handler: Node runs signal handlers only on a turn of the event
+ *  loop (v1.21.18 audit, H1: right after the self-heal child, the guard still
+ *  said "no signal", and the heals then ran again in this process). */
+export async function settleSignals(): Promise<void> {
+	await new Promise((r) => setImmediate(r));
+	await new Promise((r) => setImmediate(r));
+}
+
+/**
+ * From the moment /opt/morphit is moved aside until the services run the new
+ * release, the install is half-way: Node's default on Ctrl+C or a closed SSH
+ * session (SIGINT / SIGHUP) is to exit at once, which left /opt/morphit EMPTY
+ * with no rollback and no message (v1.21.17 audit). While this guard is up
+ * those signals (and SIGTERM) are only noted: the step that runs finishes or
+ * fails (its own child got the signal too), and the upgrade then puts the
+ * previous install back and says why. A closed terminal makes writes fail;
+ * that must not end the process either. As fastSync.ts's restore does.
+ * Exported for its test.
+ */
+export function guardInstallWindow(out: NodeJS.WriteStream = process.stdout): {
+	readonly signal: () => NodeJS.Signals | null;
+	/** A step's child was ended by this signal: a stop, though this process
+	 *  may not have been sent it (only the child was). */
+	readonly note: (sig: NodeJS.Signals) => void;
+	/** The install is whole (every service runs the new release): a signal
+	 *  from now on skips what is left instead of putting anything back. */
+	readonly finishing: (tag: string) => void;
+	readonly release: () => void;
+} {
+	let got: NodeJS.Signals | null = null;
+	let doneTag: string | null = null;
+	const quiet = (): void => undefined;
+	const stop = (sig: NodeJS.Signals): void => {
+		if (got !== null) return;
+		got = sig;
+		if (sig === 'SIGHUP') {
+			process.stdout.on('error', quiet);
+			process.stderr.on('error', quiet);
+		}
+		try {
+			out.write(
+				doneTag === null
+					? `\nStopping — ${stoppedWhy(sig)}. The new release is half installed, so the previous one is being put back; please wait, this takes a moment.\n`
+					: `\nStopping — ${stoppedWhy(sig)}. The upgrade itself is done (every service runs ${doneTag}), so nothing is undone; the steps still left are skipped.\n`
+			);
+		} catch {
+			/* no terminal any more */
+		}
+	};
+	const handlers = (['SIGINT', 'SIGHUP', 'SIGTERM'] as const).map((sig) => {
+		const h = (): void => stop(sig);
+		process.on(sig, h);
+		return [sig, h] as const;
+	});
+	return {
+		signal: () => got,
+		note: stop,
+		finishing: (tag) => {
+			doneTag = tag;
+		},
+		release: () => {
+			for (const [sig, h] of handlers) process.removeListener(sig, h);
+		}
+	};
+}
+
+/** A stopped or failed install's last lines also go to a file: after a closed
+ *  SSH session nobody saw them. Its path, or null. */
+function keepStoppedNote(lines: readonly string[]): string | null {
+	try {
+		const dir = stepLogDir();
+		mkdirSync(dir, { recursive: true, mode: 0o750 });
+		const f = join(dir, `upgrade-stopped-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+		writeFileSync(f, `${lines.join('\n')}\n`, { mode: 0o600, flag: 'wx' });
+		return f;
+	} catch {
+		return null;
+	}
+}
+
 export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const upgradeStartedMs = Date.now();
 	// The Tor bridges check alone (lib/torBridgesHeal.ts): what
@@ -2311,6 +2723,29 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// below take the questions and warning counts a running upgrade keeps for
 	// its last lines: the timer may fire during one.
 	if (opts.flags['tor-bridges'] === 'true') return runTorBridgesCheck();
+	// Everything below except a check changes files only root may change. A run
+	// without sudo used to verify and download the release and then fail with
+	// "EACCES … rename" (or, with --heals, print ten confusing warnings and
+	// exit 0): say so first, and change nothing (v1.21.17 audit, M3).
+	{
+		const uid = opts.uid ?? process.getuid?.();
+		const looksOnly = opts.flags['check-only'] === 'true' || opts.flags['json'] === 'true';
+		if (!looksOnly && uid !== undefined && uid !== 0) {
+			const cmd =
+				opts.flags['heals'] === 'true'
+					? HEALS_COMMAND
+					: opts.flags['questions'] === 'true'
+						? QUESTIONS_COMMAND
+						: 'sudo morphit-ops upgrade';
+			printError(
+				`This needs the root account (it changes ${process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR} and system settings), so nothing was done. Run it with sudo: ${cmd}`
+			);
+			info(
+				'  (To only see whether a newer release exists, without sudo: morphit-ops upgrade --check-only)'
+			);
+			return 1;
+		}
+	}
 	// What an earlier run (or an older upgrader's heal phase) may have left for
 	// its last lines is not this upgrade's: start clean.
 	takeUpgradeQuestions();
@@ -2453,7 +2888,16 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			);
 			return 5;
 		}
-		if (hiddenCheckTag !== null && !checkOnly && localInfo !== null && !allowDowngrade) {
+		// `--json` only reports (it may run without sudo): never the heals and
+		// never a download here; the JSON document below says up to date or not
+		// (v1.21.18 audit: it ran the heals and printed no JSON).
+		if (
+			hiddenCheckTag !== null &&
+			!checkOnly &&
+			!jsonOutput &&
+			localInfo !== null &&
+			!allowDowngrade
+		) {
 			if (!isNewerRelease(hiddenCheckTag, localInfo.tag)) {
 				info(`Current version: ${sanitizeForTerm(localInfo.tag)}`);
 				info(`On-chain release: ${sanitizeForTerm(hiddenCheckTag)}`);
@@ -2466,7 +2910,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}
 		}
 	}
-	if (offline === null && hiddenCheckTag !== null && !checkOnly) {
+	if (offline === null && hiddenCheckTag !== null && !checkOnly && !jsonOutput) {
 		// Over Tor/I2P this takes minutes and reports each step: the spinner
 		// turns between the progress lines (taken off the line for each one),
 		// says what it is doing right now, and counts the time.
@@ -2684,9 +3128,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				// wait each on a network that drops connections (review 2026-10-08).
 				if (checkOnly) break;
 			} catch (err) {
-				fetchErrors.push(
-					`${src.host}/${src.repo}: ${err instanceof Error ? err.message : String(err)}`
-				);
+				fetchErrors.push(`${src.host}: ${netFailureWords(err)}`);
 			}
 		}
 		latest = primaryRelease ?? releasesBySource[0]?.rel ?? null;
@@ -2779,17 +3221,23 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				latest = synthOfflineRelease(dropped.tag, dropped.tarballPath, dropped.sigPath);
 				info(`No network — falling back to the local offline release: ${dropped.tarballPath}`);
 			} else {
-				printError(
-					`Could not reach any release source, and no offline release tarball was found in ` +
-						`${offlineReleaseDir(installDir)} (drop a morphit-<ver>-offline.tar.gz there, with its .asc if it has one, ` +
-						`or use --from-file=PATH).\n  ` +
-						fetchErrors.join('\n  ') +
-						(onchainSeen !== null &&
-						(localInfo === null || isNewerRelease(onchainSeen, localInfo.tag))
-							? `\n  @morphit's on-chain release record names ${sanitizeForTerm(onchainSeen)}, but it could not be fetched ` +
-								`from ${host}, its mirrors or the other Morphit instances. Nothing was changed. Run the upgrade again later.`
-							: '')
-				);
+				const named =
+					onchainSeen !== null && (localInfo === null || isNewerRelease(onchainSeen, localInfo.tag))
+						? sanitizeForTerm(onchainSeen)
+						: null;
+				const lines = nothingFetchedLines({
+					what:
+						named !== null
+							? `@morphit's on-chain release record names ${named}, but no place that publishes it could be reached, so nothing was downloaded. What was tried:`
+							: 'Could not reach any place that publishes Morphit releases, so nothing was downloaded. What was tried:',
+					tried: fetchErrors,
+					current: localInfo !== null ? sanitizeForTerm(localInfo.tag) : 'what it ran before',
+					host,
+					offlineDir: offlineReleaseDir(installDir),
+					tag: named
+				});
+				// One block (the reasons included), as before: callers read it whole.
+				printError(lines.join('\n').replace(/^✗ /, ''));
 				return 5;
 			}
 		} else if (primaryRelease === null) {
@@ -2906,15 +3354,37 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 
 	// ─── 4. Confirmation prompt ─────────────────────────────────
 	if (!forceYes) {
+		// What it may also do to the web firewall, said before the question
+		// (L5): only where BunkerWeb runs.
+		let bunkerweb = false;
+		{
+			const stop = startDotsSpinner('Looking for the web firewall (BunkerWeb)…');
+			try {
+				bunkerweb = findBunkerWebStack(join(installDir, 'apps', 'web', 'build')).stack !== null;
+			} catch {
+				bunkerweb = false;
+			} finally {
+				stop();
+			}
+		}
 		const ok = await promptYes(
 			// rl.question() is not sanitized, so a tag
 			// carrying terminal escapes could repaint this question.
 			`Apply ${downgrading ? 'DOWNGRADE' : 'upgrade'} from ${sanitizeForTerm(currentTag)} to ${sanitizeForTerm(latestTag)}?\n` +
-				`This will: back up ${installDir}, install the new release, check that the site serves it, and restart the services.\n` +
-				`Set MORPHIT_AUTO_UPGRADE=1 to skip this prompt in future runs.`
+				`This will: back up ${installDir}, install the new release, check that the site serves it, and restart the services` +
+				(bunkerweb
+					? `; and on the web firewall (BunkerWeb) it may change settings, recreate its containers, and ask Let's Encrypt to add the www address to the certificate.\n`
+					: '.\n') +
+				'(To upgrade without this question, e.g. from a script: sudo morphit-ops upgrade --yes)'
 		);
 		if (!ok) {
-			info('Upgrade declined.');
+			if (lastPromptStoppedByCtrlC) {
+				info('Stopped — you pressed Ctrl+C. Nothing was changed.');
+				return 130;
+			}
+			info(
+				`Not upgraded; nothing was changed. This server still runs ${sanitizeForTerm(currentTag)}.`
+			);
 			return 2;
 		}
 	}
@@ -2966,9 +3436,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					);
 					primaryHash = parseShaFile(primaryShaPath);
 				} catch (err) {
-					warn(
-						`Could not fetch the SHA-256 from the primary: ${err instanceof Error ? err.message : String(err)}`
-					);
+					warn(`Could not fetch the release's SHA-256 from ${host}: ${netFailureWords(err)}`);
 				}
 			}
 		}
@@ -3000,13 +3468,19 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				}
 				break;
 			} catch (err) {
-				dlErrors.push(`${src.host}: ${err instanceof Error ? err.message : String(err)}`);
+				dlErrors.push(`${src.host}: ${netFailureWords(err)}`);
 			}
 		}
 		if (bytesSource === null) {
-			printError(
-				`Could not download the release tarball from any source.\n  ${dlErrors.join('\n  ')}`
-			);
+			const lines = nothingFetchedLines({
+				what: `${latestTag} is listed, but its download did not complete from any place that publishes it, so nothing was installed. What was tried:`,
+				tried: dlErrors,
+				current: sanitizeForTerm(currentTag),
+				host,
+				offlineDir: offlineReleaseDir(installDir),
+				tag: latestTag
+			});
+			printError(lines.join('\n').replace(/^✗ /, ''));
 			cleanupTmp(tmpDir);
 			return 5;
 		}
@@ -3043,11 +3517,18 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				);
 	let anchor: ReleaseAnchor | null = (hiddenResolution ?? hiddenFallback)?.anchor ?? null;
 	if (anchor === null) {
+		// v1.21.18: on a hidden-only node the indexer relays each read over
+		// Tor/I2P, where one 1000-entry page of @morphit's history never arrived
+		// (morphitlat, v1.21.16): a read there gets the time a page over Tor/I2P
+		// needs, the history is read in small pages, and the block this node's
+		// indexer names for the op is checked first — one small read. Clearnet
+		// keeps its pages (one or two seconds each), and also gets the hint.
 		const viaIndexer: CondenserRead =
 			opts.trust?.chainRead ??
 			((method, params) =>
 				chainRead(method, params, {
 					hiddenOnly: () => nodeHiddenOnly,
+					hiddenReadTimeoutMs: RECORD_READ_TIMEOUT_HIDDEN_MS,
 					...(opts.localIndexerBases !== undefined ? { indexerBases: opts.localIndexerBases } : {})
 				}));
 		// One answer without the record proves nothing: the indexer relays the read
@@ -3066,7 +3547,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			tag: latestTag,
 			signer: MORPHIT_RELEASE_ACCOUNT,
 			pinnedPubkey: opts.trust?.postingPubkey ?? MORPHIT_OFFICIAL_POSTING_PUBKEY,
-			chainId: BLURT_MAINNET_CHAIN_ID
+			chainId: BLURT_MAINNET_CHAIN_ID,
+			...(nodeHiddenOnly
+				? { pageSize: RECORD_PAGE_SIZE_HIDDEN, maxPages: RECORD_MAX_PAGES_HIDDEN }
+				: {}),
+			hint: await withSpinner(
+				"Asking this node's indexer where @morphit's release record is…",
+				() => readReleaseRecordHint(localIndexer, latestTag)
+			)
 		};
 		const clockOpts = {
 			...(opts.anchorWait?.now !== undefined ? { now: opts.anchorWait.now } : {}),
@@ -3145,10 +3633,53 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// files changed outside the install dir from here
 	// on (refreshed units, self-heal edits), for rollback() to put back.
 	const restoreOnRollback: RollbackRestore[] = [];
+	// From here until the services run the new release, a signal does not end
+	// the process half-way: the previous install is put back (H2).
+	const guard = guardInstallWindow();
+	lastFailedStepLog = null;
+	const undo = async (
+		err: unknown,
+		web?: Parameters<typeof rollback>[4],
+		restore: readonly RollbackRestore[] = [],
+		/** Said first when it was a failure, not a stop (v1.21.18 audit, L4:
+		 *  "Extract failed" was printed for a Ctrl+C, before this wait). */
+		failedLine?: string
+	): Promise<number> => {
+		// The signal also reaches the step's own child (tar, npm …), and its exit
+		// can be seen before this process has run its own signal handler: give
+		// that handler a moment, so a closed SSH session is not reported as
+		// "tar exited 1" (seen under load in the battery, 2026-10-29).
+		if (guard.signal() === null && err !== null) await new Promise((r) => setTimeout(r, 250));
+		const sig = guard.signal();
+		if (sig === null && failedLine !== undefined) warn(failedLine);
+		try {
+			const code = await rollback(
+				installDir,
+				backupDir,
+				tmpDir,
+				sig !== null ? new UpgradeStopped(sig) : err,
+				web,
+				restore
+			);
+			// Stopped and put back: the signal's own exit code (Ctrl+C 130);
+			// a rollback that needs a hand (4) says so whatever stopped it.
+			return sig !== null && code === 3 ? signalExitCode(sig) : code;
+		} finally {
+			guard.release();
+		}
+	};
+	/** A signal came during the step that just ended: put the previous install
+	 *  back. Waits a turn first, so a signal that arrived while a blocking
+	 *  child ran is seen (H1). */
+	const stoppedHere = async (web?: Parameters<typeof rollback>[4]): Promise<number | null> => {
+		await settleSignals();
+		return guard.signal() !== null ? undo(null, web, restoreOnRollback) : null;
+	};
 	info(`Backing up ${installDir} → ${backupDir}`);
 	try {
 		renameSync(installDir, backupDir);
 	} catch (err) {
+		guard.release();
 		printError(
 			`Backup failed (could not rename ${installDir} → ${backupDir}): ` +
 				(err instanceof Error ? err.message : String(err))
@@ -3218,10 +3749,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			],
 			{ quietOnSuccess: true, warningsOnSuccess: false, name: 'tar -xzf' }
 		);
-		if (tarCode !== 0) throw new Error(`tar -xzf ${tarballPath} exited ${tarCode}`);
+		if (tarCode !== 0) throw stepFailed(`tar -xzf ${tarballPath} exited ${tarCode}`);
 	} catch (err) {
-		warn(`Extract failed; rolling back to ${backupDir}.`);
-		return rollback(installDir, backupDir, tmpDir, err);
+		return undo(err, undefined, [], `Extract failed; rolling back to ${backupDir}.`);
+	}
+	{
+		const st = await stoppedHere();
+		if (st !== null) return st;
 	}
 
 	// ─── 8a. The tarball must BE the release we chose ──────────────
@@ -3236,12 +3770,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				`The downloaded tarball is ${extracted === null ? 'not a Morphit release' : `release ${sanitizeForTerm(extracted.tag)}`}, ` +
 					`not ${latestTag}; putting the previous install back.`
 			);
-			return rollback(
-				installDir,
-				backupDir,
-				tmpDir,
-				new Error(`tarball does not contain ${latestTag}`)
-			);
+			return undo(new Error(`tarball does not contain ${latestTag}`));
 		}
 	}
 
@@ -3305,7 +3834,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	} catch (err) {
 		warn('Failed to carry config/keys forward; rolling back.');
-		return rollback(installDir, backupDir, tmpDir, err);
+		return undo(err);
+	}
+	{
+		const st = await stoppedHere();
+		if (st !== null) return st;
 	}
 
 	// detect whether this upgrade crossed an indexer schema.sql
@@ -3388,7 +3921,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				info
 			});
 			if (!outcome.ok) {
-				throw new Error(
+				throw stepFailed(
 					`${outcome.reason}. To finish privately, bring the offline bundle to this box ` +
 						`(morphit-${latestTag}-offline.tar.gz, from any mirror, on a USB stick if need be) and run on this box: ` +
 						`sudo morphit-ops upgrade --from-file=/path/to/morphit-${latestTag}-offline.tar.gz ` +
@@ -3401,8 +3934,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 		await ensureMatrixBotNatives(installDir, nodeHiddenOnly);
 	} catch (err) {
-		warn('Installing dependencies did not complete; rolling back.');
-		return rollback(installDir, backupDir, tmpDir, err);
+		return undo(err, undefined, [], 'Installing dependencies did not complete; rolling back.');
+	}
+	{
+		const st = await stoppedHere();
+		if (st !== null) return st;
 	}
 
 	// ─── 9b. Rebuild the static web frontend (ALWAYS) ───
@@ -3464,9 +4000,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// and trips the tamper banner). Only rebuild if the prebuilt is absent — an
 		// older tarball, or a source checkout — so nothing regresses.
 		const shippedBuild = join(installDir, 'apps', 'web', 'build', 'index.html');
-		if (existsSync(shippedBuild)) {
-			info('Using the prebuilt web frontend shipped in the release (no rebuild).');
-		} else {
+		// The release's own prebuilt frontend is the normal case: nothing to say.
+		if (!existsSync(shippedBuild)) {
 			info('No prebuilt frontend in this release — building the web frontend (apps/web)...');
 			const buildCode = await runStepWithSpinner(
 				'Building the web frontend — this can take a few minutes…',
@@ -3474,14 +4009,17 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				['run', 'build'],
 				{ cwd: join(installDir, 'apps', 'web'), env: localBuildEnv, quietOnSuccess: true }
 			);
-			if (buildCode !== 0) throw new Error(`npm run build exited ${buildCode}`);
+			if (buildCode !== 0) throw stepFailed(`npm run build exited ${buildCode}`);
 		}
 	} catch (err) {
 		// Nothing served has been touched yet (the build writes to
 		// apps/web/build inside the install), so a build failure rolls back
 		// cleanly.
-		warn('Frontend build failed; rolling back.');
-		return rollback(installDir, backupDir, tmpDir, err);
+		return undo(err, undefined, [], 'Frontend build failed; rolling back.');
+	}
+	{
+		const st = await stoppedHere();
+		if (st !== null) return st;
 	}
 
 	// ─── 9b1. Restore served-dir ownership + auto-restore the canary ──
@@ -3654,6 +4192,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 
+	{
+		const st = await stoppedHere();
+		if (st !== null) return st;
+	}
+
 	// ─── 9c. Publish the freshly-built frontend ────────────────
 	//
 	// Decide how to publish from two signals:
@@ -3692,9 +4235,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// comes from the runtime indexer config and is unaffected either way.
 	try {
 		const opTag = readOperatorTagFromConfig();
-		if (opTag && patchVerifyJsonOperatorTag(buildDir, opTag)) {
-			info(`Stamped operator_tag "${sanitizeForTerm(opTag)}" into verify.json.`);
-		}
+		// Routine (every upgrade, every box): nothing to say (L1).
+		if (opTag) patchVerifyJsonOperatorTag(buildDir, opTag);
 	} catch {
 		/* non-fatal — verify.json's operator_tag is informational */
 	}
@@ -3719,8 +4261,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			{ info, warn, spinner: (l) => startDotsSpinner(l) },
 			{ installDir, buildDir, origin: o, webRoot: null }
 		);
+		// Its detail says what changed or what is wrong; "already" says nothing
+		// (it printed "Instance origin: … — already.", L1).
 		if (r.detail !== '') (r.verified ? info : warn)(sanitizeForTerm(r.detail));
-		if (r.strategy !== 'no-map') info(`Instance origin: ${r.origin} (${o.why}) — ${r.strategy}.`);
 	} catch (err) {
 		warn(
 			`Your instance origin could not be applied (${sanitizeForTerm(err instanceof Error ? err.message : String(err))}); ` +
@@ -3777,14 +4320,19 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}
 			info(`\u2713 Web frontend redeployed to ${webRoot}.`);
 		} catch (err) {
-			warn('Frontend redeploy failed; rolling back.');
-			return rollback(installDir, backupDir, tmpDir, err, { webRoot, webRootBackup });
+			return undo(err, { webRoot, webRootBackup }, [], 'Frontend redeploy failed; rolling back.');
 		}
 	}
 	if (plan.restartContainer) {
 		// Best-effort: the backend already upgraded and the build is fresh, so
 		// a docker hiccup must NOT roll the whole upgrade back.
-		await restartFrontendContainer(plan.restartContainer, installDir);
+		await restartFrontendContainer(plan.restartContainer, installDir, {
+			stopped: () => guard.signal() !== null
+		});
+		// A stop during the rebuild ends here: the previous install goes back
+		// (v1.21.18 audit, M2: the fallback build, a restart and the checks ran on).
+		const st = await stoppedHere({ webRoot, webRootBackup, container: plan.restartContainer });
+		if (st !== null) return st;
 	}
 	if (plan.warn) {
 		warn(plan.warn);
@@ -3799,6 +4347,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// never fails the upgrade.
 	// For the last word: true only when the served frontend was seen to be this build.
 	const frontendVerified = await verifyServedFrontend(plan, buildDir, webRoot);
+	{
+		const st = await stoppedHere({ webRoot, webRootBackup, container: plan.restartContainer });
+		if (st !== null) return st;
+	}
 
 	// ─── 9d-bis. Offer a warrant canary when the footer link would 404 (v1.17.1) ──
 	//
@@ -3901,20 +4453,36 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 						MORPHIT_CANARY_OPERATOR_EMAIL: email
 					}
 				});
-				if (res.status === 0) {
+				// A Ctrl+C at its questions reached it and this process: the stop
+				// is handled below, nothing more is said about the canary (H1).
+				await settleSignals();
+				const setupErr = res.error as NodeJS.ErrnoException | undefined;
+				if (isStopSignal(res.signal) && setupErr?.code !== 'ETIMEDOUT') guard.note(res.signal);
+				if (guard.signal() !== null) {
+					/* stopped: the rollback below says what happens */
+				} else if (res.status === 0) {
 					info('\u2713 Warrant canary set up and scheduled — the footer link now resolves.');
 				} else {
 					warn(`Canary setup didn't finish; you can run it anytime: sudo bash ${setupScript}`);
 				}
 			} else {
-				info(
-					`No problem — skipping the canary. Set it up anytime with: ` +
-						`sudo bash ${join(installDir, 'scripts', 'canary', 'setup.sh')}`
-				);
+				// Ctrl+C (or a closed session) at the question is a stop, not a
+				// "no": nothing more is said here (v1.21.18 audit, L3).
+				await settleSignals();
+				if (!lastPromptStoppedByCtrlC && guard.signal() === null)
+					info(
+						`No problem — skipping the canary. Set it up anytime with: ` +
+							`sudo bash ${join(installDir, 'scripts', 'canary', 'setup.sh')}`
+					);
 			}
 		}
 	} catch {
 		// best-effort — the canary offer must NEVER fail or hang the upgrade
+	}
+
+	{
+		const st = await stoppedHere({ webRoot, webRootBackup, container: plan.restartContainer });
+		if (st !== null) return st;
 	}
 
 	// ─── 9e. Refresh systemd unit files from the new templates ──
@@ -4066,9 +4634,29 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			// (pid 0: it could not be started at all.)
 			healChildRan = typeof r.pid === 'number' && r.pid > 0;
 			selfHealReexeced = r.status === 0;
+			// The child was stopped by Ctrl+C or a closed session (not by its own
+			// time limit, which also ends it with SIGTERM): that is a stop, even
+			// when this process was not sent the signal itself.
+			const childErr = r.error as NodeJS.ErrnoException | undefined;
+			if (isStopSignal(r.signal) && childErr?.code !== 'ETIMEDOUT') guard.note(r.signal);
 		}
 	} catch {
 		/* fall back to in-process below */
+	}
+	// A signal that came while spawnSync blocked reaches its handler only on a
+	// turn of the event loop: wait for it before deciding (v1.21.18 audit, H1:
+	// the heals then ran AGAIN in this process before the stop was seen).
+	await settleSignals();
+	if (guard.signal() !== null) {
+		// Stopped while the heal phase ran (it got the signal too): its edits
+		// are put back with the rest, never run again in-process.
+		restoreOnRollback.push(...selfHealRestoreList(healSnapshot, installDir));
+		restoreOnRollback.push(...selfHealRestoreList(helperSnapshot, installDir));
+		return undo(
+			null,
+			{ webRoot, webRootBackup, container: plan.restartContainer },
+			restoreOnRollback
+		);
 	}
 	if (!selfHealReexeced) {
 		// Run here instead: its open questions still go to this upgrade's last
@@ -4082,17 +4670,92 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// Every service restarted here was seen to stay up on the new version (else
 	// the upgrade rolls back); one that was down before and still is, an MCP or
 	// Matrix bot that did not come back, or no service restarted at all, clears it.
-	const restartsDone = await restartServicesOnNewVersion();
+	// The units and helpers refreshed above (step 9e/9f): a stop before the
+	// restarts puts them back too.
+	{
+		const st = await stoppedHere({ webRoot, webRootBackup, container: plan.restartContainer });
+		if (st !== null) return st;
+	}
+	// A stop is looked for before each service and while each is watched
+	// (v1.21.18 audit, M1: it was not, so the next service was restarted too,
+	// and the upgrade then went on for up to an hour of optional steps).
+	const restartsDone = await restartServicesOnNewVersion(SERVICES_TO_RESTART, {
+		stopped: () => guard.signal() !== null
+	});
 	if ('rollback' in restartsDone)
-		return rollback(
-			installDir,
-			backupDir,
-			tmpDir,
+		return undo(
 			restartsDone.rollback,
 			{ webRoot, webRootBackup, container: plan.restartContainer },
 			restoreOnRollback
 		);
+	// A stop that came while the last service was watched: its message said
+	// the previous install is put back, so it is.
+	{
+		const st = await stoppedHere({ webRoot, webRootBackup, container: plan.restartContainer });
+		if (st !== null) return st;
+	}
+	// Every service runs the new release (each was seen to stay up): the
+	// install is whole. A signal from now on undoes nothing; the steps still
+	// left are skipped, each named with how to do it (finishStop below).
+	guard.finishing(latestTag);
 	let servicesVerified = restartsDone.verified;
+	const systemdDir = process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system';
+	const matrixUnitPath = join(systemdDir, MATRIX_BOT_UNIT);
+	/** Stopped after the install was whole: say what is done and what was
+	 *  skipped or cut short — `from` (the step that ran last, which the
+	 *  signal may have ended) on — and end with the signal's exit code. */
+	const finishStop = async (from: FinishStep): Promise<number | null> => {
+		await settleSignals();
+		const sig = guard.signal();
+		if (sig === null) return null;
+		let ipfsUp = false;
+		{
+			const stopSpin = startDotsSpinner('Checking whether this server hosts IPFS…');
+			try {
+				ipfsUp =
+					spawnSync(
+						'sh',
+						['-c', 'command -v ipfs >/dev/null 2>&1 && systemctl is-active --quiet ipfs'],
+						{ stdio: 'ignore', timeout: 8000 }
+					).status === 0;
+			} finally {
+				stopSpin();
+			}
+		}
+		const lines = stoppedAfterInstallLines({
+			why: stoppedWhy(sig),
+			tag: latestTag,
+			from,
+			installDir,
+			backupDir,
+			mcp: existsSync(join(systemdDir, 'morphit-mcp.service'))
+				? {
+						deployScript: join(installDir, 'ops', 'scripts', 'deploy-mcp.sh'),
+						dest: process.env.MORPHIT_MCP_DEPLOY_DIR ?? '/opt/morphit-mcp',
+						user: process.env.MORPHIT_MCP_DEPLOY_USER ?? 'morphit-mcp'
+					}
+				: null,
+			matrix: existsSync(matrixUnitPath),
+			gateway: existsSync(join(installDir, 'ops', 'ipfs', 'morphit-gateway-firewall-heal.sh')),
+			ipfs: ipfsUp
+				? {
+						mirrorScript: existsSync(join(installDir, 'ops', 'snapshot-mirror.sh'))
+							? join(installDir, 'ops', 'snapshot-mirror.sh')
+							: null
+					}
+				: null
+		});
+		const note = keepStoppedNote(lines);
+		for (const l of lines) info(l);
+		if (note !== null) info(`  (These lines are also kept on this server: sudo cat ${note})`);
+		cleanupTmp(tmpDir);
+		guard.release();
+		return signalExitCode(sig);
+	};
+	{
+		const st = await finishStop('mcp');
+		if (st !== null) return st;
+	}
 
 	// ─── 10b. Redeploy + restart the MCP (its own isolated tree) ──
 	// The MCP runs from a SELF-CONTAINED tree at /opt/morphit-mcp, separate
@@ -4105,67 +4768,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// the unit being installed, so boxes without the MCP are untouched.  The
 	// MCP is isolated, read-only, and non-critical, so a failure here WARNS
 	// rather than rolling back the whole upgrade — morphit.io is unaffected.
-	const mcpUnitPath = join(
-		process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system',
-		'morphit-mcp.service'
-	);
-	if (existsSync(mcpUnitPath)) {
-		const mcpDest = process.env.MORPHIT_MCP_DEPLOY_DIR ?? '/opt/morphit-mcp';
-		const mcpUser = process.env.MORPHIT_MCP_DEPLOY_USER ?? 'morphit-mcp';
-		const deployScript = join(installDir, 'ops', 'scripts', 'deploy-mcp.sh');
-		const mcpWasActive =
-			spawnSync('systemctl', ['is-active', '--quiet', 'morphit-mcp.service']).status === 0;
-		const depCode = await runStepWithSpinner('Redeploying the MCP server…', 'bash', [
-			deployScript,
-			installDir,
-			mcpDest,
-			mcpUser
-		]);
-		const dep = { status: depCode };
-		if (dep.status !== 0) {
-			servicesVerified = false;
-			warn(
-				`MCP redeploy failed (deploy-mcp.sh exit ${dep.status ?? 'signal'}); morphit-mcp ` +
-					`may keep running stale code. Re-run \`sudo bash ${deployScript} ${installDir} ` +
-					`${mcpDest} ${mcpUser}\` then \`sudo systemctl restart morphit-mcp\`.`
-			);
-		} else {
-			const rs = {
-				status: await runStepWithSpinner(
-					'Restarting the MCP server…',
-					'systemctl',
-					['restart', 'morphit-mcp.service'],
-					{ quietOnSuccess: true, warningsOnSuccess: false }
-				)
-			};
-			if (rs.status !== 0) {
-				servicesVerified = false;
-				warn(
-					`morphit-mcp restart failed (exit ${rs.status ?? 'signal'}); the new code is ` +
-						`deployed. Start it with \`sudo systemctl restart morphit-mcp\` and check ` +
-						`\`journalctl -u morphit-mcp\`.`
-				);
-			} else {
-				if (!mcpWasActive) {
-					info('Started morphit-mcp (it was not previously active).');
-				}
-				// ─── 10b-reach. Post-restart MCP reachability probe ──
-				// Confirm the freshly-restarted MCP actually bound its HTTP
-				// listener. Probe the CONFIGURED LOCAL bind (read from
-				// /etc/morphit/mcp.env), NOT the public site — on a BunkerWeb
-				// deployment the WAF/reverse-proxy fronts the service at /mcp,
-				// so the direct bind is the clean liveness signal, and the bind
-				// host is often the Docker-bridge gateway (172.18.0.1), which a
-				// loopback-only probe would miss. Best-effort + NON-FATAL: the
-				// MCP is isolated + read-only + non-critical, so a miss WARNS
-				// (with the exact place to look) rather than rolling back an
-				// otherwise-good upgrade.
-				const { host: mcpHost, port: mcpPort } = resolveMcpHttpBind(mcpEnvFile());
-				if (!(await checkMcpAnswers(mcpHost, mcpPort))) servicesVerified = false;
-			}
-		}
-	}
+	if (!(await redeployMcpOnUpgrade(installDir, { stopped: () => guard.signal() !== null })))
+		servicesVerified = false;
 	// (No MCP unit on this server: nothing to redeploy, nothing to say.)
+	{
+		const st = await finishStop('mcp');
+		if (st !== null) return st;
+	}
 
 	// ─── 10c. Sync the matrix-bot to the configured alert username ──
 	// The matrix-bot is opt-in: it only runs when a valid alert MXID is
@@ -4177,11 +4786,11 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// no manual step.  Gated on the unit being installed; the bot is
 	// isolated and non-critical, so a failure WARNs rather than rolling
 	// back the whole upgrade (morphit.io is unaffected).
-	const matrixUnitPath = join(
-		process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system',
-		MATRIX_BOT_UNIT
-	);
 	if (existsSync(matrixUnitPath) && !(await syncMatrixBotOnUpgrade())) servicesVerified = false;
+	{
+		const st = await finishStop('matrix');
+		if (st !== null) return st;
+	}
 
 	// ─── 10d. Confirm the chat fast-path (sub-6s delivery) state ──
 	// Safeguard: a process still running with its cwd inside the OLD install
@@ -4226,6 +4835,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 
+	{
+		const st = await finishStop('sweep');
+		if (st !== null) return st;
+	}
 	// ─── 10e. Keep the DB backup Docker-aware (v1.8.4 B) ──
 	// If the operator's Postgres is containerized but their backup.env still
 	// points a host pg_dump at it (DB_CONTAINER empty), the daily backup
@@ -4237,6 +4850,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	//         the seed can reuse the tarball we already downloaded) ──
 	pruneOldBackups(installDir);
 
+	{
+		const st = await finishStop('prune');
+		if (st !== null) return st;
+	}
 	// ─── 11b. Heal the frontend → IPFS-gateway path BEFORE seeding ──
 	// v1.17.2 codified the "allow the bunkerweb network to reach the IPFS
 	// gateway" firewall rule in the Ansible bunkerweb role — but morphit.io is a
@@ -4263,6 +4880,16 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		/* never fail an upgrade over the firewall self-heal */
 	}
 
+	{
+		const st = await finishStop('gateway');
+		if (st !== null) return st;
+	}
+	// A seed a stop ended is named in the upgrade's last lines, not as a failure.
+	const reportSeedUnlessStopped = async (code: number): Promise<void> => {
+		if (code !== 0) await settleSignals();
+		if (code !== 0 && guard.signal() !== null) return;
+		reportSeedResult(latestTag, code);
+	};
 	// ─── 12. Self-seed this release to IPFS (become an origin host) ──
 	// v1.9.3: if this box runs IPFS release hosting (Kubo installed + the ipfs
 	// service active — the opt-in `morphit-ops harden` → "Set up IPFS release
@@ -4433,8 +5060,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				} catch {
 					/* couldn't relax perms — the seed's download mode has no clearnet here, so it'll no-op */
 				}
-				reportSeedResult(
-					latestTag,
+				await reportSeedUnlessStopped(
 					await runStepWithSpinner(
 						`Seeding ${latestTag} to IPFS\u2026`,
 						'sudo',
@@ -4472,8 +5098,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					/* couldn't relax perms — let the seed download mode handle it */
 				}
 			}
-			reportSeedResult(
-				latestTag,
+			await reportSeedUnlessStopped(
 				await runStepWithSpinner(
 					`Seeding ${latestTag} to IPFS\u2026`,
 					'sudo',
@@ -4486,6 +5111,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		/* best-effort; never fail an upgrade over IPFS seeding */
 	}
 
+	{
+		const st = await finishStop('seed');
+		if (st !== null) return st;
+	}
 	// ─── 12b. Refresh this box's federation-snapshot mirror ──────────
 	// Fast-sync gets a new node from an empty database to a live orderbook in
 	// minutes instead of days. It needs one small (~600 kB) artifact: the indexer
@@ -4521,51 +5150,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			// instance that matters most. Idempotent: re-copying an identical unit
 			// and re-enabling an already-enabled timer are both no-ops.
 			try {
-				// Install the PUBLISH units too. Only the canonical box should ever
-				// publish, so they stay inert until enabled — but they have to be
-				// PRESENT to be enableable, and morphit.io is a manual install Ansible
-				// never touches. Without this, even a first hand-made publish would
-				// never get a recurring timer, and the snapshot would go stale again.
-				const units = [
-					'morphit-snapshot-mirror.service',
-					'morphit-snapshot-mirror.timer',
-					'morphit-snapshot-publish.service',
-					'morphit-snapshot-publish.timer'
-				];
-				let installed = 0;
-				for (const u of units) {
-					const src = join(installDir, 'ops', 'systemd', u);
-					if (!existsSync(src)) continue;
-					const dest = join('/etc/systemd/system', u);
-					const incoming = readFileSync(src, 'utf8');
-					if (existsSync(dest) && readFileSync(dest, 'utf8') === incoming) continue;
-					writeFileSync(dest, incoming);
-					installed++;
-				}
-				if (installed > 0) {
-					await runSpinning('Reloading systemd…', 'systemctl', ['daemon-reload'], {
-						timeoutMs: 60_000
-					});
-				}
-				await runSpinning(
-					'Turning on the snapshot mirror timer…',
-					'systemctl',
-					['enable', '--now', 'morphit-snapshot-mirror.timer'],
-					{ timeoutMs: 60_000 }
-				);
-				// Enable publishing ONLY where the operator has opted in by dropping the
-				// env file. Explicit and reversible: exactly one instance in the
-				// federation should publish, and an upgrade must never make a box start
-				// signing snapshots under its own account by surprise.
-				if (existsSync('/etc/morphit/snapshot-publish.env')) {
-					await runSpinning(
-						'Turning on the snapshot publish timer…',
-						'systemctl',
-						['enable', '--now', 'morphit-snapshot-publish.timer'],
-						{ timeoutMs: 60_000 }
-					);
-					info('  This box is configured as the federation snapshot publisher (timer armed).');
-				}
+				await armSnapshotTimers(installDir);
 			} catch {
 				/* the timer is a convenience; the mirror below still runs this upgrade */
 			}
@@ -4580,6 +5165,10 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	} catch {
 		/* best-effort; never fail an upgrade over snapshot mirroring */
+	}
+	{
+		const st = await finishStop('mirror');
+		if (st !== null) return st;
 	}
 
 	// ─── 13. Cleanup — remove the download scratch (incl. the ~13 MB
@@ -4606,8 +5195,84 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	);
 
 	cleanupTmp(tmpDir);
+	guard.release();
 
 	return 0;
+}
+
+/** What is left once the install is whole, in order (finishStop). */
+const FINISH_STEPS = ['mcp', 'matrix', 'sweep', 'prune', 'gateway', 'seed', 'mirror'] as const;
+type FinishStep = (typeof FINISH_STEPS)[number];
+
+/** PURE. The last lines of an upgrade stopped AFTER every service runs the
+ *  new release (v1.21.18 audit, M1): what is done, then each step skipped or
+ *  cut short from `from` on — the ones that apply on this server — with how
+ *  it gets done. Exported for its test. */
+export function stoppedAfterInstallLines(o: {
+	readonly why: string;
+	readonly tag: string;
+	readonly from: FinishStep;
+	readonly installDir: string;
+	readonly backupDir: string;
+	readonly mcp: {
+		readonly deployScript: string;
+		readonly dest: string;
+		readonly user: string;
+	} | null;
+	readonly matrix: boolean;
+	readonly gateway: boolean;
+	/** This server hosts IPFS (the seed and the mirror run here). */
+	readonly ipfs: { readonly mirrorScript: string | null } | null;
+}): string[] {
+	const bar = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+	const tag = sanitizeForTerm(o.tag);
+	const from = FINISH_STEPS.indexOf(o.from);
+	const left = (s: FinishStep): boolean => FINISH_STEPS.indexOf(s) >= from;
+	const skipped: string[] = [];
+	if (left('mcp') && o.mcp !== null)
+		skipped.push(
+			`the MCP server's update to ${tag} (it keeps the previous release's code until then); on this server: sudo bash ${o.mcp.deployScript} ${o.installDir} ${o.mcp.dest} ${o.mcp.user} && sudo systemctl try-restart morphit-mcp`
+		);
+	if (left('matrix') && o.matrix)
+		skipped.push(
+			`the Matrix alert bot's restart on ${tag}; on this server: sudo systemctl try-restart morphit-matrix-bot`
+		);
+	if (left('sweep'))
+		skipped.push(
+			`stopping programs still running from the previous install's folder, if any; to see them, on this server: sudo ls -l /proc/*/cwd 2>/dev/null | grep ${o.backupDir}`
+		);
+	if (left('prune'))
+		skipped.push(
+			'the check that the database backup reaches the database, and removing older copies of the install (the next upgrade does both)'
+		);
+	if (left('gateway') && o.gateway)
+		skipped.push(
+			"the check that the website reaches this server's IPFS gateway (the next upgrade does it)"
+		);
+	if (left('seed') && o.ipfs !== null)
+		skipped.push(
+			`seeding ${tag} to IPFS from this server (the next upgrade seeds the release it installs)`
+		);
+	if (left('mirror') && o.ipfs !== null)
+		skipped.push(
+			o.ipfs.mirrorScript !== null
+				? `refreshing the federation-snapshot mirror (its weekly timer does it); to do it now, on this server: sudo bash ${o.ipfs.mirrorScript}`
+				: 'refreshing the federation-snapshot mirror (its weekly timer does it)'
+		);
+	const out = [
+		'',
+		bar,
+		`  ✓ Upgraded — this server runs ${tag} (stopped before the last steps)`,
+		bar,
+		'',
+		`  Stopped: ${o.why}. Every service had restarted on ${tag} (checked), so nothing was undone.`,
+		`  The previous install is kept at ${o.backupDir}.`
+	];
+	if (skipped.length > 0) {
+		out.push('  Not done (or cut short) because it was stopped:');
+		for (const l of skipped) out.push(`    • ${l}`);
+	}
+	return out;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -4966,6 +5631,8 @@ export function webHealForSummary(
 	// during it.
 	const at = Date.parse(s.finishedAt ?? s.startedAt);
 	if (!Number.isFinite(at) || at < startedMs - 5_000) return { running: false, outcome: null };
+	// The heal phase showed how it ended (its warnings are counted above).
+	if (s.shown === true) return { running: false, outcome: null };
 	if (s.state === 'running')
 		return {
 			running: false,
@@ -5212,7 +5879,17 @@ export async function runTorBridgesCheck(
 
 /** `upgrade --heals`: this release's heals again, then the checks that need
  *  the services running it (they already are), all in this process. */
-async function runHealsAgain(o: { upToDate?: boolean; installDir?: string } = {}): Promise<number> {
+export async function runHealsAgain(
+	o: {
+		upToDate?: boolean;
+		installDir?: string;
+		/** Tests: the heal steps and the after-restart steps. */
+		steps?: () => Array<[string, () => unknown]>;
+		afterSteps?: () => Array<[string, () => Promise<void>]>;
+		/** Tests: is the background web heal (morphit-web-heal) still at work? */
+		webHealRunning?: () => boolean;
+	} = {}
+): Promise<number> {
 	if (o.upToDate && process.getuid?.() !== 0) {
 		info("Run it with sudo to also check this release's repairs on this server.");
 		return 0;
@@ -5230,9 +5907,32 @@ async function runHealsAgain(o: { upToDate?: boolean; installDir?: string } = {}
 			? "Checking this release's repairs on this server (nothing is downloaded or installed)…"
 			: 'Running the heals of this release again (nothing is downloaded or installed)…'
 	);
-	await runHealSteps(selfHealSteps().filter(([n]) => n !== 'the after-restart heals'));
-	await runAfterRestartHeals(0);
-	return 0;
+	const before = warningCount();
+	await runHealSteps((o.steps ?? selfHealSteps)().filter(([n]) => n !== 'the after-restart heals'));
+	// Nothing restarts here: the services already run this release (L7).
+	await runAfterRestartHeals(0, {
+		servicesRestarted: false,
+		...(o.afterSteps !== undefined ? { steps: o.afterSteps } : {})
+	});
+	// The last word, counted (v1.21.17 audit, L7: it ended exit 0 with no count).
+	const n = warningCount() - before;
+	// Not "every repair is in place" while the web firewall's check still runs
+	// in the background (v1.21.18 audit, M6).
+	const bgRunning = (o.webHealRunning ?? (() => unitIsActive(WEB_HEAL_UNIT)))();
+	const still =
+		"the web firewall's check, still running in the background (on this server: sudo morphit-ops status)";
+	info(
+		n === 0
+			? bgRunning
+				? `Done, except ${still}.`
+				: '✓ Done: every repair of this release is in place on this server; nothing else to do.'
+			: `Done, with ${n === 1 ? 'one warning' : `${n} warnings`} above (the lines marked ⚠ or [WARN]): each says what to do and where.` +
+					(bgRunning ? ` Not finished yet: ${still}.` : '')
+	);
+	// `upgrade --heals` exits 1 when a repair warned (a script can tell). A plain
+	// `upgrade` on an up-to-date box exits 0, as docs/UPGRADING.md says: the
+	// warnings above say what to do (v1.21.18 audit, M6).
+	return n === 0 || o.upToDate === true ? 0 : 1;
 }
 
 /** The self-heal steps, in order (exported so the ORDER and each step's effect
@@ -5802,9 +6502,23 @@ export async function runAfterRestartHeals(
 		readonly waitRestarts?: typeof waitForRestarts;
 		readonly waitAnswers?: (services: readonly string[]) => Promise<string[]>;
 		readonly steps?: () => Array<[string, () => Promise<void>]>;
+		/** false (`upgrade --heals`): nothing was restarted, so nothing is
+		 *  waited for — the checks run against what runs now. */
+		readonly servicesRestarted?: boolean;
 	} = {}
 ): Promise<void> {
 	const services = ['morphit-indexer.service', 'morphit-relay.service'];
+	if (deps.servicesRestarted === false) {
+		for (const [name, step] of (deps.steps ?? afterRestartHealSteps)()) {
+			try {
+				await step();
+			} catch (e) {
+				warn(`${name} failed: ${e instanceof Error ? e.message : String(e)}`);
+			}
+		}
+		printRoutineSummary();
+		return;
+	}
 	info(`Waiting for ${services.join(' and ')} to restart on the new version…`);
 	const w = await (deps.waitRestarts ?? waitForRestarts)(sinceUs, services);
 	if (w === 'timed-out')
@@ -6028,6 +6742,7 @@ export async function runWebProxyHealsNow(opts: { readonly background: boolean }
 	if (opts.background) writeWebHealState({ state: 'running', startedAt });
 	let result = 'error';
 	let detail: string | undefined;
+	let except: string | undefined;
 	try {
 		await healBunkerWebWaf(undefined, installBuildDir(), {
 			reloadBudgetMs: opts.background ? 10 * 60_000 : 60_000
@@ -6056,7 +6771,7 @@ export async function runWebProxyHealsNow(opts: { readonly background: boolean }
 		// Finished before the run that hosts it ends: the background unit's time
 		// limit, or the self-heal child's (a few minutes: never enough to recreate
 		// BunkerWeb, so there the heal only says what it finds).
-		await healBunkerWebWwwNow(installBuildDir(), {
+		const www = await healBunkerWebWwwNow(installBuildDir(), {
 			background: opts.background,
 			deadline: wwwHealDeadline({
 				background: opts.background,
@@ -6065,6 +6780,8 @@ export async function runWebProxyHealsNow(opts: { readonly background: boolean }
 				uptimeS: process.uptime()
 			})
 		});
+		// Its own warning says what; the outcome must not claim it is in place.
+		if (www !== null && !www.verified) except = 'the www address';
 	} catch (err) {
 		detail = err instanceof Error ? err.message : String(err);
 		throw err;
@@ -6075,19 +6792,31 @@ export async function runWebProxyHealsNow(opts: { readonly background: boolean }
 			finishedAt: new Date().toISOString(),
 			result,
 			...(detail !== undefined ? { detail } : {}),
-			...(warningCount() > warningsBefore ? { warnings: warningCount() - warningsBefore } : {})
+			...(except !== undefined ? { except } : {}),
+			...(warningCount() > warningsBefore ? { warnings: warningCount() - warningsBefore } : {}),
+			// Run here: its warnings and its end are shown here, not again at
+			// the end of the upgrade.
+			...(!opts.background ? { shown: true } : {})
 		});
 	}
 	// Run here (not in the background unit): say how it ended, as the
-	// background path does at the end of the heals.
-	if (!opts.background)
-		reportWebProxyOutcome({
-			state: 'done',
-			startedAt,
-			finishedAt: new Date().toISOString(),
-			result,
-			...(detail !== undefined ? { detail } : {})
-		});
+	// background path does at the end of the heals. Its warnings were printed
+	// right here (each counted once).
+	if (!opts.background) {
+		const n = warningCount() - warningsBefore;
+		reportWebProxyOutcome(
+			{
+				state: 'done',
+				startedAt,
+				finishedAt: new Date().toISOString(),
+				result,
+				...(detail !== undefined ? { detail } : {}),
+				...(except !== undefined ? { except } : {}),
+				...(n > 0 ? { warnings: n } : {})
+			},
+			n
+		);
+	}
 }
 
 /** Post-upgrade step: on a BunkerWeb box start the heals in the background;
@@ -6120,8 +6849,8 @@ export async function startWebProxyHeals(
 			webHealLaunchedAt = Number.isFinite(since) ? Math.min(since, at) : at;
 			info(
 				r === 'launched'
-					? "BunkerWeb's settings are checked in the background (a change takes BunkerWeb minutes to apply); anything they change is shown at the end of this upgrade."
-					: "BunkerWeb's settings are already being checked in the background; anything they change is shown at the end of this upgrade."
+					? "BunkerWeb's settings are checked in the background (a change takes BunkerWeb minutes to apply); how that ends is shown further down, or in this upgrade's last lines if it takes longer."
+					: "BunkerWeb's settings are already being checked in the background; how that ends is shown further down, or in this upgrade's last lines if it takes longer."
 			);
 			return;
 		}
@@ -6136,9 +6865,17 @@ export async function showWebProxyResult(): Promise<void> {
 	if (webHealLaunchedAt === null) return;
 	// Finish before the child's kill (it started process.uptime() s ago).
 	const until = Date.now() - process.uptime() * 1000 + SELF_HEAL_CHILD_TIMEOUT_MS - 25_000;
+	// Every warning the background run printed is relayed here as a warning
+	// of its own (counted once); the outcome line then adds only what they did
+	// not already say (v1.21.17: one www problem was shown three times and
+	// counted twice).
+	let relayed = 0;
 	const s = await followWebHeal(until, webHealLaunchedAt, {
 		info,
-		warn,
+		warn: (m) => {
+			relayed++;
+			warn(m);
+		},
 		spinner: (l) => startDotsSpinner(l)
 	});
 	if (s === null) {
@@ -6148,7 +6885,9 @@ export async function showWebProxyResult(): Promise<void> {
 		info(`${WEB_HEAL_STILL_RUNNING} See how it ended, on this server: sudo morphit-ops status`);
 		return;
 	}
-	reportWebProxyOutcome(s);
+	reportWebProxyOutcome(s, relayed);
+	// Shown here: the upgrade's last lines do not repeat it.
+	if (relayed >= (s.warnings ?? 0)) writeWebHealState({ ...s, shown: true });
 }
 
 /** The background web heal (morphit-web-heal) is still at work: true whether
@@ -6160,19 +6899,32 @@ const WEB_HEAL_STILL_RUNNING =
 /** One web-heal outcome for the operator: nothing (counted) when nothing
  *  changed and nothing was warned about, ✓ when applied, a warning for
  *  anything else. Exported for its test. */
-export function reportWebProxyOutcome(s: WebHealState): void {
-	if ((s.result === 'already' || s.result === 'no-proxy') && (s.warnings ?? 0) === 0) {
+export function reportWebProxyOutcome(s: WebHealState, relayed = 0): void {
+	const n = s.warnings ?? 0;
+	const ok = s.result === 'already' || s.result === 'no-proxy' || s.result === 'applied';
+	if ((s.result === 'already' || s.result === 'no-proxy') && n === 0 && !s.except) {
 		routineCheck();
 		return;
 	}
-	const line = `Web-proxy settings: ${describeWebHeal(s, Date.now())}.`;
+	// Its warnings were already shown above, each counted once.
+	const allShown = n > 0 && relayed >= n;
+	if (ok && allShown) {
+		// They said what is wrong; the settings themselves are in place. A
+		// change it made is still news.
+		if (s.result === 'applied')
+			info(
+				`✓ Web-proxy settings: applied and checked; the warning above is about ${s.except ?? 'one of its checks'}.`
+			);
+		return;
+	}
+	const line = `Web-proxy settings: ${describeWebHeal({ ...s, ...(allShown ? { warnings: 0 } : {}) }, Date.now())}.`;
 	// Only an applied change is good news; anything else —
 	// rolled back, failed, left alone, no time — needs the operator. So does
-	// a run that printed warnings: the line names them and their log (they
-	// are relayed above only when its log could be read).
-	const warned = (s.warnings ?? 0) > 0;
-	if (s.result === 'applied' && !warned) info(`✓ ${line}`);
-	else if (s.result === 'unchecked' && !warned) info(line);
+	// a run whose warnings could not be relayed (its log could not be read):
+	// the line names them and their log. One whose warnings were relayed is
+	// the conclusion of what they said, not another warning.
+	if (s.result === 'applied' && n === 0 && !s.except) info(`✓ ${line}`);
+	else if ((s.result === 'unchecked' && n === 0) || allShown) info(line);
 	else warn(line);
 }
 
@@ -7079,7 +7831,7 @@ export function wwwHealDeadline(o: {
 export async function healBunkerWebWwwNow(
 	buildDir = installBuildDir(),
 	opts: { readonly deadline?: number; readonly background?: boolean } = {}
-): Promise<void> {
+): Promise<HealResult | null> {
 	let stack: BunkerWebStack | null = null;
 	try {
 		stack = findBunkerWebStack(buildDir).stack;
@@ -7106,7 +7858,9 @@ export async function healBunkerWebWwwNow(
 					),
 					envFile: () => ({ path: null, note: null })
 				};
-	await reportHeal(healBunkerWebWww({ info, warn, spinner: (l) => startDotsSpinner(l) }, rt));
+	const r = healBunkerWebWww({ info, warn, spinner: (l) => startDotsSpinner(l) }, rt);
+	await reportHeal(r);
+	return r.catch(() => null);
 }
 
 /** The box as the www heal sees it. Exported for its test
@@ -7140,6 +7894,21 @@ export function realWwwRuntime(
 	// Every connection to this server, with the name (Host, SNI) kept. A proxy
 	// in the environment would make curl ask somewhere else.
 	const curlBase = ['--noproxy', '*', '--connect-to', '::127.0.0.1:', '--max-time', '15'];
+	// The scheduler's reason when the last apply was refused.
+	let refusal: string | null = null;
+	/** WWW_DB_PY inside the scheduler; its JSON answer, or null. */
+	const wwwDb = (env: Record<string, string>): Record<string, unknown> | null => {
+		if (sched === null) return null;
+		const args = ['exec', '-i'];
+		for (const [k, v] of Object.entries(env)) args.push('-e', `${k}=${v}`);
+		const r = sh('docker', [...args, sched, 'python3', '-c', WWW_DB_PY], 30_000);
+		if (!r.ok) return null;
+		try {
+			return JSON.parse(r.out.trim()) as Record<string, unknown>;
+		} catch {
+			return null;
+		}
+	};
 	const readText = (p: string): string | null => {
 		try {
 			return readFileSync(p, 'utf8');
@@ -7243,6 +8012,7 @@ export function realWwwRuntime(
 			} finally {
 				spin.stop();
 			}
+			refusal = c.kind === 'refused' ? c.reason : null;
 			return c.kind === 'loaded' ? 'loaded' : c.kind === 'refused' ? 'refused' : 'pending';
 		},
 		writeSchedulerConf: (name, conf) => {
@@ -7319,9 +8089,45 @@ export function realWwwRuntime(
 			if (!svc || svc.envFiles === null) return null;
 			return {
 				readsFile: envPath !== null && svc.envFiles.includes(envPath),
-				overrides: [...svc.environment.keys()]
+				overrides: [...svc.environment.keys()],
+				values: svc.environment
 			};
-		}
+		},
+		nginxConfig: () => {
+			if (!stack.edge.name) return null;
+			const stop = startDotsSpinner('Reading the nginx config BunkerWeb really runs…');
+			let r: ReturnType<typeof sh>;
+			try {
+				r = sh('docker', ['exec', stack.edge.name, 'sh', '-c', 'nginx -T 2>/dev/null'], 20_000);
+			} finally {
+				stop();
+			}
+			return r.ok && /\bserver\s*\{/.test(r.out) ? r.out : null;
+		},
+		siteList: () => {
+			const j = wwwDb({ MODE: 'list' });
+			if (j === null || !['sqlite', 'other', 'missing'].includes(String(j.db))) return null;
+			const ids = Array.isArray(j.ids)
+				? j.ids.filter((x): x is string => typeof x === 'string')
+				: [];
+			return { db: j.db as SiteList['db'], ids };
+		},
+		addSiteNames: (add, first) => {
+			const j = wwwDb({ MODE: 'add', ADD: add.join(' '), FIRST: first });
+			return j !== null && j.added === add.length && typeof j.backup === 'string'
+				? { backup: j.backup }
+				: null;
+		},
+		removeRuleCopy: () => {
+			const j = wwwDb({ MODE: 'unrule', NAME: WWW_RULE_FILE });
+			return j !== null && (Number(j.rows) > 0 || Number(j.moved) > 0);
+		},
+		lastRefusal: () => refusal,
+		recreateCommand: () =>
+			ref !== null
+				? `sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services])}`
+				: null,
+		containerNames: () => ({ edge: stack.edge.name, scheduler: sched })
 	};
 }
 
@@ -7368,6 +8174,35 @@ export async function healBunkerWebWaf(
 	bwEnv = '/etc/bunkerweb/bunkerweb.env',
 	buildDir = runningInstallBuildDir(),
 	opts: { readonly reloadBudgetMs?: number } = {}
+): Promise<void> {
+	wafPassed = [];
+	try {
+		await healBunkerWebWafSteps(bwEnv, buildDir, opts);
+	} finally {
+		// What was checked live and passed, in one plain line (v1.21.17 audit,
+		// L1); each check's own detail is a "  · " line, kept in the background
+		// heal's log, not relayed into the upgrade's output.
+		if (wafPassed.length > 0)
+			info(`✓ Web firewall (BunkerWeb), checked on this server: ${wafPassed.join(', ')}.`);
+		wafPassed = [];
+	}
+}
+
+/** The live WAF checks that passed in this run (see healBunkerWebWaf). */
+let wafPassed: string[] = [];
+
+/** A live WAF check passed: a few words for the ✓ line, and its detail as a
+ *  "  · " line — printed where it is read in full (the background heal's
+ *  log, a direct run), not inside an upgrade, whose summary line says it. */
+function wafOk(short: string, detail: string): void {
+	wafPassed.push(short);
+	if (process.env.MORPHIT_UPGRADE_SUMMARIZES !== '1') info(`  · ${detail}`);
+}
+
+async function healBunkerWebWafSteps(
+	bwEnv: string,
+	buildDir: string,
+	opts: { readonly reloadBudgetMs?: number }
 ): Promise<void> {
 	let found: ReturnType<typeof findBunkerWebStack>;
 	try {
@@ -7727,9 +8562,13 @@ export async function healBunkerWebWaf(
 	try {
 		const stopProbe = site ? startDotsSpinner('Checking the WAF lets the API through…') : () => {};
 		let api: string;
+		let relay: string;
 		let home: string;
 		try {
 			api = liveProbe('/v1/health');
+			// The relay's own path too: the exemption covers /relay/ as well, and
+			// only what was asked is claimed (v1.21.17 audit, L2).
+			relay = liveProbe('/relay/v1/health');
 			home = liveProbe('/');
 		} finally {
 			stopProbe();
@@ -7747,8 +8586,14 @@ export async function healBunkerWebWaf(
 			}
 		} else if (home === '403' && /^[0-9]{3}$/.test(api) && api !== '000') {
 			const n = sched !== null ? listRuleCopies(sched) : null;
-			info(
-				`WAF: /v1/ + /relay/ exemption verified live (a request ModSecurity blocks elsewhere reaches the API: ${api})${n !== null ? `; stored ${copyCount(n)} time(s)` : ''}.`
+			const relayOk = /^[0-9]{3}$/.test(relay) && relay !== '000' && relay !== '403';
+			if (relay === '403')
+				warn(
+					`WAF: ModSecurity lets the API (/v1/) through on ${site} but blocks the relay (/relay/: a request it blocks elsewhere was answered 403), so sign-ups and broadcasts through this site may fail. On this server: sudo docker exec ${bw} nginx -T | grep -n 1990001`
+				);
+			wafOk(
+				relayOk ? 'the API and the relay get through' : 'the API gets through',
+				`WAF: ${relayOk ? '/v1/ + /relay/' : '/v1/'} exemption verified live (a request ModSecurity blocks elsewhere reaches the API: ${api}${relayOk ? `, the relay: ${relay}` : ''}${!relayOk && relay !== '403' ? `; the relay could not be checked: ${relay || 'no answer'}` : ''})${n !== null ? `; stored ${copyCount(n)} time(s)` : ''}.`
 			);
 		}
 		// Anything else (no answer, ModSecurity off): nothing to conclude, say nothing.
@@ -7830,16 +8675,20 @@ export async function healBunkerWebWaf(
 			}
 			const verdict = classifyBroadcastProbe(code);
 			// Only a fitting broadcast is good news; the rest needs the operator.
-			(verdict === 'fits' ? info : warn)(
-				verdict === 'too-large'
-					? `WAF: broadcast body limit STILL 413 after escalation — capture \`docker exec ${bw} nginx -T 2>/dev/null | grep client_max_body_size\` and send it.`
-					: verdict === 'fits'
-						? `WAF: broadcast body limit OK (a ~50 KB POST returned ${code}, not 413) — avatar/order uploads fit.`
+			if (verdict === 'fits')
+				wafOk(
+					'uploads fit',
+					`WAF: broadcast body limit OK (a ~50 KB POST returned ${code}, not 413) — avatar/order uploads fit.`
+				);
+			else
+				warn(
+					verdict === 'too-large'
+						? `WAF: broadcast body limit STILL 413 after escalation — capture \`docker exec ${bw} nginx -T 2>/dev/null | grep client_max_body_size\` and send it.`
 						: // 000 / empty / 5xx: we could NOT reach the edge to check (e.g.
 							// morphitir, whose clearnet is filtered upstream). Never claim OK for
 							// an unverified condition (review B9).
 							`WAF: the broadcast body-limit check got no answer from this server (curl ${code || 'no response'}); the WAF settings were applied. To check again later, on this server: ${HEALS_COMMAND}`
-			);
+				);
 		}
 	} catch {
 		/* best-effort — never fail the upgrade over a probe */
@@ -7873,7 +8722,10 @@ export async function healBunkerWebWaf(
 				if (c !== null) live = liveTrustsXff();
 			}
 			if (live === false)
-				info("WAF: real-IP verified live — BunkerWeb uses each visitor's own address.");
+				wafOk(
+					'visitors keep their own address',
+					"WAF: real-IP verified live — BunkerWeb uses each visitor's own address."
+				);
 			// It asks the operator to act: a warning (counted for the last word).
 			else if (live === true)
 				warn(
@@ -7935,7 +8787,8 @@ export async function healBunkerWebWaf(
 				if (c !== null) live = await repeated();
 			}
 			if (live === 'free')
-				info(
+				wafOk(
+					'a page can be fetched three times in a second',
 					'WAF: request limit verified live — the home page fetched three times in a second got no 429.'
 				);
 			// No answer from this server's own edge: never reported as checked
@@ -8024,7 +8877,8 @@ export async function healBunkerWebWaf(
 				if (c !== null) live = await probe();
 			}
 			if (live === 'passes')
-				info(
+				wafOk(
+					"the site's own error answers reach the browser",
 					"WAF: error answers verified live — a missing chat key came back as the indexer's own answer, with its reason."
 				);
 			else if (live === null)
@@ -8298,6 +9152,44 @@ async function fetchReleaseJson(
 		clearTimeout(timer);
 		closeQuietly(agent);
 	}
+}
+
+/** PURE. Why a request to a release source failed, in plain words: the
+ *  usual network causes by name (fetch's own "fetch failed" says nothing),
+ *  the error's message otherwise. */
+export function netFailureWords(err: unknown): string {
+	const e = err as { name?: string; message?: string; cause?: { code?: string; message?: string } };
+	const code = e?.cause?.code ?? '';
+	if (e?.name === 'AbortError' || /TIMEOUT|ETIMEDOUT/.test(code)) return 'did not answer in time';
+	if (code === 'ECONNREFUSED') return 'refused the connection';
+	if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'its name could not be looked up (DNS)';
+	if (code === 'ECONNRESET' || code === 'UND_ERR_SOCKET') return 'dropped the connection';
+	if (code === 'ENETUNREACH' || code === 'EHOSTUNREACH') return 'is not reachable from this server';
+	if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY/.test(code)) return 'its certificate could not be checked';
+	const m = /^HTTP (\d{3})\b/.exec(e?.message ?? '');
+	if (m) return `answered HTTP ${m[1]}`;
+	const msg = e?.message ?? String(err);
+	return msg === 'fetch failed' && e?.cause?.message ? e.cause.message : msg;
+}
+
+/** The plain end of an upgrade that downloaded nothing: what was tried,
+ *  that nothing changed, and the next step. PURE. Exported for its test. */
+export function nothingFetchedLines(o: {
+	readonly what: string;
+	readonly tried: readonly string[];
+	readonly current: string;
+	readonly host: string;
+	readonly offlineDir: string;
+	readonly tag: string | null;
+}): string[] {
+	const bundle = `morphit-${o.tag ?? '<version>'}-offline.tar.gz`;
+	return [
+		`✗ ${o.what}`,
+		...o.tried.map((t) => `    ${t}`),
+		`  Nothing was changed; this server still runs ${o.current}.`,
+		`  Next: once this server can reach ${o.host} again (to check, on this server: curl -sI https://${o.host}), run on this server: sudo morphit-ops upgrade`,
+		`  Without a network: copy ${bundle} and its .asc into ${o.offlineDir}, then on this server: sudo morphit-ops upgrade`
+	];
 }
 
 /** One line for why the Tor/I2P fallback of a clearnet node did not get the
@@ -8594,11 +9486,28 @@ const STABLE_POLLS = 4;
  *  version (the caller undoes the upgrade). A service that was down before
  *  and still cannot start does not undo it. Exported for its test. */
 export async function restartServicesOnNewVersion(
-	services: readonly string[] = SERVICES_TO_RESTART
+	services: readonly string[] = SERVICES_TO_RESTART,
+	o: {
+		/** The upgrade was stopped (Ctrl+C, a closed session): no further
+		 *  service is restarted, and the caller puts the previous install back. */
+		readonly stopped?: () => boolean;
+		/** Tests: the watch window and the pause between looks (ms). */
+		readonly windowMs?: number;
+		readonly pollMs?: number;
+	} = {}
 ): Promise<{ readonly verified: boolean } | { readonly rollback: Error }> {
 	let servicesVerified = true;
 	let restartedAny = false;
+	const stopped = async (): Promise<boolean> => {
+		if (o.stopped === undefined) return false;
+		await settleSignals();
+		return o.stopped();
+	};
+	const stopError = (): Error => new Error('the upgrade was stopped while the services restarted');
 	for (const svc of services) {
+		// Before each service (v1.21.18 audit, M1: the relay was restarted on
+		// the new release after a Ctrl+C during the indexer's).
+		if (await stopped()) return { rollback: stopError() };
 		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
 		if (!isActive) {
 			// v1.20.1: an ENABLED service that is not running is meant to run
@@ -8620,8 +9529,10 @@ export async function restartServicesOnNewVersion(
 				quietOnSuccess: true,
 				warningsOnSuccess: false
 			});
-			if (code !== 0) throw new Error(`systemctl restart ${svc} exited ${code}`);
+			if (code !== 0) throw stepFailed(`systemctl restart ${svc} exited ${code}`);
 		} catch (err) {
+			// A stop that ended the restart is not a service that failed.
+			if (await stopped()) return { rollback: stopError() };
 			// It was down before this upgrade: the upgrade did not break it, so it
 			// does not undo the upgrade — say so and carry on.
 			if (!isActive) {
@@ -8641,7 +9552,12 @@ export async function restartServicesOnNewVersion(
 		// short window; `activating`/a slow first chain read over Tor is NOT a
 		// failure. Only a confirmed `failed`/crash-loop rolls back — so a
 		// half-upgraded box is never left running the new code down.
-		const outcome = await verifyUnitStayedUp(svc, restartsBefore);
+		const outcome = await verifyUnitStayedUp(svc, restartsBefore, {
+			stopped: o.stopped,
+			windowMs: o.windowMs,
+			pollMs: o.pollMs
+		});
+		if (outcome === 'stopped') return { rollback: stopError() };
 		if (outcome === 'down' && !isActive) {
 			warn(
 				`${svc} was not running before this upgrade and did not stay up when started now. See: sudo journalctl -u ${svc} -n 50`
@@ -8655,6 +9571,7 @@ export async function restartServicesOnNewVersion(
 		}
 		restartedAny = true;
 	}
+	if (await stopped()) return { rollback: stopError() };
 	if (!restartedAny) servicesVerified = false;
 	return { verified: servicesVerified };
 }
@@ -8706,12 +9623,22 @@ export function evaluateRestartSamples(
 /** Observe whether a just-restarted unit came up and STAYED up, polling its
  *  running state (not the restart exit code) under a spinner so the pause is
  *  never silent. Returns 'up' or 'down'. */
-async function verifyUnitStayedUp(svc: string, restartsBefore: number): Promise<'up' | 'down'> {
+async function verifyUnitStayedUp(
+	svc: string,
+	restartsBefore: number,
+	o: {
+		readonly stopped?: (() => boolean) | undefined;
+		readonly windowMs?: number | undefined;
+		readonly pollMs?: number | undefined;
+	} = {}
+): Promise<'up' | 'down' | 'stopped'> {
 	const stop = startDotsSpinner(`Checking ${svc} came up on the new version…`);
 	try {
 		const samples: Array<{ activeState: string; restarts: number }> = [];
-		const deadline = Date.now() + RESTART_WINDOW_MS;
+		const deadline = Date.now() + (o.windowMs ?? RESTART_WINDOW_MS);
 		for (;;) {
+			// A stop while it is watched ends the watch (M1).
+			if (o.stopped?.() === true) return 'stopped';
 			const r = spawnSync('systemctl', ['show', '-p', 'ActiveState', '--value', svc], {
 				encoding: 'utf8',
 				timeout: 10_000
@@ -8719,7 +9646,7 @@ async function verifyUnitStayedUp(svc: string, restartsBefore: number): Promise<
 			samples.push({ activeState: (r.stdout ?? '').trim(), restarts: readUnitRestarts(svc) });
 			const verdict = evaluateRestartSamples(restartsBefore, samples, Date.now() >= deadline);
 			if (verdict !== 'wait') return verdict;
-			await new Promise((res) => setTimeout(res, RESTART_POLL_MS));
+			await new Promise((res) => setTimeout(res, o.pollMs ?? RESTART_POLL_MS));
 		}
 	} finally {
 		stop();
@@ -8735,10 +9662,14 @@ export async function rollback(
 	restore: readonly RollbackRestore[] = [],
 	deps: RollbackDeps = {}
 ): Promise<number> {
-	const restartContainer = deps.restartContainer ?? restartFrontendContainer;
+	const restartContainer =
+		deps.restartContainer ??
+		((name: string, dir: string) => restartFrontendContainer(name, dir, { restoring: true }));
 	const systemctl =
 		deps.systemctl ?? ((args: readonly string[]) => spawnSync('systemctl', [...args]));
-	printError(`Upgrade failed: ${err instanceof Error ? err.message : String(err)}`);
+	const reason = err instanceof Error ? err.message : String(err);
+	if (err instanceof UpgradeStopped) info(`Upgrade stopped: ${reason}.`);
+	else printError(`Upgrade failed: ${reason}`);
 	// What the heal phase left for the upgrade's last word (step 14), which a
 	// rollback never reaches: say it here instead of losing it.
 	{
@@ -8888,8 +9819,63 @@ export async function rollback(
 		}
 	}
 	cleanupTmp(tmpDir);
-	info(`Rolled back to previous install at ${installDir}.`);
+	// The last word: where this server is now, checked, why the upgrade
+	// stopped and where that step's full output is (L8).
+	const running: string[] = [];
+	const down: string[] = [];
+	for (const svc of SERVICES_TO_RESTART) {
+		if (systemctl(['is-enabled', '--quiet', svc]).status !== 0) continue;
+		(systemctl(['is-active', '--quiet', svc]).status === 0 ? running : down).push(svc);
+	}
+	const lines = rollbackConclusion({
+		installDir,
+		tag: readLocalReleaseInfo(installDir)?.tag ?? null,
+		running,
+		down,
+		reason,
+		stopped: err instanceof UpgradeStopped,
+		// Only the log of the step that made the upgrade fail (M3).
+		log: err instanceof StepFailed ? err.log : null
+	});
+	const note = keepStoppedNote(lines);
+	for (const l of lines) info(l);
+	if (note !== null) info(`  (These lines are also kept on this server: sudo cat ${note})`);
 	return 3;
+}
+
+/** PURE. A rolled-back upgrade's last lines. Exported for its test. */
+export function rollbackConclusion(o: {
+	readonly installDir: string;
+	readonly tag: string | null;
+	readonly running: readonly string[];
+	readonly down: readonly string[];
+	readonly reason: string;
+	readonly stopped: boolean;
+	readonly log: string | null;
+}): string[] {
+	const bar = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+	const on = o.tag !== null ? sanitizeForTerm(o.tag) : 'the version it ran before';
+	const out = [
+		'',
+		bar,
+		`  ✗ Not upgraded — this server is back on ${on}`,
+		bar,
+		'',
+		`  The previous install is back in ${o.installDir}` +
+			(o.running.length > 0
+				? `, and ${o.running.join(' and ')} ${o.running.length === 1 ? 'runs' : 'run'} on it (checked).`
+				: '.')
+	];
+	for (const d of o.down)
+		out.push(`  ${d} is not running; on this server: sudo journalctl -u ${d} -n 50`);
+	out.push(
+		`  Why: ${o.stopped ? o.reason : `the upgrade failed (${o.reason})`}.` +
+			(!o.stopped && o.log !== null
+				? ` The step's full output, on this server: sudo cat ${o.log}`
+				: '')
+	);
+	out.push('  To try again later, on this server: sudo morphit-ops upgrade');
+	return out;
 }
 
 /** PIDs whose current working directory is `dir` or a subdirectory of it.
@@ -9116,50 +10102,95 @@ async function askHiddenWaitChoice(): Promise<HiddenWaitChoice> {
  *  arrive at once; a stuck pipe must not wedge an upgrade. */
 const NON_TTY_ANSWER_TIMEOUT_MS = 20_000;
 
+/** The last question was ended by Ctrl+C (at a terminal). */
+let lastPromptStoppedByCtrlC = false;
+
+/** One line from a stdin that is not a terminal (piped answers), or null at
+ *  once when it has ended (/dev/null: cron, the release monitor) or after
+ *  `timeoutMs` (a pipe that never delivers). What follows the line is put
+ *  back for the next question. */
+function readPipedLine(timeoutMs: number): Promise<string | null> {
+	const input = process.stdin;
+	return new Promise((resolveLine) => {
+		let buf = '';
+		let done = false;
+		const finish = (v: string | null): void => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			input.removeListener('data', onData);
+			input.removeListener('end', onEnd);
+			input.removeListener('error', onEnd);
+			input.pause();
+			resolveLine(v);
+		};
+		const onData = (d: Buffer | string): void => {
+			buf += d.toString();
+			const i = buf.indexOf('\n');
+			if (i < 0) return;
+			const rest = buf.slice(i + 1);
+			if (rest !== '') input.unshift(Buffer.from(rest));
+			finish(buf.slice(0, i));
+		};
+		const onEnd = (): void => finish(buf === '' ? null : buf);
+		const timer = setTimeout(() => finish(null), timeoutMs);
+		if (input.readableEnded) {
+			finish(null);
+			return;
+		}
+		input.on('data', onData);
+		input.once('end', onEnd);
+		input.once('error', onEnd);
+		input.resume();
+	});
+}
+
 async function promptYes(message: string): Promise<boolean> {
-	// NEVER block forever, but DO accept piped answers.
-	//
-	// The hazard is not "stdin is not a terminal" — feeding answers through a
-	// pipe is ordinary automation and must keep working. The hazard is stdin that
-	// never delivers: an open pipe, `ssh -T`, or a systemd unit with stdin
-	// attached, where readline waits for input that can never arrive and the
-	// upgrade hangs silently after printing a question nobody sees. (With
-	// /dev/null stdin — plain cron — readline gets EOF and returns, so that case
-	// was already safe.)
-	//
-	// So: a human at a terminal gets unlimited time to answer, while a
-	// non-terminal stdin gets a bounded wait — long enough for piped input, which
-	// arrives at once, and short enough that a stuck pipe cannot wedge an
-	// upgrade. Declining on timeout leaves the box as it was; hanging leaves an
-	// upgrade half-open.
-	// Use Node's readline.  We don't `import readline from 'node:readline/promises'`
-	// at the module top to keep the cost off the --check-only path.
+	lastPromptStoppedByCtrlC = false;
+	// NEVER block forever, but DO accept piped answers: feeding answers
+	// through a pipe is ordinary automation. A stdin that never delivers (an
+	// open pipe, `ssh -T`, a systemd unit with stdin attached) is given up on
+	// after NON_TTY_ANSWER_TIMEOUT_MS; one that has ENDED (/dev/null: cron, a
+	// script) is "no" at once — readline waited the whole 20 s for it (v1.21.17
+	// audit, L4). Declining leaves the box as it was.
+	if (process.stdin.isTTY !== true) {
+		process.stdout.write(`${message}\n[y/N]: `);
+		const line = await readPipedLine(NON_TTY_ANSWER_TIMEOUT_MS);
+		if (line === null) {
+			process.stdout.write('\n');
+			info('(No answer came on stdin, so the answer is no.)');
+			return false;
+		}
+		process.stdout.write('\n');
+		const a = line.trim().toLowerCase();
+		return a === 'y' || a === 'yes';
+	}
+	// At a terminal: Node's readline (not imported at the module top, to keep
+	// the cost off the --check-only path), with unlimited time to answer.
 	const readline = await import('node:readline/promises');
 	const rl = readline.createInterface({
 		input: process.stdin,
 		output: process.stdout
 	});
-	const interactive = process.stdin.isTTY === true;
+	// Ctrl+C at the question means stop, not "no answer on stdin" (L3). While
+	// the install is half-way (the signal guard is up), it is passed on as the
+	// signal it is, so the previous install is put back.
+	// (A closed interface leaves the question pending: it is aborted instead.)
+	const ac = new AbortController();
+	rl.on('SIGINT', () => {
+		lastPromptStoppedByCtrlC = true;
+		process.stdout.write('\n');
+		ac.abort();
+		if (process.listenerCount('SIGINT') > 0) process.emit('SIGINT', 'SIGINT');
+	});
+	rl.on('close', () => ac.abort());
 	let answer = '';
 	try {
-		if (interactive) {
-			answer = (await rl.question(`${message}\n[y/N]: `)).trim().toLowerCase();
-		} else {
-			const ac = new AbortController();
-			const timer = setTimeout(() => ac.abort(), NON_TTY_ANSWER_TIMEOUT_MS);
-			try {
-				answer = (await rl.question(`${message}\n[y/N]: `, { signal: ac.signal }))
-					.trim()
-					.toLowerCase();
-			} finally {
-				clearTimeout(timer);
-			}
-		}
+		answer = (await rl.question(`${message}\n[y/N]: `, { signal: ac.signal })).trim().toLowerCase();
 	} catch {
-		// Aborted (or stdin closed) — decline, and say so, since nobody saw the
-		// question.
+		// Ctrl+C (above) or Ctrl+D: the safe answer.
 		rl.close();
-		info('(no answer on stdin — declining. Set MORPHIT_AUTO_UPGRADE=1 to proceed unattended.)');
+		if (!lastPromptStoppedByCtrlC) info('(No answer, so the answer is no.)');
 		return false;
 	}
 	rl.close();

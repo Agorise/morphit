@@ -271,8 +271,9 @@ check(
 // gated on the unit being installed.
 check('upgrade.ts re-runs deploy-mcp.sh', /deploy-mcp\.sh/.test(upgradeTs));
 check(
-	'upgrade.ts restarts morphit-mcp after redeploy',
-	/\['restart',\s*'morphit-mcp\.service'\]/.test(upgradeTs)
+	'upgrade.ts restarts morphit-mcp after redeploy (only when it is on: v1.21.17 review)',
+	/\[wasActive \? 'restart' : 'start', 'morphit-mcp\.service'\]/.test(upgradeTs) &&
+		/is-enabled', 'morphit-mcp\.service'/.test(upgradeTs)
 );
 check(
 	'upgrade.ts gates the MCP step on the unit being installed',

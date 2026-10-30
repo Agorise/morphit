@@ -45,11 +45,16 @@ let signalsInstalled = false;
  *  handler is attached only while a spinner is up, so Ctrl-C at a prompt
  *  behaves exactly as before. */
 function onSigint(): void {
-	for (const o of drawing.keys()) o.write(RESTORE);
+	const streams = [...drawing.keys()];
+	for (const o of streams) o.write(RESTORE);
 	drawing.clear();
 	process.removeListener('SIGINT', onSigint);
-	// Another part of the program handles Ctrl-C itself: leave the exit to it.
+	// Another part of the program handles Ctrl-C itself: leave the exit (and
+	// what to say) to it.
 	if (process.listenerCount('SIGINT') > 0) return;
+	// The same plain line a Ctrl+C at a question gets (review v1.21.18: here
+	// it exited 130 with nothing said), on the terminal the spinner was on.
+	(streams[0] ?? process.stdout).write('\n  Stopped — you pressed Ctrl+C.\n');
 	process.exit(130);
 }
 function track(out: NodeJS.WriteStream): void {

@@ -26,7 +26,12 @@
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { PrivateKey } from '@beblurt/dblurt';
-import { askHidden, broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+import {
+	askHidden,
+	broadcastCustomJsonOnce,
+	hiddenModeFromArgs,
+	prepareNodes
+} from './lib/signOnceBroadcast.ts';
 import {
 	buildChainSnapshotOp,
 	CHAIN_SNAPSHOT_OP_ID,
@@ -57,7 +62,7 @@ async function main(): Promise<void> {
 	const file = process.argv[2];
 	if (!file || file.startsWith('--'))
 		die(
-			'usage: chain-snapshot-broadcast.ts <payload.json> [--broadcast] [--signer morphit] [--node <url>] [--include-hidden]'
+			'usage: chain-snapshot-broadcast.ts <payload.json> [--broadcast] [--signer morphit] [--node <url>] [--no-hidden | --include-hidden]'
 		);
 	const signer = flag('signer') ?? CHAIN_SNAPSHOT_SIGNER_DEFAULT;
 
@@ -108,12 +113,16 @@ async function main(): Promise<void> {
 		json: op.json
 	};
 	// v1.20.0 (D12): signed ONCE, offered to health-ranked nodes in turn;
-	// --node pins one, --include-hidden adds the hidden nodes (off by default).
+	// --node pins one; otherwise the hidden nodes this machine reaches (Tor /
+	// i2pd) are ranked with the clearnet ones (--no-hidden: clearnet only,
+	// --include-hidden: all of them).
 	const nodeOverride = flag('node') ?? null;
-	const includeHidden = has('include-hidden');
+	const hidden = hiddenModeFromArgs(process.argv.slice(2));
 	let res: Awaited<ReturnType<typeof broadcastCustomJsonOnce>>;
 	try {
-		res = await broadcastCustomJsonOnce(opData, priv, { nodeOverride, includeHidden });
+		res = await broadcastCustomJsonOnce(opData, priv, {
+			nodes: await prepareNodes({ nodeOverride, hidden })
+		});
 	} catch (e) {
 		die(errMsg(e));
 	}

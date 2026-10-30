@@ -1,26 +1,38 @@
 [Unit]
-Description=Morphit federation-snapshot mirror timer — monthly
+Description=Morphit federation-snapshot mirror timer — weekly
 Documentation=https://git.agorise.net/agorise/morphit
-Requires=morphit-snapshot-mirror.service
+# No Requires= on the service: systemd starts every Requires= unit as soon as
+# this timer starts (systemd.unit(5)), so each boot and each `enable --now` /
+# restart of the timer ran the mirror at once, while an upgrade runs its own
+# mirror step. Unit= below is all a timer needs (systemd.timer(5)).
 
 [Timer]
-# WEEKLY, plus once shortly after boot. Upgrades refresh the mirror immediately
-# (morphit-ops upgrade runs the same job), so this timer exists for the box that
-# never upgrades again: without it, a long-running stable node would go on
-# advertising the snapshot it happened to have when it was installed.
+# WEEKLY. Upgrades refresh the mirror immediately (morphit-ops upgrade runs the
+# same job), so this timer exists for the box that never upgrades again:
+# without it, a long-running stable node would go on advertising the snapshot it
+# happened to have when it was installed.
 #
 # Why weekly and not monthly: a mirror must not lag the PUBLISHER. The canonical
-# box anchors a fresh snapshot daily, and a newcomer looks up the newest anchored
+# box exports a fresh snapshot daily, and a newcomer looks up the newest anchored
 # CID — so a mirror that refreshed a month ago is holding a CID nobody is asking
 # for, and is no help to the node in front of it. Weekly keeps mirrors in step at
 # a cost of roughly 600 kB, and the job is a cheap no-op when nothing changed.
 #
-# Anchored to "7 days after the last run" via Persistent=true rather than a fixed
-# weekday, so the whole federation does not wake up and hit the DHT at the same
-# hour. RandomizedDelaySec spreads it further.
-OnBootSec=15min
-OnUnitActiveSec=7d
-RandomizedDelaySec=6h
+# A CALENDAR timer, recorded on disk (Persistent=true): a week missed while the
+# box was off or rebooting runs once at the next start. Until v1.21.17 this was
+# OnBootSec=15min + OnUnitActiveSec=7d with Persistent=true — but systemd honours
+# Persistent= only for OnCalendar= timers (systemd.timer(5)), so nothing on disk
+# recorded its last run, and its next one was counted from whatever started the
+# timer last. On morphit.io it last ran on 25 September and was next due on
+# 5 November (systemctl list-timers, 29 October): over a month without a run.
+#
+# RandomizedDelaySec spreads the whole federation over the week instead of every
+# box hitting the DHT at Monday 00:00; FixedRandomDelay keeps each box's own
+# offset the same from week to week (systemd 247+; older ones ignore the line),
+# so its runs stay a week apart.
+OnCalendar=weekly
+RandomizedDelaySec=6d
+FixedRandomDelay=true
 Persistent=true
 Unit=morphit-snapshot-mirror.service
 

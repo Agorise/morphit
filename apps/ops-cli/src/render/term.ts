@@ -303,10 +303,13 @@ export function row(opts: {
 	// it ("in place, with warnings" ran into its "[WARN]").
 	const labelPad = `${sanitizeForTerm(opts.label)} `.padEnd(labelW);
 	const valuePad = `${sanitizeForTerm(opts.value)} `.padEnd(valueW);
+	// The detail is shown with or without a status glyph: a row without one
+	// (a breakdown, a total) used to drop its detail silently.
+	const detail = opts.detail !== undefined ? fmt.dim(sanitizeForTerm(opts.detail)) : '';
 	const tail =
 		opts.status === undefined
-			? ''
-			: `${glyph(opts.status)}${opts.detail !== undefined ? ' ' + fmt.dim(sanitizeForTerm(opts.detail)) : ''}`;
+			? detail
+			: `${glyph(opts.status)}${detail !== '' ? ' ' + detail : ''}`;
 	process.stdout.write(`  ${labelPad}${valuePad}${tail}\n`);
 }
 

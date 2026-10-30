@@ -46,10 +46,10 @@
 			"check_unconfirmed": "Nicht geprüft: Die neueste signierte Version ließ sich nicht bestätigen (gelesen wurde nur Version {version}, älter als die {running} dieser Seite). Erneute Prüfung innerhalb einer Stunde."
 		},
 		"asset_stance": {
-			"explain": "Morphit ist ein föderierter Marketplace. Jeder Betreiber wählt, für welche handelbaren Assets seine Instanz neue Orders annimmt — die Standardeinstellung ist alles im kanonischen Register, aber ein Betreiber kann jedes reine Trade-Asset (z. B. USDT) deaktivieren, wenn er seine Instanz auf privatsphäre- oder dezentralisierungsfokussierte Assets spezialisieren möchte. Dies ist die aktuelle Haltung DEINER Instanz. Föderations-Hinweis: Orders, die auf anderen Instanzen gepostet werden, erscheinen unabhängig davon in deinem Orderbook — die Sperre gilt nur für neue Orders, die VON HIER gepostet werden.",
+			"explain": "Morphit ist ein föderierter Marketplace. Jeder Betreiber wählt, welche handelbaren Assets seine Instanz anbietet — die Standardeinstellung ist alles im kanonischen Register, aber ein Betreiber kann jedes reine Trade-Asset (z. B. USDT) deaktivieren, wenn er seine Instanz auf privatsphäre- oder dezentralisierungsfokussierte Assets spezialisieren möchte. Dies ist die aktuelle Haltung DEINER Instanz. Föderations-Hinweis: Orders für ein deaktiviertes Asset werden auf dieser Instanz nicht angezeigt, auch solche, die auf anderen Instanzen gepostet wurden. Instanzen, die dieses Asset anbieten, zeigen sie weiterhin an.",
 			"disabled_label": "Deaktivierte Assets",
 			"disabled_none": "Keine — diese Instanz akzeptiert jedes handelbare Asset.",
-			"disabled_suffix": "(vom Betreiber auf dieser Instanz deaktiviert; auf Peer-Instanzen handelbar)",
+			"disabled_suffix": "(auf dieser Instanz deaktiviert: hier nicht angeboten, und seine Orders werden hier nicht angezeigt)",
 			"federation_note": "Möchtest du eine andere Haltung? Durchsuche /operators für eine Instanz, deren Richtlinie deinen Wünschen entspricht, oder betreibe deine eigene — siehe /run-a-node."
 		},
 		"worried": {
@@ -63,12 +63,13 @@
 			"type_warning_body": "Wenn du diese Instanz für bösartig hältst, kannst du auch den Links hier nicht trauen — eine feindliche Instanz kann den Text \"morphit.io\" anzeigen, während die URL woandershin zeigt. Tippe die Adressen per Hand in einen sauberen Tab."
 		},
 		"payment_stance": {
-			"explain": "Jeder Betreiber wählt außerdem, welche Zahlungsmethoden seine Instanz anbietet. Standardmäßig sind alle Methoden aus der kanonischen Registry aktiv; ein Betreiber kann jede davon deaktivieren – am häufigsten Tausch (Waren/Dienstleistungen) –, um seine Instanz rein geldbasiert oder fokussiert zu halten. Dies ist die aktuelle Haltung DEINER Instanz. Föderations-Hinweis: Aufträge von anderen Instanzen, die eine deaktivierte Methode nutzen, erscheinen trotzdem in deinem Orderbuch; die Sperre gilt nur für neue, hier veröffentlichte Aufträge.",
+			"explain": "Jeder Betreiber wählt außerdem, welche Zahlungsmethoden seine Instanz anbietet. Standardmäßig sind alle Methoden aus der kanonischen Registry aktiv; ein Betreiber kann jede davon deaktivieren – am häufigsten Tausch (Waren/Dienstleistungen) –, um seine Instanz rein geldbasiert oder fokussiert zu halten. Dies ist die aktuelle Haltung DEINER Instanz. Föderations-Hinweis: Ein Auftrag, dessen Zahlungsmethoden hier alle deaktiviert sind, wird auf dieser Instanz nicht angezeigt, auch wenn er auf einer anderen Instanz veröffentlicht wurde; ein Auftrag, der noch eine hier angebotene Methode enthält, wird angezeigt. Instanzen, die diese Methoden anbieten, zeigen ihn weiterhin an.",
 			"disabled_label": "Deaktivierte Methoden",
 			"disabled_none": "Keine – diese Instanz bietet alle Zahlungsmethoden an.",
-			"disabled_suffix": "(vom Betreiber auf dieser Instanz deaktiviert; auf Peer-Instanzen nutzbar)"
+			"disabled_suffix": "(auf dieser Instanz deaktiviert: hier nicht angeboten, und Aufträge, die nur deaktivierte Methoden anbieten, werden hier nicht angezeigt)"
 		},
-		"fee_recipient_unregistered": "Das Gebührenkonto dieser Instanz, @{account}, steht noch nicht in der On-Chain-Registrierung ihres Betreibers. Deshalb blenden die anderen Instanzen der Föderation hier in BLURT bezahlte Aufträge aus und stellen ihren Nutzern erste Nachrichten von hier nicht zu. Der Betreiber behebt das, indem er auf dem Server sudo morphit-ops register ausführt."
+		"fee_recipient_unregistered": "Das Gebührenkonto dieser Instanz, @{account}, steht noch nicht in der On-Chain-Registrierung ihres Betreibers. Deshalb blenden die anderen Instanzen der Föderation hier in BLURT bezahlte Aufträge aus und stellen ihren Nutzern erste Nachrichten von hier nicht zu. Der Betreiber behebt das, indem er auf dem Server sudo morphit-ops register ausführt. Ab dem 1. November 2026 gehen die auf dieser Seite bezahlten Gebühren an die Morphit-Treasury, bis das Konto registriert ist.",
+		"fee_recipient_unregistered_to_treasury": "Das Gebührenkonto dieser Instanz steht noch nicht in der On-Chain-Registrierung ihres Betreibers. Deshalb gehen die auf dieser Seite bezahlten Gebühren stattdessen an die Morphit-Treasury (@{treasury}). Der Betreiber behebt das, indem er auf dem Server sudo morphit-ops register ausführt."
 	},
 	"admin": {
 		"setup_wizard": {
@@ -3896,7 +3897,7 @@
 			"title": "Build-Integritätsprüfung fehlgeschlagen",
 			"pubkey_mismatch_body": "Die neueste Morphit-Versionsankündigung auf der Blurt-Blockchain ist mit einem anderen Schlüssel signiert als dem @morphit-Schlüssel, dem dieser Build vertraut. Entweder hat @morphit seinen Schlüssel geändert, oder das Konto @morphit wurde übernommen. Aus dieser Ankündigung wird nichts verwendet — auch nicht die Adressen für die Inseratsgebühr. Zahle keine Inseratsgebühren, bis das geklärt ist.",
 			"invalid_payload_body": "Die On-Chain-Release-Payload ist fehlerhaft. Der Operator könnte mitten im Deploy sein, oder ein Angreifer liefert die Seite aus.",
-			"asset_mismatch_body": "Dateien, die diese Seite ausgeliefert hat, stimmen nicht mit den Hashes der Version überein, die @morphit auf der Blurt-Blockchain signiert hat. Eine veraltete Seite im Cache kann das verursachen (lade die Seite vollständig neu). Andernfalls liefert diese Seite veränderten Code aus — versehentlich, nach einem Einbruch oder absichtlich.",
+			"asset_mismatch_body": "Dateien, die diese Seite ausgeliefert hat, stimmen nicht mit den Hashes der Version überein, die @morphit auf der Blurt-Blockchain signiert hat. Eine veraltete Seite im Cache kann das verursachen (lade die Seite vollständig neu). Andernfalls liefert diese Seite alten oder veränderten Code aus — versehentlich, nach einem Einbruch oder absichtlich.",
 			"show_files": "Details anzeigen",
 			"hide_files": "Details ausblenden",
 			"what_to_do": "Was tun",
@@ -3929,7 +3930,7 @@
 		"asset_policy_heading": "Deine Instanz, deine Regeln für Assets und Zahlungsmethoden",
 		"asset_policy_body": "Die Föderation lässt jeden Betreiber wählen, welche handelbaren Assets seine Seite unterstützt. Du kannst einzelne Assets abwählen und sogar festlegen, welche Zahlungsmethoden deine Seite unterstützen soll, etwa Bargeld, PayPal, Klarna usw.",
 		"asset_policy_federation_label": "Föderation bleibt intakt.",
-		"asset_policy_federation_body": "Ein Asset auf deiner Instanz zu deaktivieren, verbirgt die Orders anderer Instanzen nicht vor deinen Nutzern — die Blockchain-Historie ist gemeinsam, also kann dein Orderbuch sie weiterhin anzeigen.",
+		"asset_policy_federation_body": "Ein Asset auf deiner Instanz zu deaktivieren, blendet seine Orders nur auf deiner eigenen Seite aus, auch die auf anderen Instanzen geposteten. Instanzen, die dieses Asset anbieten, zeigen sie ihren Nutzern weiterhin an.",
 		"requirements_heading": "Ressourcenanforderungen",
 		"req_hw_label": "Hardware",
 		"req_hw_value": "2+ CPUs, 4+ GB RAM, 80+ GB Speicherplatz (SSD empfohlen)",

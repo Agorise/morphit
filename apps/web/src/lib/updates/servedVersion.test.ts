@@ -5,7 +5,11 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { createServedVersionReader } from './servedVersion';
+import {
+	createQuickVersionReader,
+	createServedVersionReader,
+	QUICK_FALLBACK_GAP_MS
+} from './servedVersion';
 
 const body = (v: string) => JSON.stringify({ morphit_version: v, files: {} });
 
@@ -74,5 +78,47 @@ describe('the shared served-version read', () => {
 		expect(await read()).toBeNull();
 		expect(await read()).toBeNull();
 		expect(await read()).toBe('1.20.3');
+	});
+});
+
+describe('the quick version read (/version.json, v1.21.18)', () => {
+	const res = (status: number, body: string) =>
+		({ ok: status >= 200 && status < 300, text: async () => body }) as Response;
+	it('reads the version from /version.json and never touches verify.json then', async () => {
+		let fallbacks = 0;
+		const read = createQuickVersionReader({
+			fetchVersionJson: async () => res(200, '{"morphit_version":"1.21.18"}\n'),
+			fallback: async () => (fallbacks++, '9.9.9'),
+			now: () => 0
+		});
+		expect(await read()).toBe('1.21.18');
+		expect(await read()).toBe('1.21.18');
+		expect(fallbacks).toBe(0);
+	});
+	it('no /version.json on the server: falls back to verify.json, at most every few minutes', async () => {
+		let t = 1_000_000;
+		let fallbacks = 0;
+		const read = createQuickVersionReader({
+			fetchVersionJson: async () => res(404, '<html>'),
+			fallback: async () => (fallbacks++, '1.21.17'),
+			now: () => t
+		});
+		expect(await read()).toBe('1.21.17');
+		t += 30_000;
+		expect(await read()).toBeNull();
+		expect(fallbacks).toBe(1);
+		t += QUICK_FALLBACK_GAP_MS;
+		expect(await read()).toBe('1.21.17');
+		expect(fallbacks).toBe(2);
+	});
+	it('a garbled or failed read is not a version', async () => {
+		const read = createQuickVersionReader({
+			fetchVersionJson: async () => {
+				throw new Error('offline');
+			},
+			fallback: async () => null,
+			now: () => 0
+		});
+		expect(await read()).toBeNull();
 	});
 });

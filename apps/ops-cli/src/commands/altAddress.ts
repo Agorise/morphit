@@ -20,34 +20,51 @@
  *     committed; only the public address goes into config → footer.
  */
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
-import { resolve } from 'node:path';
+import { resolveOutputPath } from '../init/render.ts';
 
 import { ask, askChoice, askYesNo } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
-import { liveConfigPath, liveServiceEnvs, restartWithWritten } from '../lib/laterEnvShadow.ts';
+import {
+	effectiveSettings,
+	liveServiceEnvs,
+	restartAndCheck,
+	settingsFilesFor,
+	type RestartOutcome
+} from '../lib/laterEnvShadow.ts';
 import { offerRestart } from '../lib/restartServices.ts';
-import { atomicEnvWrite } from './edit.ts';
+import { syncInstanceOrigin } from '../lib/instanceOrigin.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
+import { resolveWebRoot } from './upgrade.ts';
+import { atomicEnvWrite, offerRepublish, registrationBlockers } from './edit.ts';
+import { runRegister } from './register.ts';
+import { reportHosting, TOR_HS_DIR } from '../lib/altAddressHosted.ts';
 import {
 	type AltNet,
 	validateAltAddress,
 	validateI2pName,
 	validateEnsName,
+	validateNostr,
 	ENV_KEY,
 	ENS_ENV_KEY,
 	GEN_SCRIPT
 } from '../lib/altAddressValidate.ts';
 
+// Kept importable from here (alt-address-wizard-smoke and older callers).
+export { validateNostr };
+
 /** Restart the indexer for a saved address — after removing any old copy in a
  *  file it reads last (/etc/morphit/indexer.env), which would keep it. Only
  *  when the file saved is the installed one: another copy (--out) has nothing
- *  on this server to clear or check against. */
-const restartAfterSave = (configPath: string, written: readonly string[]): Promise<boolean> =>
-	restartWithWritten(written, ['morphit-indexer'], {
+ *  on this server to clear or check against. Says whether it restarted and
+ *  whether the running indexer was CHECKED to have the new value. */
+const restartAfterSave = (live: boolean, written: readonly string[]): Promise<RestartOutcome> =>
+	restartAndCheck(written, ['morphit-indexer'], {
 		offer: (units) => offerRestart(units),
 		print: (line) => console.log(line === '' ? '' : `  ${sanitizeForTerm(line)}`),
-		envs: resolve(configPath) === resolve(liveConfigPath()) ? liveServiceEnvs() : []
+		envs: live ? liveServiceEnvs() : []
 	});
 
 export interface AltAddressCtx {
@@ -56,7 +73,6 @@ export interface AltAddressCtx {
 	readonly colorEnabled: boolean;
 }
 
-/** Walk up from cwd to the repo root (matches the other commands' helper). */
 function rule(): void {
 	console.log('─'.repeat(58));
 }
@@ -67,106 +83,207 @@ function cleanPrefix(raw: string): string {
 	return raw.trim().toLowerCase().replace(/[^a-z2-7]/g, '');
 }
 
-/** Walk the operator through one network. Returns the validated address to
- *  save, or null if they backed out. */
-/**
- * After a Tor/I2P/Lokinet address is set, offer to also SERVE the frontend on it
- * (not just advertise it on-chain). The site is carried over a hidden address by a
- * tunnel pointing at the frontend container port — the same way the .onion is
- * served. We give the per-network wiring at the moment the address is set, but
- * deliberately do NOT auto-rewrite lokinet.ini / i2pd configs here: a bad tunnel
- * edit takes the site down, and it must be verified against the live box. Guidance
- * + a clear yes/no, not a blind mutation.
- */
-async function offerFrontendServing(net: AltNet, addr: string): Promise<void> {
-	console.log('');
-	const want = await askYesNo(
-		`Also serve the site itself on ${sanitizeForTerm(addr)} (not only advertise it)?`,
-		false
-	);
-	if (!want) {
-		console.log('  OK — advertised on-chain only, not served here. You can wire it up later.');
-		return;
+/** The home folder of `user` on this server (passwd, as getent reads it), or
+ *  null when it cannot be told. */
+function homeOf(user: string): string | null {
+	try {
+		const r = spawnSync('getent', ['passwd', user], { encoding: 'utf8', timeout: 5_000 });
+		const home = (r.stdout ?? '').trim().split('\n')[0]?.split(':')[5];
+		return r.status === 0 && home !== undefined && home.startsWith('/') ? home : null;
+	} catch {
+		return null;
 	}
-	console.log('');
-	console.log('  Serving the frontend over a hidden address means pointing its tunnel at the');
-	console.log('  frontend container port — exactly like your .onion is already served:');
-	if (net === 'lokinet') {
-		console.log('    • In lokinet.ini, add a SNApp service that forwards to the frontend');
-		console.log('      port; keep your keyfile line so the .loki stays stable; then:');
-		console.log('        sudo systemctl restart lokinet');
-	} else if (net === 'i2p') {
-		console.log('    • In i2pd tunnels.conf, add a SERVER tunnel to the frontend port; then:');
-		console.log('        sudo systemctl restart i2pd');
-	} else {
-		console.log('    • Point the hidden service at the frontend port, then restart it.');
-	}
-	console.log('  Then open the address in a Tor/I2P/Lokinet-capable browser to confirm the');
-	console.log('  site loads. `morphit-ops health` lists served addresses under "Reachable at".');
 }
 
-async function collectAddress(net: AltNet): Promise<string | null> {
-	const script = GEN_SCRIPT[net];
+export interface SshTarget {
+	/** user@host for scp. */
+	readonly target: string;
+	/** The host is a placeholder the operator replaces. */
+	readonly placeholder: boolean;
+	/** Where that account's files land on this server (its home folder; "~"
+	 *  when it could not be looked up). */
+	readonly home: string;
+}
 
+/** Where the operator's computer reaches this server over SSH, for the copy
+ *  commands: the account that ran `sudo` (a hardened server refuses root over
+ *  SSH: PermitRootLogin no), root only when there is none; and the public
+ *  origin's host when there is one, else a placeholder that says what to put
+ *  there. */
+export function sshTarget(
+	configText: string,
+	env: NodeJS.ProcessEnv = process.env,
+	home: (user: string) => string | null = homeOf
+): SshTarget {
+	const sudoUser = (env.SUDO_USER ?? '').trim();
+	const user =
+		sudoUser !== '' && sudoUser !== 'root' && /^[a-z_][a-z0-9_.-]*\$?$/i.test(sudoUser) ? sudoUser : 'root';
+	// Not found: "~" — that account's home when it runs the commands, exact
+	// without guessing a path.
+	const userHome = user === 'root' ? '/root' : (home(user) ?? '~');
+	const origin = parseEnvValue(configText, 'MORPHIT_INSTANCE_ORIGIN');
+	if (origin !== null) {
+		try {
+			const u = new URL(origin);
+			if (u.protocol === 'https:' && u.hostname !== '' && !u.hostname.endsWith('.onion'))
+				return { target: `${user}@${u.hostname}`, placeholder: false, home: userHome };
+		} catch {
+			/* not a URL: fall through */
+		}
+	}
+	return { target: `${user}@YOUR-SERVER`, placeholder: true, home: userHome };
+}
+
+/**
+ * The exact steps to make a vanity Tor / I2P address on the operator's own
+ * computer and install its key into the hidden service this server ALREADY
+ * runs (Ansible's roles/tor and roles/i2pd), so that Tor / i2pd serve the new
+ * address with no new configuration. Each line names its machine.
+ *
+ * (They used to say: copy the directory "root-owned, mode 0700" and add
+ * HiddenServiceDir lines to torrc — Tor refuses a hidden-service directory it
+ * does not own, and Ansible already manages those torrc lines, so following
+ * them broke the onion. Plain `scp` also fails on a hardened server, which
+ * turns SSH's SFTP off: `scp -O` uses the older transfer that still works.)
+ */
+export function vanitySteps(
+	net: 'tor' | 'i2p',
+	prefix: string,
+	ssh: string,
+	repoRoot: string,
+	/** That account's home folder on this server, where its copies land. */
+	home = '/root'
+): string[] {
+	const script = net === 'tor' ? 'generate-onion.sh' : 'generate-i2p.sh';
+	const host = ssh;
+	const lines: string[] = [];
+	lines.push('Make it on your OWN computer (not this server), so the secret key is never');
+	lines.push('born here. Then install its key into the service this server already runs.');
+	lines.push('');
+	lines.push('1. On your computer, copy the helper script from this server and run it:');
+	lines.push(`     scp -O ${host}:${repoRoot}/${GEN_SCRIPT[net]} ~/${script}`);
+	lines.push(`     cd ~ && bash ${script} ${prefix} ${host}`);
+	lines.push(
+		net === 'tor'
+			? '   It needs mkp224o (it says how to get it). It prints your new address and the'
+			: '   It needs "vain" from i2pd-tools (it says how to get it). It prints your new'
+	);
+	lines.push(
+		net === 'tor'
+			? '   folder it saved the key in (a new folder each run).'
+			: '   address and the folder it saved the key in (a new folder each run).'
+	);
 	if (net === 'tor') {
+		lines.push('2. On your computer, copy the new key to this server: run the "cd" and "scp -O"');
+		lines.push('   lines the script printed under "1. On THIS computer" (they name that folder).');
+		lines.push(`   They put hs_ed25519_secret_key, hs_ed25519_public_key and hostname in ${home}/.`);
+		lines.push('3. On this server, keep a copy of the current key, put the new one in place');
+		lines.push('   (owned by Tor, or Tor refuses it), and restart Tor:');
+		lines.push(`     sudo cp -a ${TOR_HS_DIR} "/root/morphit-onion-old-$(date +%s)"`);
+		lines.push(
+			`     sudo install -o debian-tor -g debian-tor -m 600 ${home}/hs_ed25519_secret_key ${home}/hs_ed25519_public_key ${TOR_HS_DIR}/`
+		);
+		lines.push(`     sudo install -o debian-tor -g debian-tor -m 644 ${home}/hostname ${TOR_HS_DIR}/hostname`);
+		lines.push(`     sudo chown -R debian-tor:debian-tor ${TOR_HS_DIR}`);
+		lines.push(`     sudo chmod 700 ${TOR_HS_DIR}`);
+		lines.push(`     sudo shred -u ${home}/hs_ed25519_secret_key`);
+		lines.push(`     sudo rm -f ${home}/hs_ed25519_public_key ${home}/hostname`);
+		lines.push('     sudo systemctl restart tor');
+		lines.push('4. On this server, check that Tor now serves it (it prints the address):');
+		lines.push(`     sudo cat ${TOR_HS_DIR}/hostname`);
+		lines.push('   No new torrc lines are needed: the hidden service is already set up.');
+	} else {
+		lines.push('2. On your computer, copy the new key to this server: run the "scp -O" line the');
+		lines.push('   script printed under "1. On THIS computer" (it names that folder). It puts');
+		lines.push(`   the key in ${home}/morphit-web.dat.`);
+		lines.push('3. On this server, keep a copy of the current key, put the new one in place');
+		lines.push('   (owned by i2pd) and restart i2pd:');
+		lines.push(
+			'     sudo test -f /var/lib/i2pd/morphit-web.dat && sudo cp -a /var/lib/i2pd/morphit-web.dat "/root/morphit-web.dat.old-$(date +%s)"'
+		);
+		lines.push(`     sudo install -o i2pd -g i2pd -m 600 ${home}/morphit-web.dat /var/lib/i2pd/morphit-web.dat`);
+		lines.push(`     sudo shred -u ${home}/morphit-web.dat`);
+		lines.push('     sudo systemctl restart i2pd');
+		lines.push('   The [morphit-web] tunnel in /etc/i2pd/tunnels.conf already uses that key file;');
+		lines.push('   do not add a second tunnel.');
+	}
+	return lines;
+}
+
+/** Walk the operator through one network. Returns the validated address to
+ *  save, or null if they backed out. */
+async function collectAddress(net: AltNet, configText: string, repoRoot: string): Promise<string | null> {
+	const ssh = sshTarget(configText);
+
+	if (net === 'tor' || net === 'i2p') {
 		console.log('');
-		console.log('Tor (.onion) — the most common privacy address.');
-		console.log('');
-		console.log('You pick the first few letters; a tool tries random keys');
-		console.log('until one starts with them. Short = fast, long = slow.');
-		const prefix = cleanPrefix(await ask('First letters you want (e.g. morph)', 'morph'));
-		if (prefix.length > 6) {
-			console.log('  Heads up: 7+ letters can take hours. 4–6 is a good balance.');
+		if (net === 'tor') {
+			console.log('Tor (.onion) — the most common privacy address.');
+			console.log('');
+			console.log('You pick the first few letters; a tool tries random keys');
+			console.log('until one starts with them. Short = fast, long = slow.');
+		} else {
+			console.log('I2P (.b32.i2p) — an established privacy network.');
+			console.log('');
+			console.log('You can pick the first few letters, but only a FEW (the address');
+			console.log('is a hash): 1–5 letters is quick, 6 takes minutes, 7+ much longer.');
 		}
+		const raw = await ask(
+			net === 'tor' ? 'First letters you want (e.g. morph)' : 'First letters you want, keep it short (e.g. morph)',
+			'morph'
+		);
+		const prefix = cleanPrefix(raw) || 'morph';
+		if (net === 'tor' && prefix.length > 6) console.log('  Heads up: 7+ letters can take hours. 4–6 is a good balance.');
+		if (net === 'i2p' && prefix.length > 5) console.log('  Heads up: more than ~5 letters gets slow fast. Shorter is better.');
 		console.log('');
-		console.log('On your OWN computer (not the server), in the Morphit folder, run:');
-		console.log(`    ./${script} ${prefix || 'morph'}`);
-		console.log('It churns for a while, then prints an address + saves a secret');
-		console.log('key file. Copy the key to the server over SSH (the script shows how).');
-		console.log('Why your own computer? So the secret key is never born on the server.');
-	} else if (net === 'i2p') {
-		console.log('');
-		console.log('I2P (.b32.i2p) — an established privacy network.');
-		console.log('');
-		console.log('You can pick the first few letters, but only a FEW (the address');
-		console.log('is a hash): 1–5 letters is quick, 6 takes minutes, 7+ much longer.');
-		const prefix = cleanPrefix(await ask('First letters you want, keep it short (e.g. morph)', 'morph'));
-		if (prefix.length > 5) {
-			console.log('  Heads up: more than ~5 letters gets slow fast. Shorter is better.');
+		for (const l of vanitySteps(net, prefix, ssh.target, repoRoot, ssh.home)) console.log(l);
+		if (ssh.placeholder) {
+			console.log('');
+			console.log('(Put the address you use with ssh for this server in place of YOUR-SERVER.)');
 		}
-		console.log('');
-		console.log('On your OWN computer (not the server), in the Morphit folder, run:');
-		console.log(`    ./${script} ${prefix || 'morph'}`);
-		console.log('It prints an address + saves a secret key file (private.dat).');
-		console.log('Copy the key to the server over SSH (the script shows how).');
+		if (ssh.target.startsWith('root@')) {
+			console.log('');
+			console.log('(These use root: no other account ran this command. A hardened server refuses');
+			console.log('root over ssh — then use your own login in place of root, and its home folder');
+			console.log('in place of /root.)');
+		}
 	} else {
 		// Lokinet — no prefix possible.
 		console.log('');
 		console.log('Lokinet (.loki) — Lokinet picks the address for you.');
 		console.log('You CANNOT choose the letters here (there is no vanity tool).');
 		console.log('');
-		console.log('On the SERVER (where Lokinet runs):');
-		console.log('  1. In lokinet.ini under [network], add a keyfile line so your');
-		console.log('     address stays the same:');
+		console.log('On this server (where Lokinet runs):');
+		console.log('  1. Open Lokinet\'s settings file (one of these exists):');
+		console.log('       sudo nano /etc/loki/lokinet.ini');
+		console.log('       sudo nano /var/lib/lokinet/lokinet.ini');
+		console.log('     Under [network], add this line so your address stays the same:');
 		console.log('       keyfile=/var/lib/lokinet/morphit-snapp.private');
-		console.log('  2. sudo systemctl restart lokinet');
-		console.log('     It makes the key and prints your ".loki" address.');
-		console.log('  3. See it again later:');
-		console.log("       sudo journalctl -u lokinet | grep -i '.loki' | tail");
-		console.log(`(The ./${script} helper prints these same steps.)`);
+		console.log('  2. Restart Lokinet; it makes the key and logs your ".loki" address:');
+		console.log('       sudo systemctl restart lokinet');
+		console.log('  3. Read the address:');
+		console.log("       sudo journalctl -u lokinet --no-pager | grep -i '\\.loki' | tail");
 		console.log('');
 		console.log('Want a short name like "yourbrand.loki"? That is ONS — you buy it');
 		console.log('with OXEN coin in the Oxen wallet (optional, costs money).');
 	}
 
-// Capture + validate, looping on bad input.
+	// Capture + validate, looping on bad input.
 	console.log('');
 	for (;;) {
-		const pasted = await ask('Paste the address here (or press Enter to go back)', '');
+		const pasted = await ask('Paste the new address here (or press Enter to go back)', '');
 		if (pasted.trim().length === 0) return null;
 		const res = validateAltAddress(net, pasted);
 		if (res.ok) {
-			await offerFrontendServing(net, res.value);
+			if (net === 'lokinet') {
+				// Saving puts the pill in the footer. Morphit's installer does not
+				// set up serving the site over Lokinet: say so, never imply it.
+				console.log('');
+				console.log('  Note: Morphit does not set up serving your site over Lokinet. The address');
+				console.log('  points at this server\'s Lokinet connection; visitors reach your site there');
+				console.log('  only if your web front answers on it. Check from a computer that runs');
+				console.log(`  Lokinet by opening http://${sanitizeForTerm(res.value)}/ in its browser.`);
+			}
 			return res.value;
 		}
 		console.log(`  ✗ ${res.reason}`);
@@ -195,29 +312,60 @@ const NET_LABEL: Record<ManagedNet, string> = {
 	ens: 'ENS name (DOMAIN.eth)'
 };
 
-/** Env key(s) per address.  Element [0] is the canonical key we WRITE;
- *  any extras are legacy aliases we also CLEAR (so a stale value can't
- *  shadow the canonical one) and READ as fallback.  i2p historically
- *  used MORPHIT_INSTANCE_I2P_ADDRESS (what `init` writes); the indexer
- *  prefers MORPHIT_INSTANCE_I2P_B32_ADDRESS but falls back to the
- *  legacy key, so we keep both in sync here. */
+/** The env key per address (element [0] is the key we WRITE). */
 const ENV_KEYS_FOR: Record<ManagedNet, readonly string[]> = {
 	tor: [ENV_KEY.tor],
 	lokinet: [ENV_KEY.lokinet],
-	i2p: [ENV_KEY.i2p, 'MORPHIT_INSTANCE_I2P_ADDRESS'],
+	// The legacy single MORPHIT_INSTANCE_I2P_ADDRESS (what older `init`
+	// wrote) is read and retired by readManagedValue / managedUpdates.
+	i2p: [ENV_KEY.i2p],
 	i2p_name: ['MORPHIT_INSTANCE_I2P_NAME_ADDRESS'],
 	nostr: ['MORPHIT_INSTANCE_NOSTR_PUBKEY'],
 	ens: [ENS_ENV_KEY]
 };
 
+const LEGACY_I2P_KEY = 'MORPHIT_INSTANCE_I2P_ADDRESS';
+
+/** Which slot the legacy single I2P setting belongs to, by its ending (the
+ *  indexer's own rule): a .b32.i2p is the b32 address, any other .i2p is the
+ *  vanity name. PURE. */
+function legacyI2pSlot(v: string): 'i2p' | 'i2p_name' {
+	return v.toLowerCase().endsWith('.b32.i2p') ? 'i2p' : 'i2p_name';
+}
+
 /** Current value of a managed address from morphit.config.env text, or
- *  null.  For i2p this checks the modern key then the legacy alias. */
+ *  null. The legacy single I2P setting is read into the slot its ending says
+ *  (it used to land in the b32 slot whatever it was). */
 function readManagedValue(text: string, kind: ManagedNet): string | null {
-	for (const key of ENV_KEYS_FOR[kind]) {
-		const v = parseEnvValue(text, key);
-		if (v !== null && v.length > 0) return v;
+	return readManagedFrom((k) => parseEnvValue(text, k), kind);
+}
+
+/** {@link readManagedValue} from any reader (the settings in force). */
+function readManagedFrom(get: (key: string) => string | null, kind: ManagedNet): string | null {
+	const v = get(ENV_KEYS_FOR[kind][0]!);
+	if (v !== null && v.length > 0) return v;
+	if (kind === 'i2p' || kind === 'i2p_name') {
+		const legacy = get(LEGACY_I2P_KEY);
+		if (legacy !== null && legacy.length > 0 && legacyI2pSlot(legacy) === kind) return legacy;
 	}
 	return null;
+}
+
+/** The writes that set (or, value null, clear) one managed address. Writing
+ *  either I2P slot also retires the legacy single setting — moving a value it
+ *  holds for the OTHER slot into that slot's own key, so nothing is lost. */
+function managedUpdates(text: string, kind: ManagedNet, value: string | null): Map<string, string | null> {
+	const updates = new Map<string, string | null>([[ENV_KEYS_FOR[kind][0]!, value]]);
+	if (kind === 'i2p' || kind === 'i2p_name') {
+		const legacy = parseEnvValue(text, LEGACY_I2P_KEY);
+		if (legacy !== null) {
+			updates.set(LEGACY_I2P_KEY, null);
+			const slot = legacy.length > 0 ? legacyI2pSlot(legacy) : kind;
+			const otherKey = ENV_KEYS_FOR[slot][0]!;
+			if (slot !== kind && (parseEnvValue(text, otherKey) ?? '') === '') updates.set(otherKey, legacy);
+		}
+	}
+	return updates;
 }
 
 /** Minimal KEY=value reader: last assignment wins (matches the indexer's
@@ -312,26 +460,21 @@ async function collectEns(): Promise<string | null> {
 	}
 }
 
-/** Validate a Nostr pubkey: npub1 bech32 or 64-char hex.  Lenient on the
- *  bech32 body (guards typos, not a full checksum verify); rejects nsec. */
-export function validateNostr(
-	raw: string
-): { ok: true; value: string } | { ok: false; reason: string } {
-	const v = raw.trim();
-	if (v.toLowerCase().startsWith('nsec')) {
-		return {
-			ok: false,
-			reason: 'that looks like a PRIVATE key (nsec…). Paste your PUBLIC key (npub… or hex).'
-		};
-	}
-	if (/^npub1[a-z0-9]{58,}$/i.test(v)) return { ok: true, value: v.toLowerCase() };
-	if (/^[0-9a-f]{64}$/i.test(v)) return { ok: true, value: v.toLowerCase() };
-	return { ok: false, reason: 'expected an "npub1…" key or a 64-character hex string' };
-}
+/** The addresses that ride in the on-chain registration (register.ts
+ *  alt_addresses). Nostr does not. */
+const REGISTERED: ReadonlySet<ManagedNet> = new Set(['tor', 'lokinet', 'i2p', 'i2p_name', 'ens']);
+
+const isDenied = (err: unknown): boolean => {
+	const code = (err as { code?: unknown } | null)?.code;
+	return code === 'EACCES' || code === 'EPERM' || /EACCES|EPERM/.test(err instanceof Error ? err.message : String(err));
+};
+const SUDO_HINT = 'Run it with sudo: sudo morphit-ops alt-address';
 
 export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
-	const repoRoot = ctx.flags.out ? resolve(ctx.flags.out) : defaultRepoRoot();
+	// A relative --out is relative to where the operator ran the command.
+	const repoRoot = resolveOutputPath(ctx.flags.out, defaultRepoRoot());
 	const configPath = `${repoRoot}/morphit.config.env`;
+	const where = settingsFilesFor(configPath, `${repoRoot}/morphit.env`);
 
 	console.log('');
 	rule();
@@ -385,8 +528,24 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 								? 'nostr'
 								: 'ens';
 		const label = NET_LABEL[kind];
-		const fileText = hasConfig ? readFileSync(configPath, 'utf-8') : '';
-		const current = hasConfig ? readManagedValue(fileText, kind) : null;
+		let fileText = '';
+		if (hasConfig) {
+			try {
+				fileText = readFileSync(configPath, 'utf-8');
+			} catch (err) {
+				if (!isDenied(err)) throw err;
+				console.log(`\n  ✗ Can't read your settings (${configPath}) as this user.`);
+				console.log(`  ${SUDO_HINT}`);
+				return 1;
+			}
+		}
+		// What the indexer runs with: every file it reads, the last one wins (an
+		// older server keeps a copy in /etc/morphit/indexer.env, read last).
+		let current: string | null = null;
+		if (hasConfig) {
+			const inForce = effectiveSettings(where.indexer, [...ENV_KEYS_FOR[kind], LEGACY_I2P_KEY]);
+			current = readManagedFrom((k) => inForce.get(k) ?? null, kind);
+		}
 
 		// Show what's there now.
 		console.log('');
@@ -418,6 +577,7 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 			continue;
 		}
 
+		let address: string | null = null;
 		if (action === 'clear') {
 			console.log('');
 			const sure = await askYesNo(`Really delete your ${label}? It disappears from the footer.`, false);
@@ -425,73 +585,144 @@ export async function runAltAddress(ctx: AltAddressCtx): Promise<number> {
 				console.log('  Left it as-is.\n');
 				continue;
 			}
-			// For i2p we clear BOTH the modern (_I2P_B32_ADDRESS) and legacy
-			// (_I2P_ADDRESS) keys so the value can't survive under the other
-			// name.  Other networks clear their single key.
-			const updates = new Map<string, string | null>();
-			for (const k of ENV_KEYS_FOR[kind]) updates.set(k, null);
-			const result = atomicEnvWrite(configPath, fileText, updates, 'parseEnv');
-			if (!result.ok) {
-				console.log(`\n  ✗ ${sanitizeForTerm(result.message)}`);
-				return 3;
-			}
-			console.log(`\n  ✓ removed from ${configPath}`);
-			console.log(`  ✓ backed up the old version to ${result.backupPath}`);
-			await restartAfterSave(configPath, [...updates.keys()]);
-			console.log('  Reload your site; the pill is gone from the footer.\n');
-			continue;
-		}
-
-		// action === 'replace' (or first-time set).
-		const address =
-			kind === 'nostr'
-				? await collectNostr()
-				: kind === 'i2p_name'
-					? await collectI2pName()
-					: kind === 'ens'
-						? await collectEns()
-						: await collectAddress(kind);
-		if (address === null) {
-			console.log('  (Cancelled — back to the list.)\n');
-			continue;
-		}
-
-		// Confirm.
-		const writeKey = ENV_KEYS_FOR[kind][0]!; // canonical key we WRITE
-		console.log('');
-		console.log(`  Save this ${label}?`);
-		console.log(`    ${sanitizeForTerm(address)}`);
-		console.log(`    (into ${writeKey})`);
-		const ok = await askYesNo('Save it?', true);
-		if (!ok) {
-			console.log('  Not saved.\n');
-			continue;
-		}
-
-		if (!hasConfig) {
-			// SystemD/Docker case: no file to patch — hand them the line.
-			console.log('');
-			console.log('  No settings file to write, so add this line to your env');
-			console.log('  (SystemD `Environment=` or your Docker env), then restart');
-			console.log('  the indexer and reload your site — the pill then appears:');
-			console.log(`    ${writeKey}=${address}`);
-			console.log('');
 		} else {
-			// Write the canonical key.  For i2p, ALSO clear the legacy
-			// _I2P_ADDRESS key (if present) so it can't shadow the new
-			// value the indexer reads.
-			const updates = new Map<string, string | null>([[writeKey, address]]);
-			for (const k of ENV_KEYS_FOR[kind].slice(1)) updates.set(k, null);
-			const result = atomicEnvWrite(configPath, fileText, updates, 'parseEnv');
-			if (!result.ok) {
-				console.log(`\n  ✗ ${sanitizeForTerm(result.message)}`);
-				return 3;
+			// action === 'replace' (or first-time set).
+			address =
+				kind === 'nostr'
+					? await collectNostr()
+					: kind === 'i2p_name'
+						? await collectI2pName()
+						: kind === 'ens'
+							? await collectEns()
+							: await collectAddress(kind, fileText, repoRoot);
+			if (address === null) {
+				console.log('  (Cancelled — back to the list.)\n');
+				continue;
 			}
-			console.log(`\n  ✓ saved to ${configPath}`);
-			console.log(`  ✓ backed up the old version to ${result.backupPath}`);
-			await restartAfterSave(configPath, [...updates.keys()]);
-			console.log('  Reload your site; the new pill appears in the footer.');
+			// Confirm.
+			const writeKey = ENV_KEYS_FOR[kind][0]!; // canonical key we WRITE
 			console.log('');
+			console.log(`  Save this ${label}?`);
+			console.log(`    ${sanitizeForTerm(address)}`);
+			console.log(`    (into ${writeKey})`);
+			const ok = await askYesNo('Save it?', true);
+			if (!ok) {
+				console.log('  Not saved.\n');
+				continue;
+			}
+			if (!hasConfig) {
+				// SystemD/Docker case: no file to patch — hand them the line.
+				console.log('');
+				console.log('  No settings file to write, so add this line to your env');
+				console.log('  (SystemD `Environment=` or your Docker env), then restart');
+				console.log('  the indexer and reload your site — the pill then appears:');
+				console.log(`    ${writeKey}=${address}`);
+				console.log('');
+				continue;
+			}
 		}
+
+		const updates = managedUpdates(fileText, kind, address);
+		const result = atomicEnvWrite(configPath, fileText, updates, 'parseEnv');
+		if (!result.ok) {
+			console.log(`\n  ✗ ${sanitizeForTerm(result.message)}`);
+			if (isDenied(result.message)) console.log(`  ${SUDO_HINT}`);
+			return 3;
+		}
+		console.log(`\n  ✓ ${address === null ? 'removed from' : 'saved to'} ${configPath}`);
+		console.log(`  ✓ backed up the old version to ${result.backupPath}`);
+		const outcome = await restartAfterSave(where.live, [...updates.keys()]);
+		if (outcome.live === true) {
+			// Checked: the running indexer has it.
+			console.log(
+				address === null
+					? '  Reload your site; the pill is gone from the footer.'
+					: '  Reload your site; the new pill appears in the footer.'
+			);
+		} else if (outcome.live === false) {
+			// What the check found was just said (not running, or another value).
+			console.log('  Your footer changes once the indexer runs with it (see the check above).');
+		} else if (outcome.restarted) {
+			console.log('  Reload your site to see your footer: whether the running indexer has the');
+			console.log('  new setting could not be checked from here.');
+		} else {
+			// The restart commands were just printed (offerRestart, on decline).
+			console.log('  Your footer changes after that restart.');
+		}
+		console.log('');
+
+		// Does this server's Tor / i2pd serve what was just saved?
+		if (address !== null && (kind === 'tor' || kind === 'i2p'))
+			await reportHosting(kind, address, { fix: 'follow the steps shown above, then run this again.' });
+
+		// The served pages, sitemap and robots.txt name the onion on a
+		// hidden-only node: put a changed Tor address on the live site, as
+		// `edit` does.
+		if (kind === 'tor') {
+			try {
+				const webRoot = resolveWebRoot(process.env);
+				const r = syncInstanceOrigin(
+					{
+						info: (m) => console.log(`  ${m}`),
+						warn: (m) => console.log(`  ! ${m}`),
+						spinner: (l) => startDotsSpinner(l)
+					},
+					{ installDir: repoRoot, webRoot: existsSync(webRoot) ? webRoot : null }
+				);
+				if (r.detail !== '') console.log(`  ${r.verified ? '' : '! '}${sanitizeForTerm(r.detail)}`);
+			} catch (err) {
+				console.log(
+					`  ! The site's pages were not updated (${sanitizeForTerm(err instanceof Error ? err.message : String(err))}). On this server run: sudo morphit-ops upgrade`
+				);
+			}
+		}
+
+		// Saving only changes this site's footer. The address is also part of
+		// the on-chain registration other instances read: offer to re-publish it.
+		if (REGISTERED.has(kind)) await offerRegistrationUpdate(fileText, updates, outcome);
+		console.log('');
 	}
+}
+
+/** After a saved address that is part of the on-chain registration: offer to
+ *  re-publish it — or, when register could not run (no name, no address),
+ *  say exactly what to set. */
+async function offerRegistrationUpdate(
+	before: string,
+	updates: ReadonlyMap<string, string | null>,
+	outcome: RestartOutcome
+): Promise<void> {
+	// `register` reads these from the file just written; no older value in
+	// this process's environment may stand in for one.
+	for (const [k, v] of updates) {
+		if (v === null) delete process.env[k];
+		else process.env[k] = v;
+	}
+	const eff = (k: string): string => {
+		const fromFile = updates.has(k) ? (updates.get(k) ?? '') : (parseEnvValue(before, k) ?? '');
+		return ((process.env[k] ?? '').trim() || fromFile).trim();
+	};
+	console.log('');
+	console.log('  Other Morphit instances list your addresses from your on-chain registration;');
+	console.log('  saving here changes only your own footer until that is re-published.');
+	const blockers = registrationBlockers({
+		MORPHIT_INSTANCE_NAME: eff('MORPHIT_INSTANCE_NAME'),
+		MORPHIT_INSTANCE_ORIGIN: eff('MORPHIT_INSTANCE_ORIGIN'),
+		MORPHIT_INSTANCE_TOR_ADDRESS: eff('MORPHIT_INSTANCE_TOR_ADDRESS')
+	});
+	if (blockers.length > 0) {
+		console.log('  It cannot be re-published yet:');
+		for (const b of blockers) console.log(`    • ${b}`);
+		console.log('  Set it with  sudo morphit-ops edit  (on this server), then publish with');
+		console.log('  sudo morphit-ops register');
+		return;
+	}
+	console.log('');
+	await offerRepublish({
+		askYesNo,
+		register: (flags) => runRegister({ flags, positional: [] }),
+		print: (l) => console.log(l),
+		restarted: outcome.restarted,
+		live: outcome.live
+	});
 }

@@ -70,6 +70,10 @@ function makeInstall(
 	configEnvContent: string
 ): string {
 	const dir = mkdtempSync(join(tmpdir(), 'doctor-smoke-'));
+	// The workspace root's package.json marks this folder as the install root:
+	// doctor finds the install the CLI belongs to (defaultRepoRoot), never by
+	// taking the working directory as it is.
+	symlinkSync(join(REPO, 'package.json'), join(dir, 'package.json'));
 	symlinkSync(join(REPO, 'apps'), join(dir, 'apps'));
 	symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'));
 	symlinkSync(join(REPO, 'packages'), join(dir, 'packages'));
@@ -81,7 +85,7 @@ function makeInstall(
 	return dir;
 }
 
-function runDoctor(dir: string): { code: number; out: string } {
+function runDoctor(dir: string, cwd: string = dir): { code: number; out: string } {
 	// Strip any tsx/loader injection from the parent (this smoke runs
 	// under tsx) so the spawned plain-`node` bundle starts cleanly.
 	const childEnv = { ...process.env };
@@ -91,7 +95,7 @@ function runDoctor(dir: string): { code: number; out: string } {
 	// network reachability (the RPC probe logic is covered by
 	// rpc-endpoint-probe-smoke). Keeps this smoke offline + deterministic.
 	const r = spawnSync('node', [join(REPO, 'apps', 'ops-cli', 'dist', 'main.js'), 'doctor', '--no-color', '--no-rpc'], {
-		cwd: dir,
+		cwd,
 		env: childEnv,
 		encoding: 'utf8',
 		timeout: 90_000,
@@ -169,15 +173,35 @@ try {
 		}
 	}
 
-	// ── Scenario 4: not an install dir → exit 2, helpful message ─
+	// ── Scenario 4: run from apps/ops-cli, as the installed launcher does ─
+	// (`cd /opt/morphit && npm exec --workspace apps/ops-cli`): doctor checks
+	// the install root, never "this does not look like an install directory".
 	{
-		const dir = mkdtempSync(join(tmpdir(), 'doctor-empty-'));
+		const dir = mkdtempSync(join(tmpdir(), 'doctor-launcher-'));
 		created.push(dir);
-		const { code, out } = runDoctor(dir);
-		if (code === 2 && /install directory/i.test(out)) {
-			ok('non-install directory → exit 2 with guidance (no crash)');
+		symlinkSync(join(REPO, 'package.json'), join(dir, 'package.json'));
+		symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'));
+		symlinkSync(join(REPO, 'packages'), join(dir, 'packages'));
+		const { mkdirSync, copyFileSync } = await import('node:fs');
+		mkdirSync(join(dir, 'apps', 'ops-cli'), { recursive: true });
+		copyFileSync(join(REPO, 'apps', 'ops-cli', 'package.json'), join(dir, 'apps', 'ops-cli', 'package.json'));
+		symlinkSync(join(REPO, 'apps', 'indexer'), join(dir, 'apps', 'indexer'));
+		symlinkSync(join(REPO, 'apps', 'relay'), join(dir, 'apps', 'relay'));
+		const keyPath = join(dir, 'keystore.wif');
+		writeFileSync(keyPath, PLAINTEXT_WIF);
+		chmodSync(keyPath, 0o600);
+		writeFileSync(join(dir, 'morphit.env'), goodEnv(keyPath));
+		writeFileSync(join(dir, 'morphit.config.env'), '# operator-tunable\n');
+		const { code, out } = runDoctor(dir, join(dir, 'apps', 'ops-cli'));
+		if (
+			code === 0 &&
+			out.includes(`Install directory: ${dir}`) &&
+			/indexer: will start/.test(out) &&
+			!/does not look like/i.test(out)
+		) {
+			ok('run from apps/ops-cli (the launcher) → checks the install root, both services validate');
 		} else {
-			bad('empty dir not handled as expected', `exit=${code}\n${out.slice(0, 300)}`);
+			bad('doctor run from apps/ops-cli did not check the install root', `exit=${code}\n${out.slice(0, 400)}`);
 		}
 	}
 

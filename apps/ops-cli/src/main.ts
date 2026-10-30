@@ -33,7 +33,8 @@
  *   loyalty [--since=DUR]               Loyalty milestones triggered
  *   attestations                        Pending fee-attestation queue
  *   treasury btc [--addresses]          BTC treasury: per-order fee addresses + wallet gap limit (read-only)
- *   flags [--type=reciprocity|related]  Moderation flags raised
+ *   flags [--type=reciprocity|related|pile_on|concentration] [--since=DUR|all]
+ *                                       Moderation flags raised (7d default)
  *
  * Sally-operator finding So-2: pre-fix this JSDoc was
  * partial — listed only 8 of 14 subcommands.  Operators reading
@@ -50,7 +51,8 @@
  * Environment:
  *   MORPHIT_OPS_DATABASE_URL    (or MORPHIT_INDEXER_DATABASE_URL,
  *                                or DATABASE_URL) — required.
- *   MORPHIT_OPS_RELAY_ACCOUNT   default: morphit-relay
+ *   MORPHIT_OPS_RELAY_ACCOUNT   default: MORPHIT_RELAY_ACCOUNT from morphit.env
+ *                                (no fallback: status/signups say it is not set)
  *   MORPHIT_OPS_FEES_ACCOUNT    default: morphit-fees
  *   MORPHIT_OPS_THRESHOLD_*     threshold tunables (see config.ts)
  */
@@ -91,7 +93,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { runRegister, REGISTER_DECLINED } from './commands/register.ts';
 import { isAbortError } from './init/prompt.ts';
-import { commandFailed } from './lib/commandFailed.ts';
+import { commandFailed, sudoCommandLine } from './lib/commandFailed.ts';
+import { notInstalledMessage } from './lib/notInstalled.ts';
 import { runShowKey } from './commands/showKey.ts';
 import { runEdit } from './commands/edit.ts';
 import { runAltAddress } from './commands/altAddress.ts';
@@ -104,7 +107,7 @@ import { runHealth } from './commands/health.ts';
 import { runMcp } from './commands/mcp.ts';
 import { runMatrix } from './commands/matrix.ts';
 import { runOfflineNotify } from './commands/offlineNotify.ts';
-import { runMainMenu } from './commands/mainMenu.ts';
+import { needsRoot, runMainMenu, runningAsRoot } from './commands/mainMenu.ts';
 import { gatherMenuAnnotations } from './lib/menuAnnotations.ts';
 import { runEditActiveKey } from './commands/editActiveKey.ts';
 import { runUpgrade } from './commands/upgrade.ts';
@@ -251,30 +254,32 @@ function printHelp(): void {
 		"                                  [--theme-mid '#…'] [--theme-background '#121212'], or a",
 		'                                  preset: --theme champagne-gold | morphit (the default).',
 		'                                  Buttons: --theme-button deep | bright.',
-		'  alt-address [--out=PATH]        Guided setup for a Tor/Lokinet/I2P address: helps you',
-		'                                  generate one (vanity prefix where possible), then saves it',
-		'                                  to the footer. Lokinet has no vanity prefix (ONS for names).',
+		'  alt-address [--out=PATH]        Guided setup for a Tor/Lokinet/I2P address, a Nostr pubkey',
+		'                                  or an ENS .eth name: helps you generate one (vanity prefix',
+		'                                  where possible), shows how to install its key on this',
+		'                                  server, then saves it to the footer.',
 		'  edit-active-key [--wipe-prior | --keep-backup]',
-		'                                  Rotate the relay account ACTIVE key (no full re-init needed;',
-		'                                  use this when an operator pasted the wrong key, or for routine',
-		'                                  rotation after an on-chain account_update op).  By default the',
-		'                                  command asks interactively whether the prior key was wrong',
-		'                                  (no-trace rotation, overwrites + unlinks the prior keystore)',
-		'                                  or whether to keep a .bak backup (safe rotation; default).',
+		"                                  Replace the relay account's ACTIVE key (a wrong key was",
+		'                                  pasted, or the key was changed on the chain). It checks the',
+		'                                  new key against the chain first. It asks whether to keep a',
+		'                                  copy of the old key file (default yes); --keep-backup keeps',
+		'                                  it without asking, --wipe-prior overwrites and deletes it.',
 		'  import-altnet-key --network=tor|lokinet|i2p --in=PATH',
 		'                                  Encrypt an alt-network service key with the relay passphrase',
 		'  export-altnet-key --network=tor|lokinet|i2p [--out=PATH]',
 		'                                  Decrypt an alt-network service key (passphrase prompted)',
 		'  register                        Publish operator registration on-chain (run after init)',
-		'  show-key                        Show the public key your saved active key derives to',
-		'                                  (verify the correct key is installed; never prints the',
-		'                                  private key)',
+		"  show-key                        Show the public key of the relay's saved active key and",
+		'                                  check it against the account on the chain (never prints',
+		'                                  the private key)',
 		'  payment-method [add|remove|list]',
-		'                                  Manage instance-specific payment-method additions (ADR-0021;',
-		'                                  no subcommand opens an interactive list/add/remove menu)',
+		'                                  The extra payment methods this instance offers (no',
+		'                                  subcommand opens a list/add/remove menu). add/remove sign',
+		"                                  with the relay account's active key, as register does;",
+		'                                  run with sudo.',
 		'  upgrade [--check-only] [--yes] [--json] [--from-file=PATH]',
 		'                                  Check for and apply a newer Morphit release (manual-only',
-		'                                  by default; set MORPHIT_AUTO_UPGRADE=1 to skip the prompt).',
+		'                                  by default; --yes skips the question).',
 		'                                  --from-file=PATH upgrades OFFLINE from a local, signed',
 		'                                  morphit-<ver>-offline.tar.gz (cable unplugged; no network).',
 		'                                  --questions asks what the upgrade did not stop for',
@@ -295,22 +300,36 @@ function printHelp(): void {
 		'  mcp                             MCP server on/off switch: show the morphit-mcp service state',
 		'                                  and enable+start or stop+disable it (the AI-agent orderbook',
 		'                                  surface). Read-only + non-custodial; on by default.',
-		'  matrix [set <mxid>|clear|test]  Matrix alert username: set/edit/clear it (the bot auto',
-		'                                  starts/stops); "test" DMs you a sample alert.',
+		'  matrix [setup|set <mxid>|clear|test]',
+		'                                  Matrix alerts: set up the bot (setup), change the address',
+		'                                  alerts go to (set), turn alerts off (clear), or send a test',
+		'                                  alert (test). With none: status and choices.',
 		'  offline-notify [status]         Offline notifications for your users: set up the Matrix,',
 		'                                  Session, XMPP, Telegram and email accounts this site sends',
-		'                                  them from (each tested before it is saved).',
+		'                                  them from. Before saving: Matrix has its sign-in checked',
+		'                                  by its server (a test note to you is optional); Telegram',
+		'                                  its bot token, by Telegram; email always sends you a test',
+		'                                  note; XMPP does too (an account made here can be saved',
+		'                                  without it); Session is tested only by a test note, which',
+		'                                  you may skip.',
 		'  status                          Operator dashboard at a glance',
-		'  drain-queue [--age=DUR]         List pending relay transfers',
-		'  signups [--since=DUR]           Recent signups via this relay',
+		'  drain-queue [--age=DUR] [--offset=N]',
+		'                                  List pending relay transfers (--offset skips the first N)',
+		'  signups [--since=DUR] [--offset=N]',
+		'                                  Recent signups via this relay (--offset skips the first N)',
 		'  abuse [--since=DUR]             Recent abuse alerts (24h default)',
-		'  failed-broadcasts [--since=DUR] Relay broadcasts that errored',
+		'  failed-broadcasts [--since=DUR] [--offset=N]',
+		'                                  Relay broadcasts that errored (--offset skips the first N)',
 		'  loyalty [--since=DUR]           Loyalty milestones triggered',
 		'  attestations                    Pending fee-attestation queue',
 		'  treasury btc [--addresses]      BTC treasury: per-order fee addresses + the gap limit to set',
 		'                                  in your wallet (read-only; run on the server)',
-		'  moderation [--type=...] [--since=DUR]  Review abuse flags + block/unblock accounts (interactive)',
-		'  flags [--type=reciprocity|related]  Moderation flags raised',
+		'  moderation [--type=...] [--since=DUR]',
+		'                                  Review the moderation flags (all time by default), and block,',
+		'                                  unblock, clear a flag or undo a clearance (interactive)',
+		'  flags [--type=reciprocity|related|pile_on|concentration] [--since=DUR]',
+		'                                  Moderation flags raised (last 7d by default; --since=all',
+		'                                  shows all of them)',
 		'  block <account> [reason]        Hide an account\u2019s listings on THIS instance (local; no posting key)',
 		'  unblock <account>               Un-hide an account\u2019s listings on this instance',
 		'  fast-sync [--from-file <path>]   Restore the newest federation snapshot (or import a peer snapshot .tar.gz) — recommended for a fresh node',
@@ -327,8 +346,9 @@ function printHelp(): void {
 		'',
 		'Environment:',
 		'  Set MORPHIT_OPS_DATABASE_URL (or MORPHIT_INDEXER_DATABASE_URL,',
-		'  or DATABASE_URL) to the Postgres connection string.  Other env',
-		'  vars (relay-account name, threshold tunables) have sensible',
+		'  or DATABASE_URL) to the Postgres connection string.  The relay',
+		'  account is MORPHIT_RELAY_ACCOUNT from morphit.env (or',
+		'  MORPHIT_OPS_RELAY_ACCOUNT); the threshold tunables have',
 		'  defaults; see apps/ops-cli/src/config.ts for the full list.'
 	];
 	for (const line of lines) info(line);
@@ -351,6 +371,77 @@ export function opsCliVersion(): string {
 
 function printVersion(): void {
 	info(`morphit-ops ${opsCliVersion()}`);
+}
+
+// ─── Run without sudo ────────────────────────────────────────────
+
+/** A database URL given in this process's own environment (not from the
+ *  root-only files), so a database view can run without sudo. */
+function databaseUrlInEnv(): boolean {
+	return ['MORPHIT_OPS_DATABASE_URL', 'MORPHIT_INDEXER_DATABASE_URL', 'DATABASE_URL'].some(
+		(k) => (process.env[k] ?? '') !== ''
+	);
+}
+
+/**
+ * Whether a TYPED command must stop up front when run without sudo (review
+ * v1.21.18: only the menu checked; typed, `doctor`, `status`,
+ * `edit-active-key` … failed part-way with a raw "EACCES" or advice that was
+ * not true). The commands that already look after a run without sudo
+ * themselves are left to it:
+ *  - upgrade: refuses itself, except its read-only --check-only / --json;
+ *  - edit, alt-address: say "Run it with sudo" as soon as the settings cannot
+ *    be read, and --out may name a folder this user owns;
+ *  - offline-notify: says to run it with sudo, first thing;
+ *  - mcp: shows the service state, and runs `sudo systemctl` for a change;
+ *  - harden, ssl, bunkerweb: look at what this user can, and say "Run it with
+ *    sudo" for what it cannot;
+ *  - branding status: says so when the settings cannot be read;
+ *  - the database views, and `fast-sync --rehearse` / `--verify-only`, when
+ *    this run's own environment names the database (they then need nothing
+ *    root-only to read it).
+ */
+function typedNeedsRoot(
+	subcommand: string,
+	flags: Readonly<Record<string, string>>,
+	positional: readonly string[]
+): boolean {
+	if (!needsRoot(subcommand)) return false;
+	switch (subcommand) {
+		case 'upgrade':
+		case 'edit':
+		case 'alt-address':
+		case 'offline-notify':
+		case 'mcp':
+		case 'harden':
+		case 'ssl':
+		case 'bunkerweb':
+			return false;
+		case 'branding': {
+			const sub = positional[0] ?? 'status';
+			// Its own hidden child (`branding __apply-child`) runs as the user
+			// that started it, which already passed this check.
+			return sub !== 'status' && !sub.startsWith('__');
+		}
+		case 'status':
+		case 'signups':
+		case 'failed-broadcasts':
+		case 'drain-queue':
+		case 'moderation':
+			return !databaseUrlInEnv();
+		case 'fast-sync':
+			// --rehearse / --verify-only only download and check a snapshot.
+			return !(flags.rehearse === 'true' || flags['verify-only'] === 'true') || !databaseUrlInEnv();
+		default:
+			return true;
+	}
+}
+
+/** Say that this needs sudo, with the exact command. */
+function sayNeedsSudo(argv: readonly string[]): void {
+	info('');
+	info('  That needs administrator rights on this server. Run it with sudo:');
+	info(`    ${sudoCommandLine(argv)}`);
 }
 
 // ─── Main ────────────────────────────────────────────────────────
@@ -386,6 +477,18 @@ async function main(): Promise<number> {
 		return 0;
 	}
 
+	// A typed command that needs root, run without it: say so up front, with
+	// the exact command, instead of failing part-way (the menu does the same
+	// for what is picked there, below).
+	if (
+		args.subcommand !== null &&
+		!runningAsRoot() &&
+		typedNeedsRoot(args.subcommand, args.flags, args.positional)
+	) {
+		sayNeedsSudo(process.argv.slice(2));
+		return 1;
+	}
+
 	if (args.subcommand === null) {
 		// bare `morphit-ops` on an interactive terminal opens a
 		// menu so the operator can pick an action by intent instead of
@@ -403,13 +506,29 @@ async function main(): Promise<number> {
 		// disabled — the "update available" marker and relay-balance
 		// warnings rendered as plain text.
 		initColorMode(readColorMode());
-		// Best-effort annotations (live version on Upgrade, attention marker
-		// on Moderation). Never throws or hangs — bounded timeouts, and the
-		// braille spinner turns while it waits.
-		const annotations = await gatherMenuAnnotations();
-		const selection = await runMainMenu(annotations);
+		// This server's own settings (its relay account, database address) BEFORE
+		// the annotations: without them the "relay balance low" marker graded the
+		// default @morphit-relay — morphit.io's relay — on every other server.
+		// Best-effort; OS env wins; a file this user cannot read is skipped.
+		loadInstanceEnv(defaultRepoRoot());
+		let selection;
+		try {
+			// Best-effort annotations (live version on Upgrade, attention marker
+			// on Moderation). Never throws or hangs — bounded timeouts, and the
+			// braille spinner turns while it waits.
+			const annotations = await gatherMenuAnnotations();
+			selection = await runMainMenu(annotations, { isRoot: runningAsRoot() });
+		} catch (err) {
+			// Ctrl+C / Ctrl+D at the menu: "Stopped — …" and 130, never "fatal:".
+			return commandFailed(err);
+		}
 		if (selection === null) {
 			return 0;
+		}
+		if (!runningAsRoot() && needsRoot(selection.subcommand)) {
+			// It would stop with a permission error part-way; say so up front.
+			sayNeedsSudo([selection.subcommand, ...selection.positional]);
+			return 1;
 		}
 		// Re-enter dispatch with the chosen subcommand by rebuilding
 		// args; everything below handles it exactly as if typed.
@@ -673,9 +792,8 @@ async function main(): Promise<number> {
 
 	// `upgrade` — check for + apply releases from Forgejo.
 	// No DB needed; talks to the release HTTP API and the local
-	// filesystem.  Manual-only by default; set
-	// MORPHIT_AUTO_UPGRADE=1 to skip the confirmation prompt for
-	// cron/automation use..
+	// filesystem.  Manual-only by default; --yes skips the confirmation
+	// question for cron/automation use.
 	if (args.subcommand === 'upgrade') {
 		try {
 			return await runUpgrade({
@@ -841,7 +959,7 @@ async function main(): Promise<number> {
 	// morphit.env is root-owned, which is exactly why these commands are
 	// tagged "(needs sudo)".  Same bridge the on-chain commands (register /
 	// show-key / payment-method) already use.
-	loadInstanceEnv(defaultRepoRoot());
+	const instanceEnv = loadInstanceEnv(defaultRepoRoot());
 
 	// Now load config — only after we've handled help/version
 	// and init, because those work without DATABASE_URL set.
@@ -849,10 +967,26 @@ async function main(): Promise<number> {
 	try {
 		config = loadConfig();
 	} catch (err) {
-		printError(err instanceof Error ? err.message : String(err));
+		printError(
+			notInstalledMessage(err, defaultRepoRoot(), undefined, {
+				isRoot: runningAsRoot(),
+				argv: process.argv.slice(2)
+			}) ?? (err instanceof Error ? err.message : String(err))
+		);
 		return 2;
 	}
 	initColor(config);
+
+	// The views that are about this server's relay account need to know which
+	// it is: there is no default (it used to be morphit.io's relay, shown and
+	// graded on every other server).
+	if (
+		config.relayAccount === '' &&
+		(args.subcommand === 'status' || args.subcommand === 'signups')
+	) {
+		printError(relayAccountNotSet(args.subcommand, instanceEnv.infraPath));
+		return 1;
+	}
 
 	const db = await createDatabase(config);
 	try {
@@ -899,6 +1033,39 @@ async function main(): Promise<number> {
 	}
 }
 
+/** Why `status` / `signups` cannot run: this server's relay account is not
+ *  known — its settings file cannot be read as this user, or does not name
+ *  it. What to do, with the exact commands. */
+function relayAccountNotSet(subcommand: string, infraPath: string): string {
+	const what =
+		subcommand === 'signups'
+			? 'its signups cannot be listed'
+			: "the dashboard cannot show the relay's balance and signups";
+	const again = sudoCommandLine(
+		process.argv.slice(2).length > 0 ? process.argv.slice(2) : [subcommand]
+	);
+	let unreadable = false;
+	if (existsSync(infraPath)) {
+		try {
+			readFileSync(infraPath, 'utf8');
+		} catch {
+			unreadable = true;
+		}
+	}
+	if (unreadable) {
+		return (
+			`This server's settings (${infraPath}) cannot be read as this user, so its relay account is not known and ${what}.\n` +
+			`  Run it with sudo, on this server: ${again}`
+		);
+	}
+	return (
+		`This server's relay account is not set, so ${what}.\n` +
+		`  It is the MORPHIT_RELAY_ACCOUNT line in ${infraPath} (the guided install writes it).\n` +
+		`  Add that line with your relay account's name, on this server: sudo nano ${infraPath}\n` +
+		`  then run: ${again}`
+	);
+}
+
 /** A command that threw: Ctrl+C at a prompt is the operator stopping it (exit
  *  130, the SIGINT convention), anything else an error (exit 3). */
 
@@ -924,6 +1091,8 @@ for (const evt of ['uncaughtException', 'unhandledRejection'] as const) {
 main()
 	.then((code) => process.exit(code))
 	.catch((err: unknown) => {
+		// Ctrl+C / Ctrl+D that reached here is the operator stopping, not a fault.
+		if (isAbortError(err)) process.exit(commandFailed(err));
 		// Last-resort handler — main()'s try/finally should have
 		// caught everything, but if a Promise rejection escapes
 		// we still want to surface it cleanly.  the

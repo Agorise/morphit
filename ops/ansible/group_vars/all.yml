@@ -288,7 +288,10 @@ morphit_indexer_disabled_assets: ""
 # money-only instance.  See OPERATIONS.md §"Payment-method configuration".
 morphit_indexer_disabled_payment_methods: ""
 
-# Attestation phase: 'launch' or 'steady'.  See §20.
+# Attestation phase: 'launch' or 'steady'.  See §20.  It only counts
+# for attestations in blocks stamped before 2026-11-01 00:00 UTC; from
+# then on every indexer uses 'launch' whatever this says, and moving to
+# 'steady' needs a Morphit release (changing this no longer does it).
 morphit_indexer_attestation_phase: launch
 
 

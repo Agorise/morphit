@@ -103,8 +103,18 @@ case "$rc" in
              '{"hint":"listing-fee pin has drifted; broadcast a re-pin (release-build-payload.ts | release-broadcast.ts) or enable auto-broadcast"}'
         ;;
     *)
-        emit info treasury_repin_check_failed \
-             '{"hint":"could not fetch release/prices; no re-pin made (transient)"}'
+        # The check stops before asking anything where there is no clearnet
+        # (scripts/lib/repinHiddenOnlyStop.ts): say so, not "could not fetch".
+        if grep -q "This server is hidden-only" /tmp/morphit-repin.out 2>/dev/null; then
+            emit info treasury_repin_check_failed \
+                 '{"hint":"this server is hidden-only: the re-pin check needs clearnet, so it asked nothing and made no re-pin; run it on a machine with clearnet"}'
+        elif grep -q "Could not tell whether this server is hidden-only" /tmp/morphit-repin.out 2>/dev/null; then
+            emit info treasury_repin_check_failed \
+                 '{"hint":"could not tell whether this server is hidden-only, so the re-pin check asked nothing; if it is not, on this server: echo MORPHIT_REPIN_HIDDEN_ONLY=no | sudo tee -a /etc/morphit/treasury-repin.env"}'
+        else
+            emit info treasury_repin_check_failed \
+                 '{"hint":"could not fetch release/prices; no re-pin made (transient)"}'
+        fi
         ;;
 esac
 exit 0

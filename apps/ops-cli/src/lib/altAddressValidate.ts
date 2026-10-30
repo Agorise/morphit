@@ -30,6 +30,41 @@ const I2P_NAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9
 // it lives here beside validateI2pName rather than in the AltNet generator set.
 const ENS_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.eth$/;
 
+/** The longest address the indexer accepts for every alt-network setting
+ *  (apps/indexer/src/config/index.ts: MORPHIT_INSTANCE_TOR_ADDRESS,
+ *  _LOKINET_ADDRESS, _I2P_B32_ADDRESS, _I2P_NAME_ADDRESS, _NOSTR_PUBKEY and
+ *  _ENS_NAME are all z.string().max(80)). A longer value stops the indexer
+ *  from starting, so every validator here refuses it first. Tied to the
+ *  indexer's schema by test/editFieldLimits.test.ts. */
+export const ALT_ADDRESS_MAX = 80;
+
+/** The longest value the indexer accepts for each free-text setting `init`
+ *  and `edit` write (apps/indexer/src/config/index.ts: z.string().max(…)). A
+ *  longer one makes the indexer refuse to start, so both refuse it at the
+ *  prompt. The alt-network addresses share ALT_ADDRESS_MAX. Tied to the
+ *  indexer's own schema by test/editFieldLimits.test.ts. */
+export const INDEXER_TEXT_LIMITS: Readonly<Record<string, number>> = {
+	MORPHIT_INSTANCE_NAME: 64,
+	MORPHIT_INSTANCE_TAGLINE: 200,
+	MORPHIT_INSTANCE_SEO_TITLE: 200,
+	MORPHIT_INSTANCE_SEO_DESCRIPTION: 500,
+	MORPHIT_INSTANCE_SEO_KEYWORDS: 500
+};
+
+/** Why `value` cannot be saved as `key` (the indexer would refuse to start),
+ *  or null when it can. PURE. */
+export function fieldProblem(key: string, value: string): string | null {
+	const max = INDEXER_TEXT_LIMITS[key];
+	if (max !== undefined && value.length > max)
+		return `too long — ${value.length} characters, at most ${max} fit (a longer one stops your site from starting)`;
+	return null;
+}
+
+const TOO_LONG: ValidateResult = {
+	ok: false,
+	reason: `too long — at most ${ALT_ADDRESS_MAX} characters (a longer one stops your site from starting)`
+};
+
 /** Trim, lowercase, strip a pasted scheme + trailing slashes. */
 export function normalizeAltAddress(raw: string): string {
 	return raw
@@ -63,6 +98,7 @@ export type ValidateResult =
 export function validateAltAddress(net: AltNet, raw: string): ValidateResult {
 	const v = normalizeAltAddress(raw);
 	if (v.length === 0) return { ok: false, reason: 'empty' };
+	if (v.length > ALT_ADDRESS_MAX) return TOO_LONG;
 	if (net === 'tor') {
 		return isValidOnion(v)
 			? { ok: true, value: v }
@@ -84,6 +120,7 @@ export function validateAltAddress(net: AltNet, raw: string): ValidateResult {
 export function validateI2pName(raw: string): ValidateResult {
 	const v = normalizeAltAddress(raw);
 	if (v.length === 0) return { ok: false, reason: 'empty' };
+	if (v.length > ALT_ADDRESS_MAX) return TOO_LONG;
 	if (v.endsWith('.b32.i2p'))
 		return { ok: false, reason: 'that is a .b32.i2p hash address — set it under the I2P b32 option, not the vanity name' };
 	return isValidI2pName(v)
@@ -99,9 +136,26 @@ export function validateI2pName(raw: string): ValidateResult {
 export function validateEnsName(raw: string): ValidateResult {
 	const v = normalizeAltAddress(raw);
 	if (v.length === 0) return { ok: false, reason: 'empty' };
+	if (v.length > ALT_ADDRESS_MAX) return TOO_LONG;
 	return isValidEnsName(v)
 		? { ok: true, value: v }
 		: { ok: false, reason: 'that is not an ENS .eth name (expected something like "yourbrand.eth")' };
+}
+
+/** Validate a Nostr pubkey: npub1 bech32 or 64-char hex.  Lenient on the
+ *  bech32 body (guards typos, not a full checksum verify); rejects nsec. */
+export function validateNostr(raw: string): ValidateResult {
+	const v = raw.trim();
+	if (v.toLowerCase().startsWith('nsec')) {
+		return {
+			ok: false,
+			reason: 'that looks like a PRIVATE key (nsec…). Paste your PUBLIC key (npub… or hex).'
+		};
+	}
+	if (v.length > ALT_ADDRESS_MAX) return TOO_LONG;
+	if (/^npub1[a-z0-9]{58,}$/i.test(v)) return { ok: true, value: v.toLowerCase() };
+	if (/^[0-9a-f]{64}$/i.test(v)) return { ok: true, value: v.toLowerCase() };
+	return { ok: false, reason: 'expected an "npub1…" key or a 64-character hex string' };
 }
 
 /** morphit.config.env key for the optional ENS .eth name. Standalone (not in

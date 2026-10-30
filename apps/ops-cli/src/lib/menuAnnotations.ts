@@ -21,9 +21,12 @@
  *     server each time the menu opens. Hidden-only is decided as the upgrade
  *     decides it (isHiddenOnly); when that cannot be told, the node is treated
  *     as hidden-only. The menu waits with the braille spinner.
- *   - unresolvedFlags: recent abuse flags where NEITHER named account
- *     is blocked on this instance (i.e. the operator hasn't acted) —
- *     best-effort DB read, null if config/DB unavailable.
+ *   - unresolvedFlags: abuse flags where NEITHER named account is blocked on
+ *     this instance (i.e. the operator hasn't acted) — counted by the SAME
+ *     function, window and four signals as the Moderation screen
+ *     (moderationSignals.countFlags, all time); it once counted 2 signals over
+ *     30 days while the screen listed 4 over 7, so "⚠ 2 to review" opened onto
+ *     "0 flags". Best-effort DB read, null if config/DB unavailable.
  *   - relayBalanceStatus: the relay account's liquid BLURT graded
  *     against thresholds.relayBalance ('warn'/'error' when running low),
  *     via a short-timeout chain read; null if config/chain unavailable. On a
@@ -39,6 +42,8 @@ import { lookupBlurtAccount } from '../init/chainCheck.ts';
 import { findLocalOfflineRelease, compareTags } from '../commands/upgrade.ts';
 import { startDotsSpinner } from '../init/spinner.ts';
 import { isHiddenOnlyNode } from './hiddenOnly.ts';
+import { countFlags, cutoffFor, DEFAULT_MODERATION_SINCE } from './moderationSignals.ts';
+import { parseDurationSpec } from './time.ts';
 import { closeQuietly, codeHostAgent } from './codeHostAgent.ts';
 import {
 	isHiddenOnly,
@@ -64,7 +69,6 @@ export interface MenuAnnotations {
 const DEFAULT_INSTALL_DIR = '/opt/morphit';
 const DEFAULT_RELEASE_HOST = 'git.agorise.net';
 const DEFAULT_RELEASE_REPO = 'agorise/morphit';
-const FLAG_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 /** How long the menu waits for the code host's answer (with the spinner). */
 export const MENU_RELEASE_HOST_TIMEOUT_MS = 10_000;
 /** How long the menu waits for this node's own indexer (on the box). */
@@ -72,11 +76,16 @@ export const MENU_ONCHAIN_TIMEOUT_MS = 4_000;
 /** A release tag the menu may show. */
 const TAG_RE = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]{1,40})?$/;
 
+/** The file the installed release tag is read from (MORPHIT_INSTALL_DIR,
+ *  else /opt/morphit). */
+export function currentVersionFile(): string {
+	return join(process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR, 'release-info.json');
+}
+
 /** Installed release tag from release-info.json, or null. Sync, no
  *  network, never throws. */
 export function readCurrentVersion(): string | null {
-	const installDir = process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR;
-	const p = join(installDir, 'release-info.json');
+	const p = currentVersionFile();
 	if (!existsSync(p)) return null;
 	try {
 		const parsed = JSON.parse(readFileSync(p, 'utf-8')) as { tag?: unknown };
@@ -137,8 +146,8 @@ export async function fetchLatestVersion(
 	return typeof any === 'string' ? any : null;
 }
 
-/** Best-effort count of recent abuse flags where NEITHER named account
- *  is blocked on this instance. Loads config + DB, bounded by
+/** Best-effort count of abuse flags where NEITHER named account is blocked
+ *  on this instance — the Moderation screen's own count. Loads config + DB, bounded by
  *  `timeoutMs`; returns null if anything is unavailable. */
 export async function unresolvedFlagCount(timeoutMs = 2500): Promise<number | null> {
 	const work = (async (): Promise<number | null> => {
@@ -155,24 +164,11 @@ export async function unresolvedFlagCount(timeoutMs = 2500): Promise<number | nu
 			return null;
 		}
 		try {
-			const cutoff = new Date(Date.now() - FLAG_WINDOW_MS);
-			const r = await db.query<{ n: number | string }>(
-				`SELECT
-				   (SELECT count(*) FROM suspicious_reciprocity sr
-				     WHERE sr.detected_at >= $1
-				       AND NOT EXISTS (SELECT 1 FROM operator_blocks ob
-				                         WHERE ob.operator = $2 AND ob.state = 'blocked'
-				                           AND ob.blocked IN (sr.account_a, sr.account_b)))
-				 + (SELECT count(*) FROM related_accounts ra
-				     WHERE ra.detected_at >= $1
-				       AND NOT EXISTS (SELECT 1 FROM operator_blocks ob
-				                         WHERE ob.operator = $2 AND ob.state = 'blocked'
-				                           AND ob.blocked IN (ra.account_a, ra.account_b)))
-				   AS n`,
-				[cutoff, config.operatorAccount]
+			const cutoff = cutoffFor(
+				DEFAULT_MODERATION_SINCE,
+				parseDurationSpec(DEFAULT_MODERATION_SINCE) ?? 0
 			);
-			const n = r.rows[0]?.n;
-			return n === undefined ? null : Number(n);
+			return (await countFlags(db, config.operatorAccount, cutoff)).unresolved;
 		} catch {
 			return null;
 		} finally {
@@ -209,6 +205,9 @@ export async function relayBalanceStatus(
 		} catch {
 			return null; // not configured yet (pre-install menu)
 		}
+		// No relay account known on this server ('' — relayAccountFromEnv found
+		// none): nothing to grade, and no lookup of an empty name.
+		if (config.relayAccount === '') return null;
 		try {
 			const acct = await lookupBlurtAccount(config.relayAccount);
 			if (acct === null) return null; // account not found

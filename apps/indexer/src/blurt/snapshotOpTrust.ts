@@ -26,9 +26,20 @@
  *
  * The payload that comes back is the one parsed from the confirmed block, never
  * the one in the history answer.
+ *
+ * v1.21.18 — ON A HIDDEN-ONLY NODE check 1 could never complete: it asked for
+ * the newest 1000 positions of @morphit's history in one read, and over Tor/I2P
+ * even 100 never arrived within 240 s (morphitlat, v1.21.16: 10 positions,
+ * 23,646 bytes, took 33.7 s). When every node this process can ask is a Tor/I2P
+ * service, the history is now read in pages of HIDDEN_HISTORY_PAGE_SIZE
+ * positions, newest first, down to the same depth, each page agreed by the
+ * same number of operators under the same rule (agreedHistoryPages). Checks 2
+ * and 3 are unchanged. With a clearnet (or local) node in the pool the single
+ * read is kept as it was.
  */
 import { createHash } from 'node:crypto';
 import { cryptoUtils, Signature } from '@beblurt/dblurt';
+import { isHiddenEndpointUrl } from '@morphit/rpc-pool';
 import {
 	INDEXER_SNAPSHOT_OP_ID,
 	selectNewestSnapshotOp,
@@ -45,6 +56,116 @@ export interface AgreedChainReader {
 		minAgree: number,
 		opts?: { readonly mutable?: boolean; readonly freshOf?: (answer: T) => number | null }
 	): Promise<{ readonly value: T; readonly key: string } | null>;
+	/** The nodes it asks (BlurtClient: its pool), to tell whether every read
+	 *  goes over Tor/I2P. */
+	endpointSnapshot?(): ReadonlyArray<{ readonly url: string }>;
+}
+
+/**
+ * History positions per page when every node is a Tor/I2P service. Measured
+ * through morphitlat's indexer (v1.21.16): 10 positions of @morphit's history,
+ * 23,646 bytes, took 33.7 s; 100 never arrived within 240 s. @morphit's ops are
+ * large (a release op is 3-4 KB) and every op it broadcasts also takes a second
+ * position, the chain's fee for it, which the answer leaves out.
+ */
+export const HIDDEN_HISTORY_PAGE_SIZE = 10;
+
+/** True when every node `chain` reads from is a Tor/I2P (or Lokinet) service:
+ *  no clearnet and no local node in its pool. False when it cannot tell. */
+export function readsOnlyHiddenNodes(chain: unknown): boolean {
+	const snap = (chain as { endpointSnapshot?: unknown } | null)?.endpointSnapshot;
+	if (typeof snap !== 'function') return false;
+	let list: unknown;
+	try {
+		list = (snap as () => unknown).call(chain);
+	} catch {
+		return false;
+	}
+	if (!Array.isArray(list) || list.length === 0) return false;
+	return list.every(
+		(e) =>
+			typeof (e as { url?: unknown } | null)?.url === 'string' &&
+			isHiddenEndpointUrl((e as { url: string }).url)
+	);
+}
+
+function seqBounds(history: readonly unknown[]): { low: number | null; high: number | null } {
+	let low: number | null = null;
+	let high: number | null = null;
+	for (const e of history) {
+		if (!Array.isArray(e)) continue;
+		const s = e[0];
+		if (typeof s !== 'number' || !Number.isInteger(s)) continue;
+		if (low === null || s < low) low = s;
+		if (high === null || s > high) high = s;
+	}
+	return { low, high };
+}
+
+/**
+ * `account`'s history read newest first in pages of `pageSize` positions, down
+ * to `depth` positions, until `pick` finds what it looks for in a page. Each
+ * page is one condenserAgreed read: `minAgree` operators must agree on what
+ * `pick` names in it AND on the page's first and last positions (so the next
+ * page starts where the agreed one ended, never where one node said), under the
+ * mutable-state rule (an answer with fewer positions is from a node that is
+ * behind, and is outvoted as older). Returns null when some page was not
+ * agreed (the caller learns nothing); `found` null when the depth, or the start
+ * of the history, was reached without it (`complete`: the start was reached).
+ */
+export async function agreedHistoryPages<S>(
+	chain: AgreedChainReader,
+	args: {
+		readonly account: string;
+		readonly depth: number;
+		readonly pageSize: number;
+		readonly minAgree: number;
+		readonly pick: (page: readonly unknown[]) => { readonly key: string; readonly value: S } | null;
+	}
+): Promise<{
+	readonly pages: readonly (readonly unknown[])[];
+	readonly found: S | null;
+	readonly complete: boolean;
+} | null> {
+	const pageSize = Math.max(1, Math.floor(args.pageSize));
+	const pages: unknown[][] = [];
+	let from = -1;
+	let covered = 0;
+	while (covered < args.depth) {
+		const limit = Math.min(pageSize, args.depth - covered - 1, from === -1 ? Infinity : from);
+		if (limit < 0) break;
+		const agreed = await chain.condenserAgreed<unknown>(
+			'get_account_history',
+			[args.account, from, limit],
+			(h) => {
+				if (!Array.isArray(h)) return null;
+				const { low, high } = seqBounds(h);
+				let picked: { key: string } | null;
+				try {
+					picked = args.pick(h);
+				} catch {
+					return null;
+				}
+				return `${picked === null ? 'none' : picked.key}|${low ?? '-'}..${high ?? '-'}`;
+			},
+			args.minAgree,
+			{
+				mutable: true,
+				freshOf: (h) => (Array.isArray(h) ? (seqBounds(h).high ?? 0) : null)
+			}
+		);
+		if (agreed === null || !Array.isArray(agreed.value)) return null;
+		const page = agreed.value as unknown[];
+		pages.push(page);
+		const hit = args.pick(page);
+		if (hit !== null) return { pages, found: hit.value, complete: false };
+		covered += limit + 1;
+		const { low } = seqBounds(page);
+		if (low === null || low <= 0) return { pages, found: null, complete: true };
+		if (from !== -1 && low > from) return null; // the agreed page did not move back
+		from = low - 1;
+	}
+	return { pages, found: null, complete: false };
 }
 
 interface TxLike {
@@ -207,40 +328,65 @@ export async function resolveTrustedSnapshotOp(
 		readonly chainId: string;
 		readonly historyLimit: number;
 		readonly minAgree: number;
+		/** History positions per read. Default: the whole `historyLimit` in one
+		 *  read, or HIDDEN_HISTORY_PAGE_SIZE when every node is a Tor/I2P
+		 *  service (readsOnlyHiddenNodes). */
+		readonly pageSize?: number;
 	}
 ): Promise<TrustedSnapshotResult> {
 	const signer = args.signer.toLowerCase();
 	const trusted = new Set([signer]);
-	const hist = await chain.condenserAgreed<unknown>(
-		'get_account_history',
-		[signer, -1, args.historyLimit],
-		(h) => {
-			if (!Array.isArray(h)) return null;
-			const sel = selectNewestSnapshotOp(h, trusted);
-			return sel === null ? 'none' : `${sel.blockNum ?? '?'}|${sel.trxId ?? '?'}`;
-		},
-		args.minAgree,
-		{
-			// The account's NEWEST op changes as the chain grows: a node that is
-			// behind names an older one. Its block number says which (VT5-1), so
-			// a stale majority cannot pin an older snapshot over a newer one.
-			mutable: true,
-			freshOf: (h) => {
-				if (!Array.isArray(h)) return null;
-				const n = selectNewestSnapshotOp(h, trusted)?.blockNum;
-				return typeof n === 'number' ? n : 0;
+	const noAgreement: TrustedSnapshotResult = {
+		ok: false,
+		reason:
+			`the RPC nodes this box can reach did not agree on @${signer}'s newest snapshot ` +
+			`(${args.minAgree} operators, counted by node name, must). Try again in a few minutes.`
+	};
+	const pageSize =
+		args.pageSize ?? (readsOnlyHiddenNodes(chain) ? HIDDEN_HISTORY_PAGE_SIZE : args.historyLimit);
+	let history: unknown;
+	if (pageSize < args.historyLimit) {
+		// Over Tor/I2P: small pages, newest first, until the newest snapshot op.
+		const r = await agreedHistoryPages(chain, {
+			account: signer,
+			depth: args.historyLimit,
+			pageSize,
+			minAgree: args.minAgree,
+			pick: (h) => {
+				const sel = selectNewestSnapshotOp(h, trusted);
+				return sel === null
+					? null
+					: { key: `${sel.blockNum ?? '?'}|${sel.trxId ?? '?'}`, value: sel };
 			}
-		}
-	);
-	if (hist === null) {
-		return {
-			ok: false,
-			reason:
-				`the RPC nodes this box can reach did not agree on @${signer}'s newest snapshot ` +
-				`(${args.minAgree} operators, counted by node name, must). Try again in a few minutes.`
-		};
+		});
+		if (r === null) return noAgreement;
+		history = r.pages.flat();
+	} else {
+		const hist = await chain.condenserAgreed<unknown>(
+			'get_account_history',
+			[signer, -1, args.historyLimit],
+			(h) => {
+				if (!Array.isArray(h)) return null;
+				const sel = selectNewestSnapshotOp(h, trusted);
+				return sel === null ? 'none' : `${sel.blockNum ?? '?'}|${sel.trxId ?? '?'}`;
+			},
+			args.minAgree,
+			{
+				// The account's NEWEST op changes as the chain grows: a node that is
+				// behind names an older one. Its block number says which (VT5-1), so
+				// a stale majority cannot pin an older snapshot over a newer one.
+				mutable: true,
+				freshOf: (h) => {
+					if (!Array.isArray(h)) return null;
+					const n = selectNewestSnapshotOp(h, trusted)?.blockNum;
+					return typeof n === 'number' ? n : 0;
+				}
+			}
+		);
+		if (hist === null) return noAgreement;
+		history = hist.value;
 	}
-	const sel = selectNewestSnapshotOp(hist.value, trusted);
+	const sel = selectNewestSnapshotOp(history, trusted);
 	if (sel === null)
 		return {
 			ok: false,
@@ -277,7 +423,7 @@ export async function resolveTrustedSnapshotOp(
 	return {
 		ok: true,
 		selected: { payload: v.value, seq: sel.seq, signer, blockNum: sel.blockNum, trxId: sel.trxId },
-		history: hist.value
+		history
 	};
 }
 

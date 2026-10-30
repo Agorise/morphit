@@ -12,7 +12,7 @@
  * handlers — register, order, stranger fee — against real Postgres; every
  * verdict is read back from the rows the handlers wrote.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import registerHandler from '../../src/indexer/handlers/operatorRegister';
 import orderHandler from '../../src/indexer/handlers/order';
@@ -24,6 +24,7 @@ import {
 	backfillFeeRecipientHistory
 } from '../../src/indexer/reconcileRegistrations';
 import { instanceRoute } from '../../src/api/instance';
+import { CONSENSUS_V2_ACTIVATION_TIME } from '../../src/indexer/consensusActivation';
 import { operatorRegistrationRoute } from '../../src/api/operatorRegistration';
 import {
 	INTEGRATION_ENABLED,
@@ -422,6 +423,14 @@ d('G1 — cross-instance BLURT fee verification', () => {
 	});
 
 	it("/v1/instance reports whether this instance's fees account is registered (= accepted elsewhere)", async () => {
+		// Read as before the consensus activation time, when an unregistered
+		// account is still advertised as configured (afterwards it is the
+		// treasury: test/api/instanceConfiguredFeeRecipient.test.ts).
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(Date.parse(CONSENSUS_V2_ACTIVATION_TIME) - 3_600_000);
+		onTestFinished(() => {
+			vi.useRealTimers();
+		});
 		const read = async (cfg: ReturnType<typeof fakeConfig>) => {
 			const res = await instanceRoute(cfg, undefined, fx.db).request('/');
 			const body = (await res.json()) as Record<string, unknown>;

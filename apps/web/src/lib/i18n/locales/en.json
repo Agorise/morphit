@@ -46,10 +46,10 @@
 			"check_unconfirmed": "Not checked: the newest signed release could not be confirmed (the only one read is version {version}, older than this site's {running}). Checked again within the hour."
 		},
 		"asset_stance": {
-			"explain": "Morphit is a federated marketplace. Every operator chooses which tradable assets their instance accepts new orders for — the default is everything in the canonical registry, but an operator can disable any trade-only asset (e.g. USDT) if they prefer their instance to specialize in privacy-first or decentralization-first assets. This is YOUR instance's current stance. Federation note: orders posted on other instances still appear in your orderbook regardless — the gate is only on new orders posted FROM here.",
+			"explain": "Morphit is a federated marketplace. Every operator chooses which tradable assets their instance offers — the default is everything in the canonical registry, but an operator can disable any trade-only asset (e.g. USDT) if they prefer their instance to specialize in privacy-first or decentralization-first assets. This is YOUR instance's current stance. Federation note: orders for a disabled asset are not shown on this instance, including orders posted on other instances. Instances that offer that asset still show them.",
 			"disabled_label": "Disabled assets",
 			"disabled_none": "None — this instance accepts every tradable asset.",
-			"disabled_suffix": "(operator-disabled on this instance; tradeable on peer instances)",
+			"disabled_suffix": "(disabled on this instance: not offered here, and its orders are not shown here)",
 			"federation_note": "Want a different stance? Browse /operators to find an instance whose policy matches your preference, or run your own — see /run-a-node."
 		},
 		"worried": {
@@ -63,12 +63,13 @@
 			"type_warning_body": "If you suspect this instance is rogue, the links here can't be trusted either — a hostile instance can render visible text saying \"morphit.io\" while the underlying URL points elsewhere. Type the addresses by hand into a clean browser tab."
 		},
 		"payment_stance": {
-			"explain": "Every operator also chooses which payment methods their instance offers. The default is every method in the canonical registry; an operator can turn off any of them — most often Barter (goods/services) — to keep their instance money-only or focused. This is YOUR instance's current stance. Federation note: orders from other instances that use a disabled method still appear in your orderbook; the gate is only on new orders posted from here.",
+			"explain": "Every operator also chooses which payment methods their instance offers. The default is every method in the canonical registry; an operator can turn off any of them — most often Barter (goods/services) — to keep their instance money-only or focused. This is YOUR instance's current stance. Federation note: an order whose payment methods are all disabled here is not shown on this instance, including one posted on another instance; an order that still offers a method this instance offers is shown. Instances that offer those methods still show it.",
 			"disabled_label": "Disabled methods",
 			"disabled_none": "None — this instance offers every payment method.",
-			"disabled_suffix": "(operator-disabled on this instance; usable on peer instances)"
+			"disabled_suffix": "(disabled on this instance: not offered here, and orders that offer only disabled methods are not shown here)"
 		},
-		"fee_recipient_unregistered": "This instance's fees account @{account} is not in its operator's on-chain registration yet, so other instances in the federation hide orders paid in BLURT here and do not deliver first messages sent from here to their users. The operator fixes this by running sudo morphit-ops register on the server."
+		"fee_recipient_unregistered": "This instance's fees account @{account} is not in its operator's on-chain registration yet, so other instances in the federation hide orders paid in BLURT here and do not deliver first messages sent from here to their users. The operator fixes this by running sudo morphit-ops register on the server. From 1 November 2026, until it is registered, fees paid on this site go to the Morphit treasury.",
+		"fee_recipient_unregistered_to_treasury": "This instance's fees account is not in its operator's on-chain registration yet, so fees paid on this site go to the Morphit treasury (@{treasury}) instead. The operator fixes this by running sudo morphit-ops register on the server."
 	},
 	"admin": {
 		"setup_wizard": {
@@ -3896,7 +3897,7 @@
 			"title": "Build integrity check failed",
 			"pubkey_mismatch_body": "The latest Morphit release announcement on the Blurt blockchain is signed by a key other than the @morphit key this build trusts. Either @morphit changed its key or the @morphit account was taken over. Nothing from that announcement is used — not even the listing-fee addresses. Don't pay listing fees until this is resolved.",
 			"invalid_payload_body": "The on-chain release payload is malformed. The operator may be in the middle of a deploy, or the page you're looking at is being served by an attacker.",
-			"asset_mismatch_body": "Files this site served don't match the hashes in the release @morphit signed on the Blurt blockchain. A stale cached page can cause this (try a hard refresh). Otherwise this site is serving changed code — by accident, after a break-in, or on purpose.",
+			"asset_mismatch_body": "Files this site served don't match the hashes in the release @morphit signed on the Blurt blockchain. A stale cached page can cause this (try a hard refresh). Otherwise this site is serving old, or changed code — by accident, after a break-in, or on purpose.",
 			"show_files": "Show details",
 			"hide_files": "Hide details",
 			"what_to_do": "What to do",
@@ -3929,7 +3930,7 @@
 		"asset_policy_heading": "Your instance, your asset and payment-methods policies",
 		"asset_policy_body": "The federation lets each Operator pick which tradable assets their site supports. You can opt out per-asset and even configure which payment methods your site should support such as Cash, Paypal, Klarna, etc.",
 		"asset_policy_federation_label": "Federation stays intact.",
-		"asset_policy_federation_body": "Disabling an asset on your instance doesn't hide peer instances' orders from your users — chain history is shared, so your orderbook can still show them.",
+		"asset_policy_federation_body": "Disabling an asset hides its orders on your own site only, including orders posted on other instances. Instances that offer that asset keep showing them to their users.",
 		"requirements_heading": "Resource requirements",
 		"req_hw_label": "Hardware",
 		"req_hw_value": "2+ CPUs, 4+ GB RAM, 80+ GB drive space (SSD is best)",

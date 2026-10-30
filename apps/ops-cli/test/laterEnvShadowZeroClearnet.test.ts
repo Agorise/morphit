@@ -133,7 +133,7 @@ describe('the check after the restart says only what is true', () => {
 			},
 			tries: 1
 		});
-		expect(r).toEqual({ ok: true, unreadable: false, wrong: [] });
+		expect(r).toEqual({ ok: true, unreadable: false, down: [], wrong: [] });
 	});
 });
 

@@ -161,10 +161,13 @@ export async function healIndexerMemory(
 			? `${mib(configured)} (the cap set on this server, kept)`
 			: mib(configured);
 
+	// Already in place and nothing changed: one of the "other checks" (L1).
+	const routine = strategy === 'already' ? { routine: true } : {};
 	if (!running)
 		return {
 			strategy,
 			verified: true,
+			...routine,
 			detail: `Indexer memory cap: ${capText}, read back from systemd; it applies when the indexer starts.`
 		};
 
@@ -173,6 +176,7 @@ export async function healIndexerMemory(
 		return {
 			strategy,
 			verified: true,
+			...routine,
 			detail: `Indexer memory cap: ${capText}, read back from the running indexer.`
 		};
 	const used = inUse();

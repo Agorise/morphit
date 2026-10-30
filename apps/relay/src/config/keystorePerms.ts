@@ -60,6 +60,11 @@ export function currentProcessIdentity(): ProcessIdentity {
 	return { uid, gids: [...gids] };
 }
 
+/** `path` as one shell word (single-quoted unless it is plain). */
+function shellWord(path: string): string {
+	return /^[A-Za-z0-9_./@%+=:,-]+$/.test(path) ? path : `'${path.replace(/'/g, `'\\''`)}'`;
+}
+
 /** Throw unless the keystore at `path` has an accepted shape for `who`. */
 export function assertKeystorePermissions(
 	path: string,
@@ -68,8 +73,10 @@ export function assertKeystorePermissions(
 ): void {
 	const problem = keystorePermissionProblem(st, who);
 	if (problem === null) return;
+	const p = shellWord(path);
 	throw new Error(
 		`MORPHIT_RELAY_ACTIVE_KEY_FILE ${JSON.stringify(path)} ${problem}; it must be 0400/0600 (owner only) ` +
-			`or root:morphit-relay 0640/0440 (run: chown root:morphit-relay ${path} && chmod 0640 ${path})`
+			`or root:morphit-relay 0640/0440. To fix it, on the relay's server run: ` +
+			`sudo chown root:morphit-relay ${p} && sudo chmod 0640 ${p} && sudo systemctl restart morphit-relay`
 	);
 }

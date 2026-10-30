@@ -711,8 +711,9 @@ These are the operator's responsibility:
   Ubuntu or equivalent is the minimum baseline.
 - **Key rotation.** The relay's active key should be rotated
   quarterly or on suspicion of compromise, per OPERATIONS.md §8
-  (`sudo morphit-ops edit-active-key` installs the new key and
-  re-seals the unlock credential).
+  (on the server, `sudo morphit-ops edit-active-key` checks the new
+  key against the chain, installs it, and seals a new unlock
+  passphrase for the relay if you choose one).
 - **Balance monitoring.** Watch the relay's BLURT balance. A
   sudden drop suggests either heavy legitimate use (good signal
   to top up) or abuse (investigate). The Matrix bot alerts on low
@@ -982,8 +983,7 @@ treasury gets 10% of each fee, so this is about 1,000 BLURT of
 fees there; on the canonical instance, 100 BLURT. (Attestation ops
 in blocks stamped before 2026-11-01 00:00 UTC, the consensus-v2
 activation time, keep the old measure, all
-fee legs.) The gate runs in two phases controlled by the
-`MORPHIT_INDEXER_ATTESTATION_PHASE` env var:
+fee legs.) The gate has two phases:
 
 - **Launch** (OR gate): attestor qualifies by meeting either
   condition. Plainly: an account at least 30 days old qualifies
@@ -992,15 +992,26 @@ fee legs.) The gate runs in two phases controlled by the
 - **Steady** (AND gate): attestor must meet both — 30 days AND
   the treasury-share threshold for every sock account.
 
-**Known gap:** the phase is a node-local setting, yet it decides
-whether an attestation op is applied or rejected — a verdict every
-node should reach the same way. Until it is pinned on chain, nodes on
-different phases can disagree about attested orders.
+**The phase is the same on every node from 2026-11-01 00:00 UTC
+(v1.21.18).** Whether an attestation is recorded decides an order's
+fee status, which every node must agree on. For attestations in
+blocks stamped before that time, each node used its own
+`MORPHIT_INDEXER_ATTESTATION_PHASE` setting (so nodes on different
+phases could disagree about attested orders, and history keeps what
+each recorded). From that time every node uses **Launch**, whatever
+the setting says. Moving the federation to Steady is no longer an
+operator setting: it needs a release that changes the rule for
+everyone, with its own start time. Per the ADR-0011 addendum, the
+trigger for that move is whichever comes first: 90 days after the
+ADR-0011 activation OR 500 accounts on the chain that already meet
+both thresholds.
 
-The phase flip is an operator config change, not a redeploy.
-Per the ADR-0011 addendum, the transition trigger is whichever
-comes first: 90 days after the ADR-0011 activation OR 500
-accounts on the chain that already meet both thresholds.
+From the same time the quorum itself is counted the same way on
+every node: at least two attestors, neither the poster nor linked to
+the poster by Signal A (same creator, first Morphit activity within
+five minutes) or Signal B (mutual high-star reviews and nobody else),
+judged from chain data as of the order's newest attestation. The
+node's own flag tables, clearances and relay setting are not read.
 
 Failed attestations record four distinct rejection reasons
 (`attestor_account_not_found`,

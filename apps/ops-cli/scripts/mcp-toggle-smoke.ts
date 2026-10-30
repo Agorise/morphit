@@ -104,13 +104,16 @@ async function main(): Promise<void> {
 	);
 
 	// ── 4. runMcp branches ────────────────────────────────────────
-	// (a) running + confirm yes → systemctl disable --now, exit 0
+	// (a) running + confirm yes → systemctl disable --now, exit 0 once it is
+	//     seen stopped
 	{
 		const { exec, calls } = recordingExec(0);
+		let reads = 0;
 		const rc = await quiet(() =>
 			runMcp(CTX, {
 				exec,
-				readState: (_u: string): ServiceState => 'active',
+				readState: (_u: string): ServiceState => (reads++ === 0 ? 'active' : 'inactive'),
+				advertisedUrl: async () => null,
 				confirm: async () => true
 			})
 		);
@@ -123,13 +126,17 @@ async function main(): Promise<void> {
 		);
 	}
 
-	// (b) stopped + confirm yes → systemctl enable --now, exit 0
+	// (b) stopped + confirm yes → systemctl enable --now, exit 0 once it is
+	//     SEEN running and answering (Type=simple: enable --now returning 0
+	//     proves nothing about the process staying up)
 	{
 		const { exec, calls } = recordingExec(0);
+		let reads = 0;
 		const rc = await quiet(() =>
 			runMcp(CTX, {
 				exec,
-				readState: (_u: string): ServiceState => 'inactive',
+				readState: (_u: string): ServiceState => (reads++ === 0 ? 'inactive' : 'active'),
+				probeHealth: async () => true,
 				confirm: async () => true
 			})
 		);

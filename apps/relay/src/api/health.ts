@@ -45,7 +45,7 @@ const log = logger('relay-acts');
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-export const VERSION = '1.21.17';
+export const VERSION = '1.21.18';
 const POLL_INTERVAL_MS = 30_000;
 /** Liquid-BLURT headroom (above the account_creation_fee) the relay
  *  must hold to accept a signup. Blurt disabled the ACT model at HF2,
@@ -111,6 +111,8 @@ export class HealthService {
 	 *  drainer; null until wired. */
 	private queueStats: (() => { unsettled: number; escalated: number } | null) | null = null;
 	private signupEnabled: boolean = true;
+	/** The relay's key check (policy/activeKeyGuard), for the operator block. */
+	private activeKeyStatus: (() => Record<string, unknown>) | null = null;
 
 	constructor(
 		private readonly cfg: Config,
@@ -125,6 +127,12 @@ export class HealthService {
 	setSignupContext(opts: { ceiling: GlobalDailyCeiling; signupEnabled: boolean }): void {
 		this.ceiling = opts.ceiling;
 		this.signupEnabled = opts.signupEnabled;
+	}
+
+	/** Wire the relay's key check into /v1/health (verbose): whether the key the
+	 *  relay holds is on its account's active authority on the chain. */
+	setActiveKeyStatusProvider(fn: () => Record<string, unknown>): void {
+		this.activeKeyStatus = fn;
 	}
 
 	/** Wire the queue drainer's counts into /v1/health (verbose). */
@@ -309,6 +317,9 @@ export class HealthService {
 				// they are NOT re-sent and need the operator.
 				const q = this.queueStats?.() ?? null;
 				if (q !== null) body.transfer_queue = q;
+				// The relay's key against the chain: `mismatch` means it signs
+				// nothing (signups refused, payments held) until it is fixed.
+				if (this.activeKeyStatus !== null) body.active_key = this.activeKeyStatus();
 
 				// Signup-drain-prevention stats. Present only when
 				// setSignupContext() has wired the ceiling in — the

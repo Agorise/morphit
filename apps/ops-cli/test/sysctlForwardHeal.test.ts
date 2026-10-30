@@ -67,6 +67,12 @@ describe('IPv4 forwarding where Docker publishes public ports', () => {
 		expect(b.files.get('/etc/sysctl.d/99-morphit-hardening.conf')).toContain('tcp_syncookies = 1');
 		expect(out.detail).toMatch(/80, 443/);
 	});
+	it('already on and forwarded, nothing changed: one of the upgrade\'s "other checks" (v1.21.17 audit L1)', async () => {
+		const { isRoutineHeal } = await import('../src/commands/upgrade.ts');
+		const b = new Box();
+		expect(isRoutineHeal(await b.run())).toBe(false);
+		expect(isRoutineHeal(await b.run())).toBe(true);
+	});
 	it('a hidden-only box (loopback publish only) is left exactly as it is', async () => {
 		const b = new Box();
 		b.ports = '127.0.0.1:8090->80/tcp\n';

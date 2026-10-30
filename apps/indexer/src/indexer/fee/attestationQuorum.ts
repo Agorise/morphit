@@ -11,25 +11,42 @@
  *
  *   ≥ ATTESTATION_QUORUM distinct attestors, where an attestor counts only if
  *     - it is NOT the poster, and
- *     - it is not flagged as a related / reciprocal pair WITH the poster by the
- *       anti-review-ring signals (`related_accounts`, Signal A;
- *       `suspicious_reciprocity`, Signal B).
+ *     - it is not a related pair WITH the poster (Signal A: same creator,
+ *       first Morphit activity minutes apart), and
+ *     - it is not a reciprocal pair with the poster (Signal B: mutual
+ *       five-star reviews and nobody else).
  *
  * The attestor's own eligibility (loyalty / age) is still checked when the
  * attestation is recorded (attestorEligibility.ts); rejected attestations never
  * reach `fee_attestations`, so they cannot count here.
  *
- * Determinism: the inputs are chain-derived rows, judged as of the newest
- * attestation's block time. The reciprocity part (Signal B) is computed from
- * the feedback rows up to that moment (signals.reciprocityEverHeld), never
- * read from the detector's table, so intake and every later re-derivation, on
- * every node, reach the same answer. The related-accounts part (Signal A) is
- * still read from its table: its inputs are chain-derived, but the periodic
- * detector can raise a pair a cycle later on one node than another, so the
- * re-check job re-derives this verdict and every instance converges.
+ * Determinism. Every node, at intake and at every later re-derivation, must
+ * reach the same count, so it is judged as of the NEWEST attestation of the
+ * order (its block time and block number, both chain data) from chain-derived
+ * rows only. A row written in that same block AFTER the attestation op is
+ * invisible at intake but visible to the re-check job, so nothing may depend
+ * on one:
+ *   - Signal A: signalVerdicts.relatedEverHeld — accounts (creator), the
+ *     event log (first applied op) and operators (registration block). Never
+ *     the detector's `related_accounts` table, which this node's clearances,
+ *     its own relay setting and its timer shape. An operator registration
+ *     counts from the next block. The attestor's own attestation stands in
+ *     for its first op while that is not logged yet (an attestation that is
+ *     the account's first Morphit op); the poster's order op is logged by the
+ *     time its order exists.
+ *   - Signal B: signalVerdicts.reciprocityEverHeld over the feedback rows of
+ *     earlier blocks only (`before`).
+ *
+ * Activation. That rule applies when the newest attestation is in a block
+ * stamped at or after CONSENSUS_V2_ACTIVATION_TIME. An order whose newest
+ * attestation is older is counted as it always was (attestationQuorumLegacy.ts:
+ * `related_accounts`, and reviews up to and including that block), so history
+ * keeps the verdicts every node already recorded.
  */
 
-import { reciprocityEverHeld } from '$indexer/signals';
+import { consensusV2Active } from '$indexer/consensusActivation';
+import { legacyCountIndependentAttestors } from '$indexer/fee/attestationQuorumLegacy';
+import { reciprocityEverHeld, relatedEverHeld } from '$indexer/signalVerdicts';
 
 /** Minimal query surface (PoolClient inside a handler, Database outside). */
 interface Queryable {
@@ -48,28 +65,37 @@ export async function countIndependentAttestors(
 	orderAccount: string,
 	orderPermlink: string
 ): Promise<number> {
-	const r = await db.query<{ attestor: string; as_of: Date }>(
-		`SELECT DISTINCT fa.attestor,
-		        (SELECT MAX(x.observed_at) FROM fee_attestations x
-		          WHERE x.order_account = $1 AND x.order_permlink = $2) AS as_of
-		   FROM fee_attestations fa
-		  WHERE fa.order_account = $1
-		    AND fa.order_permlink = $2
-		    AND fa.attestor <> $1
-		    AND NOT EXISTS (
-		          SELECT 1 FROM related_accounts ra
-		           WHERE ra.account_a = LEAST(fa.attestor, $1)
-		             AND ra.account_b = GREATEST(fa.attestor, $1))`,
+	// The newest attestation of the order: its block time and number. Block
+	// times only grow with block numbers, so the two maxima are one block's.
+	const newest = await db.query<{ as_of: Date | null; as_of_block: string | null }>(
+		`SELECT MAX(observed_at) AS as_of, MAX(observed_in_block)::text AS as_of_block
+		   FROM fee_attestations
+		  WHERE order_account = $1 AND order_permlink = $2`,
+		[orderAccount, orderPermlink]
+	);
+	const row = newest.rows[0];
+	if (row === undefined || row.as_of === null || row.as_of_block === null) return 0;
+	// The newest attestation's block time picks the rule (consensusActivation).
+	const newestAttestationTime = new Date(row.as_of);
+	if (!consensusV2Active(newestAttestationTime)) {
+		return legacyCountIndependentAttestors(db, orderAccount, orderPermlink);
+	}
+	const asOf = newestAttestationTime;
+	const asOfBlock = Number(row.as_of_block);
+	// One row per attestor (UNIQUE (order_account, order_permlink, attestor)).
+	const attestors = await db.query<{ attestor: string; observed_at: Date }>(
+		`SELECT attestor, observed_at FROM fee_attestations
+		  WHERE order_account = $1 AND order_permlink = $2 AND attestor <> $1
+		  ORDER BY attestor`,
 		[orderAccount, orderPermlink]
 	);
 	let n = 0;
-	for (const row of r.rows) {
-		const flagged = await reciprocityEverHeld(db, {
-			a: row.attestor,
-			b: orderAccount,
-			asOf: new Date(row.as_of)
-		});
-		if (!flagged) n++;
+	for (const { attestor, observed_at } of attestors.rows) {
+		const pair = { a: attestor, b: orderAccount };
+		const aActiveAt = new Date(observed_at);
+		if (await relatedEverHeld(db, { ...pair, asOf, asOfBlock, aActiveAt })) continue;
+		if (await reciprocityEverHeld(db, { ...pair, asOf, before: true })) continue;
+		n++;
 	}
 	return n;
 }

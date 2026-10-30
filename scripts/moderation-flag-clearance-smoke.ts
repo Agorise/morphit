@@ -155,7 +155,9 @@ check(
 );
 check(
 	'the clearances list shows each entry\'s lifetime',
-	/permanent/.test(cmd) && /watched from/.test(cmd)
+	// 2026-10-29: "watched beyond N mutual reviews / reviews" (per signal;
+	// Signal D's watermark counts reviews, not mutual reviews).
+	/permanent/.test(cmd) && /watched beyond/.test(cmd)
 );
 
 // ─── documented in BOTH operator docs ───

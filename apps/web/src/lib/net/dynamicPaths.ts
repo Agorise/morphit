@@ -37,6 +37,9 @@ import { withHiddenFloor } from './transportBudget';
  *                  honest.
  *   • /canary.txt  warrant canary — a stale copy is a silent security
  *                  signal failure.
+ *   • /version.json the deployed build's version alone (v1.21.18) — the
+ *                  update check's half-minute poll; cached, it would never
+ *                  see a new build.
  *
  * Excluded paths fall through to the network, where each caller's own
  * `cache:` directive (`no-cache` on getInstance, the verify.json
@@ -59,6 +62,8 @@ export function isDynamicDataPath(pathname: string): boolean {
 	if (pathname === '/rss' || pathname.startsWith('/rss/')) return true;
 	// Deploy-generated, runtime-fetched single files (not precached).
 	if (pathname === '/verify.json') return true;
+	// v1.21.18: the build's version alone, read by the update check.
+	if (pathname === '/version.json') return true;
 	if (pathname === '/canary.txt') return true;
 	return false;
 }

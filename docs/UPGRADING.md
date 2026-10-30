@@ -19,20 +19,36 @@ tarball, runs `npm ci`, rebuilds and redeploys the web frontend
 (then checks it answered on its configured bind), and restarts
 services. If anything fails, it rolls back automatically.
 
-**Deadline: every instance must run v1.21.17 or later before
+**Deadline: every instance must run v1.21.18 or later before
 2026-11-01 00:00 UTC.** From that time (by block timestamp) every
 indexer applies the stricter "consensus v2" rules (listed in
 `docs/release-notes/RELEASE-NOTES-v1.21.0.md`, refined in v1.21.1),
-and, from v1.21.17, accepts reviews of a proven first-buy trade
-(`docs/release-notes/RELEASE-NOTES-v1.21.17.md`). An instance that
+accepts reviews of a proven first-buy trade (from v1.21.17,
+`docs/release-notes/RELEASE-NOTES-v1.21.17.md`), and judges fees,
+featured bids and fee attestations with the same numbers on every
+node (from v1.21.18, `docs/release-notes/RELEASE-NOTES-v1.21.18.md`). An instance that
 applies those blocks with an older release keeps or lacks records no
 other instance has — orders, reviews, profiles, featured slots — for
 good; it would then need `sudo morphit-ops fast-sync`. From v1.21.17 the
 indexer notices this itself: if blocks stamped from that time on were
 applied by an older release (a late upgrade, a rollback, or a restore of
 an older snapshot), it stops before applying anything more and its log
-says `waiver_evidence_gap` — run `sudo morphit-ops fast-sync`, then start
-it again. (Judged by the chain's block times, not your server's clock.)
+says `waiver_evidence_gap`. There are two ways on, both on the server:
+
+1. `sudo morphit-ops fast-sync`. This helps only if the newest snapshot
+   was made by Morphit v1.21.17 or later: fast-sync shows which version
+   made it ("It was made by Morphit indexer v…") before it changes
+   anything; if that version is older, press Ctrl+C at its first
+   question and nothing is changed. It starts the indexer again
+   itself when it was running, or says how to start it.
+2. Rebuild the indexer's database from the chain
+   (`docs/OPERATIONS.md` §46, "The reset"). It is slow, but it always
+   works, because the new release records what it needs as it replays.
+
+(Judged by the chain's block times, not your server's clock.) This check
+only covers what v1.21.17 records; nothing notices blocks from that time
+applied by v1.21.17 under the older fee rules, so upgrade to v1.21.18
+before the deadline.
 
 The rest of this doc covers the details: how the trust chain
 works, the manual procedure (for operators who prefer to apply
@@ -189,7 +205,10 @@ Steps the command takes, in order:
    beta you always get the newest beta even if it's flagged
    pre-release; once a stable ships, the stable is preferred and you
    are not pushed onto a newer beta automatically.
-3. If you're already on it, exits 0 (no-op). It also exits 0 without
+3. If you're already on it, exits 0: nothing is downloaded or installed, and
+   only this release's repairs are checked (see "Nothing in the heal phase
+   stops to ask" below; a repair that warns says what to do, and the exit
+   code stays 0). It also exits 0 without
    changing anything when the release offered is **older** than the one
    you run (v1.18.0): only a strictly newer version counts as an upgrade,
    so a mirror or an on-chain record can never walk your node back to an
@@ -281,7 +300,9 @@ Steps the command takes, in order:
     file for bare-metal; the container's own port for a Docker frontend,
     with a short retry while it restarts). It then tells you plainly:
     - **fresh** → "Verified the live frontend is serving this build …
-      Returning visitors get the 'Load it now' update prompt within ~60s."
+      Visitors who have the site open see the 'Load it now' prompt within a few minutes."
+      (A page from v1.21.18 on asks which version is deployed every half minute while
+      it is in view, and at once when it comes back into view.)
     - **stale** → a loud warning naming the served-vs-built versions and
       the specific fix (e.g. your container bakes the build in — rebuild
       its image, or switch it to bind-mount `<install>/apps/web/build`).
@@ -327,6 +348,26 @@ If **any** step from 7 onwards fails, the command:
   runs `systemctl daemon-reload`
 - Restarts services on the previous version
 - Exits with code 3 ("upgrade failed, rolled back")
+- Keeps its last lines on the server, too, in
+  `/var/log/morphit/upgrade-stopped-<time>.log` (it prints the exact
+  name), so they are not lost when your SSH session dropped
+
+The same happens when you press Ctrl+C, or your SSH session drops,
+while the new release is being installed: the upgrade does not exit
+half-way, it puts the previous release back and says why. It then exits
+with the stop's own code instead of 3: 130 for Ctrl+C, 129 when the
+session closed, 143 for a `kill` (SIGTERM).
+
+Once every service runs the new release (each seen to stay up), a stop
+undoes nothing: the upgrade is done. The steps still left (the MCP
+server's update, the Matrix bot's restart, the IPFS seed, the snapshot
+mirror, …) are skipped; its last lines name each one with how to do it,
+and it exits 130 (129, 143).
+
+Run the upgrade with `sudo`. Without it, it stops at once with
+"This needs the root account … so nothing was done" and changes
+nothing (`--check-only` and `--json`, which change nothing, run
+without sudo).
 
 In the rare case rollback itself fails (filesystem error, etc.),
 it exits with code 4 and prints the manual recovery steps.
@@ -334,23 +375,21 @@ it exits with code 4 and prints the manual recovery steps.
 ### Automated mode (opt-in)
 
 By default the command prompts y/N before applying. To skip the
-prompt — for cron jobs or unattended automation — set:
-
-```
-export MORPHIT_AUTO_UPGRADE=1
-sudo -E morphit-ops upgrade
-```
-
-`MORPHIT_AUTO_UPGRADE=1` is opt-in, not the default, by design:
-Morphit's posture is that an operator should consciously decide
-to upgrade. Auto-upgrade is a power-user feature for sites that
-want to track upstream tightly.
-
-Equivalent inline:
+prompt — for cron jobs or unattended automation — run, on the server:
 
 ```
 sudo morphit-ops upgrade --yes
 ```
+
+Skipping the question is opt-in, not the default, by design:
+Morphit's posture is that an operator should consciously decide
+to upgrade. Auto-upgrade is a power-user feature for sites that
+want to track upstream tightly.
+
+`MORPHIT_AUTO_UPGRADE=1` in the command's environment does the same as
+`--yes`. `sudo` normally drops your shell's variables, so an `export` in your
+shell alone usually does not reach the command; `--yes` avoids that
+trap.
 
 ### Configuration
 
@@ -380,10 +419,11 @@ names it, with the command to answer it, in the upgrade's last lines
 - `sudo morphit-ops upgrade --questions` — asks those questions at a
   terminal (without one it stops with an error and changes nothing).
 - `sudo morphit-ops upgrade --heals` — re-runs this release's heals and
-  the after-restart heals, downloading nothing. A plain
+  the after-restart heals, downloading nothing. It exits 1 when a repair
+  warned (each warning says what to do), else 0. A plain
   `sudo morphit-ops upgrade` on an up-to-date box does the same after
-  "Already on the latest release." (`--check-only` and `--json` stay
-  read-only).
+  "Already on the latest release.", and exits 0 either way. (`--check-only`
+  and `--json` stay read-only: they never run the repairs.)
 
 **Zero-clearnet (Tor + I2P) nodes upgrade like every other node:**
 `sudo morphit-ops upgrade` fetches the release from other instances over
@@ -471,8 +511,8 @@ node installs it by the on-chain SHA-256 (path 1).
 
 The `morphit-release-monitor` sidecar runs twice a day, calls
 `morphit-ops upgrade --check-only`, and emits an INFO event when a newer
-release is available. With Matrix alerts set up (`sudo morphit-ops`, option
-17) the alert bot sends it to you as a message; it is also in
+release is available. With Matrix alerts set up (`sudo morphit-ops` →
+**Matrix alerts: set up, change, test or turn off**) the alert bot sends it to you as a message; it is also in
 `journalctl -u morphit-release-monitor`.
 
 The check reads @morphit's on-chain release record from this node's own
@@ -485,8 +525,8 @@ opens, and asks the code host only when the record does not answer and the node
 is not Tor/I2P-only; it says it couldn't check only when nothing answered.
 
 The sidecar **never applies upgrades itself** — it only watches.
-You still run `morphit-ops upgrade` manually (or with
-`MORPHIT_AUTO_UPGRADE=1` cron) when you decide to apply.
+You still run `sudo morphit-ops upgrade` on the server when you decide
+to apply (or `sudo morphit-ops upgrade --yes` from a script).
 
 **It is on by itself** since v1.21.3: every install and every upgrade puts
 its unit and timer in place and turns the timer on, and the upgrade also runs

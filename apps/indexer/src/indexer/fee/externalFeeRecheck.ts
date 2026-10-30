@@ -82,7 +82,23 @@
  *
  * The amount asked for is the lower of the amount quoted when the order was
  * posted (btc_fee_sats, the pin in force at its block) and today's pin, like
- * G9 below. Awaiting rows share the fair rotation above; they are checked on
+ * G9 below — for orders in blocks before the consensus activation time. From
+ * it, the amount quoted at posting alone: "today's pin" is whatever this node
+ * has seen by the time it looks, so two nodes, or one node now and after a
+ * rebuild, asked the explorers for different amounts.
+ *
+ * The same holds for txid orders (expectedFor): from the activation time the
+ * amount is the one pinned in force AT THE ORDER'S BLOCK — the amount the
+ * order handler checked at intake (fee/feeRulesAtBlock.ts); the handler
+ * refuses an order with none pinned, so there is always one.
+ *
+ * A node that does not check a method (no verifier: the operator switched it
+ * off, or no usable explorer) asks nobody and changes nothing: from the
+ * activation time such orders are accepted there too, and stay
+ * `pending_external` / `awaiting_payment` on that node — never on its book,
+ * never promoted by attestation there — while nodes that do check settle them.
+ * The node never claims a fee it did not check, and never asks an explorer
+ * its operator turned off. Awaiting rows share the fair rotation above; they are checked on
  * the normal spacing for PENDING_RECHECK_DAYS, then at most once a day up to
  * AWAITING_RECHECK_DAYS (a late payer is still credited), then no more.
  */
@@ -91,6 +107,8 @@ import type { Database } from '$db/pool';
 import type { FeeVerifier } from '$indexer/fee/verifier';
 import { attestationQuorumMet } from '$indexer/fee/attestationQuorum';
 import { xmrBindingOfRow, type XmrBinding } from '$indexer/fee/xmrBinding';
+import { externalFeeAmountOf } from '$indexer/fee/feeRulesAtBlock';
+import { consensusV2Active } from '$indexer/consensusActivation';
 import { logger } from '$log';
 
 const log = logger('fee-recheck');
@@ -158,6 +176,10 @@ interface Candidate {
 		btc?: { satoshis?: unknown } | null;
 		xmr?: { piconero?: unknown } | null;
 	} | null;
+	/** The treasury block of the newest valid release in a block BEFORE the
+	 *  order's (block times only grow with block numbers) — the pin in force at
+	 *  its block, as the order handler reads it (treasuryPinAt). */
+	pin_at_block?: unknown;
 	/** (v1.20.2) When the order was posted (the lone-answer rule's clock). */
 	created_at?: Date | string | null;
 }
@@ -182,6 +204,11 @@ function expectedFor(
 	row: Candidate,
 	current: number | bigint | undefined
 ): number | bigint | undefined {
+	// From the consensus activation time (by the order's block time): the pin
+	// in force at the order's block, whatever this node holds now.
+	if (postedFromActivation(row.created_at)) {
+		return externalFeeAmountOf(row.pin_at_block, row.fee_method);
+	}
 	if (current === undefined) return undefined;
 	const pin = row.pin_at_post;
 	if (row.fee_method === 'btc' && typeof current === 'number') {
@@ -198,6 +225,14 @@ function expectedFor(
 		}
 	}
 	return current;
+}
+
+/** Was the order posted in a block stamped at or after the consensus
+ *  activation time? `orders.created_at` is its block time, never rewritten. */
+function postedFromActivation(createdAt: Date | string | null | undefined): boolean {
+	if (createdAt === null || createdAt === undefined) return false;
+	const postedBlockTime = createdAt instanceof Date ? createdAt : new Date(createdAt);
+	return consensusV2Active(postedBlockTime);
 }
 
 type Next = 'verified' | 'underpaid' | 'missing' | 'verified_by_attestation' | 'pending_external';
@@ -244,7 +279,11 @@ export async function recheckExternalFees(
 		        (SELECT r.treasury FROM releases r
 		          WHERE r.valid = true AND r.treasury IS NOT NULL
 		            AND r.created_at <= c.created_at
-		          ORDER BY r.created_at DESC LIMIT 1) AS pin_at_post
+		          ORDER BY r.created_at DESC LIMIT 1) AS pin_at_post,
+		        (SELECT r.treasury FROM releases r
+		          WHERE r.valid = true AND r.treasury IS NOT NULL
+		            AND r.created_at < c.created_at
+		          ORDER BY r.source_block_num DESC, r.id DESC LIMIT 1) AS pin_at_block
 		   FROM cand c
 		  WHERE c.acct_turn <= $5
 		    AND (c.fee_status <> 'missing' OR c.miss_turn <= $6)
@@ -384,13 +423,17 @@ interface AddressRow {
 	btc_fee_sats: string | null;
 	btc_fee_received_sats: string | null;
 	btc_fee_unconfirmed_sats: string | null;
+	/** The order's block time. */
+	created_at?: Date | string | null;
 }
 
 /** What to ask for: the lower of the amount quoted at posting (the pin in
- *  force at the order's block) and today's pin (G9). */
+ *  force at the order's block) and today's pin (G9) — for orders before the
+ *  consensus activation time; from it, the amount quoted at posting. */
 function addressExpected(row: AddressRow, today: number | undefined): number | null {
 	const posted = Number(row.btc_fee_sats);
 	if (!Number.isSafeInteger(posted) || posted <= 0) return null;
+	if (postedFromActivation(row.created_at)) return posted;
 	return typeof today === 'number' && Number.isSafeInteger(today) && today > 0 && today < posted
 		? today
 		: posted;
@@ -470,7 +513,7 @@ export async function recheckFeeAddresses(
 	const now = deps.now;
 	const res = await deps.db.query<AddressRow>(
 		`SELECT account, permlink, fee_status, btc_fee_address, btc_fee_sats::text,
-		        btc_fee_received_sats::text, btc_fee_unconfirmed_sats::text
+		        btc_fee_received_sats::text, btc_fee_unconfirmed_sats::text, created_at
 		   FROM orders
 		  WHERE status = 'live'
 		    AND (expires_at IS NULL OR expires_at > $1)
@@ -562,7 +605,7 @@ export async function claimFeeAddressCheck(
 	const now = deps.now;
 	const cur = await deps.db.query<AddressRow & { rechecked: Date | null }>(
 		`SELECT account, permlink, fee_status, btc_fee_address, btc_fee_sats::text,
-		        btc_fee_received_sats::text, btc_fee_unconfirmed_sats::text,
+		        btc_fee_received_sats::text, btc_fee_unconfirmed_sats::text, created_at,
 		        fee_rechecked_at AS rechecked
 		   FROM orders
 		  WHERE account = $1 AND permlink = $2 AND status = 'live'

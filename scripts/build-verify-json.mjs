@@ -79,9 +79,7 @@ function sha256Hex(buf) {
 
 function readMorphitVersion() {
 	try {
-		const pkg = JSON.parse(
-			readFileSync(resolve(WEB_DIR, 'package.json'), 'utf8')
-		);
+		const pkg = JSON.parse(readFileSync(resolve(WEB_DIR, 'package.json'), 'utf8'));
 		return typeof pkg.version === 'string' ? pkg.version : 'unknown';
 	} catch {
 		return 'unknown';
@@ -161,10 +159,7 @@ function readConfigEnvValue(key) {
 			const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$/);
 			if (m && m[1] === key) {
 				let v = m[2].trim();
-				if (
-					(v.startsWith('"') && v.endsWith('"')) ||
-					(v.startsWith("'") && v.endsWith("'"))
-				) {
+				if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
 					v = v.slice(1, -1);
 				}
 				if (v.length > 0) found = v; // last non-empty wins (override order)
@@ -193,9 +188,7 @@ function readOperatorTag() {
 	// weirder; we don't want operator_tag becoming an injection
 	// vector into the JSON.
 	if (!/^[a-zA-Z0-9.\-_]{1,64}$/.test(trimmed)) {
-		console.warn(
-			`[verify-json] operator tag '${trimmed}' fails shape check; emitting null`
-		);
+		console.warn(`[verify-json] operator tag '${trimmed}' fails shape check; emitting null`);
 		return null;
 	}
 	return trimmed;
@@ -248,9 +241,22 @@ function main() {
 		builtAt = new Date().toISOString();
 	}
 
+	// v1.21.18 — /version.json: just this build's version, a few bytes, for the
+	// app's update check. verify.json (the whole hash manifest, ~80 KB) was
+	// the only place to read it, so open tabs asked at most every five
+	// minutes and the "Load it now" prompt came late; this one is cheap enough
+	// to ask every half minute. Written first, so the manifest hashes it like
+	// any other file of the build.
+	const version = readMorphitVersion();
+	writeFileSync(
+		resolve(BUILD_DIR, 'version.json'),
+		JSON.stringify({ morphit_version: version }) + '\n',
+		'utf8'
+	);
+
 	const payload = {
 		schema_version: SCHEMA_VERSION,
-		morphit_version: readMorphitVersion(),
+		morphit_version: version,
 		git_commit: readGitCommit(),
 		operator_tag: readOperatorTag(),
 		built_at: builtAt,

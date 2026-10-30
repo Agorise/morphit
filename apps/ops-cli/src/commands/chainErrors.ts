@@ -109,9 +109,12 @@ export interface DiagnoseCtx {
 	readonly tag: string | null;
 	/** Path of the active-key file, for the key-mismatch branch. */
 	readonly keyFile: string;
-	/** The env var that holds the instance name → tag, for the
-	 *  reserved/taken-tag branch's "edit X and re-run" instruction. */
-	readonly nameEnvVar: string;
+	/** Not used any more: the tag `register` publishes is always the
+	 *  configured operator tag (MORPHIT_INSTANCE_OPERATOR_TAG, set with
+	 *  `sudo morphit-ops edit` → Operator tag), so that is what the tag advice
+	 *  names (review, 2026-10-29: it said to change MORPHIT_INSTANCE_NAME,
+	 *  which register does not read for the tag). Kept so callers compile. */
+	readonly nameEnvVar?: string;
 }
 
 /** Coarse category of a broadcast failure, for callers/tests that
@@ -260,6 +263,11 @@ export function classifyChainError(message: string): ChainErrorKind {
 		m.includes('econnrefused') ||
 		m.includes('enotfound') ||
 		m.includes('etimedout') ||
+		// register's own limit ("Timed out reaching a Blurt RPC after 15s",
+		// "No answer from this node's own indexer …") and a node's timeout.
+		m.includes('timed out') ||
+		m.includes('timeout after') ||
+		m.includes('no answer') ||
 		m.includes('fetch failed') ||
 		m.includes('network')
 	) {
@@ -311,11 +319,11 @@ export function printChainErrorHelp(
 			log('permanent once registered).  Nobody else has "claimed" it; it is');
 			log('simply not available to register.');
 			log('');
-			log('What to do:');
-			log(`  - Choose a different instance name.  Edit ${ctx.nameEnvVar}`);
-			log('    in your config to something that identifies YOUR node (e.g.');
-			log('    your domain or community name), then re-run.  The tag is');
-			log('    derived from that name (lower-cased, URL-safe).');
+			log('What to do (on this server):');
+			log('  - Choose a different federation tag — one that identifies YOUR node');
+			log('    (your domain is a good choice):  sudo morphit-ops edit  → Operator tag');
+			log('    (it is saved as MORPHIT_INSTANCE_OPERATOR_TAG).');
+			log('  - Then publish again:  sudo morphit-ops register');
 			break;
 
 		case 'tag_taken':
@@ -323,10 +331,12 @@ export function printChainErrorHelp(
 			log('another operator.  Tags are unique across the federation and');
 			log('permanent, so you cannot take one that exists.');
 			log('');
-			log('What to do:');
-			log(`  - Pick a different instance name (edit ${ctx.nameEnvVar}) and`);
-			log('    re-run.  Search the /instances directory of any node to see');
-			log('    which tags are taken.');
+			log('What to do (on this server):');
+			log('  - Choose a different federation tag — one that identifies YOUR node');
+			log('    (your domain is a good choice):  sudo morphit-ops edit  → Operator tag');
+			log('    (it is saved as MORPHIT_INSTANCE_OPERATOR_TAG).');
+			log('  - Then publish again:  sudo morphit-ops register');
+			log('  (The /instances page of any Morphit node lists the tags already taken.)');
 			break;
 
 		case 'invalid_tag':
@@ -397,14 +407,14 @@ export function printChainErrorHelp(
 			log('key (e.g. a posting key was saved instead of the active key, or');
 			log('the key belongs to a different account / network).');
 			log('');
-			log('What to do:');
-			log('  - Verify which key is saved by running:');
-			log('       sudo morphit-ops show-key');
-			log('    It prints the PUBLIC key your saved key derives to (it never');
-			log('    reveals the private key).  Compare that public key against');
-			log(`    the active authority shown for @${sanitizeForTerm(ctx.account)} on a Blurt`);
-			log('    block explorer.  If they differ, re-run `sudo morphit-ops');
-			log('    edit` and supply the correct ACTIVE key.');
+			log('What to do (on this server):');
+			log('  - Check which key is saved:  sudo morphit-ops show-key');
+			log('    It works out the PUBLIC key of the saved key (it never shows the');
+			log(
+				`    private key) and checks it against @${sanitizeForTerm(ctx.account)}'s keys on the chain.`
+			);
+			log('  - If it is not the ACTIVE key, put the right one in place:');
+			log('       sudo morphit-ops edit-active-key');
 			break;
 
 		case 'insufficient_fee':
@@ -459,8 +469,8 @@ export function printChainErrorHelp(
 		default:
 			log('The broadcast was rejected and the cause was not recognized.');
 			log('Things worth checking:');
-			log(`  - Tag availability: is the tag derived from ${ctx.nameEnvVar}`);
-			log('    free and not project-reserved? (try a different name)');
+			log('  - Tag: is your operator tag free and not reserved by the project?');
+			log('    (change it on this server: sudo morphit-ops edit  → Operator tag)');
 			log(`  - Key: does \`sudo morphit-ops show-key\` show the active key for`);
 			log(`    @${sanitizeForTerm(ctx.account)}?`);
 			log(`  - Fee: does @${sanitizeForTerm(ctx.account)} hold a little liquid BLURT for the`);

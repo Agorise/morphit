@@ -263,6 +263,13 @@ const RESERVED_NAMES_RAW: readonly string[] = [
 	'kencode'
 ];
 
+/** The exact reserved account names (what isReservedTag matches). Also read
+ *  by the Signal A creator exemption the fee-attestation quorum uses
+ *  (signalVerdicts.ts): those accounts are the project's own, one of them the
+ *  canonical instance's relay. Editing this list changes consensus verdicts
+ *  (tag claims, that exemption), so an edit needs its own activation time. */
+export const RESERVED_ACCOUNT_NAMES: readonly string[] = RESERVED_NAMES_RAW;
+
 const RESERVED_REGEXES: readonly RegExp[] = RESERVED_NAMES_RAW.map(compileReservedRegex);
 
 /** Look-alikes the per-letter table does not list, folded before the

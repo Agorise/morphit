@@ -14,12 +14,15 @@
  * instance, and a first-contact DM from a B user was dropped on the recipient's
  * instance.
  *
- * THE RULE (deterministic: a pure function of chain data up to the op's block).
- * The allowed owner recipients of a fee op at block N are
+ * THE RULE BEFORE THE CONSENSUS ACTIVATION TIME (ownerRecipientsFor). The
+ * allowed owner recipients of a fee op at block N are
  *     { this indexer's own recipient }
  *   ∪ { the fee_recipient registered, as of block N, by the operator that OWNS
  *       the op's `operator_tag` }
- * where the second set is non-empty only when
+ * The first set is THIS NODE'S setting (MORPHIT_INDEXER_FEE_RECIPIENT), not
+ * chain data: an order paid to an instance's fees account that instance never
+ * registered was `verified` there and `underpaid` everywhere else. Only the
+ * second set is chain data. It is non-empty only when
  *   - the tag belongs to a registered, active operator (tags are first-come and
  *     immutable, so the tag names exactly one account);
  *   - that operator's latest `fee_recipient` row is from a block STRICTLY BEFORE
@@ -38,9 +41,27 @@
  *
  * A transfer to any OTHER account (a decoy) is still ignored: only the tag's
  * owner can be paid the owner leg, and only when the op names that tag.
+ *
+ * THE RULE FROM THE CONSENSUS ACTIVATION TIME (by the op's block time;
+ * ownerRecipientsAt / chainFeePayeesAt) — a pure function of the chain up to
+ * the op's block. The owner leg may go to the fees account in force at block N
+ * of EVERY operator: for each account, its latest operator_fee_recipients row
+ * with effective_block < N (the register op's own block, never a wall-clock
+ * column). That table is the append-only history of accepted register ops, so
+ * a later re-registration never changes the account in force at an older
+ * block, and a node that indexed the op live and one that back-filled it hold
+ * the same rows. Nothing of this node's setting counts any more: an instance
+ * whose fees account is not registered on chain is paid through the canonical
+ * treasury instead (/v1/instance advertises it from then on). The canonical
+ * 10 % leg stays mandatory (sumFeeTransfers / canonicalShareOk), and the
+ * canonical treasury itself is always a valid payee (it is the canonical leg).
+ * LEGACY GRACE (graceRecipientAt) does not apply to such ops either: it judged
+ * an op against an account registered AFTER it, which intake never could.
  */
 
 import type pg from 'pg';
+
+import { consensusV2Active } from '$indexer/consensusActivation';
 
 /** The project-canonical Blurt account-name regex (byte-identical to every
  *  other account-name regex in the tree). */
@@ -103,6 +124,44 @@ export async function ownerRecipientsFor(
 ): Promise<readonly string[]> {
 	const tagged = await taggedOperatorRecipientAt(client, operatorTagOf(payload), blockNum);
 	return tagged !== null && tagged !== ownRecipient ? [ownRecipient, tagged] : [ownRecipient];
+}
+
+/**
+ * Every operator's fees account in force at block `blockNum`: for each account
+ * its latest registered fee_recipient from a block strictly before `blockNum`.
+ * Chain data only — the same set on every node, at intake and on every
+ * re-derivation.
+ */
+export async function chainFeePayeesAt(
+	client: Queryable,
+	blockNum: number
+): Promise<readonly string[]> {
+	const res = await client.query<{ fee_recipient: string }>(
+		`SELECT DISTINCT ON (account) fee_recipient
+		   FROM operator_fee_recipients
+		  WHERE effective_block < $1
+		  ORDER BY account, effective_block DESC, trx_in_block DESC, op_in_trx DESC`,
+		[blockNum]
+	);
+	return [...new Set(res.rows.map((r) => r.fee_recipient))].sort();
+}
+
+/**
+ * The accounts whose transfers count as the OWNER leg of a fee op at `at`:
+ * before the consensus activation time ownerRecipientsFor (this node's own
+ * recipient plus the tagged operator's); from it chainFeePayeesAt (every
+ * operator's registered account in force at the block, and nothing local).
+ */
+export async function ownerRecipientsAt(
+	client: Queryable,
+	ownRecipient: string,
+	payload: unknown,
+	at: { readonly blockNum: number; readonly blockTime: Date }
+): Promise<readonly string[]> {
+	if (!consensusV2Active(at.blockTime)) {
+		return ownerRecipientsFor(client, ownRecipient, payload, at.blockNum);
+	}
+	return chainFeePayeesAt(client, at.blockNum);
 }
 
 /**

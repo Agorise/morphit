@@ -61,7 +61,9 @@ import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { getStrangerFeeQuote, type Queryable } from '$indexer/strangerFeePricing';
 import { canonicalShareOk, meetsMinimumMilli, sumFeeTransfers } from '$indexer/fee';
-import { ownerRecipientsFor } from '$indexer/feeRecipients';
+import { ownerRecipientsAt } from '$indexer/feeRecipients';
+import { consensusV2Active } from '$indexer/consensusActivation';
+import { feeToleranceAt } from '$indexer/fee/feeRulesAtBlock';
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 import { inSavepoint, isUniqueViolation } from '$indexer/savepoint';
 
@@ -84,6 +86,8 @@ export interface StrangerFeeInput {
 	readonly blockNum: number;
 	readonly blockTime: Date;
 	readonly feeRecipient: string;
+	/** This node's MORPHIT_INDEXER_FEE_TOLERANCE; used only for a fee in a
+	 *  block before the consensus activation time (feeToleranceAt). */
 	readonly feeTolerance: number;
 	readonly extraOwnerRecipients?: readonly string[];
 	/** Fees from this signer not recorded yet (the head path, S-H3). */
@@ -125,6 +129,11 @@ export async function evaluateStrangerFee(
 		return { ok: false, reason: 'amount_blurt_invalid' };
 	}
 
+	// The rounding band: this node's setting for a fee in a block before the
+	// consensus activation time, the federation's from it, so every indexer
+	// (and the head tailer, and the re-verifier) admits the same fees.
+	const tolerance = feeToleranceAt(input.blockTime, input.feeTolerance);
+
 	// ─── Dynamic pricing — escalation ───────────────────────────
 	// Count this sender's stranger-fee payments in the last 5
 	// minutes. The next fee doubles for each prior, capped at
@@ -154,7 +163,7 @@ export async function evaluateStrangerFee(
 	if (quotedBlurt > quote.priceBlurt * 1.5) {
 		return { ok: false, reason: 'amount_blurt_out_of_range' };
 	}
-	if (quotedBlurt < quote.priceBlurt * (1 - input.feeTolerance)) {
+	if (quotedBlurt < quote.priceBlurt * (1 - tolerance)) {
 		// User quoted (and paid) less than the current escalating
 		// price. They need to re-quote. The frontend will refresh
 		// the modal showing the new price.
@@ -172,9 +181,12 @@ export async function evaluateStrangerFee(
 		input.signer,
 		// G1 — own recipient ∪ the tagged operator's registered fee account
 		// (∪ the legacy-grace account when the re-verifier re-runs this op).
+		// From the consensus activation time: every operator's registered fees
+		// account in force at the block, nothing local, and no grace account
+		// (intake could never know one registered later) — ownerRecipientsAt.
 		[
-			...(await ownerRecipientsFor(client, input.feeRecipient, input.payload, input.blockNum)),
-			...(input.extraOwnerRecipients ?? [])
+			...(await ownerRecipientsAt(client, input.feeRecipient, input.payload, input)),
+			...(consensusV2Active(input.blockTime) ? [] : (input.extraOwnerRecipients ?? []))
 		],
 		CANONICAL_TREASURY.blurt,
 		`morphit-stranger:${recipient}`
@@ -186,7 +198,7 @@ export async function evaluateStrangerFee(
 	// BLURT-native: the user paid `quote.priceBlurt` directly,
 	// no USD conversion needed.  Tolerance band absorbs floating-
 	// point rounding in the client's BLURT amount formatting.
-	const minAcceptable = quote.priceBlurt * (1 - input.feeTolerance);
+	const minAcceptable = quote.priceBlurt * (1 - tolerance);
 	// G8 — exact milliBLURT comparison (no float-sum boundary error).
 	if (!meetsMinimumMilli(fee.totalMilli, minAcceptable)) {
 		return { ok: false, reason: 'fee_underpaid' };

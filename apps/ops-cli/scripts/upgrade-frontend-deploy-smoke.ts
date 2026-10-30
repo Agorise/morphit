@@ -364,7 +364,7 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-14b',
-			re: /restartFrontendContainer\(plan\.restartContainer, installDir\)/,
+			re: /restartFrontendContainer\(plan\.restartContainer, installDir[,)]/,
 			desc: 'runUpgrade restarts the detected container (restartFrontendContainer)'
 		},
 		{
@@ -389,8 +389,8 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-32',
-			re: /Refreshed the frontend nginx\.conf from the upgraded release/,
-			desc: 'v1.16.12: rebuild refreshes the build-context nginx.conf from the upgraded repo first'
+			re: /const whose =\s*o\.restoring === true \? "the restored release's settings" : "this release's settings";[\s\S]{0,4000}nginx\.conf \(\$\{dstConf\}\) now has \$\{whose\}/,
+			desc: "v1.16.12: rebuild refreshes the build-context nginx.conf from the upgraded repo first (v1.21.17: only when it differs, the previous copy kept; v1.21.18: a rollback says it is the restored release's) — behaviour in test/upgradeFrontendConfBackup.test.ts"
 		},
 		{
 			id: 'FD-14c',

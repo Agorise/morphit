@@ -663,6 +663,28 @@ export function rasterizeSvg(svg: string, size: number, height: number = size): 
 	return null;
 }
 
+const realWhich = (c: string): boolean => {
+	try {
+		return (
+			spawnSync('sh', ['-c', `command -v ${c}`], { stdio: 'ignore', timeout: 5_000 }).status === 0
+		);
+	} catch {
+		return false;
+	}
+};
+
+/** Why the PNGs could not be drawn, in plain words — read from what this
+ *  server has, not assumed: ImageMagick installed WITHOUT SVG support used to
+ *  be reported as "neither rsvg-convert nor ImageMagick". */
+export function rasterizerProblem(which: (c: string) => boolean = realWhich): string {
+	const rsvg = which('rsvg-convert');
+	const magick = which('magick') || which('convert');
+	if (rsvg) return 'rsvg-convert on this server could not draw them';
+	if (magick)
+		return 'ImageMagick on this server cannot read SVG files: it has no SVG support, which librsvg2-bin provides';
+	return 'this server has neither rsvg-convert nor ImageMagick';
+}
+
 // ─── Text helpers ───────────────────────────────────────────────────────
 
 export function htmlEscape(s: string): string {
@@ -1151,10 +1173,9 @@ export function planBranding(
 		// sources may still be clearnet ones (see `morphit-ops branding`).
 		const install = isHiddenOnlyNode()
 			? 'Install librsvg2-bin (rsvg-convert) the way you install packages on this server (apt over Tor, or the offline bundle)'
-			: 'Install one — sudo apt install librsvg2-bin —';
+			: 'Install librsvg2-bin (it gives rsvg-convert) — on this server: sudo apt install librsvg2-bin —';
 		warnings.push(
-			`Could not generate ${missingPngs.join(' and ')} (this server has neither rsvg-convert nor ` +
-				`ImageMagick), so those still show the Morphit mark. ${install} ` +
+			`Could not generate ${missingPngs.join(' and ')} (${rasterizerProblem()}), so those still show the Morphit mark. ${install} ` +
 				`and run \`sudo morphit-ops branding apply\` again, or put ready-made PNGs of the same names and ` +
 				`sizes in ${dir} (launch screens under ${dir}/static/splash/).`
 		);

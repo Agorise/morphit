@@ -84,7 +84,12 @@ import {
 } from '../src/lib/treasuryRepin.ts';
 import { checkServedAgainstChain, fetchReleasePayloadFromChain } from '../src/lib/repinSource.ts';
 import { describeQuotes, fetchAgreedPrices } from './treasury-repin-prices.ts';
-import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+import {
+	broadcastCustomJsonOnce,
+	hiddenModeFromArgs,
+	prepareNodes
+} from './lib/signOnceBroadcast.ts';
+import { repinHiddenOnlyStop } from './lib/repinHiddenOnlyStop.ts';
 
 function errMsg(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
@@ -121,13 +126,31 @@ if (node === null) {
 		'usage: tsx treasury-repin-broadcast.ts --node <indexer-url> [--threshold 0.1]\n' +
 			'         [--enable-auto-broadcast --unattended] [--key-file <path>]\n' +
 			'         [--signer morphit] [--broadcast-node <rpc>] [--rpc <rpc> …] [--dry-run]\n' +
-			'  default (no --enable-auto-broadcast) = DETECT-ONLY, no key, exit 3 if due.'
+			'         [--no-hidden | --include-hidden]\n' +
+			'  default (no --enable-auto-broadcast) = DETECT-ONLY, no key, exit 3 if due.\n' +
+			'  The broadcast also asks the hidden (.onion / .b32.i2p) RPC nodes this machine\n' +
+			'  reaches through its own Tor / i2pd; --no-hidden keeps to clearnet nodes,\n' +
+			'  --include-hidden asks every hidden node.'
 	);
 	process.exit(1);
 }
 if (!Number.isFinite(threshold) || threshold <= 0 || threshold >= 0.15) {
 	out(`invalid --threshold ${threshold} (must be >0 and <0.15, inside the verifier band)`);
 	process.exit(1);
+}
+
+// A hidden-only Morphit server (it runs this from morphit-treasury-repin.service)
+// must not reach clearnet at all, and a re-pin cannot be made without it: so it
+// stops here, before anything is asked (lib/repinHiddenOnlyStop.ts).
+{
+	const stop = repinHiddenOnlyStop(
+		'a re-pin needs clearnet — prices from CoinGecko, CoinPaprika and Kraken, the release\n' +
+			'  op from clearnet Blurt nodes'
+	);
+	if (stop !== null) {
+		out(stop);
+		process.exit(1);
+	}
 }
 
 async function fetchJson(url: string): Promise<unknown> {
@@ -332,8 +355,7 @@ async function main(): Promise<void> {
 	};
 	try {
 		const r = await broadcastCustomJsonOnce(opData, priv, {
-			nodeOverride: broadcastNode,
-			includeHidden: false
+			nodes: await prepareNodes({ nodeOverride: broadcastNode, hidden: hiddenModeFromArgs(argv) })
 		});
 		process.stdout.write(
 			`✓ Re-pin broadcast ${r.duplicate ? 'already on chain' : 'accepted'}.\n  trx_id    : ${r.trxId}\n` +

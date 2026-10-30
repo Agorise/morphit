@@ -2,7 +2,8 @@
  * Which featured-slot bids can hold a slot right now: the bid is active
  * (not cancelled, effective, not expired) AND its order is one /v1/orderbook
  * would show — live, not past its expires_at (NULL = no expiry), fee
- * established, and its owner not blocked on this instance.
+ * established, its owner not blocked on this instance, and not of an asset /
+ * payment methods this instance switched off (api/localHiding.ts).
  *
  * The featured strip (featuredOrderbook.ts) ranks these and takes the top
  * MAX_SLOTS; /featured/bids (featuredBids.ts) ranks the same set for
@@ -14,6 +15,8 @@
  * `opParam` is the placeholder bound to the operator account. Yields the
  * featured_slot_bids columns.
  */
+import { andLocallyShown } from '$api/localHiding';
+
 export function eligibleFeaturedBidsSql(opParam: string): string {
 	return `SELECT b.*
 	  FROM featured_slot_bids b
@@ -26,5 +29,5 @@ export function eligibleFeaturedBidsSql(opParam: string): string {
 	   AND o.status = 'live'
 	   AND (o.expires_at IS NULL OR o.expires_at > NOW())
 	   AND o.fee_status IN ('verified', 'verified_by_attestation')
-	   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')`;
+	   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')${andLocallyShown('o')}`;
 }

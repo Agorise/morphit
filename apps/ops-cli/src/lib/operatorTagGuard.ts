@@ -17,6 +17,7 @@
  * unreachable/unsynced indexer also returns null → proceed rather than block on
  * infrastructure. Only a CONFIRMED, different existing tag blocks.
  */
+import { localIndexerBases } from './hiddenOnly.ts';
 
 /** True only when the account is already registered under a DIFFERENT tag than
  *  the one about to be broadcast — i.e. the chain would reject as tag_immutable.
@@ -29,25 +30,40 @@ interface OperatorsWire {
 	readonly operators?: ReadonlyArray<{ readonly account?: string; readonly tag?: string }>;
 }
 
-/** Best-effort: the tag `account` is currently registered under, per the local
- *  indexer, or null (not registered / indexer unreachable / malformed). Never
- *  throws — callers treat null as "cannot confirm, proceed". */
+/** Best-effort: the tag `account` is currently registered under, per this
+ *  node's own indexer, or null (not registered / indexer unreachable /
+ *  malformed). Asks the indexer where it listens (localIndexerBases: the
+ *  address in indexer.env, then the standard ones), each in turn, all within
+ *  `timeoutMs` in all — a base that does not answer (a bridge address with no
+ *  route) cannot stretch the wait. Never throws — callers treat null as
+ *  "cannot confirm, proceed". */
 export async function fetchRegisteredTag(
 	account: string,
-	base = process.env.MORPHIT_INDEXER_LOCAL_URL ?? 'http://127.0.0.1:8081',
-	timeoutMs = 5000
+	opts: { readonly bases?: readonly string[]; readonly timeoutMs?: number } = {}
 ): Promise<string | null> {
-	const ctrl = new AbortController();
-	const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-	try {
-		const res = await fetch(`${base.replace(/\/$/, '')}/v1/operators`, { signal: ctrl.signal });
-		if (!res.ok) return null;
-		const body = (await res.json()) as OperatorsWire;
-		const row = body.operators?.find((o) => o.account === account);
-		return typeof row?.tag === 'string' && row.tag.length > 0 ? row.tag : null;
-	} catch {
-		return null;
-	} finally {
-		clearTimeout(timer);
+	const until = Date.now() + (opts.timeoutMs ?? 5000);
+	for (const base of opts.bases ?? localIndexerBases()) {
+		const left = until - Date.now();
+		if (left <= 0) return null;
+		const ctrl = new AbortController();
+		const timer = setTimeout(() => ctrl.abort(), left);
+		try {
+			const res = await fetch(`${base.replace(/\/$/, '')}/v1/operators`, {
+				signal: ctrl.signal,
+				redirect: 'manual',
+				headers: { accept: 'application/json' }
+			});
+			if (!res.ok) continue; // not the indexer at this address: try the next
+			const body = (await res.json()) as OperatorsWire;
+			if (!Array.isArray(body?.operators)) continue;
+			// The indexer answered: its list is the answer.
+			const row = body.operators.find((o) => o.account === account);
+			return typeof row?.tag === 'string' && row.tag.length > 0 ? row.tag : null;
+		} catch {
+			// Not answering here (or not JSON): try the next address.
+		} finally {
+			clearTimeout(timer);
+		}
 	}
+	return null;
 }

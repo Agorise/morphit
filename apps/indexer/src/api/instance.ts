@@ -39,6 +39,7 @@ import { getOperationalSnapshot } from '$api/operationalHealth';
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
 import { cachedInstanceFeeRecipientStatus, type Queryable } from '$indexer/feeRecipients';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
+import { consensusV2Active } from '$indexer/consensusActivation';
 
 export interface InstanceResponse {
 	name: string | null;
@@ -77,6 +78,13 @@ export interface InstanceResponse {
 	 *  registered — `sudo morphit-ops register` on the server fixes it.
 	 *  null: could not be read right now (never report as false). */
 	fee_recipient_registered: boolean | null;
+	/** The fees account this node is CONFIGURED with (the resolved
+	 *  MORPHIT_INDEXER_FEE_RECIPIENT), the one `fee_recipient_registered` is
+	 *  about. It differs from `fee_recipient` while the site sends its users'
+	 *  fees whole to the canonical treasury (advertisedFeeRecipient). Served
+	 *  only to a LOCAL caller (X-Morphit-Local-Health: 1): `morphit-ops status`
+	 *  names it to the operator; visitors are told where their fees go. */
+	configured_fee_recipient?: string;
 	relay_account: string;
 	/** Backlog item 5 — operator earnings.  When non-null,
 	 *  the frontend includes this on every order op as
@@ -238,17 +246,17 @@ export interface InstanceResponse {
 	 *  disable USDT; pragmatic operators leave it on).  ADR-0023
 	 *  USDT context + backlog §A recommendation.
 	 *
-	 *  Note: federation peers still see this instance's USERS
-	 *  trade USDT (chain history is shared); the gate is only
-	 *  on NEW orders posted FROM this instance.  Cross-instance
-	 *  read-only visibility is preserved regardless of operator
-	 *  stance. */
+	 *  Note: this instance HIDES every order of a disabled asset
+	 *  from its own pages, whichever instance it was posted on
+	 *  (api/localHiding.ts; before the consensus activation time
+	 *  the order handler refused such orders here). Instances that
+	 *  have the asset switched on still show them. */
 	disabled_assets: readonly string[];
 	/** Canonical payment-method keys disabled on this instance
 	 *  (e.g. "barter_goods").  Frontend hides them from the picker +
-	 *  orderbook filter; the gate on NEW orders is only enforced
-	 *  for orders whose methods are ALL disabled.  Cross-instance
-	 *  read-only visibility is preserved. */
+	 *  orderbook filter; this instance hides from its own pages
+	 *  every order whose methods are ALL disabled, whichever
+	 *  instance it was posted on (api/localHiding.ts). */
 	disabled_payment_methods: readonly string[];
 	/** PUBLIC Matrix room alias for user→operator
 	 *  contact.  Rendered on /support, /about-this-instance, and
@@ -276,6 +284,29 @@ export interface InstanceResponse {
 	mcp_url: string | null;
 }
 
+/**
+ * The fees account the frontend is told to pay the 90 % owner leg to.
+ *
+ * From the consensus activation time every indexer accepts that leg only when
+ * it goes to a fees account an operator registered on chain
+ * (feeRecipients.ownerRecipientsAt) — this node's own setting no longer counts,
+ * not even here. A fee paid to an account that is VERIFIED unregistered would
+ * leave the order `underpaid` on every instance and the payer's BLURT gone, so
+ * from then on such an instance sends its users' fees whole to the canonical
+ * treasury instead (one 100 % leg, accepted everywhere) until its operator
+ * registers the account (`sudo morphit-ops register`). "Could not tell"
+ * (null) keeps the configured account: an outage of this lookup must not
+ * redirect a registered operator's fees.
+ */
+export function advertisedFeeRecipient(
+	configured: string,
+	registered: boolean | null,
+	nextBlockTime: Date,
+	canonicalTreasury: string = CANONICAL_TREASURY.blurt
+): string {
+	return registered === false && consensusV2Active(nextBlockTime) ? canonicalTreasury : configured;
+}
+
 export function instanceRoute(
 	config: Config,
 	getTreasuryAddresses: () => { btc: string | null; xmr: string | null } = () => ({
@@ -298,6 +329,7 @@ export function instanceRoute(
 
 	app.get('/', async (c) => {
 		const feeStatus = await feeRecipientStatus();
+		const nextBlockTime = new Date();
 		// The relay leg comes from what the relay last reported; asking for the
 		// operational snapshot keeps that sample fresh (a background refresh at
 		// most every 15 s, never on the request path).
@@ -326,8 +358,14 @@ export function instanceRoute(
 				i2p: null,
 				nostr: config.instanceNostrPubkey ?? null
 			},
-			fee_recipient: config.feeRecipient,
+			// `nextBlockTime`: the fee is paid in a block stamped about now.
+			fee_recipient: advertisedFeeRecipient(
+				config.feeRecipient,
+				feeStatus?.registered ?? null,
+				nextBlockTime
+			),
 			fee_recipient_registered: feeStatus?.registered ?? null,
+			...(localCaller ? { configured_fee_recipient: config.feeRecipient } : {}),
 			relay_account: config.relayAccount,
 			operator_tag: config.instanceOperatorTag ?? null,
 			// Keystone gate — an HONEST strict-AND of every private-transport leg

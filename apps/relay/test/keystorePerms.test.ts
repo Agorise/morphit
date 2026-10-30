@@ -27,7 +27,10 @@ import {
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { keystorePermissionProblem } from '../src/config/keystorePerms.ts';
+import {
+	assertKeystorePermissions,
+	keystorePermissionProblem
+} from '../src/config/keystorePerms.ts';
 
 const RELAY_DIR = fileURLToPath(new URL('..', import.meta.url));
 const CONFIG = fileURLToPath(new URL('../src/config/index.ts', import.meta.url));
@@ -134,5 +137,30 @@ describe('keystorePermissionProblem', () => {
 		}
 		expect(ok(0o640, 0, 5)).not.toBeNull();
 		expect(ok(0o640, 998, 998)).not.toBeNull();
+	});
+});
+
+describe('the refusal names the exact fix, with sudo and the machine', () => {
+	const svc = { uid: 998, gids: [998] };
+	const refusal = (path: string): string => {
+		try {
+			assertKeystorePermissions(path, svc, { mode: 0o100644, uid: 0, gid: 998 });
+		} catch (e) {
+			return (e as Error).message;
+		}
+		return 'LOADED';
+	};
+	it('every command has sudo, and the relay is restarted after', () => {
+		expect(refusal('/etc/morphit/relay-active.key')).toContain(
+			"on the relay's server run: sudo chown root:morphit-relay /etc/morphit/relay-active.key && " +
+				'sudo chmod 0640 /etc/morphit/relay-active.key && sudo systemctl restart morphit-relay'
+		);
+	});
+	it('a path with a space or a quote is one shell word', () => {
+		const m = refusal("/etc/morphit/it's a key");
+		expect(m).toContain(`sudo chmod 0640 '/etc/morphit/it'\\''s a key'`);
+		const word = m.match(/sudo chmod 0640 ('(?:[^']|'\\'')*')/)?.[1] ?? '';
+		const r = spawnSync('sh', ['-c', `printf %s ${word}`], { encoding: 'utf8' });
+		expect(r.stdout).toBe("/etc/morphit/it's a key");
 	});
 });

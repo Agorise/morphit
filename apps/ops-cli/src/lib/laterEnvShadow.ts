@@ -22,10 +22,22 @@
  * the running service's environment and says whether it has the new values.
  */
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import {
+	accessSync,
+	chmodSync,
+	constants as fsConstants,
+	copyFileSync,
+	existsSync,
+	readFileSync,
+	renameSync,
+	writeFileSync
+} from 'node:fs';
+import { resolve } from 'node:path';
 import { isHiddenOnlyEndpointSet } from '@morphit/hidden-transport';
 import { keepOwnerAndMode } from './keepOwner.ts';
+import { startDotsSpinner } from '../init/spinner.ts';
 import { parseShellValue } from './offlineNotifyEnv.ts';
+import { INDEXER_ENV_FILES, RELAY_ENV_FILES, readEffectiveEnv } from './relayHiddenHeal.ts';
 
 export type ServiceUnit = 'morphit-indexer' | 'morphit-relay';
 
@@ -74,6 +86,85 @@ export const RELAY_READS: ReadonlySet<string> = new Set([
 	'MORPHIT_INSTANCE_LOKINET_ADDRESS',
 	'MORPHIT_RELAY_BLURT_RPC'
 ]);
+
+/** The files whose settings a settings file `edit` / `alt-address` writes
+ *  feeds into, in each service's order (last wins). For the installed file
+ *  (`live`), the units' own lists — /etc/morphit/indexer.env, relay.env … come
+ *  AFTER it and win. For another copy (--out), only that copy's two files. */
+export function settingsFilesFor(
+	configPath: string,
+	envPath: string
+): {
+	readonly live: boolean;
+	readonly indexer: readonly string[];
+	readonly relay: readonly string[];
+	/** Whether the relay reads its settings on this server (its own file is here). */
+	readonly relayHere: boolean;
+} {
+	const root = process.env.MORPHIT_ENV_ROOT ?? '';
+	const live = resolve(configPath) === resolve(liveConfigPath());
+	if (!live)
+		return { live, indexer: [envPath, configPath], relay: [envPath, configPath], relayHere: false };
+	return {
+		live,
+		indexer: INDEXER_ENV_FILES.map((f) => `${root}${f}`),
+		relay: RELAY_ENV_FILES.map((f) => `${root}${f}`),
+		relayHere: existsSync(`${root}/etc/morphit/relay.env`)
+	};
+}
+
+/** Files among `files` that exist but this user cannot read (run it with sudo). */
+export function unreadableFiles(files: readonly string[]): string[] {
+	return files.filter((f) => {
+		if (!existsSync(f)) return false;
+		try {
+			accessSync(f, fsConstants.R_OK);
+			return false;
+		} catch {
+			return true;
+		}
+	});
+}
+
+/**
+ * What each of `names` is inside a service that reads `files` in order (the
+ * last assignment wins): undefined when no file sets it. Read the way the
+ * unit reads them — sourced by bash with an empty environment. When bash
+ * cannot be run, the same files are read here (quotes and comments as bash
+ * reads them; a value only running the file could tell is taken as written).
+ */
+export function effectiveSettings(
+	files: readonly string[],
+	names: readonly string[]
+): Map<string, string | undefined> {
+	try {
+		return new Map(readEffectiveEnv(files, names));
+	} catch {
+		const texts = files.map((f) => {
+			try {
+				return readFileSync(f, 'utf8');
+			} catch {
+				return '';
+			}
+		});
+		const out = new Map<string, string | undefined>();
+		for (const n of names) {
+			const v = envValue(texts, n);
+			out.set(n, v === null ? rawLastValue(texts, n) : v);
+		}
+		return out;
+	}
+}
+
+function rawLastValue(texts: readonly string[], key: string): string | undefined {
+	let v: string | undefined;
+	for (const t of texts)
+		for (const line of t.split('\n')) {
+			const m = ASSIGN.exec(line);
+			if (m && m[1] === key) v = (m[2] ?? '').trim().replace(/^(["'])(.*)\1$/, '$2');
+		}
+	return v;
+}
 
 /** Blurt node lists: kept in a service's own file when EMPTY there. */
 export const NODE_LIST_KEYS: ReadonlySet<string> = new Set([
@@ -214,7 +305,7 @@ export function describeShadowFix(r: ShadowFixResult): string[] {
 		);
 	for (const x of r.failed)
 		lines.push(
-			`✗ could not remove ${x.keys.join(', ')} from ${x.file}; the ${unitLabel(x.unit)} reads that file last and keeps its old value. On this server delete those lines, then: sudo systemctl restart ${unitLabel(x.unit)}`
+			`✗ could not remove ${x.keys.join(', ')} from ${x.file}; the ${unitLabel(x.unit)} reads that file last and keeps its old value. On this server delete those lines, then: sudo systemctl restart ${x.unit}`
 		);
 	return lines;
 }
@@ -222,10 +313,15 @@ export function describeShadowFix(r: ShadowFixResult): string[] {
 export const unitLabel = (u: ServiceUnit): string => u.replace(/^morphit-/, '');
 
 export interface RunningEnv {
-	/** The running service's value of `key` (undefined: not set); null: unreadable. */
+	/** The running service's value of `key` (undefined: not set); null: unreadable
+	 *  (as root: the service has no running process). */
 	processEnv(unit: ServiceUnit, key: string): string | undefined | null;
 	sleep(ms: number): Promise<void>;
 }
+
+/** What to run on this server to see why a service is not running. */
+export const journalCommand = (u: ServiceUnit): string =>
+	`sudo journalctl -u ${u} -n 50 --no-pager`;
 
 /**
  * After a restart: does each running service have, for every written key,
@@ -240,6 +336,9 @@ export async function confirmRunning(
 ): Promise<{
 	readonly ok: boolean;
 	readonly unreadable: boolean;
+	/** Units whose environment could not be read on the last look: as root,
+	 *  that is a service with no running process. */
+	readonly down: readonly ServiceUnit[];
 	readonly wrong: ReadonlyArray<{
 		readonly unit: ServiceUnit;
 		readonly key: string;
@@ -263,16 +362,19 @@ export async function confirmRunning(
 		got: string | undefined;
 	}> = [];
 	let unreadable = false;
+	let down: ServiceUnit[] = [];
 	const tries = opts.tries ?? 20;
 	for (let i = 0; i < tries; i++) {
 		if (i > 0) await rt.sleep(1_500);
 		wrong = [];
 		unreadable = false;
+		down = [];
 		for (const u of units)
 			for (const k of keys) {
 				const got = rt.processEnv(u, k);
 				if (got === null) {
 					unreadable = true;
+					if (!down.includes(u)) down.push(u);
 					continue;
 				}
 				const w = want.get(`${u} ${k}`);
@@ -280,9 +382,32 @@ export async function confirmRunning(
 				if (w === null) continue;
 				if (norm(got) !== norm(w)) wrong.push({ unit: u, key: k, want: w, got });
 			}
-		if (!unreadable && wrong.length === 0) return { ok: true, unreadable: false, wrong: [] };
+		if (!unreadable && wrong.length === 0)
+			return { ok: true, unreadable: false, down: [], wrong: [] };
 	}
-	return { ok: false, unreadable, wrong };
+	return { ok: false, unreadable, down, wrong };
+}
+
+/** What happened after a save: was the restart done, and was the running
+ *  service CHECKED to have the new settings? `live`: true only when it was
+ *  confirmed; false when the check found it down or on another value; null
+ *  when nothing was checked (not restarted, not root, or another copy). */
+export interface RestartOutcome {
+	readonly restarted: boolean;
+	readonly live: boolean | null;
+}
+
+/** The files among `files` that set `key`, in the order the service reads
+ *  them (the last one wins). PURE over `read`. */
+export function filesSetting(
+	files: readonly string[],
+	key: string,
+	read: (path: string) => string | null
+): string[] {
+	return files.filter((f) => {
+		const t = read(f);
+		return t !== null && envValue([t], key) !== undefined;
+	});
 }
 
 /**
@@ -294,17 +419,33 @@ export async function confirmRunning(
 export async function restartWithWritten(
 	written: readonly string[],
 	units: readonly ServiceUnit[],
-	deps: {
-		offer: (units: readonly ServiceUnit[]) => Promise<boolean>;
-		print: (line: string) => void;
-		/** The files each service reads (default: the installed ones). */
-		envs?: readonly ServiceEnv[];
-		fs?: ShadowFs;
-		runtime?: RunningEnv;
-		/** Whether the running services' settings can be read (root). */
-		canRead?: () => boolean;
-	}
+	deps: RestartDeps
 ): Promise<boolean> {
+	return (await restartAndCheck(written, units, deps)).restarted;
+}
+
+export interface RestartDeps {
+	offer: (units: readonly ServiceUnit[]) => Promise<boolean>;
+	print: (line: string) => void;
+	/** The files each service reads (default: the installed ones). */
+	envs?: readonly ServiceEnv[];
+	fs?: ShadowFs;
+	runtime?: RunningEnv;
+	/** Whether the running services' settings can be read (root). */
+	canRead?: () => boolean;
+	/** The braille spinner shown while the running services are checked
+	 *  (default: the real one). Returns its stop function. */
+	spinner?: (label: string) => () => void;
+}
+
+/** {@link restartWithWritten}, also saying whether the running services were
+ *  confirmed to have the new settings — so a caller says "it is live" only
+ *  then. */
+export async function restartAndCheck(
+	written: readonly string[],
+	units: readonly ServiceUnit[],
+	deps: RestartDeps
+): Promise<RestartOutcome> {
 	const shadow = clearLaterShadows(written, { envs: deps.envs, fs: deps.fs });
 	const notes = describeShadowFix(shadow);
 	for (const line of notes) deps.print(line);
@@ -321,25 +462,53 @@ export async function restartWithWritten(
 	// runs with: never confirmed as "the new settings".
 	const check = written.filter((k) => !shadow.kept.some((x) => x.key === k));
 	if (!restarted || check.length === 0 || !envs.some((e) => all.includes(e.unit)) || !canRead())
-		return restarted;
-	const r = await confirmRunning(all, check, {
-		envs,
-		fs: deps.fs,
-		runtime: deps.runtime
-	});
+		return { restarted, live: null };
+	const names = all.map(unitLabel).join(' and ');
+	// The new process can take a while to come up (its shell reads the files
+	// first): the spinner turns for the whole wait, never a silent pause.
+	const stop = (deps.spinner ?? ((l: string) => startDotsSpinner(l)))(
+		`Checking that the ${names} ${all.length === 1 ? 'is' : 'are'} running with the new settings…`
+	);
+	let r: Awaited<ReturnType<typeof confirmRunning>>;
+	try {
+		r = await confirmRunning(all, check, {
+			envs,
+			fs: deps.fs,
+			runtime: deps.runtime
+		});
+	} finally {
+		stop();
+	}
 	if (r.ok) {
 		deps.print(
-			`✓ checked: the running ${all.map(unitLabel).join(' and ')} ${all.length === 1 ? 'uses' : 'use'} the new settings.`
+			`✓ checked: the running ${names} ${all.length === 1 ? 'uses' : 'use'} the new settings — the change is live.`
 		);
 		deps.print('');
-	} else if (r.wrong.length > 0) {
-		for (const w of r.wrong)
-			deps.print(
-				`! the running ${unitLabel(w.unit)} still has ${w.key}=${w.got ?? '(not set)'} (its settings give ${w.want ?? '(not set)'}). On this server run: sudo systemctl restart ${unitLabel(w.unit)}`
-			);
-		deps.print('');
+		return { restarted, live: true };
 	}
-	return restarted;
+	const fs = deps.fs ?? realFs;
+	for (const u of r.down)
+		deps.print(
+			`✗ the ${unitLabel(u)} is not running after the restart. On this server, see why with: ${journalCommand(u)}`
+		);
+	for (const w of r.wrong) {
+		// It was just restarted and checked for a while: restarting it again is
+		// no answer. Say what it runs with, what its files give and where that
+		// comes from, and how to see why.
+		const files = envs.find((e) => e.unit === w.unit)?.files ?? [];
+		const setIn = filesSetting(files, w.key, (p) => fs.read(p));
+		const from =
+			setIn.length === 0
+				? `none of its settings files sets it now (${files.join(', ')})`
+				: setIn.length === 1
+					? `set in ${setIn[0]}`
+					: `set in ${setIn.join(', then ')} — the last one wins`;
+		deps.print(
+			`! the ${unitLabel(w.unit)} did not pick up the new ${w.key} after the restart: it runs with ${w.got ?? '(not set)'}, its settings give ${w.want ?? '(not set)'} (${from}). On this server, see why with: ${journalCommand(w.unit)}`
+		);
+	}
+	if (r.down.length > 0 || r.wrong.length > 0) deps.print('');
+	return { restarted, live: false };
 }
 
 const sh = (cmd: string, args: string[]): string => {

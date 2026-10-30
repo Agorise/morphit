@@ -1041,14 +1041,13 @@ describe('the pauses after the services restart show what is happening (A-F6)', 
 			visit(sf);
 			return found;
 		};
-		expect(clears('checkMcpAnswers'), 'the MCP check').toBe(true);
+		// The MCP step (redeployMcpOnUpgrade since the v1.21.17 review) returns
+		// false when it should run and does not (test/upgradeMcpOff.test.ts).
+		expect(clears('redeployMcpOnUpgrade'), 'the MCP step').toBe(true);
 		expect(clears('syncMatrixBotOnUpgrade'), 'the Matrix bot').toBe(true);
 		const src = rf(file, 'utf8');
-		expect(src, 'a failed MCP restart or redeploy').toMatch(
-			/if \(dep\.status !== 0\) \{[\s\S]{0,200}servicesVerified = false;/
-		);
-		expect(src, 'a failed MCP restart').toMatch(
-			/if \(rs\.status !== 0\) \{[\s\S]{0,200}servicesVerified = false;/
+		expect(src, 'the MCP step ends on its health check').toMatch(
+			/return await checkMcpAnswers\(mcpHost, mcpPort\);/
 		);
 		// The restart step's own verdict (test/upgradeServicesVerified.test.ts)
 		// is where the last lines start from.

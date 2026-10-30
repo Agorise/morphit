@@ -105,7 +105,11 @@ class Box {
 	backupOk = true;
 	timeLeft = 30 * 60_000;
 	background = true;
-	source: { readsFile: boolean; overrides: string[] } | null = { readsFile: true, overrides: [] };
+	source: {
+		readsFile: boolean;
+		overrides: string[];
+		values?: ReadonlyMap<string, string>;
+	} | null = { readsFile: true, overrides: [] };
 	applies: string[] = [];
 	certbotCalls: string[][] = [];
 	perms = 0;
@@ -113,10 +117,57 @@ class Box {
 	writes: string[] = [];
 	modes: Record<string, number | undefined> = {};
 	loadedOnce = false;
+	/** BunkerWeb 1.5 (single site): nginx serves the names of its site list,
+	 *  and its scheduler only ever puts the first name of SERVER_NAME there. */
+	bw15 = false;
+	sites: string[] = [D];
+	siteDb: 'sqlite' | 'other' | 'missing' = 'sqlite';
+	/** Adding to the site list changes nothing nginx serves (another cause). */
+	sitesIgnored = false;
+	added: string[][] = [];
+	/** `nginx -T` can be read in the edge. */
+	nginxReadable = false;
+	ruleCopiesRemoved = 0;
+	refusal: string | null = null;
+
+	/** The names the running nginx answers for. */
+	servedNames(): string[] {
+		if (!this.bw15) return serverNames(this.live);
+		const live = serverNames(this.live);
+		return this.sitesIgnored ? this.sites.slice(0, 1) : this.sites.filter((n) => live.includes(n));
+	}
+	nginxText(): string {
+		const env =
+			!this.ignoreEnvRule && envValues(this.live).get(WWW_REDIRECT_KEY) === wwwRedirectConf(D);
+		return [
+			'# configuration file /etc/nginx/api.conf:',
+			'server {',
+			'\tserver_name bwapi;',
+			'}',
+			'# configuration file /etc/nginx/server.conf:',
+			'server {',
+			`\tserver_name ${this.servedNames().join(' ')};`,
+			'}',
+			...(env
+				? [
+						'# configuration file /etc/bunkerweb/configs/server-http/morphit_www_redirect.conf:',
+						'# CREATED BY ENV',
+						wwwRedirectConf(D)
+					]
+				: []),
+			...(this.schedConf
+				? [
+						'# configuration file /etc/bunkerweb/configs/server-http/morphit-www-redirect.conf:',
+						wwwRedirectConf(D)
+					]
+				: []),
+			''
+		].join('\n');
+	}
 
 	ruleLive(): boolean {
 		const v = envValues(this.live);
-		const named = serverNames(this.live).includes(W);
+		const named = this.servedNames().includes(W);
 		const env = !this.ignoreEnvRule && v.get(WWW_REDIRECT_KEY) === wwwRedirectConf(D);
 		return named && (env || (this.schedConf && this.schedConfWorks));
 	}
@@ -145,6 +196,7 @@ class Box {
 			if (!this.restartable || (recreate && !this.canRecreate)) return 'not-restarted';
 			if (this.applyResult === 'pending') this.pendingSeen = true;
 			if (this.applyResult !== 'loaded') return this.applyResult;
+			if (this.refusal !== null) return 'refused';
 			// A recreate reads the settings file; a scheduler restart only its
 			// config files and the certificate.
 			if (recreate && this.recreateReadsFile) this.live = this.files.get(ENV)!;
@@ -176,7 +228,7 @@ class Box {
 				return res(this.loadedOnce && this.siteAfter !== null ? this.siteAfter : '200');
 			}
 			if (u.hostname === W) {
-				if (!serverNames(this.live).includes(W))
+				if (!this.servedNames().includes(W))
 					return u.protocol === 'https:' && o.verify ? res('000', '', 60) : res('403');
 				if (u.protocol === 'https:' && !tlsOk(W)) return res('000', '', 60);
 				if (this.ruleLive()) return res('301', `https://${D}${path}`);
@@ -212,7 +264,23 @@ class Box {
 		timeLeftMs: () => this.timeLeft,
 		inBackground: () => this.background,
 		composeManaged: () => this.canRecreate,
-		edgeSettingsSource: () => this.source
+		edgeSettingsSource: () => this.source,
+		nginxConfig: () => (this.nginxReadable ? this.nginxText() : null),
+		// As WWW_DB_PY answers: the list only from a sqlite file it can read.
+		siteList: () => ({ db: this.siteDb, ids: this.siteDb === 'sqlite' ? [...this.sites] : [] }),
+		addSiteNames: (add, first) => {
+			this.added.push([...add]);
+			if (this.siteDb !== 'sqlite' || this.sites[0] !== first) return null;
+			this.sites.push(...add);
+			return { backup: '/data/lib/db.pre-morphit-sites-1.sqlite3' };
+		},
+		removeRuleCopy: () => {
+			this.ruleCopiesRemoved++;
+			this.schedConf = false;
+			return true;
+		},
+		lastRefusal: () => this.refusal,
+		containerNames: () => ({ edge: 'bunkerweb', scheduler: 'bunkerweb-scheduler' })
 	};
 }
 
@@ -524,6 +592,52 @@ describe('the heal on a simulated box', () => {
 		expect([b.writes, b.applies, b.lookups]).toEqual([[], [], []]);
 	});
 
+	// v1.21.18 audit: MULTISITE was read from bunkerweb.env only, so one set by
+	// BunkerWeb's Compose service (`environment:`, which wins) was missed and a
+	// multi-site BunkerWeb was changed as a single site.
+	it('MULTISITE=yes set by its Compose service (the file says no): named, not changed', async () => {
+		const b = new Box();
+		b.source = {
+			readsFile: true,
+			overrides: ['MULTISITE'],
+			values: new Map([['MULTISITE', 'yes']])
+		};
+		const r = await run(b);
+		expect(r.detail).toMatch(
+			/several sites here \(MULTISITE=yes, set in its Compose service's environment\), so www\.vigilante\.trading was left as it is/
+		);
+		expect([b.writes, b.applies, b.lookups, b.certbotCalls]).toEqual([[], [], [], []]);
+		expect(b.files.get(ENV)).toBe(OLD_ENV);
+	});
+	it('MULTISITE set by its Compose service with a value Compose does not give: the running edge decides; unknown, nothing changed', async () => {
+		const b = new Box();
+		b.source = { readsFile: true, overrides: ['MULTISITE'], values: new Map() };
+		b.live = OLD_ENV.replace('MULTISITE=no', 'MULTISITE=yes');
+		const r = await run(b);
+		expect(r.detail).toMatch(/several sites here \(MULTISITE=yes/);
+		expect([b.writes, b.applies, b.lookups]).toEqual([[], [], []]);
+		const c = new Box();
+		c.source = { readsFile: true, overrides: ['MULTISITE'], values: new Map() };
+		c.liveUnknown = true;
+		const rc = await run(c);
+		expect(rc.detail).toMatch(
+			/sets MULTISITE itself and its value could not be read, so www\.vigilante\.trading was left as it is/
+		);
+		expect([c.writes, c.applies, c.lookups]).toEqual([[], [], []]);
+	});
+	it('MULTISITE=no set by its Compose service: one site, so www is set up as usual', async () => {
+		const b = new Box();
+		b.files.set(ENV, OLD_ENV.replace('MULTISITE=no', 'MULTISITE=yes'));
+		b.source = {
+			readsFile: true,
+			overrides: ['MULTISITE'],
+			values: new Map([['MULTISITE', 'no']])
+		};
+		const r = await run(b);
+		expect(r.detail).not.toMatch(/several sites/);
+		expect(b.lookups).toEqual([D, W]);
+	});
+
 	it('www has no record: the CNAME to add; a certificate that still names www is issued again without it', async () => {
 		const b = new Box();
 		b.dns[W] = lk();
@@ -607,6 +721,7 @@ describe('the heal on a simulated box', () => {
 
 	it('the env rule is not loaded: written a second way (scheduler config file), then checked', async () => {
 		const b = new Box();
+		b.nginxReadable = true;
 		b.ignoreEnvRule = true;
 		const r = await run(b);
 		expect(b.schedConf).toBe(true);
@@ -616,12 +731,23 @@ describe('the heal on a simulated box', () => {
 
 	it('the rule never goes live: not claimed, the command given, Let’s Encrypt not asked', async () => {
 		const b = new Box();
+		b.nginxReadable = true;
 		b.ignoreEnvRule = true;
 		b.schedConfWorks = false;
 		const r = await run(b);
 		expect(r.verified).toBe(false);
+		// What was answered, what was checked, and the one thing to send — never
+		// "run the upgrade again" (it would try the same thing), never the long
+		// certbot command while www itself does not work (v1.21.17 review).
 		expect(r.detail).toMatch(
-			/runs with www\.vigilante\.trading in its settings, but a test request for www\.vigilante\.trading was answered 301 → https:\/\/www\.vigilante\.trading/
+			/a test request on this server for www\.vigilante\.trading was answered 301 → https:\/\/www\.vigilante\.trading\/.* instead of being sent on to https:\/\/vigilante\.trading/
+		);
+		expect(r.detail).toMatch(
+			/it needs a look: send the output of, on this server: sudo docker exec bunkerweb nginx -T/
+		);
+		expect(r.detail).not.toMatch(/upgrade --heals|certbot certonly/);
+		expect(r.detail).toMatch(
+			/the next upgrade adds it to the certificate by itself once www\.vigilante\.trading works/
 		);
 		expect(b.certbotCalls).toEqual([]);
 	});
@@ -739,7 +865,11 @@ describe('the heal on a simulated box', () => {
 		const r = await run(b);
 		expect(b.schedConf).toBe(false);
 		expect(r.verified).toBe(false);
-		expect(r.detail).toMatch(/still runs without www\.vigilante\.trading \(it answered 403\)/);
+		expect(r.detail).toMatch(
+			/services were recreated, but its containers still run without www\.vigilante\.trading/
+		);
+		// recreated once (with the change), not again for nothing
+		expect(b.applies).toEqual([`${W} added|true`]);
 		expect(b.certbotCalls).toEqual([]);
 	});
 
@@ -812,6 +942,7 @@ describe('the heal on a simulated box', () => {
 
 	it('the scheduler config file already there: not written or restarted again', async () => {
 		const b = new Box();
+		b.nginxReadable = true;
 		b.ignoreEnvRule = true;
 		b.schedConfWorks = false;
 		await run(b);
@@ -832,7 +963,10 @@ describe('the heal on a simulated box', () => {
 			b.applies.length = 0;
 			const r = await run(b);
 			expect(b.applies).toEqual([]);
-			expect(r.detail).toMatch(/after its services were recreated with this file/);
+			expect(r.detail).toMatch(
+				/services were recreated, but its containers still run without www\.vigilante\.trading/
+			);
+			expect(r.detail).not.toMatch(/upgrade --heals/);
 			expect(r.detail).not.toMatch(/next `sudo morphit-ops upgrade`/);
 		}
 		// a changed file is tried again
@@ -922,5 +1056,202 @@ describe('the heal on a simulated box', () => {
 		b.files.set(RENEWAL, conf('https://acme-staging-v02.api.letsencrypt.org/directory'));
 		await run(b);
 		expect(b.certbotCalls[0]).toContain('https://acme-staging-v02.api.letsencrypt.org/directory');
+	});
+});
+
+/**
+ * morphit.io, v1.21.17: the settings file AND BunkerWeb's containers name
+ * www.morphit.io, yet nginx serves `server_name morphit.io;` only and www gets
+ * BunkerWeb's 403. BunkerWeb 1.5 (single site) serves the names of its own
+ * site list (bw_services), and its scheduler only ever puts the FIRST name of
+ * SERVER_NAME there, so recreating it never helps. The old heal judged "BunkerWeb
+ * has www" from the container environment, wrote a scheduler config file (a
+ * second copy of the rule), and on every later run said the same thing and
+ * "run: sudo morphit-ops upgrade --heals", which changed nothing.
+ */
+describe('www named in the settings but not served (what nginx really runs)', () => {
+	const run = async (b: Box) => {
+		notes.length = 0;
+		return healBunkerWebWww(ctx, b.rt);
+	};
+	/** morphit.io as it was found: file and containers have www, nginx not. */
+	const morphitIo = (): Box => {
+		const b = new Box();
+		const t = planWwwEnv(OLD_ENV, { domain: D, alias: W }).text;
+		b.files.set(ENV, t);
+		b.live = t;
+		b.bw15 = true;
+		b.nginxReadable = true;
+		return b;
+	};
+
+	it('BunkerWeb 1.5 kept only the domain in its site list: www is added there, served, and then gets its certificate', async () => {
+		const b = morphitIo();
+		expect(b.rt.request(`http://${W}/x`).code).toBe('403');
+		const r = await run(b);
+		expect(b.added).toEqual([[W]]);
+		// the scheduler restarted (its first start generates the config again); no recreate
+		expect(b.applies[0]).toBe(`${W} added to BunkerWeb's site list|false`);
+		expect(r.detail).toMatch(
+			/BunkerWeb kept only vigilante\.trading as this site's name .*added www\.vigilante\.trading to its site list \(the database as it was is kept in BunkerWeb's scheduler at \/data\/lib\/db\.pre-morphit-sites-1\.sqlite3\)/
+		);
+		expect(b.rt.request(`http://${W}/a?b=1`)).toMatchObject({
+			code: '301',
+			location: `https://${D}/a?b=1`
+		});
+		expect(b.cert).toEqual([D, W]);
+		expect(r.verified).toBe(true);
+		expect(r.detail).not.toMatch(/upgrade --heals/);
+		// and the next run has nothing to do
+		const again = await run(b);
+		expect(again).toMatchObject({ routine: true, verified: true });
+	});
+
+	it('BunkerWeb 1.5 and a file without www: written, recreated, then added to the site list — in one run', async () => {
+		const b = new Box();
+		b.bw15 = true;
+		b.nginxReadable = true;
+		const r = await run(b);
+		expect(b.applies.slice(0, 2)).toEqual([
+			`${W} added|true`,
+			`${W} added to BunkerWeb's site list|false`
+		]);
+		expect(b.rt.request(`http://${W}/x`)).toMatchObject({ code: '301' });
+		expect(b.cert).toEqual([D, W]);
+		expect(r.verified).toBe(true);
+	});
+
+	// v1.21.18 audit, M4: WWW_DB_PY answers {"db":"other","ids":[]} for a
+	// database server (the fake answered with the site list), so this branch
+	// was never reached: BunkerWeb was recreated (the site down meanwhile) and
+	// the run ended with a sentence that blamed nginx, kept in a marker.
+	it('another database server: nothing restarted, the cause and the one step in plain words, the same on every run, never "--heals"', async () => {
+		const b = morphitIo();
+		b.siteDb = 'other';
+		for (let k = 0; k < 3; k++) {
+			b.applies.length = 0;
+			const r = await run(b);
+			expect(b.applies).toEqual([]);
+			expect(r.verified).toBe(false);
+			expect(r.detail).toMatch(
+				/BunkerWeb serves only the names in its own site list, and keeps that list in a database server \(its DATABASE_URI is not a sqlite file\), which this upgrade does not edit, so www\.vigilante\.trading was not added and BunkerWeb was not restarted\. To add it: in that database's bw_services table, add a row for www\.vigilante\.trading like the row for vigilante\.trading \(method "scheduler", is_draft 0\), then on this server: sudo docker restart bunkerweb-scheduler/
+			);
+			expect(r.detail).not.toMatch(/upgrade --heals|certbot certonly|nginx it runs/);
+		}
+		expect(b.added).toEqual([]);
+		expect(b.files.has(`${ENV}.www-recreated`)).toBe(false);
+		expect(b.certbotCalls).toEqual([]);
+	});
+	it('its database file not found: nothing restarted, said so', async () => {
+		const b = morphitIo();
+		b.siteDb = 'missing';
+		const r = await run(b);
+		expect(b.applies).toEqual([]);
+		expect(r.detail).toMatch(
+			/its database file was not found in its scheduler .*so www\.vigilante\.trading was not added and BunkerWeb was not restarted; it needs a look/
+		);
+	});
+
+	it('an automatic attempt that does not help is made once per settings file; later runs name the cause and change nothing', async () => {
+		const b = morphitIo();
+		b.sitesIgnored = true;
+		const first = await run(b);
+		expect(b.applies).toEqual([`${W} added to BunkerWeb's site list|false`]);
+		expect(first.detail).toMatch(/nginx it runs still answers only for vigilante\.trading/);
+		for (let k = 0; k < 2; k++) {
+			b.applies.length = 0;
+			const r = await run(b);
+			expect(b.applies).toEqual([]);
+			expect(r.detail).toMatch(
+				/nginx it runs still answers only for vigilante\.trading; it needs a look/
+			);
+			expect(r.detail).not.toMatch(/upgrade --heals|certbot certonly/);
+		}
+		expect(b.certbotCalls).toEqual([]);
+	});
+
+	it('BunkerWeb refuses the config: its own reason is quoted', async () => {
+		const b = morphitIo();
+		b.siteDb = 'other';
+		b.bw15 = false; // containers lack www: a recreate is the attempt
+		b.live = OLD_ENV;
+		b.refusal = 'unknown directive "iff" in /etc/nginx/server.conf:9';
+		const r = await run(b);
+		expect(r.detail).toMatch(
+			/refused its new config with www\.vigilante\.trading \("unknown directive "iff" in \/etc\/nginx\/server\.conf:9"\)/
+		);
+		expect(r.detail).not.toMatch(/upgrade --heals/);
+	});
+
+	it('the domain itself does not answer as usual from this server: www is not blamed, nothing changed', async () => {
+		const b = new Box();
+		const t = planWwwEnv(OLD_ENV, { domain: D, alias: W }).text;
+		b.files.set(ENV, t);
+		b.live = t;
+		b.nginxReadable = true;
+		const real = b.rt.request;
+		(b.rt as { request: WwwRuntime['request'] }).request = (url, o) =>
+			new URL(url).hostname === D || new URL(url).hostname === W
+				? { code: '403', location: '', headers: '', exit: 0 }
+				: real(url, o);
+		const r = await run(b);
+		expect(r.detail).toMatch(
+			/www\.vigilante\.trading could not be checked from this server: a test request for vigilante\.trading itself, made the same way, was answered 403/
+		);
+		expect(b.applies).toEqual([]);
+		expect(b.schedConf).toBe(false);
+		expect(b.certbotCalls).toEqual([]);
+	});
+
+	it('nginx cannot be read: no second copy of the rule is written on a guess, and nothing circular is said', async () => {
+		const b = morphitIo();
+		b.nginxReadable = false;
+		for (let k = 0; k < 2; k++) {
+			const r = await run(b);
+			expect(b.schedConf).toBe(false);
+			expect(r.verified).toBe(false);
+			expect(r.detail).not.toMatch(/upgrade --heals|certbot certonly/);
+		}
+	});
+
+	it('the www rule twice (from the settings and from an earlier upgrade’s config file): the file’s copy goes', async () => {
+		const b = morphitIo();
+		b.bw15 = false;
+		b.schedConf = true; // morphit-www-redirect.conf, written by v1.21.11–v1.21.17
+		b.cert = [D, W];
+		b.served = [D, W];
+		const r = await run(b);
+		expect(b.ruleCopiesRemoved).toBe(1);
+		expect(b.nginxText()).not.toContain('morphit-www-redirect.conf');
+		expect(b.nginxText()).toContain('morphit_www_redirect.conf');
+		expect(b.rt.request(`http://${W}/q`)).toMatchObject({ code: '301' });
+		expect(r.detail).toMatch(/had the www rule twice .*that file's copy was taken out/);
+	});
+
+	// v1.21.18 audit, L2: on a slow box BunkerWeb is still loading ('pending')
+	// when checked; the copy was written back, so every upgrade repeated the
+	// round (a database copy and a moved file each time).
+	it('the second copy taken out while BunkerWeb is still loading: it stays out (not written back)', async () => {
+		const b = morphitIo();
+		b.bw15 = false;
+		b.schedConf = true;
+		b.cert = [D, W];
+		b.served = [D, W];
+		b.applyResult = 'pending';
+		await run(b);
+		expect(b.ruleCopiesRemoved).toBe(1);
+		expect(b.schedConf).toBe(false);
+		expect(b.applies.filter((a) => /put back/.test(a))).toEqual([]);
+	});
+	it('the second copy taken out and BunkerWeb refuses the new config: written back', async () => {
+		const b = morphitIo();
+		b.bw15 = false;
+		b.schedConf = true;
+		b.cert = [D, W];
+		b.served = [D, W];
+		b.applyResult = 'refused';
+		await run(b);
+		expect(b.ruleCopiesRemoved).toBe(1);
+		expect(b.schedConf).toBe(true);
 	});
 });

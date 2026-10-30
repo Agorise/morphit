@@ -1,44 +1,47 @@
 /**
- * Morphit ops CLI — `edit-active-key` subcommand.
+ * Morphit ops CLI — `edit-active-key` subcommand (menu: "Rotate the relay
+ * active key").
  *
- * dedicated path for rotating the relay's ACTIVE key
- * without re-running the entire setup wizard.  Triggered when:
+ * Puts a different ACTIVE key in the relay's key file without re-running the
+ * install. For: a posting key pasted at install by mistake, a key changed on
+ * the chain (account_update), or a key that may have been exposed.
  *
- *   - An operator pasted the wrong key during initial setup
- *     (e.g. posting key instead of active key — older the
- *     wizard's prompt copy was ambiguous; this is the recovery
- *     path for instances created before that fix landed).
- *   - The active key was rotated on chain (account_update op)
- *     and the relay needs the new WIF.
- *   - Security incident — operator suspects the key may have
- *     been exposed and wants to install a freshly-generated one.
+ * What it does, in order:
+ *   0. Runs as root only (the key file, its sealed passphrase and the settings
+ *      are root's): without sudo it says so, instead of a raw EACCES.
+ *   1. Finds the install (defaultRepoRoot — the menu runs this in
+ *      /opt/morphit/apps/ops-cli, so the working directory is NOT the install;
+ *      review 2026-10-29: it looked for apps/ops-cli/morphit.env and told the
+ *      operator to run it "from the same directory you ran init in") and reads
+ *      morphit.env for the relay account and its key file.
+ *   2. Asks for the new key and CHECKS IT AGAINST THE CHAIN before anything is
+ *      written (lib/relayKeyChain.ts: a "does not match" needs two RPC
+ *      operators that agree). A key that is not one of the account's active
+ *      keys is refused, saying which key it is and what to paste instead. When
+ *      the chain cannot say for sure (it cannot be read, or only one node
+ *      answered), it asks before saving unchecked (default: No).
+ *   3. Keeps the unlock passphrase by default (opened with the relay's sealed
+ *      copy; nothing to type, nothing else changes). A new one is sealed for
+ *      the relay, and the alternative-network key files (Tor/I2P/Lokinet, kept
+ *      under the same passphrase) are re-encrypted with it and read back. One
+ *      that no known passphrase opens is named BEFORE the final question, with
+ *      what can be done about it.
+ *   4. Keeps a copy of the old key file by default (or overwrites it so no copy
+ *      stays), writes the new one in place — at the SAME path, whatever the
+ *      old file held (owner and mode kept, so the relay can still read it) —
+ *      and reads it back.
+ *   5. Says exactly what to run next on this server: restart the relay, which
+ *      checks the key against the chain at startup (policy/activeKeyGuard in
+ *      the relay) and refuses to sign with one that is not on the account.
  *
- * Ceremony:
- *   1. Read morphit.env to find MORPHIT_RELAY_ACTIVE_KEY_FILE.
- *   2. Read the current keystore (encrypted envelope OR plaintext
- *      wif) to determine the existing storage mode + filename.
- *   3. Prompt the operator for the relay account name (read from
- *      morphit.env so we can render it into prompts and the
- *      restart hint).  This avoids the operator having to
- *      remember which @account they wired up.
- *   4. Prompt for the new active key (same prompt copy as the
- *      wizard step 5 — crystal clear that this is the
- *      ACTIVE key for the named relay account, not posting).
- *   5. Optionally re-prompt for a new passphrase if the existing
- *      keystore is an encrypted envelope (default: same passphrase).
- *   6. Atomic write: temp file → fsync → rename, with a
- *      timestamped backup of the prior keystore as
- *      `keystore.<json|wif>.bak-<unix-ms>`.
- *   7. Remind the operator to restart `morphit-relay.service`.
- *
- * What this command does NOT touch:
- *   - morphit.env (path stays, account stays, only the keystore
- *     bytes change).
- *   - morphit.config.env (allowlisted config — no relay-key
- *     state lives there).
- *   - Alt-network keystores (separate file; if the passphrase
- *     changes, the operator must also re-import via
- *     `import-altnet-key`).
+ * What it does NOT touch: morphit.config.env, morphit.env, relay.env. The key
+ * file keeps its path: an old plaintext key file is converted in place. It
+ * used to become <dir>/keystore.json with only morphit.env pointed at it —
+ * but the relay's unit sources /etc/morphit/relay.env AFTER morphit.env, so
+ * an install whose relay.env names the key file kept the OLD key (and with
+ * "no copy", crash-looped on a deleted file) (review, 2026-10-29). The relay
+ * tells an encrypted key file from a plaintext one by its content, not its
+ * name.
  */
 
 import { keepOwnerAndMode } from '../lib/keepOwner.ts';
@@ -51,15 +54,38 @@ import {
 	chmodSync,
 	renameSync,
 	openSync,
+	fstatSync,
 	fsyncSync,
 	closeSync,
-	unlinkSync
+	unlinkSync,
+	writeSync
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
-import { askPassword, askYesNo, step, explain } from '../init/prompt.ts';
+import { defaultRepoRoot } from '../lib/repoRoot.ts';
+import { askPassword, askYesNo, step, explain, isAbortError } from '../init/prompt.ts';
+import { commandFailed } from '../lib/commandFailed.ts';
 import { sanitizeForTerm } from '../render/term.ts';
-import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from '../init/encrypt.ts';
+import { checkPassphraseStrength, type KeyEnvelope } from '../init/encrypt.ts';
+import {
+	decryptEnvelopeAsync,
+	encryptEnvelopeAsync,
+	KeyEnvelopeError
+} from '../../../relay/src/crypto/keyEnvelope.ts';
+import { startDotsSpinner, withSpinner } from '../init/spinner.ts';
+import {
+	checkKeyOnChain,
+	describeKeyOnChain,
+	publicKeyOf,
+	type KeyOnChain
+} from '../lib/relayKeyChain.ts';
+import { trySealedRelayPassphrase } from './register.ts';
+import {
+	altKeystoreFilename,
+	decryptAltKey,
+	encryptAltKey,
+	type AltKeyEnvelope,
+	type AltNetwork
+} from '../init/altKeystore.ts';
 
 export interface EditActiveKeyArgs {
 	readonly flags: Readonly<Record<string, string>>;
@@ -87,8 +113,10 @@ function readCriticalEnv(configDir: string): {
 	const envPath = resolve(configDir, 'morphit.env');
 	if (!existsSync(envPath)) {
 		throw new Error(
-			`Can't find morphit.env at ${envPath}.  Are you in the right directory?  ` +
-				'edit-active-key must be run from the same directory you ran `morphit-ops init` in.'
+			`Can't find morphit.env at ${envPath} — the settings file the install writes, which names ` +
+				'the relay account and its key file. Morphit is not installed in that folder. If it is ' +
+				'installed in another folder on this server, name it: ' +
+				'sudo morphit-ops edit-active-key --config-dir=<that folder>'
 		);
 	}
 	const src = readFileSync(envPath, 'utf8');
@@ -113,14 +141,16 @@ function readCriticalEnv(configDir: string): {
 	}
 	if (keystorePath.length === 0) {
 		throw new Error(
-			`morphit.env at ${envPath} doesn't define MORPHIT_RELAY_ACTIVE_KEY_FILE.  ` +
-				'The file may be corrupted or pre-init.  Re-run `morphit-ops init` instead.'
+			`${envPath} has no MORPHIT_RELAY_ACTIVE_KEY_FILE line (where the relay's key file is), ` +
+				`which the install writes. Add it on this server: sudo nano ${envPath}  ` +
+				'(the line: MORPHIT_RELAY_ACTIVE_KEY_FILE=<path of the key file>)'
 		);
 	}
 	if (relayAccount.length === 0) {
 		throw new Error(
-			`morphit.env at ${envPath} doesn't define MORPHIT_RELAY_ACCOUNT.  ` +
-				'The file may be corrupted or pre-init.  Re-run `morphit-ops init` instead.'
+			`${envPath} has no MORPHIT_RELAY_ACCOUNT line (the relay account name), which the ` +
+				`install writes. Add it on this server: sudo nano ${envPath}  ` +
+				'(the line: MORPHIT_RELAY_ACCOUNT=<your relay account>)'
 		);
 	}
 	return { keystorePath, relayAccount };
@@ -131,9 +161,9 @@ function readCriticalEnv(configDir: string): {
 function loadCurrentKeystore(keystorePath: string, relayAccount: string): CurrentKeystore {
 	if (!existsSync(keystorePath)) {
 		throw new Error(
-			`Keystore file not found at ${keystorePath}.  ` +
-				'The path is defined in morphit.env but the file is missing.  ' +
-				'Re-run `morphit-ops init` to start fresh, or restore from backup.'
+			`The relay's key file ${keystorePath} (named in morphit.env) is missing. If an earlier ` +
+				`key change kept a copy (${keystorePath}.bak-<number>), put it back on this server: ` +
+				`sudo cp ${keystorePath}.bak-<number> ${keystorePath} — then run this again.`
 		);
 	}
 	const raw = readFileSync(keystorePath, 'utf8').trim();
@@ -165,7 +195,7 @@ function loadCurrentKeystore(keystorePath: string, relayAccount: string): Curren
 			typeof env.kdf_params !== 'object'
 		) {
 			throw new Error(
-				`Keystore at ${keystorePath} looks like JSON but isn't a valid encrypted envelope.`
+				`The relay's key file ${keystorePath} is not a Morphit key file (it is not an encrypted key). Nothing was changed.`
 			);
 		}
 		return {
@@ -179,8 +209,8 @@ function loadCurrentKeystore(keystorePath: string, relayAccount: string): Curren
 	// Plaintext WIF — 51 chars starting with '5'.
 	if (!/^5[1-9A-HJ-NP-Za-km-z]{50}$/.test(raw)) {
 		throw new Error(
-			`Keystore at ${keystorePath} is neither a JSON envelope nor a valid WIF.  ` +
-				'Refusing to overwrite — you may want to investigate manually.'
+			`The relay's key file ${keystorePath} holds neither an encrypted key nor a private key. ` +
+				'It is left as it is, so nothing is lost: look at it on this server before replacing it.'
 		);
 	}
 	return {
@@ -192,88 +222,107 @@ function loadCurrentKeystore(keystorePath: string, relayAccount: string): Curren
 	};
 }
 
-/** Prompt the operator for the new active key.  Same crystal-
- *  clear prompt copy as the wizard step 5. */
-async function promptNewActiveKey(relayAccount: string): Promise<string> {
+const WIF_RE = /^5[1-9A-HJ-NP-Za-km-z]{50}$/;
+
+/** Ask for the new active key until one is the account's ACTIVE key on the
+ *  chain (or the operator stops). Nothing is written before this returns.
+ *  null: stopped — no change made. */
+async function promptCheckedActiveKey(
+	relayAccount: string,
+	check: (account: string, publicKey: string) => Promise<KeyOnChain>
+): Promise<string | null> {
 	step(1, 3, `New ACTIVE key for @${relayAccount}`);
 	explain(
-		`You are rotating the ACTIVE key for the @${relayAccount} account.\n` +
+		`The relay signs everything it sends to the Blurt chain — new accounts,\n` +
+			'welcome bonuses, power-ups, delegations — with the ACTIVE key of\n' +
+			`@${relayAccount}. A posting, owner or memo key cannot do that.\n` +
 			'\n' +
-			'Blurt has four key types per account; the relay needs the ACTIVE\n' +
-			'key because every operation it broadcasts on chain is an\n' +
-			'active-authority operation:\n' +
+			'Find it in your Blurt wallet: open the account → "Keys" or\n' +
+			'"Permissions" → the private ACTIVE key (51 characters, starts with 5).\n' +
 			'\n' +
-			'  • account_create             (signing up a new Morphit user)\n' +
-			'  • transfer                   (sending the welcome bonus)\n' +
-			'  • transfer_to_vesting        (powering up donated BLURT)\n' +
-			'  • delegate_vesting_shares    (delegating BP for posting)\n' +
-			'\n' +
-			'The posting key CANNOT sign any of these — the chain will reject\n' +
-			'every relay op with "missing required active authority", so your\n' +
-			'relay will fail to start (the unlock step checks the public key\n' +
-			'against the chain).\n' +
-			'\n' +
-			'Find the ACTIVE key in your Blurt wallet under "Permissions" or\n' +
-			'"Keys" — make sure you copy ACTIVE, not posting or owner.\n' +
-			'\n' +
-			'Format: 51 characters, starts with 5.'
+			'It is checked against the chain before anything is saved.'
 	);
-	let wif: string;
-	while (true) {
-		wif = await askPassword(
-			`Active key for @${relayAccount} (paste the 5J... string; it will not be echoed)`
+	for (;;) {
+		// The input ending (Ctrl+D, no terminal) rejects here and stops the
+		// command: it is never read as an empty answer.
+		const wif = await askPassword(
+			`Active key for @${relayAccount} (paste the 5… key; it is not shown on screen)`
 		);
 		if (wif.length === 0) {
-			console.log('  ✗ Required.  Try again.\n');
+			console.log('  ✗ Nothing was pasted.  Try again.\n');
 			continue;
 		}
-		if (!/^5[1-9A-HJ-NP-Za-km-z]{50}$/.test(wif)) {
+		if (!WIF_RE.test(wif)) {
 			console.log(
-				`  ✗ Doesn't look like a valid WIF (expected 51 chars starting with 5).  Try again.\n`
+				'  ✗ That is not a private key (it should be 51 characters and start with 5).  Try again.\n'
 			);
 			continue;
 		}
-		break;
-	}
-	console.log('  ✓ Key shape looks valid.\n');
-	return wif;
-}
-
-async function askStorageMode(current: CurrentKeystore): Promise<'encrypted' | 'plaintext'> {
-	step(2, 3, 'Storage mode for the new key');
-	// Plaintext is no longer offered: the active key is always stored encrypted, and
-	// the relay unlocks it unattended from a host-bound sealed credential (no boot
-	// prompt; a stolen disk can't decrypt it).  A plaintext key on disk lets anyone
-	// who reads the file spend your BLURT.
-	if (current.mode === 'plaintext') {
-		console.log(
-			`Your current keystore at ${current.path} is PLAINTEXT — the replacement\n` +
-				'will be stored ENCRYPTED (the relay unlocks it automatically at startup).\n'
+		let publicKey: string;
+		try {
+			publicKey = await publicKeyOf(wif);
+		} catch {
+			console.log(
+				'  ✗ That is not a valid private key (a character is wrong — copy it again).  Try again.\n'
+			);
+			continue;
+		}
+		const verdict = await withSpinner(
+			`Checking it against @${relayAccount}'s keys on the Blurt chain…`,
+			() => check(relayAccount, publicKey)
 		);
-	} else {
-		console.log('The replacement key will be stored ENCRYPTED (relay unlocks it automatically).\n');
+		for (const line of describeKeyOnChain(verdict, relayAccount, publicKey, 'edit')) {
+			console.log(`  ${sanitizeForTerm(line)}`);
+		}
+		console.log('');
+		if (verdict.kind === 'active') return wif;
+		if (verdict.kind === 'unknown') {
+			const anyway = await askYesNo(
+				verdict.unconfirmed !== undefined
+					? 'Save this key anyway? (One node says it is not the right key. If that is so, the relay refuses to sign anything until it is fixed.)'
+					: 'Save this key WITHOUT the check? (If it is the wrong key, the relay refuses to sign anything until it is fixed.)',
+				false
+			);
+			if (anyway) return wif;
+			console.log(
+				'\n  No change made.  Run this again on this server once the chain can be reached:'
+			);
+			console.log('    sudo morphit-ops edit-active-key');
+			return null;
+		}
+		// wrong / weak / owner / no-account: refused — nothing is written.
+		console.log('  Nothing has been saved.');
+		if (verdict.kind === 'no-account') return null;
+		const again = await askYesNo('Paste a different key?', true);
+		if (!again) {
+			console.log('\n  No change made.');
+			return null;
+		}
+		console.log('');
 	}
-	return 'encrypted';
 }
 
+/** Choose a new unlock passphrase (twice). It is never typed again: it is
+ *  sealed to this server for the relay. */
 async function askPassphraseForNew(): Promise<string> {
 	console.log(
-		"Choose an unlock passphrase.  This is what you'll type when starting\n" +
-			'your relay; it never leaves this machine.\n' +
+		'Choose a new unlock passphrase for the key file.  You will not have to type\n' +
+			'it to start the relay: it is sealed to this server, and the relay opens the\n' +
+			'key with it by itself.  Keep a copy somewhere safe — it is needed to move\n' +
+			'the key to another server.\n' +
 			'\n' +
-			'Use a passphrase you can remember but is hard to guess — several\n' +
-			'random words or a long sentence work well.  Length ≥8.\n'
+			'Several random words or a long sentence work well.  At least 8 characters.\n'
 	);
 	while (true) {
-		const p1 = await askPassword('Passphrase');
+		const p1 = await askPassword('New passphrase');
 		const strength = checkPassphraseStrength(p1);
 		if (!strength.ok) {
 			console.log(`  ✗ ${strength.message}  Try again.\n`);
 			continue;
 		}
-		const p2 = await askPassword('Confirm passphrase');
+		const p2 = await askPassword('The same passphrase again');
 		if (p1 !== p2) {
-			console.log('  ✗ Passphrases do not match.  Try again.\n');
+			console.log('  ✗ The two did not match.  Try again.\n');
 			continue;
 		}
 		if (strength.message !== undefined) {
@@ -283,22 +332,198 @@ async function askPassphraseForNew(): Promise<string> {
 	}
 }
 
-function atomicWrite(targetPath: string, content: string): void {
+/** Open an envelope with a passphrase under the spinner: the key, or null when
+ *  the passphrase does not open it. Throws on a damaged file. */
+async function openWith(envelope: unknown, passphrase: string): Promise<string | null> {
+	const stop = startDotsSpinner('Opening the current key file…');
+	try {
+		return await decryptEnvelopeAsync(envelope, passphrase);
+	} catch (err) {
+		if (err instanceof KeyEnvelopeError && err.code === 'decryption_failed') return null;
+		throw err;
+	} finally {
+		stop();
+	}
+}
+
+/** The current unlock passphrase, when it can be had: the relay's sealed copy,
+ *  else typed by the operator (Enter = they don't know it). null: unknown. The
+ *  input ENDING (Ctrl+D, no terminal) is not "I don't know it": it stops the
+ *  command (askPassword rejects). */
+async function currentPassphrase(
+	current: CurrentKeystore,
+	sealed: () => string | null
+): Promise<string | null> {
+	if (current.mode !== 'encrypted') return null;
+	const s = sealed();
+	if (s !== null && (await openWith(current.envelope, s)) !== null) return s;
+	console.log(
+		"  The relay's sealed passphrase could not be read here (or does not open the key file)."
+	);
+	for (let attempt = 1; attempt <= 3; attempt++) {
+		const typed = await askPassword(
+			'Current unlock passphrase (press Enter if you do not know it — you then choose a new one)'
+		);
+		if (typed === '') return null;
+		if ((await openWith(current.envelope, typed)) !== null) return typed;
+		console.log(`  ✗ That passphrase does not open the current key file (${attempt} of 3 tries).`);
+	}
+	return null;
+}
+
+/** Where the router on this server keeps the live key of each address, when
+ *  Morphit's Ansible roles installed it (roles/tor: HiddenServiceDir
+ *  /var/lib/tor/morphit; roles/i2pd: /var/lib/i2pd/morphit-web.dat). Lokinet
+ *  has no role, so no known place. Under MORPHIT_ENV_ROOT for tests. */
+function liveAltKeyPath(net: AltNetwork): string | null {
+	const root = process.env.MORPHIT_ENV_ROOT ?? '';
+	const p =
+		net === 'tor'
+			? `${root}/var/lib/tor/morphit/hs_ed25519_secret_key`
+			: net === 'i2p'
+				? `${root}/var/lib/i2pd/morphit-web.dat`
+				: null;
+	return p !== null && existsSync(p) ? p : null;
+}
+
+/** What to do about an address key file that cannot be moved to the new
+ *  passphrase because no known passphrase opens it. */
+function lockedAltKeyAdvice(net: AltNetwork, path: string): string[] {
+	const live = liveAltKeyPath(net);
+	return [
+		`⚠ The ${net} address key (${path}) is locked with the OLD passphrase, and only that`,
+		'  passphrase can open it — neither the relay’s sealed passphrase nor one typed here does,',
+		'  so it cannot be moved to the new passphrase.',
+		...(live !== null
+			? [
+					`  The router on this server still has the live key. Afterwards, store a new copy of it,`,
+					'  locked with the new passphrase (it asks for the new passphrase, and whether to',
+					'  replace the existing file — answer yes). On this server:',
+					`    sudo morphit-ops import-altnet-key --network=${net} --in=${live}`
+				]
+			: [
+					'  Without the old passphrase that copy cannot be opened. The address itself keeps',
+					'  working as long as the router on this server keeps its own key.'
+				])
+	];
+}
+
+/** Each alternative-network key file (Tor / I2P / Lokinet), and which of the
+ *  `candidates` passphrases opens it (null: none). Sync key derivation per
+ *  try; the spinner is the caller's. */
+async function altKeysAndOpeners(
+	altDir: string,
+	candidates: readonly string[]
+): Promise<Array<{ net: AltNetwork; path: string; opener: string | null }>> {
+	const out: Array<{ net: AltNetwork; path: string; opener: string | null }> = [];
+	for (const net of ['tor', 'i2p', 'lokinet'] as const) {
+		const path = join(altDir, altKeystoreFilename(net));
+		if (!existsSync(path)) continue;
+		let opener: string | null = null;
+		for (const pass of candidates) {
+			// Let the spinner draw between the (blocking) key derivations.
+			await new Promise((r) => setImmediate(r));
+			try {
+				const plain = decryptAltKey(JSON.parse(readFileSync(path, 'utf8')) as AltKeyEnvelope, pass);
+				plain.fill(0);
+				opener = pass;
+				break;
+			} catch {
+				/* not this one */
+			}
+		}
+		out.push({ net, path, opener });
+	}
+	return out;
+}
+
+/** Re-encrypt each alternative-network key file with the new passphrase,
+ *  using the passphrase that opens it, and read it back. */
+function reencryptAltnetKeys(
+	keys: ReadonlyArray<{ net: AltNetwork; path: string; opener: string | null }>,
+	newPass: string
+): Array<{ net: AltNetwork; path: string; ok: boolean; locked: boolean; why?: string }> {
+	return keys.map(({ net, path, opener }) => {
+		if (opener === null) return { net, path, ok: false, locked: true };
+		try {
+			const env = JSON.parse(readFileSync(path, 'utf8')) as AltKeyEnvelope;
+			const plain = decryptAltKey(env, opener);
+			const next = encryptAltKey(plain, newPass, net);
+			plain.fill(0);
+			atomicWrite(path, JSON.stringify(next, null, 2));
+			const back = decryptAltKey(JSON.parse(readFileSync(path, 'utf8')) as AltKeyEnvelope, newPass);
+			back.fill(0);
+			return { net, path, ok: true, locked: false };
+		} catch (err) {
+			return { net, path, ok: false, locked: false, why: errMsg(err) };
+		}
+	});
+}
+
+/** Overwrite the bytes of an open file in place: random bytes, then zeros,
+ *  each synced to disk. Opened read-write WITHOUT truncating, so the bytes go
+ *  over the old ones (a truncating rewrite may be given fresh blocks and leave
+ *  the old key in the freed ones). */
+function overwriteFd(fd: number): void {
+	const size = Math.max(fstatSync(fd).size, 64);
+	for (const fill of [randomBytes(size), Buffer.alloc(size)]) {
+		writeSync(fd, fill, 0, size, 0);
+		fsyncSync(fd);
+	}
+}
+
+/** Write `targetPath` atomically (temp file → fsync → rename), with the owner,
+ *  group and mode of `modelPath` (default: the target itself) — the relay key
+ *  file is root:morphit-relay 0640 so the relay, running as its own user, can
+ *  read it. A new file with no model stays 0600 root.
+ *
+ *  `overwriteOld`: the file being replaced is overwritten in place — AFTER the
+ *  new one is in place (through a handle opened before the rename, so it is
+ *  the old file's own bytes), never before: an overwrite followed by a failed
+ *  rename used to leave no key at all while saying "the old key file is
+ *  unchanged" (review, 2026-10-29). The temp file never outlives a failure.
+ *  Throws when the new file could not be put in place (the old one is then
+ *  untouched); an overwrite that fails after that is returned, not thrown. */
+function atomicWrite(
+	targetPath: string,
+	content: string,
+	modelPath: string = targetPath,
+	opts: { readonly overwriteOld?: boolean } = {}
+): { readonly overwriteError: string | null } {
 	const dir = dirname(targetPath);
 	const tmpPath = join(dir, `${basename(targetPath)}.tmp-${Date.now()}`);
-	writeFileSync(tmpPath, content, { mode: 0o600 });
-	// fsync the file so the content hits disk before the rename.
-	const fd = openSync(tmpPath, 'r');
+	let oldFd: number | null = null;
+	let overwriteError: string | null = null;
 	try {
-		fsyncSync(fd);
+		if (opts.overwriteOld === true) oldFd = openSync(targetPath, 'r+');
+		writeFileSync(tmpPath, content, { mode: 0o600 });
+		// fsync the file so the content hits disk before the rename.
+		const fd = openSync(tmpPath, 'r');
+		try {
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+		chmodSync(tmpPath, 0o600);
+		// Keep the model file's owner, group and mode (see above).
+		keepOwnerAndMode(modelPath, tmpPath);
+		renameSync(tmpPath, targetPath);
+		if (oldFd !== null) {
+			try {
+				overwriteFd(oldFd);
+			} catch (err) {
+				overwriteError = errMsg(err);
+			}
+		}
 	} finally {
-		closeSync(fd);
+		if (oldFd !== null) closeSync(oldFd);
+		try {
+			if (existsSync(tmpPath)) unlinkSync(tmpPath);
+		} catch {
+			/* reported by the caller's message: the temp file name is printed */
+		}
 	}
-	chmodSync(tmpPath, 0o600);
-	// Keep an existing file's owner, group and mode (the relay keystore is
-	// root:morphit-relay 0640 so the unprivileged relay can read it).
-	keepOwnerAndMode(targetPath, tmpPath);
-	renameSync(tmpPath, targetPath);
+	return { overwriteError };
 }
 
 function backupExistingKeystore(currentPath: string): string {
@@ -309,15 +534,8 @@ function backupExistingKeystore(currentPath: string): string {
 	return bakPath;
 }
 
-/** Best-effort secure delete of the prior keystore.  Used when the
- *  operator declares the prior key was wrong/compromised and wants
- *  no trace left.  Approach:
- *    1. Read the prior file size.
- *    2. Overwrite the file in place with cryptographic random
- *       bytes of the same length, then fsync (so the random
- *       payload hits disk).
- *    3. Overwrite a second time with zeros + fsync.
- *    4. unlink.
+/** Best-effort secure delete of a key file: overwrite it in place (random
+ *  bytes, then zeros, each synced), then remove it.
  *
  *  Caveats — what this CAN'T guarantee:
  *    - On copy-on-write filesystems (btrfs, ZFS, APFS) the
@@ -335,41 +553,66 @@ function backupExistingKeystore(currentPath: string): string {
  *  via the same path.  That's the practical bar for "no trace
  *  on disk" without specialist forensic tooling. */
 function wipePriorKeystore(currentPath: string): void {
-	const size = readFileSync(currentPath).length;
-	// Pass 1: random overwrite.
-	const rand = randomBytes(Math.max(size, 64));
-	writeFileSync(currentPath, rand.subarray(0, Math.max(size, 64)), { mode: 0o600 });
-	let fd = openSync(currentPath, 'r');
+	const fd = openSync(currentPath, 'r+');
 	try {
-		fsyncSync(fd);
+		overwriteFd(fd);
 	} finally {
 		closeSync(fd);
 	}
-	// Pass 2: zeros.
-	const zeros = Buffer.alloc(Math.max(size, 64));
-	writeFileSync(currentPath, zeros, { mode: 0o600 });
-	fd = openSync(currentPath, 'r');
-	try {
-		fsyncSync(fd);
-	} finally {
-		closeSync(fd);
-	}
-	// Unlink.
 	unlinkSync(currentPath);
 }
 
-export async function runEditActiveKey(args: EditActiveKeyArgs): Promise<number> {
+/** Test seams (default: the real chain check, the relay's sealed passphrase,
+ *  and whether this process runs as root). */
+export interface EditActiveKeyDeps {
+	readonly checkChain?: (account: string, publicKey: string) => Promise<KeyOnChain>;
+	readonly sealed?: () => string | null;
+	readonly isRoot?: () => boolean;
+}
+
+export async function runEditActiveKey(
+	args: EditActiveKeyArgs,
+	deps: EditActiveKeyDeps = {}
+): Promise<number> {
+	try {
+		return await editActiveKey(args, deps);
+	} catch (err) {
+		// Ctrl+C, or the input ending (Ctrl+D, no terminal, piped answers that
+		// ran out): one plain "Stopped — …" line and 130. Nothing is written
+		// before the last question is answered.
+		if (isAbortError(err)) return commandFailed(err);
+		throw err;
+	}
+}
+
+async function editActiveKey(args: EditActiveKeyArgs, deps: EditActiveKeyDeps): Promise<number> {
+	// Root only: the key file, the sealed passphrase and the install's settings
+	// are root's. Without sudo it used to stop on a raw "EACCES" (review,
+	// 2026-10-29). The menu's own root gate covers the menu; this covers anyone
+	// calling the command directly.
+	const isRoot =
+		deps.isRoot ?? (() => typeof process.getuid !== 'function' || process.getuid() === 0);
+	if (!isRoot()) {
+		console.log('');
+		console.log("✗ This changes the relay's key file, which only root can read and write.");
+		console.log('  Nothing was changed. Run it with sudo, on this server:');
+		console.log('    sudo morphit-ops edit-active-key');
+		return 1;
+	}
+
+	// The install root — NOT the working directory: the menu runs this in
+	// /opt/morphit/apps/ops-cli (review, 2026-10-29).
 	const configDir =
 		typeof args.flags['config-dir'] === 'string' && args.flags['config-dir'].length > 0
 			? resolve(args.flags['config-dir'])
-			: (safeCwd() ?? defaultRepoRoot());
+			: defaultRepoRoot();
+	const check = deps.checkChain ?? ((a: string, p: string) => checkKeyOnChain(a, p));
+	const sealed = deps.sealed ?? trySealedRelayPassphrase;
 
 	console.log('');
 	console.log('  ═══════════════════════════════════════════════════════════════');
-	console.log('  Morphit ops — rotate the relay account ACTIVE key');
+	console.log("  Morphit ops — replace the relay's ACTIVE key");
 	console.log('  ═══════════════════════════════════════════════════════════════');
-	console.log('');
-	console.log(`  Config directory: ${sanitizeForTerm(configDir)}`);
 	console.log('');
 
 	// Step 0: read state.
@@ -377,236 +620,239 @@ export async function runEditActiveKey(args: EditActiveKeyArgs): Promise<number>
 	try {
 		critical = readCriticalEnv(configDir);
 	} catch (err) {
-		console.log(`✗ ${errMsg(err)}`);
+		console.log(`✗ ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	}
-	console.log(`  Relay account: @${critical.relayAccount}`);
-	console.log(`  Keystore path: ${critical.keystorePath}`);
+	console.log(`  Relay account:  @${sanitizeForTerm(critical.relayAccount)}`);
+	console.log(`  Its key file:   ${sanitizeForTerm(critical.keystorePath)}`);
+	console.log('');
 
 	let current: CurrentKeystore;
 	try {
 		current = loadCurrentKeystore(critical.keystorePath, critical.relayAccount);
 	} catch (err) {
-		console.log(`✗ ${errMsg(err)}`);
+		console.log(`✗ ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	}
-	console.log(`  Current storage mode: ${current.mode}`);
-	console.log('');
 
-	// Determine wipe-prior vs backup-prior policy.  Three paths:
-	//   1. --wipe-prior flag set (non-interactive sysadmin use).
-	//   2. --keep-backup flag set (force-keep, even for "wrong key").
-	//   3. Otherwise, ask interactively.
-	let wipePrior: boolean;
 	const wipeFlag = args.flags['wipe-prior'] === 'true';
 	const keepFlag = args.flags['keep-backup'] === 'true';
 	if (wipeFlag && keepFlag) {
-		console.log('✗ --wipe-prior and --keep-backup are mutually exclusive.');
+		console.log('✗ --wipe-prior and --keep-backup cannot be used together.');
 		return 1;
 	}
-	if (wipeFlag) {
-		wipePrior = true;
-		console.log(
-			'  Wipe policy: --wipe-prior flag set; prior keystore will be securely overwritten + unlinked, no .bak.'
-		);
-	} else if (keepFlag) {
-		wipePrior = false;
-		console.log(
-			'  Wipe policy: --keep-backup flag set; prior keystore will be copied to .bak-<unix-ms>.'
-		);
-	} else {
-		// Interactive — ask whether prior key was compromised/wrong.
-		console.log(
-			'  Two rotation modes:\n' +
-				'\n' +
-				'    Safe rotation (default).  Keeps a timestamped backup of the\n' +
-				'      prior keystore alongside the new one as\n' +
-				`      ${basename(critical.keystorePath)}.bak-<unix-ms>.  Recommended\n` +
-				'      for routine key rotation — you can roll back if the new\n' +
-				'      key paste was wrong or chain refused it.\n' +
-				'\n' +
-				'    No-trace rotation.  Overwrites the prior keystore with random\n' +
-				'      bytes and unlinks it.  No .bak is created.  Use this if\n' +
-				'      the prior key was wrong/compromised and you want zero\n' +
-				'      record of it on the server.'
-		);
-		console.log('');
-		wipePrior = await askYesNo(
-			'Was the previous key wrong or compromised?  (Yes = no-trace rotation; No = safe rotation with .bak)',
-			false
-		);
-		console.log('');
-	}
 
-	// Confirm before overwriting.
-	if (wipePrior) {
-		console.log(
-			'⚠  NO-TRACE rotation: the existing keystore file will be overwritten\n' +
-				'   with random bytes (then zeros) and unlinked.  There will be NO\n' +
-				'   backup.  If the new key paste is wrong, you must re-paste — you\n' +
-				"   cannot roll back to the prior key from this command's output."
+	// Step 1: the new key, checked against the chain before anything is written.
+	const newWif = await promptCheckedActiveKey(critical.relayAccount, check);
+	if (newWif === null) return 1;
+
+	// Step 2: the unlock passphrase — kept by default.
+	step(2, 3, 'Unlock passphrase');
+	const oldPass = await currentPassphrase(current, sealed);
+	// Typed rather than opened with the sealed copy: the sealed copy is missing
+	// or stale, so it is sealed again below even when the passphrase is kept —
+	// or the relay could not open the new key file.
+	const sealedNow = sealed();
+	const sealedIsCurrent = oldPass !== null && sealedNow === oldPass;
+	let newPass: string;
+	let passChanged: boolean;
+	if (oldPass !== null) {
+		const keep = await askYesNo(
+			'Keep the same unlock passphrase? (Recommended: nothing else has to change)',
+			true
 		);
+		if (keep) {
+			newPass = oldPass;
+			passChanged = false;
+		} else {
+			newPass = await askPassphraseForNew();
+			passChanged = true;
+		}
 	} else {
-		console.log(
-			'⚠  SAFE rotation: a timestamped backup of the current file will be\n' +
-				`   written alongside it as ${basename(critical.keystorePath)}.bak-<unix-ms>.\n` +
-				'   You can roll back by renaming that .bak file back to the\n' +
-				'   original name.'
-		);
+		if (current.mode === 'plaintext') {
+			console.log(
+				`  The current key file is not encrypted.  The new key is stored encrypted,\n` +
+					'  so choose a passphrase for it.\n'
+			);
+		}
+		newPass = await askPassphraseForNew();
+		passChanged = true;
 	}
 	console.log('');
-	const proceed = await askYesNo(`Rotate the active key for @${critical.relayAccount}?`, false);
+
+	// The Tor / I2P / Lokinet address key files share the passphrase. With a new
+	// one, find out NOW which can be moved to it — with the passphrase in use
+	// (when known) or the relay's sealed one (it may still open them even when
+	// it does not open the relay key) — and say which cannot, before the last
+	// question rather than after the change.
+	let altKeys: Array<{ net: AltNetwork; path: string; opener: string | null }> = [];
+	if (passChanged) {
+		const candidates = [...new Set([oldPass, sealedNow].filter((p): p is string => p !== null))];
+		const altDir = join(configDir, 'apps', 'relay', 'altnet');
+		const any = (['tor', 'i2p', 'lokinet'] as const).some((n) =>
+			existsSync(join(altDir, altKeystoreFilename(n)))
+		);
+		if (any)
+			altKeys = await withSpinner('Checking the Tor / I2P / Lokinet address key files…', () =>
+				altKeysAndOpeners(altDir, candidates)
+			);
+		for (const a of altKeys.filter((k) => k.opener === null)) {
+			for (const line of lockedAltKeyAdvice(a.net, a.path)) console.log(`  ${line}`);
+			console.log('');
+		}
+	}
+
+	// Step 3: the old key file — a copy is kept by default.
+	step(3, 3, 'Save the new key');
+	let wipePrior: boolean;
+	if (wipeFlag) wipePrior = true;
+	else if (keepFlag) wipePrior = false;
+	else {
+		wipePrior = !(await askYesNo(
+			'Keep a copy of the old key file on this server, so you can go back if something is wrong? (No = overwrite it so no copy of the old key stays here — choose No if the old key was exposed)',
+			true
+		));
+	}
+	const proceed = await askYesNo(
+		`Replace the relay's active key for @${critical.relayAccount} now?`,
+		false
+	);
 	if (!proceed) {
-		console.log('\nAborted.  No files modified.');
+		console.log('\n  Stopped.  No files were changed.');
 		return 0;
 	}
 	console.log('');
 
-	// Step 1: collect new key.
-	const newWif = await promptNewActiveKey(critical.relayAccount);
+	const envelope = await withSpinner('Encrypting the new key…', () =>
+		encryptEnvelopeAsync(newWif, newPass)
+	);
+	const newContent = JSON.stringify(envelope, null, 2);
 
-	// Step 2: storage mode.
-	const newMode = await askStorageMode(current);
-	console.log('');
-
-	// Step 3: render new file content.
-	step(3, 3, 'Write new keystore atomically');
-	let newContent: string;
-	let newPath: string;
-	let newPassphrase: string | null = null;
-	if (newMode === 'encrypted') {
-		const passphrase = await askPassphraseForNew();
-		newPassphrase = passphrase;
-		console.log('  Encrypting your new active key (takes ~1 second)...');
-		const env = encryptEnvelope(newWif, passphrase);
-		newContent = JSON.stringify(env, null, 2);
-		console.log('  ✓ Encrypted.');
-		// If the prior keystore was plaintext, switch the filename.
-		newPath =
-			current.mode === 'encrypted' ? current.path : join(dirname(current.path), 'keystore.json');
-	} else {
-		newContent = newWif;
-		// If the prior keystore was encrypted, switch the filename.
-		newPath =
-			current.mode === 'plaintext' ? current.path : join(dirname(current.path), 'keystore.wif');
-	}
-
-	// Handle the prior file according to the wipe/backup policy.
+	// The old file: copy kept, or overwritten.
 	let bakPath: string | null = null;
-	if (wipePrior) {
-		try {
-			wipePriorKeystore(current.path);
-		} catch (err) {
-			console.log(`✗ Failed to wipe prior keystore: ${errMsg(err)}`);
-			return 1;
-		}
-		console.log(`  ✓ Prior keystore at ${current.path} overwritten (random + zeros) and unlinked.`);
-	} else {
+	if (!wipePrior) {
 		try {
 			bakPath = backupExistingKeystore(current.path);
 		} catch (err) {
-			console.log(`✗ Failed to back up existing keystore: ${errMsg(err)}`);
+			console.log(`✗ Could not keep a copy of the old key file: ${sanitizeForTerm(errMsg(err))}`);
+			console.log('  Nothing was changed.');
 			return 1;
 		}
-		console.log(`  ✓ Existing keystore backed up to ${bakPath}`);
+		console.log(`  ✓ A copy of the old key file is kept at ${bakPath}`);
 	}
 
-	// Atomic write of the new file.
+	// Write the new one IN PLACE — the same path, so every file that names it
+	// (morphit.env, relay.env) still does — keeping the old file's owner and
+	// mode (the relay runs as its own user), then read it back.
+	let written: { readonly overwriteError: string | null };
 	try {
-		atomicWrite(newPath, newContent);
+		written = atomicWrite(current.path, newContent, current.path, { overwriteOld: wipePrior });
 	} catch (err) {
-		console.log(`✗ Failed to write new keystore: ${errMsg(err)}`);
-		if (bakPath !== null) {
-			console.log(`  Your previous keystore is intact at ${bakPath}.`);
-		} else {
-			console.log(`  The prior keystore was already wiped.  Re-run edit-active-key`);
-			console.log('  with the correct key to install one.');
-		}
+		// The new file is put in place by one rename, and the old one is only
+		// overwritten after it: when this fails, the old file is as it was.
+		console.log(`✗ Could not write the new key file: ${sanitizeForTerm(errMsg(err))}`);
+		console.log(
+			bakPath !== null
+				? `  The old key file is unchanged (and copied to ${bakPath}). Nothing else was changed.`
+				: '  The old key file is unchanged. Nothing else was changed.'
+		);
+		console.log('  Once the cause is fixed, run this again on this server:');
+		console.log('    sudo morphit-ops edit-active-key');
 		return 1;
 	}
-	console.log(`  ✓ New keystore written to ${newPath} (0600 permissions)`);
+	try {
+		const back = await openWith(JSON.parse(readFileSync(current.path, 'utf8')), newPass);
+		if (back !== newWif) throw new Error('it did not read back as the key that was pasted');
+	} catch (err) {
+		console.log(`✗ The new key file did not read back correctly: ${sanitizeForTerm(errMsg(err))}`);
+		console.log(
+			bakPath !== null
+				? `  Put the old one back on this server:  sudo cp ${bakPath} ${current.path}`
+				: `  No copy of the old key was kept. Run this again on this server:  sudo morphit-ops edit-active-key`
+		);
+		return 1;
+	}
+	console.log(
+		current.mode === 'plaintext'
+			? `  ✓ New key saved in ${current.path} — encrypted now (the file keeps its name) — and read back.`
+			: `  ✓ New key saved in ${current.path} (encrypted) and read back.`
+	);
 
-	// The relay opens the keystore with its host-sealed passphrase; seal the
-	// new one, or the relay cannot start.
-	let sealed = true;
-	if (newPassphrase !== null) {
-		const r = sealRelayPassphrase(newPassphrase);
-		sealed = r.ok;
-		if (r.ok)
-			console.log(`  ✓ The new passphrase is sealed into ${relayCredPath()} for the relay.`);
-		else {
-			console.log(`  ✗ Could not seal the new passphrase into ${relayCredPath()} (${r.reason}).`);
+	if (wipePrior) {
+		if (written.overwriteError === null)
 			console.log(
-				'    The relay cannot unlock the new keystore until it is sealed; on this server run:'
+				'  ✓ The old key was overwritten (random bytes, then zeros) once the new one was in place.'
 			);
+		else
+			console.log(
+				`  ⚠ The old key's bytes could not be overwritten (${sanitizeForTerm(written.overwriteError)}).\n` +
+					'    The old file is already replaced, so its bytes may remain in unused space on the disk;\n' +
+					'    only full-disk encryption protects against that.'
+			);
+	}
+
+	// The relay opens the key file with its host-sealed passphrase: seal a new
+	// one, or the relay cannot start.
+	let sealedOk = true;
+	if (passChanged || !sealedIsCurrent) {
+		const r = sealRelayPassphrase(newPass);
+		sealedOk = r.ok && sealed() === newPass;
+		if (sealedOk)
+			console.log(`  ✓ The unlock passphrase is sealed for the relay (${relayCredPath()}).`);
+		else {
+			console.log(
+				`  ✗ Could not seal the unlock passphrase for the relay (${r.ok ? 'it did not read back' : r.reason}).`
+			);
+			console.log('    The relay cannot open the new key until it is sealed.  On this server run:');
 			console.log(`      ${manualSealCommand()}`);
 		}
 	}
-
-	// If the filename changed (encrypted ↔ plaintext), update morphit.env.
-	if (newPath !== current.path) {
-		const envPath = resolve(configDir, 'morphit.env');
-		try {
-			const envSrc = readFileSync(envPath, 'utf8');
-			const oldQuoted = JSON.stringify(current.path);
-			const newQuoted = JSON.stringify(newPath);
-			let envSrcNew = envSrc;
-			// Try a few likely shapes (with or without surrounding quotes).
-			if (envSrc.includes(`MORPHIT_RELAY_ACTIVE_KEY_FILE=${oldQuoted}`)) {
-				envSrcNew = envSrc.replace(
-					`MORPHIT_RELAY_ACTIVE_KEY_FILE=${oldQuoted}`,
-					`MORPHIT_RELAY_ACTIVE_KEY_FILE=${newQuoted}`
-				);
-			} else if (envSrc.includes(`MORPHIT_RELAY_ACTIVE_KEY_FILE=${current.path}`)) {
-				envSrcNew = envSrc.replace(
-					`MORPHIT_RELAY_ACTIVE_KEY_FILE=${current.path}`,
-					`MORPHIT_RELAY_ACTIVE_KEY_FILE=${newPath}`
-				);
-			}
-			if (envSrcNew !== envSrc) {
-				atomicWrite(envPath, envSrcNew);
-				console.log(`  ✓ morphit.env updated to point at the new keystore filename.`);
+	if (passChanged) {
+		for (const a of reencryptAltnetKeys(altKeys, newPass)) {
+			if (a.ok)
+				console.log(`  ✓ The ${a.net} address key (${a.path}) now opens with the new passphrase.`);
+			else if (a.locked) {
+				for (const line of lockedAltKeyAdvice(a.net, a.path)) console.log(`  ${line}`);
 			} else {
+				const live = liveAltKeyPath(a.net);
 				console.log(
-					`  ⚠ Couldn't find the old keystore path in morphit.env to rewrite.\n` +
-						`     You'll need to edit MORPHIT_RELAY_ACTIVE_KEY_FILE manually to point\n` +
-						`     at ${newPath} before restarting the relay.`
+					`  ⚠ The ${a.net} address key (${a.path}) could not be moved to the new passphrase (${sanitizeForTerm(a.why ?? '')});\n` +
+						'    it is still locked with the passphrase that was in use before.' +
+						(live !== null
+							? '\n    Store a new copy of the live key, locked with the new passphrase (it asks for the new\n' +
+								'    passphrase, and whether to replace the existing file — answer yes). On this server:\n' +
+								`      sudo morphit-ops import-altnet-key --network=${a.net} --in=${live}`
+							: '')
 				);
 			}
-		} catch (err) {
-			console.log(
-				`  ⚠ Could not update morphit.env: ${errMsg(err)}.  ` +
-					`Edit it manually to point MORPHIT_RELAY_ACTIVE_KEY_FILE at ${newPath} ` +
-					'before restarting the relay.'
-			);
 		}
 	}
 
 	console.log('');
 	console.log('  ─────────────────────────────────────────────────────────────');
-	console.log('  Next steps:');
-	console.log('    1. Restart the relay so it loads the new key:');
-	console.log('         sudo systemctl restart morphit-relay.service');
+	console.log('  Next, on this server:');
+	if (!sealedOk) {
+		console.log('    0. Seal the passphrase first (the command above), or the relay cannot start.');
+	}
+	console.log('    1. Restart the relay so it uses the new key:');
+	console.log('         sudo systemctl restart morphit-relay');
+	console.log('    2. When it starts, the relay checks its key against the chain.  To see the');
+	console.log('       result (the line "Relay key:"):');
+	console.log('         sudo morphit-ops status');
+	console.log('       or its log ("active_key_matches_chain" means all is well):');
 	console.log(
-		sealed
-			? '    2. The relay unlocks the new keystore with the sealed passphrase.  It then'
-			: '    2. Seal the passphrase first (the command above), or the relay cannot start.  It then'
+		'         sudo journalctl -u morphit-relay --since "-15min" --no-pager | grep active_key'
 	);
-	console.log('       verifies the new active pubkey matches what the');
-	console.log(`       chain says @${critical.relayAccount}'s active authority`);
-	console.log('       is, and refuses to start if there is a mismatch — so');
-	console.log("       a wrong-key paste won't silently break signup.");
+	console.log('       If the key does not match, the relay keeps running but signs nothing');
+	console.log('       (signups are refused, payments wait) until it is fixed.');
 	if (bakPath !== null) {
-		console.log('    3. Once the relay is up, the old key in the .bak file');
-		console.log(`       (${bakPath})`);
-		console.log('       can be securely deleted with `shred -u`.  Until');
-		console.log("       you've confirmed the new one works, KEEP the .bak.");
-	} else {
-		console.log('    3. No backup was created — the prior keystore was');
-		console.log('       overwritten and unlinked.  If the relay refuses to');
-		console.log('       start (chain pubkey mismatch), run');
-		console.log('       `morphit-ops edit-active-key` again with the');
-		console.log('       correct key.');
+		console.log(
+			current.mode === 'plaintext'
+				? '    3. Once the relay works with the new key, delete the copy of the old key\n' +
+						'       (it holds the old key UNENCRYPTED):'
+				: '    3. Once the relay works with the new key, delete the copy of the old key:'
+		);
+		console.log(`         sudo shred -u ${bakPath}`);
 	}
 	console.log('  ─────────────────────────────────────────────────────────────');
 	console.log('');

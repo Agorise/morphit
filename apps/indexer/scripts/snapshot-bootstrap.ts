@@ -21,6 +21,11 @@
  *     apps/indexer/scripts/snapshot-bootstrap.ts <snapshot.tar.gz> --i-trust-this-source
  *   sudo systemctl start morphit-indexer
  *
+ * PEEK (--peek, v1.21.18): say which snapshot a run WOULD restore — its block
+ * and, from the chain, how old it is — as one JSON line on stdout, then stop.
+ * Nothing is downloaded (from-chain) and nothing is written. fast-sync shows
+ * this before it asks anything, so the operator decides knowing what they get.
+ *
  * EXIT CODES (v1.21.7) — the caller decides from them whether the indexer may
  * be started again:
  *   0  restored and checked;
@@ -32,7 +37,16 @@
  * quarantined database — review, 2026-10-12.)
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+	createReadStream,
+	mkdtempSync,
+	readFileSync,
+	existsSync,
+	rmSync,
+	statSync,
+	writeFileSync
+} from 'node:fs';
+import { createGunzip } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -115,6 +129,96 @@ class Stop extends Error {
 
 function die(msg: string, code: number = EXIT_UNCHANGED): never {
 	throw new Stop(msg, code);
+}
+
+/** Blurt makes a block every 3 seconds. */
+const BLOCK_SECONDS = 3;
+/** Older than this, a snapshot is called out as old. */
+const OLD_SNAPSHOT_SEC = 2 * 24 * 3600;
+
+/** How far behind the chain head a snapshot is, from the chain itself. */
+interface SnapshotAge {
+	readonly block: number;
+	readonly headBlock: number | null;
+	/** From the two blocks' own timestamps; null when unknown. */
+	readonly ageSec: number | null;
+}
+
+/** A block's chain timestamp (UTC, "YYYY-MM-DDTHH:MM:SS"), or null. */
+function chainTime(t: unknown): number | null {
+	if (typeof t !== 'string' || t === '') return null;
+	const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? t : `${t}Z`);
+	return Number.isFinite(ms) ? ms : null;
+}
+
+/** Read the chain head and the snapshot block's time. Never throws: what could
+ *  not be read is null. */
+async function snapshotAge(
+	blurt: ReturnType<typeof bootChainClient>,
+	block: number
+): Promise<SnapshotAge> {
+	let headBlock: number | null = null;
+	let headTime: number | null = null;
+	try {
+		const dgp = await blurt.getDynamicGlobalProperties();
+		headBlock = dgp.head_block_number;
+		headTime = chainTime(dgp.time);
+	} catch {
+		return { block, headBlock: null, ageSec: null };
+	}
+	let blockTime: number | null = null;
+	try {
+		blockTime = chainTime((await blurt.getBlock(block))?.timestamp);
+	} catch {
+		/* unknown: the block count stands in, below */
+	}
+	const ageSec =
+		headTime !== null && blockTime !== null
+			? Math.round((headTime - blockTime) / 1000)
+			: (headBlock - block) * BLOCK_SECONDS;
+	return { block, headBlock, ageSec };
+}
+
+/** "about 3 days" / "about 5 hours" / "less than an hour". */
+function aboutDuration(sec: number): string {
+	if (sec < 3600) return 'less than an hour';
+	if (sec < 36 * 3600) {
+		const h = Math.round(sec / 3600);
+		return `about ${h} hour${h === 1 ? '' : 's'}`;
+	}
+	const d = Math.round(sec / 86400);
+	return `about ${d} day${d === 1 ? '' : 's'}`;
+}
+
+/** The snapshot's age in plain words, from the chain's own clock. */
+function snapshotAgeLines(a: SnapshotAge): string[] {
+	const at = `block ${a.block.toLocaleString('en-US')}`;
+	if (a.headBlock === null || a.ageSec === null) {
+		return [
+			`This snapshot is from ${at}. How old it is is not known: the chain head could not be read just now.`
+		];
+	}
+	const behind = a.headBlock - a.block;
+	if (behind < 0 || a.ageSec < 0) {
+		return [
+			`This snapshot is from ${at}; the RPC node asked reports an older chain head ` +
+				`(block ${a.headBlock.toLocaleString('en-US')}), so how old it is is not known.`
+		];
+	}
+	const lines = [
+		`This snapshot is from ${at}, ${aboutDuration(a.ageSec)} old ` +
+			`(the chain is now at block ${a.headBlock.toLocaleString('en-US')}).`,
+		`Your indexer then catches up ${behind.toLocaleString('en-US')} block${behind === 1 ? '' : 's'} ` +
+			`(${aboutDuration(behind * BLOCK_SECONDS)} of chain history) by itself.`
+	];
+	if (a.ageSec > OLD_SNAPSHOT_SEC) {
+		lines.push(
+			'\u26a0 That is more than 2 days old. New snapshots are anchored on the chain by hand, ' +
+				'not on a schedule, so there may be no newer one yet. The older it is, the longer ' +
+				'the catch-up takes.'
+		);
+	}
+	return lines;
 }
 
 /** Set once the restore has committed: from then on the database is no longer
@@ -257,6 +361,34 @@ function stopIfInterrupted(): void {
 				'Do not start the indexer on it: run fast-sync again.',
 			EXIT_REPLACED_UNUSABLE
 		);
+}
+
+/** What to do without a snapshot. MORPHIT_INDEXER_START_BLOCK already
+ *  defaults to Morphit's first block, so "set it to genesis" was no step at
+ *  all: an indexer replays the chain by itself whenever its database is empty. */
+const NO_SNAPSHOT_NEEDED =
+	'No snapshot is needed to run: start the indexer (sudo systemctl start morphit-indexer) and it ' +
+	'carries on from its own data, or, on an empty database, replays the chain itself from the ' +
+	'beginning (slow).';
+
+/**
+ * The caller (fast-sync) showed the operator one snapshot — its block, its age
+ * — and was told yes to THAT one. When a newer one was anchored (or the file
+ * was replaced) in between, the run would restore something the operator never
+ * saw (review, 2026-10-29): it stops instead, before anything is downloaded or
+ * changed. `--expect-block <n>`; absent, any block is fine.
+ */
+function refuseUnexpectedBlock(found: number): void {
+	const raw = flag('expect-block');
+	if (raw === undefined) return;
+	const expected = Number(raw);
+	if (!Number.isInteger(expected) || expected === found) return;
+	die(
+		`the snapshot is now at block ${found.toLocaleString('en-US')}, not block ` +
+			`${expected.toLocaleString('en-US')} as shown before you said yes (a newer one was published ` +
+			'meanwhile, or the file changed). Nothing was downloaded or changed. Run fast-sync again to see ' +
+			'the one it would restore now.'
+	);
 }
 
 /** Public IPFS gateways to try for the CID, after the (usually faster) forgejo
@@ -425,10 +557,11 @@ async function download(
  * signed op. Returns the selected op. Every failure is fatal + explained; a bad
  * source is retried, never trusted.
  */
-async function acquireFromChain(
-	config: ReturnType<typeof loadConfig>,
-	work: string
-): Promise<SelectedSnapshotOp> {
+async function resolveFromChain(config: ReturnType<typeof loadConfig>): Promise<{
+	sel: SelectedSnapshotOp;
+	history: unknown;
+	blurt: ReturnType<typeof bootChainClient>;
+}> {
 	const signer = (flag('signer') ?? INDEXER_SNAPSHOT_SIGNER_DEFAULT).toLowerCase();
 	const limit = Math.max(
 		1,
@@ -460,10 +593,7 @@ async function acquireFromChain(
 		);
 	}
 	if (!resolved.ok) {
-		die(
-			`${resolved.reason} Nothing was downloaded or changed. Full replay is always available: set ` +
-				`MORPHIT_INDEXER_START_BLOCK to genesis and start the indexer.`
-		);
+		die(`${resolved.reason} Nothing was downloaded or changed. ${NO_SNAPSHOT_NEEDED}`);
 	}
 	const sel = resolved.selected;
 	const history = resolved.history;
@@ -478,6 +608,23 @@ async function acquireFromChain(
 		die(
 			`snapshot op is for chain '${op.chain_id}', this node indexes '${config.chainId}'. Refusing.`
 		);
+	}
+	return { sel, history, blurt };
+}
+
+async function acquireFromChain(
+	config: ReturnType<typeof loadConfig>,
+	work: string
+): Promise<SelectedSnapshotOp> {
+	const { sel, history, blurt } = await resolveFromChain(config);
+	const op: IndexerSnapshotPayload = sel.payload;
+	const signer = sel.signer;
+	refuseUnexpectedBlock(op.last_applied_block);
+	// How old it is, from the chain's own clock — unless the caller (fast-sync)
+	// already showed it before asking.
+	if (process.env.MORPHIT_SNAPSHOT_AGE_SHOWN !== '1') {
+		for (const l of snapshotAgeLines(await snapshotAge(blurt, op.last_applied_block)))
+			process.stderr.write(`  ${l}\n`);
 	}
 
 	// Sources. Trust comes from op.sha256 (which @morphit signed and we prove every
@@ -511,7 +658,7 @@ async function acquireFromChain(
 			hiddenOnly
 				? 'this node is hidden-only, and neither the snapshot record nor any registration on chain names a Tor/I2P address yet, ' +
 						'so the snapshot cannot be fetched privately. Refusing to reach for a clearnet gateway. ' +
-						'Full replay still works: set MORPHIT_INDEXER_START_BLOCK to genesis and start the indexer.'
+						NO_SNAPSHOT_NEEDED
 				: 'no usable snapshot source could be built from the on-chain op.'
 		);
 	}
@@ -556,8 +703,9 @@ async function acquireFromChain(
 	die(
 		'every source failed to yield a snapshot matching the on-chain sha256. Nothing was changed. Try again later' +
 			(hiddenOnly
-				? ', or do a full replay.'
-				: ', point it at an IPFS gateway you trust (MORPHIT_IPFS_GATEWAYS=https://… sudo morphit-ops fast-sync), or do a full replay.')
+				? '.'
+				: ', or point it at an IPFS gateway you trust (MORPHIT_IPFS_GATEWAYS=https://… sudo morphit-ops fast-sync).') +
+			` ${NO_SNAPSHOT_NEEDED}`
 	);
 }
 
@@ -625,6 +773,197 @@ async function psqlReadiness(dbUrl: string): Promise<PsqlReadiness> {
 	return probe.status === 0 ? { ok: true } : { ok: false, why: 'too-old' };
 }
 
+/**
+ * --peek: which snapshot a real run would restore, as ONE JSON line on stdout
+ * ({ block, signer, indexerVersion, schemaVersion, lines }), `lines` being what
+ * to tell the operator about it. From the chain nothing is downloaded; from a
+ * file it is read with the same safe reader as a restore. Nothing is written.
+ */
+async function peek(config: ReturnType<typeof loadConfig>, file: string | null): Promise<void> {
+	if (file === null) {
+		const { sel, blurt } = await resolveFromChain(config);
+		const op = sel.payload;
+		const lines = snapshotAgeLines(await snapshotAge(blurt, op.last_applied_block));
+		console.log(
+			JSON.stringify({
+				block: op.last_applied_block,
+				signer: sel.signer,
+				indexerVersion: op.indexer_version,
+				schemaVersion: op.schema_version,
+				lines
+			})
+		);
+		return;
+	}
+	// Only the manifest is read, into memory; the dump is never written anywhere
+	// (it used to be unpacked whole into /tmp to read a few hundred bytes, and a
+	// Ctrl+C left hundreds of MB there — review, 2026-10-29).
+	const m = await readManifestOnly(file);
+	if (!m.ok) die(`could not read the snapshot file: ${m.reason}.`);
+	const manifest = parseManifest(m.text);
+	if (!manifest) die(`the snapshot file has no readable ${MANIFEST_FILENAME}.`);
+	if (manifest.chainId !== config.chainId) {
+		die(
+			`the snapshot file is for chain '${manifest.chainId}', this node indexes '${config.chainId}'. Refusing.`
+		);
+	}
+	console.log(
+		JSON.stringify({
+			block: manifest.lastAppliedBlock,
+			signer: null,
+			indexerVersion: manifest.indexerVersion ?? null,
+			schemaVersion: manifest.schemaVersion,
+			lines: [
+				`This snapshot file is from block ${manifest.lastAppliedBlock.toLocaleString('en-US')} ` +
+					`(exported ${manifest.createdAt}, by the clock of the machine that made it, from ` +
+					`${manifest.sourceLabel}).`
+			]
+		})
+	);
+}
+
+/** A manifest is a few hundred bytes (snapshotArchive.ts allows 64 KiB). */
+const PEEK_MANIFEST_MAX_BYTES = 64 * 1024;
+
+/**
+ * Read `manifest.json` out of a snapshot .tar.gz WITHOUT writing anything: the
+ * archive is streamed, the manifest kept in memory, and the stream stopped as
+ * soon as it has been read (snapshot-export writes it first). A dump that comes
+ * before it is skipped over, not stored. The same member rules as a restore's
+ * reader (snapshotArchive.ts): only the two expected names, regular files, each
+ * once, within the size caps. Never throws.
+ */
+async function readManifestOnly(
+	tarGzPath: string
+): Promise<
+	{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly reason: string }
+> {
+	const BLOCK = 512;
+	let fileBytes: number;
+	try {
+		fileBytes = statSync(tarGzPath).size;
+	} catch (e) {
+		return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+	}
+	const maxDump = fileBytes + 1024 * 1024;
+	const maxTotal = maxDump + PEEK_MANIFEST_MAX_BYTES + 64 * 1024;
+	const field = (h: Buffer, from: number, len: number): string => {
+		const raw = h.subarray(from, from + len);
+		const nul = raw.indexOf(0);
+		return raw.subarray(0, nul < 0 ? len : nul).toString('latin1');
+	};
+	const checksumOk = (h: Buffer): boolean => {
+		const s = field(h, 148, 8).trim();
+		if (!/^[0-7]{1,8}$/.test(s)) return false;
+		let sum = 0;
+		for (let i = 0; i < BLOCK; i++) sum += i >= 148 && i < 156 ? 0x20 : h[i]!;
+		return sum === parseInt(s, 8);
+	};
+	let buf: Buffer = Buffer.alloc(0);
+	let total = 0;
+	let skip = 0;
+	let reading: { left: number; pad: number; parts: Buffer[] } | null = null;
+	const seen = new Set<string>();
+	let result:
+		| { readonly ok: true; readonly text: string }
+		| { readonly ok: false; readonly reason: string }
+		| null = null;
+	const finish = (r: NonNullable<typeof result>): void => {
+		if (result === null) result = r;
+	};
+	const drain = (): void => {
+		while (result === null) {
+			if (skip > 0) {
+				const n = Math.min(skip, buf.length);
+				buf = buf.subarray(n);
+				skip -= n;
+				if (skip > 0) return;
+			}
+			if (reading !== null) {
+				const n = Math.min(reading.left, buf.length);
+				reading.parts.push(Buffer.from(buf.subarray(0, n)));
+				buf = buf.subarray(n);
+				reading.left -= n;
+				if (reading.left > 0) return;
+				return finish({ ok: true, text: Buffer.concat(reading.parts).toString('utf8') });
+			}
+			if (buf.length < BLOCK) return;
+			const h = buf.subarray(0, BLOCK);
+			buf = buf.subarray(BLOCK);
+			if (h.every((b) => b === 0))
+				return finish({ ok: false, reason: `the archive has no ${MANIFEST_FILENAME}` });
+			if (!checksumOk(h))
+				return finish({ ok: false, reason: 'the archive is not a valid tar file' });
+			const magic = field(h, 257, 6);
+			const prefix = magic.startsWith('ustar') ? field(h, 345, 155) : '';
+			const rawName = prefix !== '' ? `${prefix}/${field(h, 0, 100)}` : field(h, 0, 100);
+			const name = rawName.startsWith('./') ? rawName.slice(2) : rawName;
+			const sizeField = h.subarray(124, 136);
+			const sizeText = field(h, 124, 12).trim();
+			if ((sizeField[0]! & 0x80) !== 0 || !/^[0-7]{1,11}$/.test(sizeText))
+				return finish({ ok: false, reason: 'the archive has an unreadable entry' });
+			const size = parseInt(sizeText, 8);
+			const type = String.fromCharCode(h[156]!);
+			if (name !== MANIFEST_FILENAME && name !== DUMP_FILENAME)
+				return finish({
+					ok: false,
+					reason: `the archive holds an unexpected entry (${JSON.stringify(name.slice(0, 80))})`
+				});
+			if (type !== '0' && type !== '\0')
+				return finish({ ok: false, reason: `${name} in the archive is not a regular file` });
+			if (seen.has(name)) return finish({ ok: false, reason: `the archive holds ${name} twice` });
+			seen.add(name);
+			const cap = name === DUMP_FILENAME ? maxDump : PEEK_MANIFEST_MAX_BYTES;
+			if (size > cap)
+				return finish({
+					ok: false,
+					reason: `${name} in the archive is larger than allowed (${size} > ${cap} bytes)`
+				});
+			const pad = (BLOCK - (size % BLOCK)) % BLOCK;
+			if (name === DUMP_FILENAME) skip = size + pad;
+			else reading = { left: size, pad, parts: [] };
+		}
+	};
+	await new Promise<void>((resolve) => {
+		const src = createReadStream(tarGzPath);
+		const gz = createGunzip();
+		const stop = (): void => {
+			src.unpipe(gz);
+			src.destroy();
+			gz.destroy();
+			resolve();
+		};
+		src.on('error', (e) => {
+			finish({ ok: false, reason: `could not read it: ${e.message}` });
+			stop();
+		});
+		gz.on('error', () => {
+			finish({ ok: false, reason: 'it is not a valid gzip file' });
+			stop();
+		});
+		gz.on('data', (chunk: Buffer) => {
+			total += chunk.length;
+			if (total > maxTotal) {
+				finish({ ok: false, reason: `the archive unpacks to more than ${maxTotal} bytes` });
+				return stop();
+			}
+			buf = buf.length === 0 ? chunk : Buffer.concat([buf, chunk]);
+			drain();
+			if (result !== null) stop();
+		});
+		gz.on('end', () => {
+			finish({
+				ok: false,
+				reason:
+					reading !== null ? 'the archive is cut short' : `the archive has no ${MANIFEST_FILENAME}`
+			});
+			resolve();
+		});
+		src.pipe(gz);
+	});
+	return result ?? { ok: false, reason: `the archive has no ${MANIFEST_FILENAME}` };
+}
+
 async function main(): Promise<void> {
 	const fromChain = has('from-chain');
 	const snapshotPath = process.argv[2];
@@ -666,6 +1005,29 @@ async function main(): Promise<void> {
 	// hidden-only node, before any request (bootChainClient.ts). Throws if the
 	// router cannot be installed: never read the chain unrouted.
 	installChainRouting(config);
+	// Ctrl+C — or the terminal closing (SIGHUP), or a stop (SIGTERM). Before
+	// the restore nothing in the database has changed: stop at once, with
+	// whatever child is running, and say so. From the restore on it is only
+	// noted (psql sees it too), so the run can say which of the two happened.
+	// Set up first, before anything is read or written: a --peek stopped with
+	// Ctrl+C used to die without a word (review, 2026-10-29).
+	const stopOn = (sig: 'SIGINT' | 'SIGHUP' | 'SIGTERM', code: number): void => {
+		process.on(sig, () => {
+			if (restoreStarted) {
+				interruptedAfterRestore = true;
+				return;
+			}
+			killChild(currentChild, sig);
+			stopNow(code);
+		});
+	};
+	stopOn('SIGINT', EXIT_STOPPED);
+	stopOn('SIGHUP', 129);
+	stopOn('SIGTERM', 143);
+	if (has('peek')) {
+		await peek(config, fromChain ? null : snapshotPath!);
+		return;
+	}
 	const db = createDatabase(config);
 	// Who is running the restore, for fast-sync: its tsx wrapper can end first
 	// (a closed terminal), and fast-sync waits for this process, not the
@@ -685,23 +1047,6 @@ async function main(): Promise<void> {
 	const work = mkdtempSync(join(tmpdir(), 'morphit-snap-restore-'));
 	// Whatever ends this process, the download, the dump and restore.sql go.
 	process.on('exit', () => rmSync(work, { recursive: true, force: true }));
-	// Ctrl+C — or the terminal closing (SIGHUP), or a stop (SIGTERM). Before
-	// the restore nothing in the database has changed: stop at once, with
-	// whatever child is running. From the restore on it is only noted (psql
-	// sees it too), so the run can say which of the two happened.
-	const stopOn = (sig: 'SIGINT' | 'SIGHUP' | 'SIGTERM', code: number): void => {
-		process.on(sig, () => {
-			if (restoreStarted) {
-				interruptedAfterRestore = true;
-				return;
-			}
-			killChild(currentChild, sig);
-			stopNow(code);
-		});
-	};
-	stopOn('SIGINT', EXIT_STOPPED);
-	stopOn('SIGHUP', 129);
-	stopOn('SIGTERM', 143);
 
 	try {
 		// ── acquire: from chain (download+verify) or from a local tarball ──
@@ -725,6 +1070,7 @@ async function main(): Promise<void> {
 		// ── gate 1: manifest parses ───────────────────────────────
 		const manifest: SnapshotManifest | null = parseManifest(readFileSync(manifestPath, 'utf8'));
 		if (!manifest) die('manifest.json is malformed — refusing.');
+		if (!fromChain) refuseUnexpectedBlock(manifest.lastAppliedBlock);
 
 		// ── gate 1b (federation only): manifest is federation-ready AND the
 		//    signed op agrees with the manifest on every safety-critical field ──
@@ -1032,8 +1378,10 @@ async function main(): Promise<void> {
 			if (verify.status === 3) {
 				die(
 					'op-log spot-check QUARANTINED this snapshot (it does not match the chain). ' +
-						'Do not start the indexer on this database: run fast-sync again, and if this snapshot is ' +
-						'quarantined again, wait for the next one (published daily).',
+						'Do not start the indexer on this database. Run fast-sync again (it restores a fresh ' +
+						'copy and checks a new sample); if this snapshot is quarantined again, rebuild the ' +
+						'database from the chain instead (OPERATIONS.md \u00a746, "The reset"; fast-sync ' +
+						'prints the exact commands).',
 					EXIT_REPLACED_UNUSABLE
 				);
 			}

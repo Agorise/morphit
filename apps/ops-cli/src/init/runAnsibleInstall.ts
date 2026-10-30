@@ -25,7 +25,12 @@ import { dirname, join } from 'node:path';
 import { stepRelayAccount, stepActiveKey, stepFeesAccount, type ActiveKeyResult } from './steps.ts';
 import { collectInstallInputs, askInstallMode, askTorOnly } from './collectInstallInputs.ts';
 import { buildAnsibleVars, validateInstallInputs, type InstallMode } from './ansibleVars.ts';
-import { assembleInstall, currentInstallRestartCommand } from './assembleInstall.ts';
+import {
+	assembleInstall,
+	changedSoFar,
+	currentInstallRestartCommand,
+	noteInstallStage
+} from './assembleInstall.ts';
 import { armReachabilityRevert, confirmReachabilityOrRevert } from './reachabilityRevert.ts';
 import {
 	collectInstallSummary,
@@ -35,7 +40,9 @@ import {
 } from './installSummary.ts';
 import {
 	fastSyncFromChain,
-	stopIndexerAndWait,
+	localIndexerHealthBase,
+	serviceActive,
+	withServicesStopped,
 	FAST_SYNC_REPLACED_UNUSABLE
 } from '../commands/fastSync.ts';
 import { REGISTER_DECLINED } from '../commands/register.ts';
@@ -188,23 +195,6 @@ async function waitForChain(
 		h = await readLocalIndexerHealth();
 	}
 	return h;
-}
-
-/** Start the indexer and wait (up to ~90 s) until it answers with a chain
- *  connection, so the review and the listing step that follow see it up. */
-async function startIndexerAndWait(checkStop: () => void): Promise<void> {
-	await systemctlSpinning('Starting the indexer again\u2026', ['start', 'morphit-indexer']);
-	const stop = startDotsSpinner('Waiting for the indexer to connect to the chain\u2026');
-	try {
-		for (let i = 0; i < 45; i++) {
-			const h = await readLocalIndexerHealth();
-			if (h.reachable && h.rpcOk === true) return;
-			checkStop();
-			await sleepMs(2000);
-		}
-	} finally {
-		stop();
-	}
 }
 
 /**
@@ -368,13 +358,12 @@ export interface FastSyncDeps {
 	/** The indexer reaches the Blurt chain. */
 	readonly online: boolean;
 	readonly askYesNo: (q: string, defaultYes: boolean) => Promise<boolean>;
-	/** Stop the indexer and wait until it has stopped; false if it would not. */
-	readonly stopIndexer: () => Promise<boolean>;
-	/** Restore the newest federation snapshot over the indexer's data; exit
-	 *  code (FAST_SYNC_REPLACED_UNUSABLE: replaced, but not to be served). */
-	readonly fastSync: () => number | Promise<number>;
-	/** Start the indexer again (and wait until it answers). */
-	readonly startIndexer: () => Promise<void>;
+	/** Stop the indexer AND the relay (they share the database), restore the
+	 *  newest federation snapshot, and start them again — the relay only once
+	 *  the indexer answers ({@link restoreDuringInstall}). Its exit code
+	 *  (FAST_SYNC_REPLACED_UNUSABLE: replaced, but not to be served; both are
+	 *  then left stopped). */
+	readonly restore: () => number | Promise<number>;
 	readonly print: (s: string) => void;
 }
 
@@ -382,9 +371,9 @@ export interface FastSyncDeps {
  *  snapshot instead of replaying the whole chain from genesis.
  *
  *  Only "Configure only" offered it; the full guided install never asked, so a
- *  fresh VPS started 4.8 million blocks behind (2026-10-12). The indexer is
- *  always started again, whatever happened, and a snapshot is never restored
- *  under an indexer that did not stop. */
+ *  fresh VPS started 4.8 million blocks behind (2026-10-12). What was stopped
+ *  is always started again, whatever happened, and a snapshot is never
+ *  restored under a service that did not stop. */
 export async function offerFastSync(
 	d: FastSyncDeps
 ): Promise<'synced' | 'failed' | 'skipped' | 'unusable'> {
@@ -394,7 +383,7 @@ export async function offerFastSync(
 	if (!d.online) {
 		// It reads the chain and downloads the snapshot: offline it could only
 		// stop the indexer and fail.
-		d.print('\n  This box can\u2019t reach the Blurt chain yet, so fast-sync is skipped for now');
+		d.print('\n  This box can’t reach the Blurt chain yet, so fast-sync is skipped for now');
 		d.print('  (the indexer replays the chain meanwhile).');
 		later();
 		return 'skipped';
@@ -406,44 +395,67 @@ export async function offerFastSync(
 	if (d.reinstall) {
 		// Its own data lives in the same database, and a restore replaces it.
 		d.print('\n  This box has settings from an earlier Morphit install. If it ran a live node,');
-		d.print('  fast-sync REPLACES that node\u2019s database, including its own pending relay');
+		d.print('  fast-sync REPLACES that node’s database, including its own pending relay');
 		d.print('  payouts, push subscriptions and moderation decisions. (An earlier install that');
 		d.print('  never got going has nothing to lose: say yes.)');
 	}
 	if (
 		!(await d.askYesNo('\n  Fast-sync this node from the federation snapshot now?', !d.reinstall))
 	) {
-		d.print('\n  Skipped \u2014 the indexer goes on from its own data.');
+		d.print('\n  Skipped — the indexer goes on from its own data.');
 		later();
 		return 'skipped';
 	}
-	if (!(await d.stopIndexer())) {
-		d.print('\n  The indexer did not stop, so the snapshot was not restored.');
-		await d.startIndexer();
-		later();
-		return 'failed';
-	}
-	let rc: number;
-	try {
-		rc = await d.fastSync();
-	} catch (e) {
-		// Stopped before the restore ran (Ctrl+C during the wait for
-		// first-online): nothing was changed, so the indexer starts again.
-		await d.startIndexer().catch(() => undefined);
-		throw e;
-	}
+	const rc = await d.restore();
 	if (rc === FAST_SYNC_REPLACED_UNUSABLE) {
 		// Replaced, but it did not pass its checks: the indexer must not serve
 		// from it, so it stays stopped (fast-sync printed what to do).
 		return 'unusable';
 	}
-	await d.startIndexer();
 	if (rc !== 0) {
 		d.print('\n  The snapshot was not restored; the indexer goes on from its own data.');
 		later();
 		return 'failed';
 	}
 	return 'synced';
+}
+
+/** Up to ~90 s for the indexer to answer with a chain connection, so the review
+ *  and the listing step that follow see it up (on the address its own
+ *  settings name). `stopEarly` turns true on Ctrl+C. */
+async function indexerConnects(stopEarly: () => boolean): Promise<boolean> {
+	const base = localIndexerHealthBase('/opt/morphit');
+	const stop = startDotsSpinner('Waiting for the indexer to connect to the chain…');
+	try {
+		for (let i = 0; i < 45 && !stopEarly(); i++) {
+			const h = await readLocalIndexerHealth(base);
+			if (h.reachable && h.rpcOk === true) return true;
+			await sleepMs(2000);
+		}
+		return false;
+	} finally {
+		stop();
+	}
+}
+
+/**
+ * The install's restore, the way `fast-sync` does it (fastSync.ts,
+ * withServicesStopped): the relay is stopped too — it writes to the same
+ * database the restore replaces (review, 2026-10-29: only the indexer was
+ * stopped) — then the indexer is started, and the relay only once the indexer
+ * answers. The indexer is always stopped and started again (it is the one the
+ * restore needs stopped); the relay only when it was running.
+ */
+export async function restoreDuringInstall(o: {
+	readonly fastSync: () => number | Promise<number>;
+	/** Default: the indexer answers with a chain connection (~90 s). */
+	readonly indexerAnswers?: (stopEarly: () => boolean) => Promise<boolean>;
+}): Promise<number> {
+	return withServicesStopped(
+		{ indexer: true, relay: serviceActive('morphit-relay') === true },
+		o.fastSync,
+		o.indexerAnswers ?? indexerConnects
+	);
 }
 
 export interface ListingDeps {
@@ -534,7 +546,9 @@ export function relayKeystoreContent(activeKey: ActiveKeyResult): string {
 
 const RELAY_CRED_PATH = '/etc/morphit/relay_passphrase.cred';
 
-export function writeRelayKeystore(activeKey: ActiveKeyResult, keystorePath: string): void {
+/** Write the relay keystore (and seal its passphrase); returns the files
+ *  written, the keystore first. */
+export function writeRelayKeystore(activeKey: ActiveKeyResult, keystorePath: string): string[] {
 	mkdirSync(dirname(keystorePath), { recursive: true });
 	const existed = existsSync(keystorePath);
 	writeFileSync(keystorePath, relayKeystoreContent(activeKey), { mode: 0o600 });
@@ -555,8 +569,9 @@ export function writeRelayKeystore(activeKey: ActiveKeyResult, keystorePath: str
 	// (LoadCredentialEncrypted=relay_passphrase).  Without it the relay cannot
 	// unlock unattended and the unit fails to start.
 	if (activeKey.mode === 'encrypted' && activeKey.passphrase) {
-		sealRelayPassphraseCred(activeKey.passphrase);
+		if (sealRelayPassphraseCred(activeKey.passphrase)) return [keystorePath, RELAY_CRED_PATH];
 	}
+	return [keystorePath];
 }
 
 /** Seal the relay unlock passphrase into the systemd encrypted credential
@@ -566,7 +581,7 @@ export function writeRelayKeystore(activeKey: ActiveKeyResult, keystorePath: str
  *  carries the key too (disk encryption covers that).
  *  Best-effort: if systemd-creds is missing or fails, tell the operator the
  *  exact command (also in the unit file comments). */
-function sealRelayPassphraseCred(passphrase: string): void {
+function sealRelayPassphraseCred(passphrase: string): boolean {
 	try {
 		const r = spawnSync(
 			'systemd-creds',
@@ -580,12 +595,13 @@ function sealRelayPassphraseCred(passphrase: string): void {
 				/* systemd-creds writes 0600 already */
 			}
 			console.log('  ✓ Sealed the relay unlock passphrase into /etc/morphit/relay_passphrase.cred');
-			return;
+			return true;
 		}
 		warnCredManual((r.stderr?.toString() ?? '').trim());
 	} catch (e) {
 		warnCredManual(String(e));
 	}
+	return false;
 }
 
 function warnCredManual(detail: string): void {
@@ -697,8 +713,8 @@ export function questionPhaseStop(
 	const exit = d.exit ?? ((code: number): void => process.exit(code));
 	const onSigint = (): void => {
 		print('');
-		print('  Stopped \u2014 you pressed Ctrl+C. Nothing was installed; your answers so far');
-		print('  are kept for the next run. To start it again:');
+		print(`  Stopped \u2014 you pressed Ctrl+C. ${changedSoFar()}`);
+		print('  Your answers so far are kept for the next run. To start it again:');
 		print(`      ${restart}`);
 		print('');
 		exit(130);
@@ -728,6 +744,8 @@ async function installFromQuestions(
 	questionsDone: () => void
 ): Promise<number> {
 	const keystorePath = opts.keystorePath ?? DEFAULT_KEYSTORE_PATH;
+	// Its questions: each answer is saved as it is given (installProgress.ts).
+	noteInstallStage('questions');
 
 	// An earlier run — interrupted, or an install already done on this box —
 	// had its own database password; this run makes a new one.
@@ -829,7 +847,9 @@ async function installFromQuestions(
 	}
 
 	// Only now (inputs valid, operator ready) write the keystore Ansible reads.
-	writeRelayKeystore(activeKey, keystorePath);
+	// From here a stop says so: "nothing was installed or changed" is no longer
+	// true (review, 2026-10-29).
+	noteInstallStage('keystore-written', { keystore: writeRelayKeystore(activeKey, keystorePath) });
 
 	// Saving the generated DB password is its OWN step — and it happens BEFORE
 	// the install banner, while the wizard is still interactive, so the operator
@@ -848,6 +868,7 @@ async function installFromQuestions(
 		}
 	];
 	step(0, 0, 'Save your database password');
+	noteInstallStage('password-shown');
 	await promptSaveSecrets(secretsToSave);
 
 	// The install itself isn't a numbered step — it's the machine working, not a
@@ -963,22 +984,23 @@ async function afterInstall(c: {
 		reinstall,
 		online,
 		askYesNo,
-		stopIndexer: stopIndexerAndWait,
-		// first-online paused meanwhile: its first online run restarts tor and
-		// i2pd, which would drop a snapshot download going over them.
-		fastSync: () =>
-			withFirstOnlinePaused(
-				() =>
-					sig.child(() =>
-						fastSyncFromChain({
-							repoRoot: '/opt/morphit',
-							force: true,
-							indexerStartedByCaller: true
-						})
-					),
-				realFirstOnlineDeps(sig.checkStop)
-			),
-		startIndexer: () => startIndexerAndWait(sig.checkStop),
+		restore: () =>
+			restoreDuringInstall({
+				// first-online paused meanwhile: its first online run restarts tor and
+				// i2pd, which would drop a snapshot download going over them.
+				fastSync: () =>
+					withFirstOnlinePaused(
+						() =>
+							sig.child(() =>
+								fastSyncFromChain({
+									repoRoot: '/opt/morphit',
+									force: true,
+									indexerStartedByCaller: true
+								})
+							),
+						realFirstOnlineDeps(sig.checkStop)
+					)
+			}),
 		print: (s) => console.log(s)
 	});
 	// Done — unless it left the indexer stopped: then it is still to do, first.

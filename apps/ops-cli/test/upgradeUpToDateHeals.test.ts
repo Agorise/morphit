@@ -94,6 +94,43 @@ describe('an up-to-date box', () => {
 		expect(heals, 'no heal ran on an up-to-date hidden-only box').toBe(1);
 	});
 
+	// v1.21.18 audit: on a hidden-only box `--json` ran the heals (as root
+	// would) and printed no JSON; it only reports (it runs without sudo too).
+	it('a hidden-only box and `--json`: the JSON answer, and no heal runs', async () => {
+		const sha = createHash('sha256').update('x').digest('hex');
+		const CID = `bafy${'a'.repeat(55)}`;
+		const idx = await stubIndexer({
+			release: { version: '1.18.0', distribution: { source_sha256: sha, ipfs_cid: CID } },
+			instances: { instances: [] },
+			chain: signedRelease('1.18.0', {
+				source_sha256: sha,
+				ipfs_cid: CID,
+				gpg_fingerprint: 'A'.repeat(40)
+			})
+		});
+		const printed: string[] = [];
+		vi.spyOn(console, 'log').mockImplementation(
+			(...a: unknown[]) => void printed.push(a.join(' '))
+		);
+		let heals = 0;
+		try {
+			const rc = await runUpgrade({
+				flags: { json: 'true' },
+				positional: [],
+				localIndexerBases: [idx.base],
+				verifyLocalIndexer: () => ({ kind: 'verified' as const, how: 'override' as const }),
+				trust: { postingPubkey: OFFICIAL_PUB },
+				healsWhenUpToDate: async () => (heals++, 0)
+			} as never);
+			expect(rc).toBe(0);
+		} finally {
+			await idx.close();
+		}
+		expect(heals).toBe(0);
+		const doc = JSON.parse(printed.join('\n')) as Record<string, unknown>;
+		expect(doc).toMatchObject({ current: 'v1.18.0', latest: 'v1.18.0', up_to_date: true });
+	});
+
 	it('the default heals run only for the install this morphit-ops belongs to (here: a scratch install, so none)', async () => {
 		const out: string[] = [];
 		vi.spyOn(process.stdout, 'write').mockImplementation(

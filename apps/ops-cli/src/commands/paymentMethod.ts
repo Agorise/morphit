@@ -23,9 +23,23 @@
  * opens an interactive menu that prompts for the same inputs and
  * reuses these exact add/remove/list paths.
  *
- * Required environment (sourced from morphit.env): same as the
- * operator-block command — MORPHIT_RELAY_ACCOUNT plus an operator
- * posting-key file.
+ * Required environment (sourced from morphit.env): MORPHIT_RELAY_ACCOUNT and
+ * the relay's active-key file MORPHIT_RELAY_ACTIVE_KEY_FILE — what every
+ * install writes, and what `register` signs with. (It used to require
+ * MORPHIT_OPERATOR_POSTING_KEY_FILE, which no installer writes, so add and
+ * remove always failed — after every question had been asked. That variable
+ * is still honoured when an operator has set it.)
+ *
+ * WHY THE ACTIVE KEY CAN SIGN THIS POSTING-LEVEL OP. The op stays
+ * `required_posting_auths: [account]`: the indexer accepts this op ONLY as a
+ * posting-authority op signed by the instance's operator account
+ * (apps/indexer/src/blurt/verify.ts extractSigner — an op with
+ * required_auths is refused as `active_auth_not_allowed` unless it is one of
+ * the three fee-bearing ops — and handlers/operatorPaymentMethod.ts: signer
+ * === operatorAccountName, which Ansible sets to the relay account). On
+ * Blurt, a Steem-derived chain, a posting authority is satisfied by the
+ * account's posting, active OR owner keys, so the relay's active key signs it.
+ * `register` has always broadcast its posting-level op exactly this way.
  *
  * Reserved keys: the indexer rejects any key that collides with a
  * canonical one (PayPal, Wise, Cash, etc.).  This CLI applies the
@@ -33,10 +47,13 @@
  * doomed broadcast.
  */
 
-import { readFileSync } from 'node:fs';
-import { ask, askChoice, askPassword, askYesNo, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { ask, askChoice, askYesNo } from '../init/prompt.ts';
+import { unlockRelayKey } from './register.ts';
+import { readEffectiveEnv, INDEXER_ENV_FILES, RELAY_ENV_FILES } from '../lib/relayHiddenHeal.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { printChainErrorHelp, broadcastCustomJson, errMsg } from './chainErrors.ts';
+import { BroadcastOutcomeUnknownError } from '../lib/chainAccess.ts';
 import { withSpinner } from '../init/spinner.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
@@ -149,12 +166,17 @@ export async function runPaymentMethod(ctx: PaymentMethodCtx): Promise<number> {
 async function runMenu(ctx: PaymentMethodCtx): Promise<number> {
 	for (;;) {
 		console.log('');
-		const choice = await askChoice('Manage payment methods:', [
-			'List current payment-method additions',
-			'Add a payment method',
-			'Remove a payment method',
-			'Back to main menu'
-		]);
+		const choice = await askChoice(
+			"Manage the payment methods this site adds to Morphit's built-in list:",
+			[
+				'List the payment methods this site adds',
+				'Add a payment method',
+				'Remove a payment method',
+				// This leaves the command (the main menu does not come back).
+				'Done'
+			],
+			3
+		);
 		if (choice === 0) {
 			await runList(ctx);
 		} else if (choice === 1) {
@@ -167,17 +189,167 @@ async function runMenu(ctx: PaymentMethodCtx): Promise<number> {
 	}
 }
 
+// ─── signing key ─────────────────────────────────────────────────
+
+export interface SigningSetup {
+	readonly account: string;
+	readonly keyFile: string;
+}
+
+/**
+ * Can this server sign a payment-method change that the indexer will accept?
+ * Checked BEFORE any question is asked. Returns the account and key file, or
+ * prints exactly what is wrong and what to do, and returns null.
+ *
+ * Reads only: the environment loaded from morphit.env, the key file's
+ * readability, and the indexer's own settings (which account it accepts
+ * payment methods from). PURE apart from those reads, which are injectable.
+ */
+export function checkSigningSetup(
+	deps: {
+		readonly env?: NodeJS.ProcessEnv;
+		readonly readable?: (path: string) => 'ok' | 'missing' | 'denied';
+		readonly indexerOperator?: () => string | null;
+		/** The relay service's own key-file setting (its env files). */
+		readonly relayKeyFile?: () => string | null;
+		readonly print?: (line: string) => void;
+	} = {}
+): SigningSetup | null {
+	const env = deps.env ?? process.env;
+	const print = deps.print ?? ((l: string) => console.log(l));
+	const readable = deps.readable ?? fileReadable;
+	const account = env.MORPHIT_RELAY_ACCOUNT;
+	if (!account) {
+		print(
+			'✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo:'
+		);
+		print('    sudo morphit-ops payment-method');
+		return null;
+	}
+	// morphit.env first (what `register` reads), then the relay service's own
+	// files (/etc/morphit/relay.env carries the same setting on an install).
+	const keyFile =
+		env.MORPHIT_OPERATOR_POSTING_KEY_FILE ||
+		env.MORPHIT_RELAY_ACTIVE_KEY_FILE ||
+		(deps.relayKeyFile ?? relayServiceKeyFile)();
+	if (!keyFile) {
+		print("✗ This server has no key to sign with: MORPHIT_RELAY_ACTIVE_KEY_FILE (the relay's");
+		print('  active-key file) is set in neither morphit.env nor /etc/morphit/relay.env, so');
+		print('  the relay itself has no key either.  Set the relay up first (the guided');
+		print('  install does it): on this server, sudo morphit-ops  →  Install / set up a new node.');
+		return null;
+	}
+	const r = readable(keyFile);
+	if (r === 'denied') {
+		print(`✗ Can't read the key file ${sanitizeForTerm(keyFile)} as this user.`);
+		print('  Run it with sudo: sudo morphit-ops payment-method');
+		return null;
+	}
+	if (r === 'missing') {
+		print(`✗ The key file ${sanitizeForTerm(keyFile)} does not exist on this server.`);
+		print('  On this server, check which key is installed with: sudo morphit-ops show-key');
+		return null;
+	}
+	// The indexer stores a payment method only when it is signed by the
+	// account it treats as this instance's operator.
+	const operator = (deps.indexerOperator ?? indexerOperatorAccount)();
+	if (operator !== null && operator !== account) {
+		print(
+			`✗ Your indexer accepts payment methods only from @${sanitizeForTerm(operator)}, but this server signs as`
+		);
+		print(`  @${sanitizeForTerm(account)} — a change sent now would be ignored.`);
+		print(
+			'  Set MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME to your relay account in /etc/morphit/indexer.env,'
+		);
+		print('  then on this server run: sudo systemctl restart morphit-indexer');
+		return null;
+	}
+	return { account, keyFile };
+}
+
+function fileReadable(path: string): 'ok' | 'missing' | 'denied' {
+	if (!existsSync(path)) return 'missing';
+	try {
+		readFileSync(path);
+		return 'ok';
+	} catch (err) {
+		const code = (err as { code?: unknown }).code;
+		return code === 'EACCES' || code === 'EPERM' ? 'denied' : 'missing';
+	}
+}
+
+/** MORPHIT_RELAY_ACTIVE_KEY_FILE as the relay service gets it, or null. */
+function relayServiceKeyFile(): string | null {
+	try {
+		const root = process.env.MORPHIT_ENV_ROOT ?? '';
+		return (
+			readEffectiveEnv(
+				RELAY_ENV_FILES.map((f) => `${root}${f}`),
+				['MORPHIT_RELAY_ACTIVE_KEY_FILE']
+			).get('MORPHIT_RELAY_ACTIVE_KEY_FILE') || null
+		);
+	} catch {
+		return null;
+	}
+}
+
+/** What the indexer's own config falls back to when neither account setting
+ *  is set (apps/indexer/src/config: MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME
+ *  defaults to it, and the operator account defaults to that). */
+export const INDEXER_DEFAULT_OPERATOR_ACCOUNT = 'morphit';
+
+/** The account the indexer treats as this instance's operator (its own rule:
+ *  MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME, else MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME,
+ *  else its built-in default), or null when its settings cannot be read (one
+ *  of its env files exists but cannot be read here, or none exists).
+ *
+ *  It returned null when neither setting was set — "cannot tell" — so an
+ *  install whose indexer falls back to the default account was never warned
+ *  that its payment-method changes would be ignored (review, 2026-10-29). */
+export function indexerOperatorAccount(root = process.env.MORPHIT_ENV_ROOT ?? ''): string | null {
+	try {
+		const files = INDEXER_ENV_FILES.map((f) => `${root}${f}`);
+		const readable = files.map(fileReadable);
+		if (readable.includes('denied') || !readable.includes('ok')) return null;
+		const e = readEffectiveEnv(files, [
+			'MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME',
+			'MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME'
+		]);
+		const op = e.get('MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME');
+		if (op) return op;
+		return e.get('MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME') || INDEXER_DEFAULT_OPERATOR_ACCOUNT;
+	} catch {
+		return null;
+	}
+}
+
+/** A broadcast that may still land: say so, and how to look for it, instead of
+ *  "it failed" — sending it again blind would be a second change. */
+function printMayStillLand(err: BroadcastOutcomeUnknownError): void {
+	console.log(`✗ ${sanitizeForTerm(err.message)}`);
+	console.log('');
+	console.log("  Before sending it again, look for it: this node's indexer lists the change once");
+	console.log('  the chain has made it final. On this server:');
+	console.log('    sudo morphit-ops payment-method list');
+}
+
 /** Prompt for the fields of a new payment-method addition (with
  *  inline validation so the user can correct mistakes without
  *  aborting), then hand off to runAdd, which re-validates, shows
  *  the confirmation summary, and broadcasts. */
 async function runAddInteractive(): Promise<number> {
+	// Nothing is asked when it could not be sent anyway.
+	if (checkSigningSetup() === null) return 1;
 	console.log('');
-	console.log('Add a payment-method addition for this instance.');
+	console.log('Add a payment method to the list your site offers.');
 
 	let key = '';
 	for (;;) {
-		const raw = (await ask('Key (lowercase, e.g. "my_local_bank"; 3–24 chars)')).trim();
+		const raw = (
+			await ask(
+				'Short ID for it (lowercase letters, digits and _, e.g. "my_local_bank"; 3–24 characters)'
+			)
+		).trim();
 		if (raw === '') {
 			console.log('  ✗ A key is required.\n');
 			continue;
@@ -259,17 +431,18 @@ async function runRemoveInteractive(): Promise<number> {
 		);
 		return 1;
 	}
-	const rows = await fetchAdditions(account);
+	if (checkSigningSetup() === null) return 1;
+	// Only the ones still offered: a removed one cannot be removed again.
+	const rows = (await fetchAdditions(account)).filter((r) => r.state === 'active');
 	if (rows.length === 0) {
 		console.log('');
-		console.log('(no instance additions to remove)');
+		console.log('(this site adds no payment methods, so there is nothing to remove)');
 		return 0;
 	}
 	console.log('');
 	const labels = rows.map(
 		(r) =>
-			`${sanitizeForTerm(r.key)}  [${sanitizeForTerm(r.category)}]  ` +
-			`${sanitizeForTerm(r.name)}  (${r.state})`
+			`${sanitizeForTerm(r.name)}  [${sanitizeForTerm(r.category)}]  (ID: ${sanitizeForTerm(r.key)})`
 	);
 	labels.push('Cancel');
 	const idx = await askChoice('Which payment method do you want to remove?', labels);
@@ -402,18 +575,9 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 		url = urlRaw;
 	}
 
-	const account = process.env.MORPHIT_RELAY_ACCOUNT;
-	const keyFile = process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
-	if (!account) {
-		console.log(
-			'✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.'
-		);
-		return 1;
-	}
-	if (!keyFile) {
-		console.log('✗ Operator posting key file not configured.');
-		return 1;
-	}
+	const setup = checkSigningSetup();
+	if (setup === null) return 1;
+	const { account, keyFile } = setup;
 
 	console.log('');
 	console.log(`  Operator:    @${sanitizeForTerm(account)}`);
@@ -445,7 +609,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	try {
 		wif = await loadKeyWif(keyFile);
 	} catch (err) {
-		console.log(`✗ Failed to load posting key: ${sanitizeForTerm(errMsg(err))}`);
+		console.log(`✗ Failed to load the relay account's key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	}
 
@@ -478,6 +642,10 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 			})
 		);
 	} catch (err) {
+		if (err instanceof BroadcastOutcomeUnknownError) {
+			printMayStillLand(err);
+			return 1;
+		}
 		printChainErrorHelp(errMsg(err), {
 			opLabel: 'morphit_payment_method_addition_v1',
 			account,
@@ -522,18 +690,9 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 		return 1;
 	}
 
-	const account = process.env.MORPHIT_RELAY_ACCOUNT;
-	const keyFile = process.env.MORPHIT_OPERATOR_POSTING_KEY_FILE;
-	if (!account) {
-		console.log(
-			'✗ MORPHIT_RELAY_ACCOUNT is not set — it is defined in morphit.env (root-only), so re-run this command with sudo.'
-		);
-		return 1;
-	}
-	if (!keyFile) {
-		console.log('✗ Operator posting key file not configured.');
-		return 1;
-	}
+	const setup = checkSigningSetup();
+	if (setup === null) return 1;
+	const { account, keyFile } = setup;
 
 	console.log('');
 	console.log(`  Operator: @${sanitizeForTerm(account)}`);
@@ -555,7 +714,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	try {
 		wif = await loadKeyWif(keyFile);
 	} catch (err) {
-		console.log(`✗ Failed to load posting key: ${sanitizeForTerm(errMsg(err))}`);
+		console.log(`✗ Failed to load the relay account's key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	}
 
@@ -572,6 +731,10 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 			})
 		);
 	} catch (err) {
+		if (err instanceof BroadcastOutcomeUnknownError) {
+			printMayStillLand(err);
+			return 1;
+		}
 		printChainErrorHelp(errMsg(err), {
 			opLabel: 'morphit_payment_method_addition_v1',
 			account,
@@ -660,16 +823,10 @@ async function runList(_ctx: PaymentMethodCtx): Promise<number> {
 	}
 }
 
-// ─── helpers (mirror operatorBlock.ts) ──────────────────────────
+// ─── helpers ─────────────────────────────────────────────────────
 
-async function loadKeyWif(keyFile: string): Promise<string> {
-	const raw = readFileSync(keyFile, 'utf8').trim();
-	if (!raw.startsWith('{')) return raw;
-	const envelope = JSON.parse(raw);
-	const passphrase = await askPassword(RELAY_KEY_UNLOCK_PROMPT);
-	if (passphrase.length === 0) {
-		throw new Error('passphrase required to unlock encrypted keystore');
-	}
-	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');
-	return decryptEnvelope(envelope, passphrase);
-}
+/** Unlock the key with `register`'s own helper (unlockRelayKey): a plaintext
+ *  WIF as is; an encrypted key file first with the relay's host-sealed
+ *  passphrase (nothing to type), else the passphrase is asked, up to three
+ *  tries, a wrong one said in plain words, the unlock under the spinner. */
+const loadKeyWif = (keyFile: string): Promise<string> => unlockRelayKey(keyFile);

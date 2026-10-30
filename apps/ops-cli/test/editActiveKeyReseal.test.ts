@@ -20,7 +20,7 @@ const secrets: string[] = [];
 vi.mock('../src/init/prompt.ts', async (orig) => ({
 	...((await orig()) as object),
 	askPassword: async () => secrets.shift() ?? '',
-	askYesNo: async (q: string) => /^Rotate/.test(q),
+	askYesNo: async (q: string) => /^Replace the relay/.test(q),
 	step: () => {},
 	explain: () => {}
 }));
@@ -67,12 +67,17 @@ afterAll(() => {
 describe('edit-active-key', () => {
 	it('re-seals the relay passphrase credential with the new passphrase', async () => {
 		const { runEditActiveKey } = await import('../src/commands/editActiveKey.ts');
-		secrets.push(PrivateKey.fromSeed('new').toString(), NEW_PASS, NEW_PASS);
-		const rc = await runEditActiveKey({
-			flags: { 'config-dir': S, 'keep-backup': 'true' },
-			positional: [],
-			colorEnabled: false
-		});
+		// The new key; Enter at "current passphrase" (the sealed one does not
+		// open this file, and the operator does not know it); the new one twice.
+		secrets.push(PrivateKey.fromSeed('new').toString(), '', NEW_PASS, NEW_PASS);
+		const rc = await runEditActiveKey(
+			{
+				flags: { 'config-dir': S, 'keep-backup': 'true' },
+				positional: [],
+				colorEnabled: false
+			},
+			{ checkChain: async () => ({ kind: 'active' }) }
+		);
 		expect(rc).toBe(0);
 		expect(readFileSync(CRED, 'utf8'), 'the relay would still try the old passphrase').toBe(
 			`SEALED:${NEW_PASS}`

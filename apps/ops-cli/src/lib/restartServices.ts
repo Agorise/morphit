@@ -97,6 +97,10 @@ export async function offerRestart(
 	if (units.length === 0) return false;
 	const confirm = opts.confirm ?? askYesNo;
 	const label = (u: string): string => u.replace(/^morphit-/, '').replace(/\.service$/, '');
+	// The command printed for the operator names the real unit
+	// (morphit-indexer), never the short label: `systemctl restart indexer`
+	// is "Unit indexer.service not found" on every install.
+	const unitName = (u: string): string => u.replace(/\.service$/, '');
 	const human = units.map(label).join(' + ');
 	const plural = units.length > 1 ? 's' : '';
 	const yes = await confirm(
@@ -104,8 +108,8 @@ export async function offerRestart(
 		true
 	);
 	if (!yes) {
-		console.log('\n  Not restarted.  Apply the change later with:');
-		for (const u of units) console.log(`      sudo systemctl restart ${label(u)}`);
+		console.log('\n  Not restarted.  To apply the change later, on this server run:');
+		for (const u of units) console.log(`      sudo systemctl restart ${unitName(u)}`);
 		console.log('');
 		return false;
 	}
@@ -121,12 +125,16 @@ export async function offerRestart(
 		failed.push(...restartServices(units, opts.exec));
 	}
 	if (failed.length === 0) {
-		console.log(`\n  ✓ restarted ${human} — the change is live.`);
+		// Only "restarted": whether the running service really has the new
+		// settings is checked (and said) by the caller — restartWithWritten.
+		console.log(`\n  ✓ restarted ${human}.`);
 		console.log('');
 		return true;
 	}
-	console.log('\n  ✗ Could not restart automatically.  Run this by hand:');
-	for (const u of failed) console.log(`      sudo systemctl restart ${label(u)}`);
+	console.log('\n  ✗ Could not restart automatically.  On this server run:');
+	for (const u of failed) console.log(`      sudo systemctl restart ${unitName(u)}`);
+	console.log('  If it still does not start, see why with:');
+	for (const u of failed) console.log(`      sudo journalctl -u ${unitName(u)} -n 50 --no-pager`);
 	console.log('');
 	return false;
 }

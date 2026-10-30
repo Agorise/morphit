@@ -23,6 +23,27 @@
  * node nothing else. Because of step 3, which node answered does not matter
  * for authenticity; a node that withholds the op only makes the anchor
  * unavailable, and the caller then needs a signed tarball instead.
+ *
+ * v1.21.18 — WHAT WAS WRONG on a hidden-only node (morphitlat, v1.21.16). Step
+ * 1 asked for the newest 1000 positions of @morphit's history in ONE read.
+ * Over Tor/I2P, through the node's own indexer: the chain head (995 bytes)
+ * took 7.9 s, the newest 10 positions (23,646 bytes) 33.7 s, and the newest
+ * 100 or 1000 never came within 240 s. (Each @morphit op is large — a release
+ * op is 3-4 KB — and every op it broadcasts also takes a second position, the
+ * chain's fee for it, which the condenser API leaves out of the answer.) The
+ * read could never arrive, so every upgrade of a hidden-only node stopped with
+ * "@morphit's signed record could not be read".
+ *
+ * NOW, two cheaper ways to the same op, each checked exactly as before:
+ *   - a HINT: this node's indexer already applied the release op, and its
+ *     `/v1/release` names the block and transaction it came from. That one
+ *     block (about 5 KB) is read and checked like any history entry — the hint
+ *     only says where to look, never what is true;
+ *   - the history in SMALL PAGES (`pageSize`), newest first, walking back page
+ *     by page until the record is found or `maxPages` pages are read. A
+ *     candidate that fails its check (a forgery, a block a node does not have
+ *     yet) no longer ends the walk: older pages are still read, and the fault
+ *     decides only when nothing verifies.
  */
 import { cryptoUtils, Signature } from '@beblurt/dblurt';
 
@@ -30,6 +51,54 @@ export const RELEASE_OP_ID = 'morphit_release_v1';
 
 /** One read-only condenser call. */
 export type CondenserRead = (method: string, params: readonly unknown[]) => Promise<unknown>;
+
+/**
+ * How a read that goes over Tor/I2P (this node's indexer on a hidden-only node)
+ * walks the history, from the morphitlat measurement above:
+ *   - 10 positions per page: about 6 ops, 21-24 KB, which came in 33.7 s (20
+ *     positions are about 41 KB, nearly twice that, and the indexer gives
+ *     each Tor/I2P node 25 s for a read relayed for someone waiting on it);
+ *   - 120 s per read: one slow node the indexer gives up on, then the next
+ *     node's full answer;
+ *   - 10 pages (110 positions, about 55 ops of @morphit's): its whole history
+ *     (356 positions, April to October 2026) holds 31 ops that are not release
+ *     records, of 13 kinds — community, transfer, morphit_rpc_v1,
+ *     account_update, indexer_snapshot_v1, account_create, notify,
+ *     transfer_to_vesting, referral, comment, comment_options, vote,
+ *     chain_snapshot_v1 — and never more than one between two releases. So
+ *     the newest record is found even after more ops since a release than
+ *     @morphit has ever made in all.
+ * A clearnet read keeps 1000 positions and 4 pages: one such read holds the
+ * whole history today (182 entries, 510 KB on 29 October 2026), and small pages
+ * would multiply the requests by every source it asks (this node's indexer and
+ * each configured node).
+ */
+export const RECORD_PAGE_SIZE_HIDDEN = 10;
+export const RECORD_MAX_PAGES_HIDDEN = 10;
+export const RECORD_READ_TIMEOUT_HIDDEN_MS = 120_000;
+
+/** Where this node's indexer says the current release op is. */
+export interface ReleaseRecordHint {
+	readonly blockNum: number;
+	readonly trxId: string;
+}
+
+/**
+ * The hint in a `/v1/release` answer (`source_block_num`, `source_trx_id`), when
+ * it is about `tag` and well formed; otherwise null. PURE. A hint is only a
+ * place to look: the op found there passes the same checks as one listed in the
+ * history, so a wrong hint only costs one block read.
+ */
+export function releaseRecordHint(release: unknown, tag: string): ReleaseRecordHint | null {
+	if (!release || typeof release !== 'object') return null;
+	const r = release as { version?: unknown; source_block_num?: unknown; source_trx_id?: unknown };
+	if (typeof r.version !== 'string' || bare(r.version) !== bare(tag)) return null;
+	const blockNum = r.source_block_num;
+	const trx = typeof r.source_trx_id === 'string' ? r.source_trx_id.toLowerCase() : '';
+	if (typeof blockNum !== 'number' || !Number.isSafeInteger(blockNum) || blockNum <= 0) return null;
+	if (!TRX_ID_RE.test(trx) || /^0+$/.test(trx)) return null;
+	return { blockNum, trxId: trx };
+}
 
 export interface ReleaseAnchor {
 	/** Version as published, without a leading "v". */
@@ -195,6 +264,18 @@ function lowestSeq(history: unknown): number | null {
 	return low;
 }
 
+/** Highest sequence number in a history page, or null. */
+function highestSeq(history: unknown): number | null {
+	if (!Array.isArray(history)) return null;
+	let high: number | null = null;
+	for (const e of history) {
+		if (!Array.isArray(e)) continue;
+		const s = Number(e[0]);
+		if (Number.isInteger(s) && (high === null || s > high)) high = s;
+	}
+	return high;
+}
+
 /** Turn a verified payload into an anchor; null when its hashes are malformed. */
 function anchorFrom(
 	payload: Record<string, unknown>,
@@ -238,10 +319,13 @@ export async function readSignedReleaseAnchor(
 		readonly signer: string;
 		readonly pinnedPubkey: string;
 		readonly chainId: string;
-		/** History entries per page (Blurt allows up to 1000). */
+		/** History positions per page (Blurt allows up to 1000 here). */
 		readonly pageSize?: number;
 		/** How many pages back to look before giving up. */
 		readonly maxPages?: number;
+		/** Where this node's indexer says the op is (see releaseRecordHint):
+		 *  that block is checked first, before any history is read. */
+		readonly hint?: ReleaseRecordHint | null;
 	}
 ): Promise<ReleaseAnchorResult> {
 	const version = bare(args.tag);
@@ -249,39 +333,11 @@ export async function readSignedReleaseAnchor(
 	const pageSize = Math.max(1, Math.min(1000, args.pageSize ?? 1000));
 	const maxPages = Math.max(1, args.maxPages ?? 4);
 
-	const candidates: Candidate[] = [];
-	let from = -1;
-	for (let page = 0; page < maxPages; page++) {
-		let history: unknown;
-		try {
-			history = await read('get_account_history', [
-				signer,
-				from,
-				from === -1 ? pageSize : Math.min(pageSize, from)
-			]);
-		} catch (err) {
-			if (candidates.length > 0) break;
-			return {
-				ok: false,
-				reason: `could not read @${signer}'s history (${err instanceof Error ? err.message : String(err)})`,
-				unreadable: true
-			};
-		}
-		candidates.push(...releaseCandidates(history, signer, version));
-		if (candidates.length > 0) break;
-		const low = lowestSeq(history);
-		if (low === null || low <= 0) break;
-		from = low - 1;
-	}
-	if (candidates.length === 0) {
-		return {
-			ok: false,
-			reason: `@${signer} has published no release record for v${version}`,
-			notListed: true
-		};
-	}
-
 	let lastWhy = '';
+	// Some answer named a record for this version: a history entry, or the
+	// hinted block when it was there to read. Until one does, the record is
+	// "not listed" (or, when nothing could be read, "unreadable").
+	let listed = false;
 	// A listed record whose block the node answering did not have (a node a
 	// few blocks behind, or a read that failed) is lag, like a record not
 	// listed yet: the callers wait for it. A block that holds something else
@@ -292,16 +348,32 @@ export async function readSignedReleaseAnchor(
 	// withhold its block, and a forgery must never read as lag (v1.21.6
 	// review). A record @morphit signed that lacks a usable hash is not an
 	// attacker's (it needs the key), so it does not override a lagging block.
+	// It decides only when NOTHING verifies: a forged entry on a newer page
+	// does not stop the walk from reaching the genuine one on an older page.
 	let fault: string | null = null;
-	for (const c of candidates) {
+	/** Candidates already checked in this read (the hint and the history name
+	 *  the same op; a node that ignores `from` repeats its page). */
+	const checked = new Set<string>();
+
+	/** The anchor in candidate `c`, or null (and why, in the flags above). */
+	const check = async (c: Candidate, fromHint: boolean): Promise<ReleaseAnchor | null> => {
+		const key = `${c.blockNum}|${c.trxId}`;
+		if (checked.has(key)) return null;
 		let block: unknown;
 		try {
 			block = await read('get_block', [c.blockNum]);
 		} catch (err) {
 			lastWhy = `could not read block ${c.blockNum} (${err instanceof Error ? err.message : String(err)})`;
+			// A hint whose block could not be read says nothing yet: the history
+			// is read next, and may list the same op (then its block is asked
+			// again). A listed record whose block failed is lag, as before.
+			if (fromHint) return null;
+			checked.add(key);
 			lagging = true;
-			continue;
+			return null;
 		}
+		checked.add(key);
+		listed = true;
 		const txs = (block as { transactions?: unknown } | null)?.transactions;
 		const tx = Array.isArray(txs)
 			? (txs.find((t) => transactionIdOf(t) === c.trxId) as TxLike | undefined)
@@ -309,12 +381,12 @@ export async function readSignedReleaseAnchor(
 		if (tx === undefined) {
 			lastWhy = `block ${c.blockNum} does not hold transaction ${c.trxId}`;
 			lagging = true;
-			continue;
+			return null;
 		}
 		if (!recoverSigningKeys(tx, args.chainId).includes(args.pinnedPubkey)) {
 			lastWhy = `the release record in block ${c.blockNum} is not signed by @${signer}'s pinned posting key`;
 			fault = lastWhy;
-			continue;
+			return null;
 		}
 		let payload: Record<string, unknown> | null = null;
 		for (const op of [...(tx.operations ?? [])].reverse()) {
@@ -323,14 +395,77 @@ export async function readSignedReleaseAnchor(
 		}
 		if (payload === null) {
 			lastWhy = `the signed transaction in block ${c.blockNum} carries no release record for v${version}`;
-			continue;
+			return null;
 		}
 		const anchor = anchorFrom(payload, version, c);
 		if (anchor === null) {
 			lastWhy = `the signed release record for v${version} has no valid source_sha256`;
-			continue;
+			return null;
 		}
-		return { ok: true, anchor };
+		return anchor;
+	};
+
+	// 1. The hinted block: one small read instead of any history.
+	const hint = args.hint ?? null;
+	if (hint !== null && Number.isSafeInteger(hint.blockNum) && hint.blockNum > 0) {
+		const trxId = hint.trxId.toLowerCase();
+		if (TRX_ID_RE.test(trxId)) {
+			const a = await check({ blockNum: hint.blockNum, trxId, seq: -1 }, true);
+			if (a !== null) return { ok: true, anchor: a };
+		}
+	}
+
+	// 2. The history, newest page first, each page's records checked before
+	//    the next page is read.
+	let from = -1;
+	let readError: string | null = null;
+	let reachedStart = false;
+	// The history positions read: from the newest (`top`) down to `bottom`.
+	// A page [from, limit] covers positions from-limit .. from.
+	let top: number | null = null;
+	let bottom: number | null = null;
+	for (let page = 0; page < maxPages; page++) {
+		const limit = from === -1 ? pageSize : Math.min(pageSize, from);
+		let history: unknown;
+		try {
+			history = await read('get_account_history', [signer, from, limit]);
+		} catch (err) {
+			readError = err instanceof Error ? err.message : String(err);
+			break;
+		}
+		for (const c of releaseCandidates(history, signer, version)) {
+			listed = true;
+			const a = await check(c, false);
+			if (a !== null) return { ok: true, anchor: a };
+		}
+		const low = lowestSeq(history);
+		// No entries (an empty history), the first position read, or an answer
+		// that did not move back past `from` (a node that ignores it): stop.
+		if (low === null || low <= 0 || (from !== -1 && low > from)) {
+			reachedStart = low === null || low <= 0;
+			break;
+		}
+		if (from === -1) top = highestSeq(history);
+		bottom = Math.max(0, (from === -1 ? (top ?? low) : from) - limit);
+		from = low - 1;
+	}
+	const depth = top !== null && bottom !== null ? top - bottom + 1 : null;
+	if (!listed) {
+		if (readError !== null) {
+			return {
+				ok: false,
+				reason: `could not read @${signer}'s history (${readError})`,
+				unreadable: true
+			};
+		}
+		return {
+			ok: false,
+			reason:
+				reachedStart || depth === null
+					? `@${signer} has published no release record for v${version}`
+					: `@${signer} has published no release record for v${version} in the newest ${depth} entries of its history`,
+			notListed: true
+		};
 	}
 	if (fault !== null) return { ok: false, reason: fault };
 	return lagging ? { ok: false, reason: lastWhy, notListed: true } : { ok: false, reason: lastWhy };

@@ -71,7 +71,8 @@ case "$initsrc" in
 	*) no "init ask() can hang when stdin never delivers" ;;
 esac
 case "$initsrc" in
-	*"return defaultValue ?? '';"*) ok "…and falls back to the documented default on timeout" ;;
+	# (since v1.21.18 the shared answer reader returns { text: defaultValue ?? '', given: false })
+	*"return defaultValue ?? '';"* | *"text: defaultValue ?? ''"*) ok "…and falls back to the documented default on timeout" ;;
 	*) no "init ask() does not fall back to its default" ;;
 esac
 

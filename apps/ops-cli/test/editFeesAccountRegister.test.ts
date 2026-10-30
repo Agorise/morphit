@@ -51,9 +51,12 @@ let dir = '';
 const saved = { ...process.env };
 beforeEach(() => {
 	dir = mkdtempSync(join(tmpdir(), 'morphit-edit-fees-'));
+	// A registration needs a name and a web address; without them the edit
+	// (rightly) does not offer a re-publish that would fail (see
+	// editKeepsCurrent.test.ts).
 	writeFileSync(
 		join(dir, 'morphit.config.env'),
-		'MORPHIT_INSTANCE_NAME=B\nMORPHIT_INDEXER_FEE_RECIPIENT=old-fees\n'
+		'MORPHIT_INSTANCE_NAME=B\nMORPHIT_INSTANCE_ORIGIN=https://b.example\nMORPHIT_INDEXER_FEE_RECIPIENT=old-fees\n'
 	);
 	yesNoQuestions.length = 0;
 	registerRuns = [];

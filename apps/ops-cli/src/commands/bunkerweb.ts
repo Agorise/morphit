@@ -35,7 +35,8 @@ import { ask, askYesNo, explain } from '../init/prompt.ts';
 import { startDotsSpinner } from '../init/spinner.ts';
 import { runAsync } from '../lib/spinRun.ts';
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { effectiveEnvValue, instanceEnvFiles } from '../lib/instanceOrigin.ts';
 import { join } from 'node:path';
 import {
 	composeCommand,
@@ -224,6 +225,8 @@ export interface BunkerWebCommands {
 	readonly status: string;
 	readonly logs: string;
 	readonly down: string;
+	/** What `down` does to the site, said next to it. */
+	readonly downNote: string;
 }
 
 /** Watch BunkerWeb's output live, on this server, without storing it: the
@@ -236,22 +239,142 @@ export function bunkerwebLiveView(container: string): string {
 	return `sudo docker attach --no-stdin --sig-proxy=false ${container}`;
 }
 
-/** Operator commands matching wizard Step 21 + ops/bunkerweb/README.md.
- *  PURE. */
-export function bunkerwebCommands(): BunkerWebCommands {
+/** cp's "never overwrite a file already there" option, for THIS server's cp:
+ *  `--update=none` where it has it (coreutils 9.3+: Ubuntu 24.04 warns
+ *  "behavior of -n is non-portable … use --update=none instead" on every
+ *  `cp -n`), else `-n` (Ubuntu 22.04's coreutils 8.32 refuses `--update=none`).
+ *  `help` is `cp --help`'s text. PURE. */
+export function cpNoClobberFlag(help: string): string {
+	return /--update\[=/.test(help) && /\bnone\b/.test(help) ? '--update=none' : '-n';
+}
+
+let cpHelpCache: string | null = null;
+/** This server's `cp --help` (empty when cp cannot be run). */
+function cpHelp(): string {
+	if (cpHelpCache === null) {
+		const r = spawnSync('cp', ['--help'], { encoding: 'utf8', timeout: 5_000 });
+		cpHelpCache = typeof r.stdout === 'string' ? r.stdout : '';
+	}
+	return cpHelpCache;
+}
+
+/** Operator commands matching wizard Step 21 + ops/bunkerweb/README.md, to
+ *  run on this server. PURE given `noClobber` (default: for this server's cp).
+ *
+ *  Review 2026-10-29: the copy was relative (`ops/bunkerweb`, only right from
+ *  the install folder) and nested itself into /etc/bunkerweb/bunkerweb when
+ *  /etc/bunkerweb already existed; there was no bunkerweb.env to "edit" (only
+ *  the .example); no step got the certificate BunkerWeb needs to start; and
+ *  `docker compose` ran without sudo. Now: absolute paths, a copy that never
+ *  overwrites a file already there (`cp -r --update=none …/.`, `-n` on an older
+ *  cp), the env file made from its
+ *  example, the certificate (port 80 is still free: BunkerWeb is not running
+ *  yet), and sudo throughout. */
+export function bunkerwebCommands(
+	installDir = DEFAULT_INSTALL_DIR,
+	domain: string | null = null,
+	noClobber: string = cpNoClobberFlag(cpHelp())
+): BunkerWebCommands {
+	const d = domain ?? '<your-domain>';
+	const lines = [
+		'sudo mkdir -p /etc/bunkerweb',
+		`sudo cp -r ${noClobber} ${installDir}/ops/bunkerweb/. /etc/bunkerweb/`,
+		`sudo cp ${noClobber} /etc/bunkerweb/bunkerweb.env.example /etc/bunkerweb/bunkerweb.env`,
+		`sudo nano /etc/bunkerweb/bunkerweb.env      # set SERVER_NAME=${d}; leave the rest as shipped`
+	];
+	if (installDir !== DEFAULT_INSTALL_DIR)
+		lines.push(
+			`sudo sed -i 's#${DEFAULT_INSTALL_DIR}/#${installDir}/#g' /etc/bunkerweb/docker-compose.yml   # this install is not in ${DEFAULT_INSTALL_DIR}`
+		);
+	lines.push(
+		`sudo certbot certonly --standalone -d ${d}   # the certificate BunkerWeb serves (port 80 must be free)`,
+		'echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee -a /etc/bunkerweb/.env',
+		'cd /etc/bunkerweb && sudo docker compose up -d'
+	);
 	return {
-		bringUp: [
-			'sudo cp -r ops/bunkerweb /etc/bunkerweb',
-			'# edit /etc/bunkerweb/bunkerweb.env — set SERVER_NAME to your domain',
-			'echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee -a /etc/bunkerweb/.env',
-			'cd /etc/bunkerweb && docker compose up -d'
-		],
-		status: 'cd /etc/bunkerweb && docker compose ps',
+		bringUp: lines,
+		status: 'cd /etc/bunkerweb && sudo docker compose ps',
 		// BunkerWeb runs with `logging: driver: none` (its access/error/ban lines
 		// name visitors; nothing is stored), so `docker compose logs bunkerweb`
 		// cannot read anything. Watch it LIVE instead (review C1 / wave 2).
 		logs: BUNKERWEB_LIVE_VIEW,
-		down: 'cd /etc/bunkerweb && docker compose down'
+		down: 'cd /etc/bunkerweb && sudo docker compose down',
+		downNote: 'this takes your website offline until you start it again'
+	};
+}
+
+/** This instance's public domain for the printed steps: BunkerWeb's own
+ *  SERVER_NAME when it is set, else the instance origin as the indexer's unit
+ *  reads it; null when neither says (the steps then show <your-domain>). */
+export async function knownDomain(
+	installDir = installDirFromEnv(process.env),
+	bwEnv = '/etc/bunkerweb/bunkerweb.env'
+): Promise<string | null> {
+	try {
+		const sn = currentServerName(readFileSync(bwEnv, 'utf8'));
+		if (sn !== null && validateServerName(sn).ok) return sn;
+	} catch {
+		/* not there, or not readable here */
+	}
+	const origin = effectiveEnvValue(instanceEnvFiles(installDir), 'MORPHIT_INSTANCE_ORIGIN');
+	try {
+		const host = origin !== null && origin !== '' ? new URL(origin).hostname : '';
+		return host !== '' && validateServerName(host).ok && !/\.(onion|i2p)$/i.test(host)
+			? host
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+/** What is on this server, as far as BunkerWeb goes. */
+export interface BunkerWebDetection {
+	/** running: a BunkerWeb container is up; stopped: one exists, not up;
+	 *  none: Docker answered and has none; docker-not-answering: `docker ps`
+	 *  failed (the daemon is down, or this user may not use it); no-docker. */
+	readonly presence: 'running' | 'stopped' | 'none' | 'docker-not-answering' | 'no-docker';
+	/** /etc/bunkerweb exists (the shipped stack's settings are in place). */
+	readonly configDir: boolean;
+	/** Docker's own words when it did not answer, else null. */
+	readonly dockerError: string | null;
+}
+
+/** The next step when Docker does not answer `docker ps`. PURE. */
+export function dockerNotAnsweringText(dockerError: string | null, root: boolean): string {
+	if (!root && dockerError !== null && /permission denied/i.test(dockerError))
+		return 'Docker would not answer this user (its socket is for root and the docker group). Run it with sudo, on this server: sudo morphit-ops bunkerweb';
+	return 'Docker is not answering on this server, so whether BunkerWeb is there could not be checked. Look at Docker, on this server: sudo systemctl status docker';
+}
+
+/** Is BunkerWeb on this server? By IMAGE (locateBunkerWeb), or by its
+ *  settings folder. Never throws. IMPURE. */
+export async function detectBunkerWeb(
+	deps: {
+		readonly hasDocker?: () => Promise<boolean>;
+		readonly ps?: () => Promise<{ status: number | null; stdout: string; output: string }>;
+		readonly configDir?: string;
+	} = {}
+): Promise<BunkerWebDetection> {
+	const configDir = existsSync(deps.configDir ?? '/etc/bunkerweb');
+	if (!(await (deps.hasDocker ?? dockerPresent)())) {
+		return { presence: 'no-docker', configDir, dockerError: null };
+	}
+	const ps = await (
+		deps.ps ?? (() => runAsync('docker', ['ps', '-a', '--format', PS_FORMAT], { timeoutMs: 8000 }))
+	)();
+	if (ps.status !== 0) {
+		return {
+			presence: 'docker-not-answering',
+			configDir,
+			dockerError: ps.output.trim().slice(0, 300) || null
+		};
+	}
+	const rows = parsePsRows(ps.stdout);
+	const bw = rows.filter((r) => imageIs(r.image, 'bunkerity/bunkerweb'));
+	return {
+		presence: bw.some((r) => r.up) ? 'running' : bw.length > 0 ? 'stopped' : 'none',
+		configDir,
+		dockerError: null
 	};
 }
 
@@ -467,17 +590,30 @@ async function inspectContainer(name: string): Promise<ContainerState> {
 
 /** Where BunkerWeb is on this server (by image), plus the edge's Compose
  *  project when it was started by Compose. IMPURE, never throws. */
-async function findBunkerWeb(): Promise<{ loc: BunkerWebLocation; ref: ComposeRef | null }> {
+async function findBunkerWeb(): Promise<{
+	loc: BunkerWebLocation;
+	ref: ComposeRef | null;
+	dockerError: string | null;
+}> {
 	// Asynchronous, so the caller's spinner keeps turning while docker answers.
 	const ps = await runAsync('docker', ['ps', '-a', '--format', PS_FORMAT], { timeoutMs: 8000 });
-	const loc = locateBunkerWeb(ps.status === 0 ? parsePsRows(ps.stdout) : []);
-	if (loc.edge === null) return { loc, ref: null };
+	// Docker that does not answer is NOT "no BunkerWeb containers": it used to
+	// read that way, and offered to install a second BunkerWeb (default Yes).
+	if (ps.status !== 0)
+		return {
+			loc: locateBunkerWeb([]),
+			ref: null,
+			dockerError:
+				ps.output.trim().slice(0, 300) || (ps.timedOut ? 'no answer in time' : 'no answer')
+		};
+	const loc = locateBunkerWeb(parsePsRows(ps.stdout));
+	if (loc.edge === null) return { loc, ref: null, dockerError: null };
 	const insp = await runAsync('docker', ['inspect', loc.edge], {
 		timeoutMs: 8000,
 		maxOutputBytes: 16 * 1024 * 1024
 	});
 	const c = insp.status === 0 ? parseDockerInspect(insp.stdout || '[]')[0] : undefined;
-	return { loc, ref: c ? composeRefOf(c) : null };
+	return { loc, ref: c ? composeRefOf(c) : null, dockerError: null };
 }
 
 /** Best-effort: is the `docker compose` v2 plugin usable? IMPURE. */
@@ -614,21 +750,43 @@ export async function runBunkerWeb(ctx: BunkerWebCtx): Promise<number> {
 		json ? process.stderr : process.stdout
 	);
 	let hasDocker: boolean;
-	let found: { loc: BunkerWebLocation; ref: ComposeRef | null };
+	let found: { loc: BunkerWebLocation; ref: ComposeRef | null; dockerError: string | null };
 	let states: ContainerState[];
 	try {
 		hasDocker = await dockerPresent();
-		found = hasDocker ? await findBunkerWeb() : { loc: locateBunkerWeb([]), ref: null };
+		found = hasDocker
+			? await findBunkerWeb()
+			: { loc: locateBunkerWeb([]), ref: null, dockerError: null };
 		const names = found.loc.names;
-		states = hasDocker
-			? await Promise.all(names.map((n) => inspectContainer(n)))
-			: names.map((n) => ({ name: n, present: false, status: 'absent', health: 'none' }));
+		states =
+			hasDocker && found.dockerError === null
+				? await Promise.all(names.map((n) => inspectContainer(n)))
+				: names.map((n) => ({ name: n, present: false, status: 'absent', health: 'none' }));
 	} finally {
 		stopLook();
 	}
 	const { loc, ref } = found;
+	if (hasDocker && found.dockerError !== null) {
+		// Nothing could be checked: say what to look at, and change nothing.
+		const text = dockerNotAnsweringText(found.dockerError, isRoot());
+		if (json) {
+			console.log(
+				JSON.stringify(
+					{ docker_installed: true, state: 'docker-not-answering', detail: text, containers: [] },
+					null,
+					2
+				)
+			);
+		} else {
+			console.log('');
+			console.log(`  ${c.yellow('⚠')} ${text}`);
+			console.log(`      ${c.dim(`Docker said: ${found.dockerError.replace(/\s+/g, ' ')}`)}`);
+			console.log('');
+		}
+		return 1;
+	}
 	const verdict = bunkerwebVerdict(hasDocker, states);
-	const cmds = bunkerwebCommands();
+	const cmds = bunkerwebCommands(installDirFromEnv(process.env), await knownDomain());
 	// A BunkerWeb that is NOT the shipped /etc/bunkerweb stack (e.g. morphit.io's
 	// hand-made /opt/bunkerweb one): manage it through ITS OWN Compose project,
 	// only its own services (never `down`/whole-stack, which includes the
@@ -702,8 +860,12 @@ export async function runBunkerWeb(ctx: BunkerWebCtx): Promise<number> {
 				`  ${c.dim('Stop (on this server):')}    ${ownCmd(['stop'], `sudo docker stop ${names}`)}`
 			);
 		} else {
-			console.log(`  ${c.dim('Restart:')} cd /etc/bunkerweb && docker compose restart`);
-			console.log(`  ${c.dim('Stop:')}    ${cmds.down}`);
+			console.log(
+				`  ${c.dim('Restart (on this server):')} cd /etc/bunkerweb && sudo docker compose restart`
+			);
+			console.log(
+				`  ${c.dim('Stop (on this server):')}    ${cmds.down}   ${c.dim(`(${cmds.downNote})`)}`
+			);
 		}
 		console.log('');
 		console.log('━'.repeat(60));
@@ -742,17 +904,19 @@ export async function runBunkerWeb(ctx: BunkerWebCtx): Promise<number> {
 	}
 
 	if (verdict.kind !== 'docker-missing') {
-		console.log(`  ${c.bold('Bring BunkerWeb up:')}`);
+		console.log(`  ${c.bold('Bring BunkerWeb up, on this server:')}`);
 		for (const line of cmds.bringUp) console.log(`        ${line}`);
 		console.log('');
-		console.log(`  ${c.dim('Then re-run `morphit-ops bunkerweb` to confirm health.')}`);
+		console.log(`  ${c.dim('Then check it, on this server: sudo morphit-ops bunkerweb')}`);
 		console.log('  Full guide: ops/bunkerweb/README.md, OPERATIONS.md §32.');
 	} else {
 		const g = dockerInstallGuidance();
-		console.log(`  ${c.bold('Install Docker first:')}`);
+		console.log(`  ${c.bold('Install Docker first, on this server:')}`);
 		for (const line of g.official) console.log(`        ${line}`);
 		console.log('');
-		console.log(`  ${c.dim('Then re-run `morphit-ops bunkerweb` to install + bring up the WAF.')}`);
+		console.log(
+			`  ${c.dim('Then install + start the web firewall, on this server: sudo morphit-ops bunkerweb')}`
+		);
 		console.log(`  ${c.dim(`Docker docs: ${g.docs}`)}`);
 	}
 	console.log('');
@@ -777,10 +941,12 @@ async function runBunkerwebInstaller(
 	const envPath = join(dstDir, 'bunkerweb.env');
 	const composePath = join(dstDir, 'docker-compose.yml');
 
-	const manualBailout = (): number => {
-		const cmds = bunkerwebCommands();
+	const manualBailout = async (): Promise<number> => {
+		const cmds = bunkerwebCommands(installDir, await knownDomain());
 		console.log('');
-		console.log(`  ${c.bold('No problem — here are the manual steps:')}`);
+		console.log(
+			`  ${c.bold('No problem — here are the steps to do it yourself, on this server:')}`
+		);
 		for (const line of cmds.bringUp) console.log(`        ${line}`);
 		console.log('');
 		console.log('  Full guide: ops/bunkerweb/README.md, OPERATIONS.md §32.');
@@ -844,7 +1010,7 @@ async function runBunkerwebInstaller(
 		if (!dockerReady) {
 			console.log('');
 			console.log(`  ${c.red('✗')} Docker isn\'t ready, so I can\'t bring BunkerWeb up. Install`);
-			console.log(`      Docker (see ${g.docs}) and re-run \`morphit-ops bunkerweb\`.`);
+			console.log(`      Docker (see ${g.docs}), then on this server: sudo morphit-ops bunkerweb`);
 			console.log('');
 			return 1;
 		}
@@ -958,8 +1124,10 @@ async function runBunkerwebInstaller(
 				"domain, and it will CRASH-LOOP on startup if the certificate isn't\n" +
 				'there yet. The fix is to obtain the certificate first:\n' +
 				'\n' +
-				'  • run `morphit-ops ssl` for guided certificate setup, then\n' +
-				'  • re-run `morphit-ops bunkerweb` to finish bringing the WAF up.'
+				'  • get it, on this server (port 80 is free while BunkerWeb is not running):\n' +
+				`      sudo certbot certonly --standalone -d ${domain}\n` +
+				'    (the steps and checks: sudo morphit-ops ssl), then\n' +
+				'  • finish bringing the web firewall up, on this server: sudo morphit-ops bunkerweb'
 		);
 		if (!(await askYesNo('Continue and start BunkerWeb anyway (NOT recommended)?', false))) {
 			console.log('');
@@ -994,7 +1162,7 @@ async function runBunkerwebInstaller(
 		console.log('');
 		console.log(`  ${c.red('✗')} \`docker compose up -d\` failed (exit ${upStatus}).`);
 		console.log(
-			`      On this server, check the scheduler + frontend logs:  cd ${dstDir} && docker compose logs -f bunkerweb-scheduler frontend`
+			`      On this server, check the scheduler + frontend logs:  cd ${dstDir} && sudo docker compose logs -f bunkerweb-scheduler frontend`
 		);
 		console.log(
 			`      BunkerWeb itself stores no logs; watch it live:  ${BUNKERWEB_LIVE_VIEW}  (Ctrl-C detaches)`
@@ -1018,7 +1186,9 @@ async function runBunkerwebInstaller(
 			`  ${c.dim('Live view (on this server; nothing is stored):')} ${BUNKERWEB_LIVE_VIEW}`
 		);
 		console.log(`  ${c.dim('  (Ctrl-C detaches; the container keeps running.)')}`);
-		console.log(`  ${c.dim('Restart:')} cd ${dstDir} && docker compose restart`);
+		console.log(
+			`  ${c.dim('Restart (on this server):')} cd ${dstDir} && sudo docker compose restart`
+		);
 		console.log('');
 		console.log('  Verify on a real request: load your site, then check');
 		console.log('  /relay/v1/health and /v1/instance. See OPERATIONS.md §32.');
@@ -1028,13 +1198,11 @@ async function runBunkerwebInstaller(
 	}
 	console.log(`  ${c.yellow('⚠')} ${verdict2.message}`);
 	console.log('');
-	console.log(`      Containers are still settling. Check health in a moment with`);
-	console.log(
-		`      \`morphit-ops bunkerweb\`, or on this server watch BunkerWeb live (Ctrl-C detaches):`
-	);
+	console.log(`      Containers are still settling. Check again in a moment, on this server:`);
+	console.log(`      sudo morphit-ops bunkerweb   — or watch BunkerWeb live (Ctrl-C detaches):`);
 	console.log(`      ${BUNKERWEB_LIVE_VIEW}`);
 	console.log(
-		`      (scheduler + frontend logs still work: cd ${dstDir} && docker compose logs -f bunkerweb-scheduler frontend)`
+		`      (scheduler + frontend logs still work: cd ${dstDir} && sudo docker compose logs -f bunkerweb-scheduler frontend)`
 	);
 	console.log('━'.repeat(60));
 	console.log('');

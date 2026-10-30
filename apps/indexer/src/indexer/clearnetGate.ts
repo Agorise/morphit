@@ -73,7 +73,9 @@ export function computeClearnetEliminated(legs: ClearnetEliminationLegs): boolea
 /** The legs still preventing `clearnet_eliminated` — surfaced on /v1/instance so
  *  an operator can see exactly what to fix (e.g. "add an I2P address", "your
  *  Matrix homeserver is clearnet"). Empty array ⇔ eliminated. PURE. */
-export function clearnetEliminationMissing(legs: ClearnetEliminationLegs): (keyof ClearnetEliminationLegs)[] {
+export function clearnetEliminationMissing(
+	legs: ClearnetEliminationLegs
+): (keyof ClearnetEliminationLegs)[] {
 	return (Object.keys(legs) as (keyof ClearnetEliminationLegs)[]).filter((k) => !legs[k]);
 }
 
@@ -121,7 +123,13 @@ const MATRIX_BOT_DEFAULT_HOMESERVER = 'https://matrix.org';
 
 export type MatrixBotPosture =
 	| { readonly state: 'inert' }
-	| { readonly state: 'active'; readonly homeserver: string }
+	| {
+			readonly state: 'active';
+			readonly homeserver: string;
+			/** MORPHIT_MATRIX_BOT_SOCKS_PROXY, when set: every homeserver request
+			 *  goes through it (names resolved by the proxy). */
+			readonly socksProxy?: string;
+	  }
 	| { readonly state: 'unknown' };
 
 /** Parse the bot's env text the way systemd does (last assignment wins, one
@@ -135,22 +143,45 @@ export function matrixBotPostureFromEnvText(text: string): MatrixBotPosture {
 		if (eq <= 0) continue;
 		let v = line.slice(eq + 1).trim();
 		if (v.length >= 2 && (v[0] === '"' || v[0] === "'") && v.endsWith(v[0]!)) v = v.slice(1, -1);
-		vals.set(line.slice(0, eq).replace(/^export\s+/, '').trim(), v);
+		vals.set(
+			line
+				.slice(0, eq)
+				.replace(/^export\s+/, '')
+				.trim(),
+			v
+		);
 	}
 	if ((vals.get('MORPHIT_MATRIX_BOT_ALERT_MXID') ?? '').trim() === '') return { state: 'inert' };
 	const hs = (vals.get('MORPHIT_MATRIX_BOT_HOMESERVER') ?? '').trim();
-	return { state: 'active', homeserver: hs === '' ? MATRIX_BOT_DEFAULT_HOMESERVER : hs };
+	const socks = (vals.get('MORPHIT_MATRIX_BOT_SOCKS_PROXY') ?? '').trim();
+	return {
+		state: 'active',
+		homeserver: hs === '' ? MATRIX_BOT_DEFAULT_HOMESERVER : hs,
+		...(socks === '' ? {} : { socksProxy: socks })
+	};
 }
 
-/** Does the bot, as configured, stay off clearnet? Only when it will not run,
- *  or when its homeserver is on this box. A `.onion`/`.i2p` homeserver is NOT
- *  clean: the bot has no Tor/I2P route, so it would hand that name to the
- *  system resolver. PURE. */
+/** Does the bot, as configured, stay off clearnet? When it will not run, when
+ *  its homeserver is on this box, or when its homeserver is a `.onion` reached
+ *  through a Tor SOCKS proxy on this box (`socks5h://127.0.0.1:9050` — what a
+ *  tor-only install writes, and the only remote homeserver a tor-only bot
+ *  accepts). `socks5://` counts the same: the bot sends the host NAME to the
+ *  proxy for both (apps/matrix-bot/src/socksAgent.ts, socksConnect: address
+ *  type 3 always), so Tor resolves it either way (review, 2026-10-29: it was
+ *  counted as not clean). A `.onion` without that proxy, or an `.i2p`
+ *  homeserver (the bot has no I2P route), is NOT clean: the bot would hand the
+ *  name to the system resolver. PURE. */
 export function matrixBotIsClean(p: MatrixBotPosture): boolean {
 	if (p.state === 'inert') return true;
 	if (p.state === 'unknown') return false;
 	try {
-		return isLocalHost(new URL(p.homeserver).hostname);
+		const host = new URL(p.homeserver).hostname.toLowerCase();
+		if (isLocalHost(host)) return true;
+		if (!host.endsWith('.onion') || p.socksProxy === undefined) return false;
+		const proxy = new URL(p.socksProxy);
+		return (
+			(proxy.protocol === 'socks5h:' || proxy.protocol === 'socks5:') && isLocalHost(proxy.hostname)
+		);
 	} catch {
 		return false;
 	}
@@ -212,14 +243,19 @@ export const FRONTEND_IS_LOCAL_ONLY = true;
  * could not see it on its own directory card. (Same defect class as an earlier fix, one
  * column over.)
  */
-export function clearnetLegsFromConfig(cfg: {
-	blurtRpcEndpoints: readonly unknown[];
-	hiddenRpcEndpoints: readonly unknown[];
-	instanceTorAddress?: string | null;
-	instanceI2pB32Address?: string | null;
-	instanceI2pNameAddress?: string | null;
-	instanceMatrixHomeserver?: string | null;
-}, relayHiddenOnly: boolean, matrixBot: MatrixBotPosture = currentMatrixBotPosture(), federatedPriceLive: boolean = federatedPriceIsLive() || pricenodePriceIsLive()): ClearnetEliminationLegs {
+export function clearnetLegsFromConfig(
+	cfg: {
+		blurtRpcEndpoints: readonly unknown[];
+		hiddenRpcEndpoints: readonly unknown[];
+		instanceTorAddress?: string | null;
+		instanceI2pB32Address?: string | null;
+		instanceI2pNameAddress?: string | null;
+		instanceMatrixHomeserver?: string | null;
+	},
+	relayHiddenOnly: boolean,
+	matrixBot: MatrixBotPosture = currentMatrixBotPosture(),
+	federatedPriceLive: boolean = federatedPriceIsLive() || pricenodePriceIsLive()
+): ClearnetEliminationLegs {
 	return {
 		chainHidden: cfg.blurtRpcEndpoints.length === 0 && cfg.hiddenRpcEndpoints.length > 0,
 		transportTor: hiddenHostNetworkOf(cfg.instanceTorAddress ?? '') === 'tor',
@@ -231,7 +267,8 @@ export function clearnetLegsFromConfig(cfg: {
 		upgradeHidden: true,
 		// The bot's real config decides (M3); the old instance-level variable is
 		// still honoured when an operator did set it to a clearnet server.
-		matrixClean: matrixBotIsClean(matrixBot) && matrixHomeserverIsHidden(cfg.instanceMatrixHomeserver),
+		matrixClean:
+			matrixBotIsClean(matrixBot) && matrixHomeserverIsHidden(cfg.instanceMatrixHomeserver),
 		relayHidden: relayHiddenOnly
 	};
 }

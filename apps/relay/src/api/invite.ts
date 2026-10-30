@@ -102,7 +102,11 @@ export class InviteEndpoint {
 		 *  sentinel file exists, signups are paused without
 		 *  needing a relay restart.  Null means the feature is
 		 *  not configured (env-var disable still works). */
-		private readonly killSwitch: KillSwitch | null = null
+		private readonly killSwitch: KillSwitch | null = null,
+		/** The relay's key check (policy/activeKeyGuard): while the key the
+		 *  relay holds is not on its account's active authority, no signup can
+		 *  be completed, so none is started. */
+		private readonly signingGate: { signingRefused(): boolean } | null = null
 	) {}
 
 	register(app: Hono): void {
@@ -128,7 +132,7 @@ export class InviteEndpoint {
 		// pause signups during incident response without restarting
 		// the relay.  Same response code as the env-var disable so
 		// clients see one consistent "signups paused" path.
-		if (this.killSwitch?.isActive()) {
+		if (this.killSwitch?.isActive() || this.signingGate?.signingRefused() === true) {
 			return c.json(
 				{
 					status: 'rejected',

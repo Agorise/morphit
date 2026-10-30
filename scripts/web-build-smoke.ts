@@ -38,7 +38,7 @@ try {
 	execSync('npm run build:vite -w apps/web', {
 		cwd: ROOT,
 		stdio: 'pipe',
-		// Under the runner's 1200 s cap for slow smokes: a cold build on a busy
+		// Under the runner's 2400 s cap for slow smokes: a cold build on a busy
 		// host has taken over 6 minutes.
 		timeout: 1_100_000,
 		encoding: 'utf8'

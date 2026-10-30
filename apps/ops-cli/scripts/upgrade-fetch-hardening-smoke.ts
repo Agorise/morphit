@@ -245,7 +245,14 @@ if (codeOnly.includes('copyFileSync') && codeOnly.includes('cpSync')) {
 {
 	// find the carry-forward try/catch and confirm it calls rollback
 	const afterCarry = codeOnly.slice(codeOnly.indexOf('preserve'));
-	if (/catch[\s\S]{0,200}rollback\(installDir, backupDir, tmpDir/.test(afterCarry)) {
+	// (since the v1.21.17 review through undo(), which calls rollback(installDir,
+	// backupDir, tmpDir, …) and also covers Ctrl+C / a dropped session)
+	if (
+		/catch[\s\S]{0,200}(?:rollback\(installDir, backupDir, tmpDir|return undo\(err\))/.test(
+			afterCarry
+		) &&
+		/const undo = async[\s\S]{0,400}rollback\(\s*installDir,\s*backupDir,\s*tmpDir/.test(codeOnly)
+	) {
 		pass('carry-forward failure rolls back');
 	} else {
 		fail('carry-forward failure rolls back', 'no rollback() in the carry-forward catch');

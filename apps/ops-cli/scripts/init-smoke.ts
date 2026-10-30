@@ -14,7 +14,7 @@
 
 import { mkdtempSync, rmSync, readFileSync, statSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
@@ -140,6 +140,22 @@ scenario('resolveOutputPath: empty string returns default', () => {
 scenario('resolveOutputPath: absolute path passes through', () => {
 	assertEqual(resolveOutputPath('/etc/morphit', '/repo'), '/etc/morphit', 'absolute');
 });
+
+scenario(
+	"resolveOutputPath: a relative path is the operator's own directory, not apps/ops-cli",
+	() => {
+		assertEqual(
+			resolveOutputPath('out', '/opt/morphit', { MORPHIT_OPS_CALLER_CWD: '/home/op' }),
+			'/home/op/out',
+			'relative to the caller'
+		);
+		assertEqual(
+			resolveOutputPath('out', '/opt/morphit', { MORPHIT_OPS_CALLER_CWD: 'not-absolute' }),
+			resolve(process.cwd(), 'out'),
+			'a non-absolute caller dir is ignored'
+		);
+	}
+);
 
 // ─── writeWizardOutput ───────────────────────────────────────────
 
@@ -1273,8 +1289,11 @@ scenario(
 			!/return\s*\{\s*mode: 'plaintext'/.test(stepsSrc.replace(/\s+/g, ' ')),
 			'wizard still returns a plaintext keystore'
 		);
+		// 2026-10-29: edit-active-key has no storage step at all — it always
+		// writes an encrypted envelope (encryptEnvelopeAsync).
 		assertTrue(
-			/return 'encrypted';/.test(editSrc),
+			/encryptEnvelopeAsync\(newWif, newPass\)/.test(editSrc) &&
+				!/newContent = newWif/.test(editSrc),
 			'editActiveKey no longer forces encrypted storage'
 		);
 		assertTrue(

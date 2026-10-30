@@ -263,7 +263,9 @@ scenario('cp186: edit reminds operator to re-register after an origin/tag/name/c
 	assertEqual(e.includes('contactChanged = true'), true, 'edit tracks contact-URL change (also on-chain)');
 	// v1.20.0 (G1): the fees account rides in the register record too (the
 	// behaviour is driven for real in test/editFeesAccountRegister.test.ts).
-	assertEqual(/if \(originChanged \|\| tagChanged \|\| nameChanged \|\| contactChanged \|\| feesChanged\)/.test(e), true, 'edit gates reminder on origin/tag/name/contact/fees-account change');
+	// The alt-network addresses ride in the register record too (edit's
+	// alt-network section now offers the re-publish as well).
+	assertEqual(/if \(altChanged \|\| originChanged \|\| tagChanged \|\| nameChanged \|\| contactChanged \|\| feesChanged\)/.test(e), true, 'edit gates reminder on alt-address/origin/tag/name/contact/fees-account change');
 	assertEqual(e.includes("parts.push('contact URL')"), true, 'edit names contact URL in the re-register reminder');
 	assertEqual(e.includes('runRegister('), true, 'edit can broadcast the re-registration inline');
 	assertEqual(e.includes('Broadcast this change to the chain now'), true, 'edit offers to broadcast right there');
@@ -297,7 +299,10 @@ scenario('v1.15.6: interactive register auto-unlocks from the relay sealed crede
 	assertEqual(/systemd-creds/.test(r) && /--name=relay_passphrase/.test(r), true, 'it decrypts via systemd-creds (host-bound)');
 	assertEqual(/\/run\/morphit-reg-/.test(r), true, 'the decrypted secret lands only in a /run (tmpfs) file');
 	assertEqual(r.includes('unlinkSync'), true, 'the /run secret file is scrubbed');
-	assertEqual(r.includes('await askPassword(RELAY_KEY_UNLOCK_PROMPT)'), true, 'it still falls back to the manual prompt when the cred is absent/mismatched');
+	// 2026-10-29: the unlock is one shared helper (unlockRelayKey, used by
+	// show-key too), with retries and the prompt injectable for tests.
+	assertEqual(/\(deps\.ask \?\? askPassword\)\(RELAY_KEY_UNLOCK_PROMPT\)/.test(r), true, 'it still falls back to the manual prompt when the cred is absent/mismatched');
+	assertEqual(r.indexOf('trySealedRelayPassphrase)()') < r.indexOf('(deps.ask ?? askPassword)(RELAY_KEY_UNLOCK_PROMPT)'), true, 'the sealed credential is tried before the prompt');
 });
 
 scenario('v1.15.5: the relay-key unlock prompt is disambiguated at every decrypt site', () => {
@@ -310,7 +315,10 @@ scenario('v1.15.5: the relay-key unlock prompt is disambiguated at every decrypt
 	// Every relay-key decrypt site must use the shared constant, not a bare label.
 	for (const f of ['register.ts', 'showKey.ts', 'paymentMethod.ts']) {
 		const s = _src(f);
-		assertEqual(s.includes('askPassword(RELAY_KEY_UNLOCK_PROMPT)'), true, `${f} uses the disambiguated unlock prompt`);
+		// show-key and payment-method unlock through register's shared
+		// unlockRelayKey (2026-10-29), which asks with RELAY_KEY_UNLOCK_PROMPT.
+		const usesShared = f !== 'register.ts' && /import \{[^}]*unlockRelayKey[^}]*\} from '\.\/register\.ts'/.test(s) && /\bunlockRelayKey\(\w+\)/.test(s);
+		assertEqual(usesShared || /askPassword\)?\(RELAY_KEY_UNLOCK_PROMPT\)/.test(s), true, `${f} uses the disambiguated unlock prompt`);
 		assertEqual(s.includes("askPassword('Unlock passphrase')"), false, `${f} no longer uses the bare 'Unlock passphrase' label`);
 	}
 });

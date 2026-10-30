@@ -15,7 +15,7 @@
  */
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
 import { withHiddenFloor } from '$net/transportBudget';
-import { parseDeployedVersion, verifyJsonPollUrl } from './deployedVersion';
+import { parseDeployedVersion, verifyJsonPollUrl, versionJsonPollUrl } from './deployedVersion';
 
 export interface ServedVersionDeps {
 	fetchVerifyJson(): Promise<Response>;
@@ -65,5 +65,50 @@ export const readServedVersion = createServedVersionReader({
 			{ cache: 'no-store', credentials: 'same-origin' },
 			withHiddenFloor(10_000)
 		),
+	now: () => Date.now()
+});
+
+/**
+ * v1.21.18 — the quick read for the update check: /version.json (a few
+ * bytes), asked afresh every time. Falls back to verify.json when the server
+ * does not serve it (an older build there, or a hand-made web server config
+ * that refuses unknown files), so the check never goes blind.
+ */
+export function createQuickVersionReader(deps: {
+	fetchVersionJson(): Promise<Response>;
+	fallback(): Promise<string | null>;
+	now(): number;
+}): () => Promise<string | null> {
+	// The fallback downloads the whole manifest: at most once per
+	// QUICK_FALLBACK_GAP_MS, never every half minute.
+	let lastFallbackAt = -Infinity;
+	return async () => {
+		try {
+			const res = await deps.fetchVersionJson();
+			if (res.ok) {
+				const v = parseDeployedVersion(await res.text());
+				if (v !== null) return v;
+			}
+		} catch {
+			/* fall back below */
+		}
+		if (deps.now() - lastFallbackAt < QUICK_FALLBACK_GAP_MS) return null;
+		lastFallbackAt = deps.now();
+		return deps.fallback();
+	};
+}
+
+/** How often the quick reader may fall back to verify.json. */
+export const QUICK_FALLBACK_GAP_MS = 5 * 60_000;
+
+/** The app-wide quick reader. */
+export const readDeployedVersionQuick = createQuickVersionReader({
+	fetchVersionJson: () =>
+		fetchWithTimeout(
+			versionJsonPollUrl(),
+			{ cache: 'no-store', credentials: 'same-origin' },
+			withHiddenFloor(10_000)
+		),
+	fallback: () => readServedVersion({ maxAgeMs: 0 }),
 	now: () => Date.now()
 });

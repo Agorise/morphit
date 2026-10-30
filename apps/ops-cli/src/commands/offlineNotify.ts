@@ -10,9 +10,19 @@
  *   sudo morphit-ops offline-notify          guided setup (a menu)
  *   sudo morphit-ops offline-notify status   what is on, nothing changed
  *
- * Every account is TESTED before it is saved — a real note to an address the
- * operator types (or, for Telegram, the token checked with Telegram) — through
- * the relay's own code, as the relay's own user, with the relay's own network
+ * How each account is tested before it is saved:
+ *   - Matrix: the bot's sign-in is checked with its homeserver (whoami); a
+ *     test note to the operator's own address is optional.
+ *   - Telegram: the bot token is checked with Telegram (getMe); no note.
+ *   - email: a test note to an address the operator types, always.
+ *   - XMPP: signing in is tried when its message archive is turned off, and a
+ *     test note is asked for; only an account made here just now can be saved
+ *     without it, after a settings check that contacts nothing.
+ *   - Session: only a test note tests it; skipping it (Enter) saves it after a
+ *     settings check that contacts nothing, and the wizard says it is not
+ *     tested.
+ * The test runs through the relay's own code, as the relay's own user, with
+ * the relay's own network
  * rules (apps/relay/src/notify/adminCli.ts). Saved to
  * /etc/morphit/relay-notify.env (root:morphit-relay 0640, every value
  * single-quoted: the relay unit sources it with bash). Then the relay restarts
@@ -1055,8 +1065,22 @@ export async function runOfflineNotify(
 					)
 				).trim();
 				if (to === '') {
-					// A new account exists now: save it untested rather than lose it.
-					if (made !== null && (await askYesNo(`  Save ${jid} without a test note?`, true))) {
+					// A new account exists now: it can be saved untested rather than
+					// lost. Which answer is the safe one depends on its password:
+					//  - made for the operator: it is kept nowhere else, so not saving
+					//    loses the account for good: Enter saves it. Untested: the
+					//    relay's `check` for XMPP contacts nothing (it only reads the
+					//    settings); the archive step above signed in, if it worked;
+					//  - typed by the operator: they can add it later: Enter saves
+					//    nothing that was not tested.
+					const generated = made !== null && made.password === 'made';
+					if (generated)
+						print(
+							dim(
+								'    Its password was made for you and is kept nowhere else: saving it here is the only way to keep this account usable.'
+							)
+						);
+					if (made !== null && (await askYesNo(`  Save ${jid} without a test note?`, generated))) {
 						if (!(await testAndSave('xmpp', candidate, { kind: 'check' }))) leftOnServer();
 						return;
 					}
@@ -1106,7 +1130,7 @@ export async function runOfflineNotify(
 				if (pass.made)
 					print(
 						dim(
-							`    Its password was made for you and is kept with the site’s settings (${NOTIFY_ENV_PATH}, root only).`
+							`    Its password was made for you. Once saved, it is kept with the site’s settings (${NOTIFY_ENV_PATH}, root only).`
 						)
 					);
 				await finishXmpp(input, { password: pass.made ? 'made' : 'typed' });

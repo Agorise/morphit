@@ -16,6 +16,7 @@
  */
 
 import { cryptoFacingSideWhere, escapeLike } from '$api/shared';
+import { locallyShownSql } from '$api/localHiding';
 import { computeReputationScore } from '$indexer/reputation/score';
 import type { AssetTicker } from '@morphit/asset-registry';
 import { isOrderLang } from '@morphit/operator-config';
@@ -222,6 +223,10 @@ export function buildWhereClauses(
 			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(operatorAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
 		);
 	}
+	// What this instance switched off (assets, payment methods) is hidden
+	// here, on every path this builder serves (api/localHiding.ts).
+	const shown = locallyShownSql('o');
+	if (shown !== null) where.push(shown);
 
 	// v1.7.0 — exact-match, parameterised like every other predicate here.
 	if (q.account) where.push(`o.account = ${p(q.account)}`);

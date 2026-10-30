@@ -594,6 +594,15 @@ env-var override.  The key file is
 - `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT` (chain fallback)
 - `MORPHIT_INDEXER_FEE_RECIPIENT` (the account that gets paid)
 
+**From 2026-11-01 00:00 UTC (by block time; v1.21.18) the first three
+no longer decide anything for new fees**: every indexer uses a 0.1%
+tolerance, the BLURT base pinned at the listing's block (or 125), and
+50 BLURT per featured hour, so every node reaches the same verdict.
+The fee recipient counts only once it is in the operator's on-chain
+registration, on every node including your own; until then the
+instance sends its users' fees to the treasury instead
+(`docs/OPERATIONS.md` §40.7, "The same fee rules on every node").
+
 The welcome bonus amounts (10 BLURT liquid, 10 BLURT vesting),
 loyalty tier thresholds, and stranger-fee base (5 BLURT) are
 currently hardcoded constants — making them env-tunable is a

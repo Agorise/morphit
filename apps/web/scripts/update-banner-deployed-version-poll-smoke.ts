@@ -103,17 +103,19 @@ const importsHelpers =
 	/import\s*\{[^}]*\bdeployedVersionDiffers\b[^}]*\}\s*from\s*['"]\$lib\/updates\/deployedVersion['"]/.test(
 		banner
 	);
-const importsRunning = /import\s*\{[^}]*\brunningVersion\b[^}]*\}\s*from\s*['"]\$stores\/release['"]/.test(
-	banner
-);
-const importsFetch = /import\s*\{[^}]*\breadServedVersion\b[^}]*\}\s*from\s*['"]\$lib\/updates\/servedVersion['"]/.test(banner);
+const importsRunning =
+	/import\s*\{[^}]*\brunningVersion\b[^}]*\}\s*from\s*['"]\$stores\/release['"]/.test(banner);
+const importsFetch =
+	/import\s*\{[^}]*\breadDeployedVersionQuick\b[^}]*\}\s*from\s*['"]\$lib\/updates\/servedVersion['"]/.test(
+		banner
+	);
 if (importsHelpers && importsRunning && importsFetch) {
-	pass('UpdateBanner imports poll helpers + runningVersion + the shared readServedVersion');
+	pass('UpdateBanner imports poll helpers + runningVersion + the quick version reader');
 } else {
 	const miss: string[] = [];
 	if (!importsHelpers) miss.push('deployedVersion helpers');
 	if (!importsRunning) miss.push('runningVersion');
-	if (!importsFetch) miss.push('readServedVersion');
+	if (!importsFetch) miss.push('readDeployedVersionQuick');
 	fail('UpdateBanner missing an import', `missing: ${miss.join('; ')}`);
 }
 
@@ -128,7 +130,10 @@ if (/\{#if[^}]*\bnewerVersionDeployed\b[^}]*\}/.test(banner)) {
 }
 
 // ── poll body checks (#3, #4) ─────────────────────────────────────────────
-const pollBody = body(banner, /async function pollDeployedVersion\s*\(/);
+// v1.21.18 review: the poll is built by createDeployedVersionPoll (one at a
+// time: a poll asked while a slow read runs joins it — behaviour-tested in
+// src/lib/updates/deployedVersion.test.ts); its options are the body here.
+const pollBody = body(banner, /const pollDeployedVersion = createDeployedVersionPoll\(/);
 if (!pollBody) {
 	fail('pollDeployedVersion not found', 'the deployed-version fallback is missing');
 } else {
@@ -136,25 +141,34 @@ if (!pollBody) {
 	// v1.20.3: the read goes through the shared reader ($lib/updates/
 	// servedVersion); the cache-proofing lives there. (The release check no
 	// longer reads verify.json at all, so this poll is its only reader.)
-	const shared = readFileSync(join(REPO_ROOT, 'apps/web/src/lib/updates/servedVersion.ts'), 'utf-8');
-	const fetchesBusted = /verifyJsonPollUrl\s*\(/.test(shared);
-	const noStore = /cache:\s*['"]no-store['"]/.test(shared);
-	const usesShared = /readServedVersion\s*\(/.test(pollBody);
-	if (fetchesBusted && noStore && usesShared) {
-		pass("pollDeployedVersion reads through the shared reader, which fetches verifyJsonPollUrl() with cache:'no-store'");
+	// v1.21.18: the poll reads /version.json (a few bytes) through the quick
+	// reader, which falls back to the cache-busted verify.json read only when
+	// the server has no version.json — and then at most every few minutes.
+	const shared = readFileSync(
+		join(REPO_ROOT, 'apps/web/src/lib/updates/servedVersion.ts'),
+		'utf-8'
+	);
+	const quick = shared.slice(shared.indexOf('export const readDeployedVersionQuick'));
+	const fetchesBusted =
+		/verifyJsonPollUrl\s*\(/.test(shared) && /versionJsonPollUrl\s*\(/.test(quick);
+	const noStore = /cache:\s*['"]no-store['"]/.test(quick);
+	const fallsBack = /fallback:\s*\(\)\s*=>\s*readServedVersion\(\{\s*maxAgeMs:\s*0\s*\}\)/.test(
+		quick
+	);
+	const throttled = /QUICK_FALLBACK_GAP_MS/.test(shared) && /lastFallbackAt/.test(shared);
+	const usesShared = /read:\s*readDeployedVersionQuick\b/.test(pollBody);
+	if (fetchesBusted && noStore && usesShared && fallsBack && throttled) {
+		pass(
+			'pollDeployedVersion reads /version.json (cache-busted, no-store), verify.json only as a throttled fallback'
+		);
 	} else {
 		const miss: string[] = [];
-		if (!usesShared) miss.push('readServedVersion() in pollDeployedVersion');
-		if (!fetchesBusted) miss.push('verifyJsonPollUrl() in servedVersion.ts');
-		if (!noStore) miss.push("cache:'no-store' in servedVersion.ts");
-		fail('pollDeployedVersion fetch is not cache-proof / not shared', `missing: ${miss.join('; ')}`);
-	}
-	// Only the FIRST (page-load) poll may reuse the release check's answer; every
-	// later poll (timer, tab-foreground, reconnect) must ask afresh.
-	if (/readServedVersion\(\s*\{\s*maxAgeMs:\s*reuse\s*\?\s*SERVED_VERSION_REUSE_MS\s*:\s*0\s*\}\s*\)/.test(pollBody)) {
-		pass('only the page-load poll reuses a recent answer; later polls ask afresh (maxAgeMs 0)');
-	} else {
-		fail('poll reuse is not limited to the page-load poll', 'expected readServedVersion({ maxAgeMs: reuse ? SERVED_VERSION_REUSE_MS : 0 })');
+		if (!usesShared) miss.push('readDeployedVersionQuick() in pollDeployedVersion');
+		if (!fetchesBusted) miss.push('versionJsonPollUrl()/verifyJsonPollUrl() in servedVersion.ts');
+		if (!noStore) miss.push("cache:'no-store' on the version.json read");
+		if (!fallsBack) miss.push('the verify.json fallback');
+		if (!throttled) miss.push('the fallback throttle');
+		fail('pollDeployedVersion fetch is not cache-proof / not cheap', `missing: ${miss.join('; ')}`);
 	}
 
 	// #4 sets the flag ONLY under a deployedVersionDiffers guard.
@@ -190,7 +204,9 @@ if (!intervalCall) {
 const pollMentions = (banner.match(/pollDeployedVersion/g) ?? []).length;
 const pollCallSites = pollMentions - 1; // minus the definition
 if (pollCallSites >= 3) {
-	pass(`pollDeployedVersion is invoked from ${pollCallSites} sites (mount + foreground + reconnect)`);
+	pass(
+		`pollDeployedVersion is invoked from ${pollCallSites} sites (mount + foreground + reconnect)`
+	);
 } else {
 	fail(
 		`pollDeployedVersion is invoked from only ${pollCallSites} site(s)`,
@@ -204,14 +220,28 @@ if (pollCallSites >= 3) {
 // code on a phone's first load; fetched on every tab-foreground it cost 80 KB
 // per app switch. The first poll now waits until the page has loaded and the
 // browser is idle, and polls closer together than the minimum gap are skipped.
-if (/whenPageSettled\(\s*\(\)\s*=>\s*void pollDeployedVersion\(\s*true\s*\)/.test(banner)) {
-	pass('the first verify.json poll waits until the page has loaded (whenPageSettled)');
+if (/whenPageSettled\(\s*\(\)\s*=>\s*void pollDeployedVersion\(\s*\)/.test(banner)) {
+	pass('the first version poll waits until the page has loaded (whenPageSettled)');
 } else {
 	fail(
-		'the first verify.json poll runs at mount',
-		'expected whenPageSettled(() => void pollDeployedVersion(true)) instead of a bare call'
+		'the first version poll runs at mount',
+		'expected whenPageSettled(() => void pollDeployedVersion()) instead of a bare call'
 	);
 }
+// v1.21.18: an open page learns of an upgrade within half a minute — the poll
+// runs every 30 s, but only while the page is in view.
+const every30 =
+	/const UPDATE_POLL_INTERVAL_MS = 30_000;/.test(banner) &&
+	/setInterval\(\s*\(\)\s*=>\s*\{\s*if \(document\.visibilityState === 'visible'\) void pollDeployedVersion\(\);\s*\},\s*POLL_INTERVAL_MS\s*\)/.test(
+		banner
+	) &&
+	/const POLL_INTERVAL_MS = UPDATE_POLL_INTERVAL_MS;/.test(banner);
+if (every30) pass('the version poll runs every 30 s while the page is in view');
+else
+	fail(
+		'the version poll is not every 30 s while in view',
+		'an open tab would learn of an upgrade late'
+	);
 const settled = body(banner, /function whenPageSettled\s*\(/);
 if (
 	settled !== null &&
@@ -222,16 +252,26 @@ if (
 ) {
 	pass('whenPageSettled waits for load, then idle (with a timer fallback)');
 } else {
-	fail('whenPageSettled is missing or incomplete', 'needs readyState/load + requestIdleCallback + setTimeout fallback');
+	fail(
+		'whenPageSettled is missing or incomplete',
+		'needs readyState/load + requestIdleCallback + setTimeout fallback'
+	);
 }
 if (
 	pollBody !== null &&
-	/MIN_POLL_GAP_MS/.test(pollBody) &&
-	pollBody.indexOf('MIN_POLL_GAP_MS') < pollBody.indexOf('readServedVersion')
+	/minGapMs:\s*MIN_POLL_GAP_MS\b/.test(pollBody) &&
+	/const MIN_POLL_GAP_MS = \d[\d_]*;/.test(banner) &&
+	/export function createDeployedVersionPoll\b/.test(helpers) &&
+	/if \(inflight !== null\) return inflight;/.test(helpers)
 ) {
-	pass('pollDeployedVersion skips a poll closer than MIN_POLL_GAP_MS to the last one');
+	pass(
+		'pollDeployedVersion runs one at a time and skips a poll closer than MIN_POLL_GAP_MS to the last one'
+	);
 } else {
-	fail('no minimum gap between verify.json polls', 'every tab-foreground would download the full manifest');
+	fail(
+		'no minimum gap between verify.json polls',
+		'every tab-foreground would download the full manifest'
+	);
 }
 
 const applyBody = body(banner, /function applyUpdate\s*\(/);
@@ -244,6 +284,22 @@ if (!applyBody) {
 	);
 } else {
 	pass('applyUpdate handles the no-waiting-worker case (no early `if (!target) return`)');
+}
+
+// v1.21.18: the build writes /version.json, and the service worker never
+// answers it from its cache.
+const builder = readFileSync(join(REPO_ROOT, 'scripts/build-verify-json.mjs'), 'utf-8');
+const dyn = readFileSync(join(REPO_ROOT, 'apps/web/src/lib/net/dynamicPaths.ts'), 'utf-8');
+if (
+	/resolve\(BUILD_DIR, 'version\.json'\)/.test(builder) &&
+	/pathname === '\/version\.json'/.test(dyn)
+) {
+	pass('the build writes /version.json and the service worker leaves it to the network');
+} else {
+	fail(
+		'/version.json is not written by the build or is cacheable by the service worker',
+		'the quick poll would 404 or read a stale copy'
+	);
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

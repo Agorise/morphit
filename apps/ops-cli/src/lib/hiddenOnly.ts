@@ -153,7 +153,12 @@ const MAX_BODY_BYTES = 1024 * 1024;
  */
 export async function localIndexerJson<T>(
 	path: string,
-	init: { readonly method?: 'GET' | 'POST'; readonly body?: unknown } = {},
+	init: {
+		readonly method?: 'GET' | 'POST';
+		readonly body?: unknown;
+		/** Extra request headers (e.g. `x-morphit-local-health: 1`). */
+		readonly headers?: Readonly<Record<string, string>>;
+	} = {},
 	opts: { readonly timeoutMs?: number; readonly bases?: readonly string[] } = {}
 ): Promise<T> {
 	const bases = opts.bases ?? localIndexerBases();
@@ -169,10 +174,12 @@ export async function localIndexerJson<T>(
 				method,
 				redirect: 'manual',
 				signal: ctrl.signal,
-				headers:
-					init.body === undefined
+				headers: {
+					...init.headers,
+					...(init.body === undefined
 						? { accept: 'application/json' }
-						: { accept: 'application/json', 'content-type': 'application/json' },
+						: { accept: 'application/json', 'content-type': 'application/json' })
+				},
 				body: init.body === undefined ? undefined : JSON.stringify(init.body)
 			});
 		} catch (err) {

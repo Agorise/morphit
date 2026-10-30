@@ -43,7 +43,7 @@
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { checkAttestorEligibility } from '$indexer/attestorEligibility';
+import { attestationPhaseAt, checkAttestorEligibility } from '$indexer/attestorEligibility';
 import { attestationQuorumMet } from '$indexer/fee/attestationQuorum';
 import { validateOrderPermlink } from '$indexer/permlink';
 
@@ -126,9 +126,12 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// fee_attestations table — rejected-with-reason is visible
 	// in the event log, which is better than a silent row
 	// that never gets counted toward quorum.
+	// The phase: this node's setting for blocks before the consensus
+	// activation time, the federation-wide one from it on — a recorded
+	// attestation moves fee_status, which every node must agree on.
 	const eligibility = await checkAttestorEligibility(
 		ctx.signer,
-		ctx.config.attestationPhase,
+		attestationPhaseAt(ctx.blockTime, ctx.config.attestationPhase),
 		client,
 		ctx.blockTime,
 		ctx.blockTime

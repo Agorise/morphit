@@ -232,7 +232,9 @@ describe('a clearnet node whose release sources do not answer', () => {
 		const code = await upgradeWith(slimRelease(lock('1.17.15', '1.3.0')), '1.17.15');
 		expect(code).toBe(5);
 		expect(peerAsks).toBe(0);
-		expect(err()).toMatch(/Could not reach any release source/);
+		expect(err()).toMatch(
+			/Could not reach any place that publishes Morphit releases|no place that publishes it could be reached/
+		);
 	});
 
 	it('says what Tor/I2P answered too when no instance has a copy, and changes nothing', async () => {
@@ -240,7 +242,9 @@ describe('a clearnet node whose release sources do not answer', () => {
 		const code = await upgradeWith(slimRelease(lock('1.18.0', '1.3.0')), '1.18.0');
 		expect(code).toBe(5);
 		expect(peerAsks).toBe(1);
-		expect(err()).toMatch(/Could not reach any release source/);
+		expect(err()).toMatch(
+			/Could not reach any place that publishes Morphit releases|no place that publishes it could be reached/
+		);
 		expect(err()).toMatch(/Tor\/I2P \(the other Morphit instances\): /);
 		expect(readFileSync(join(installDir, 'release-info.json'), 'utf8')).toMatch(/v1\.17\.15/);
 	});

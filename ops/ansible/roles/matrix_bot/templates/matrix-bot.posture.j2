@@ -6,3 +6,8 @@
 # not copied, only whether one is set.
 MORPHIT_MATRIX_BOT_ALERT_MXID={{ 'configured' if (matrix_bot_alert_mxid | default('') | length) > 0 else '' }}
 MORPHIT_MATRIX_BOT_HOMESERVER={{ matrix_bot_homeserver | default('') }}
+{% if matrix_bot_socks_proxy | default('') | length > 0 %}
+MORPHIT_MATRIX_BOT_SOCKS_PROXY={{ matrix_bot_socks_proxy }}
+{% elif matrix_bot_tor_only | default(morphit_tor_only | default(false)) | bool %}
+MORPHIT_MATRIX_BOT_SOCKS_PROXY=socks5h://127.0.0.1:{{ morphit_tor_socks_port | default(9050) }}
+{% endif %}

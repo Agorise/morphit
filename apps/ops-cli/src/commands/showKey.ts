@@ -12,15 +12,16 @@
  *
  * `show-key` makes the saved key self-verifiable WITHOUT revealing
  * the private key:
- *   - It loads the keystore (prompting for the passphrase exactly
- *     as `register` and the relay do).
+ *   - It unlocks the keystore as `register` does (register.ts
+ *     unlockRelayKey): with the relay's sealed passphrase first, so
+ *     there is nothing to type on the relay's own server; only when
+ *     that does not open it is the passphrase asked (with retries).
  *   - It derives and prints the PUBLIC key (BLT...) that the saved
- *     private key corresponds to.  The operator compares that
- *     against the active authority shown for their account on any
- *     Blurt block explorer.  Match → the right key is saved.
- *     Mismatch → they saved the wrong key (e.g. posting instead of
- *     active, or a different account's key) and should re-run
- *     `edit-active-key`.
+ *     private key corresponds to, and CHECKS it against the account's
+ *     keys on the chain (lib/relayKeyChain.ts: this node's indexer
+ *     first, then the RPC pool): ✓ matches, or ✗ does not match and
+ *     which key it is instead (posting, memo, another account's), with
+ *     `sudo morphit-ops edit-active-key` as the fix.
  *   - It prints a short MASKED fingerprint of the private WIF
  *     (first 6 + last 4 chars, e.g. `5Jabcd…wXyZ`) so the operator
  *     can confirm WHICH key is on disk at a glance — never the full
@@ -35,15 +36,24 @@
  * already knows their own keys.
  */
 
-import { readFileSync } from 'node:fs';
-import { askPassword, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
+import { existsSync } from 'node:fs';
+import { isAbortError } from '../init/prompt.ts';
+import { withSpinner } from '../init/spinner.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
+import { checkKeyOnChain, describeKeyOnChain, type KeyOnChain } from '../lib/relayKeyChain.ts';
+import { missingSettingsHelp, unlockRelayKey } from './register.ts';
 
 export interface ShowKeyCtx {
 	readonly flags: Readonly<Record<string, string>>;
 	readonly positional: readonly string[];
+}
+
+/** Test seams (default: the real unlock and the real chain read). */
+export interface ShowKeyDeps {
+	readonly unlock?: (keyFile: string) => Promise<string>;
+	readonly checkChain?: (account: string, publicKey: string) => Promise<KeyOnChain>;
 }
 
 /** Mask a WIF to a short fingerprint: first 6 + ellipsis + last 4.
@@ -57,10 +67,13 @@ export function maskWif(wif: string): string {
 	return `${wif.slice(0, 6)}…${wif.slice(-4)}`;
 }
 
-export async function runShowKey(_ctx: ShowKeyCtx): Promise<number> {
+export async function runShowKey(_ctx: ShowKeyCtx, deps: ShowKeyDeps = {}): Promise<number> {
 	// Load the instance env so MORPHIT_RELAY_ACCOUNT is present on a systemd
 	// deploy (only the unit sources morphit.env). OS env wins; best-effort.
-	loadInstanceEnv(defaultRepoRoot());
+	// The install root, wherever the command was started from (the menu runs it
+	// in /opt/morphit/apps/ops-cli). Missing settings are named with the real
+	// file and the command that sets them — never "source ./morphit.env".
+	const loaded = loadInstanceEnv(defaultRepoRoot());
 	const account = process.env.MORPHIT_RELAY_ACCOUNT;
 	const keyFile = process.env.MORPHIT_RELAY_ACTIVE_KEY_FILE;
 
@@ -68,9 +81,9 @@ export async function runShowKey(_ctx: ShowKeyCtx): Promise<number> {
 	if (!account) missing.push('MORPHIT_RELAY_ACCOUNT');
 	if (!keyFile) missing.push('MORPHIT_RELAY_ACTIVE_KEY_FILE');
 	if (missing.length > 0) {
-		console.log(`✗ Missing required environment variables: ${missing.join(', ')}.`);
-		console.log('  Source your config first:');
-		console.log('    set -a; . ./morphit.env; . ./morphit.config.env; set +a');
+		for (const line of missingSettingsHelp(missing, loaded, 'show-key')) {
+			console.log(sanitizeForTerm(line));
+		}
 		return 1;
 	}
 
@@ -85,7 +98,8 @@ export async function runShowKey(_ctx: ShowKeyCtx): Promise<number> {
 
 	let wif = '';
 	try {
-		wif = await loadKeyWif(keyFile!);
+		// The relay's sealed passphrase first (nothing to type), as register does.
+		wif = await (deps.unlock ?? ((f: string) => unlockRelayKey(f)))(keyFile!);
 
 		// SECURITY: minimize the decrypted WIF's lifetime.  Derive the
 		// public key AND the masked fingerprint up front, in one tight
@@ -130,44 +144,53 @@ export async function runShowKey(_ctx: ShowKeyCtx): Promise<number> {
 		console.log(`  Private key (masked):  ${masked}`);
 		console.log(`  Public key:            ${publicKey}`);
 		console.log('');
-		console.log('━'.repeat(58));
+		// Checked against the chain here — this node's own indexer first, then
+		// the RPC pool — instead of sending the operator to a clearnet block
+		// explorer to compare by eye (review, 2026-10-29).
+		const verdict = await withSpinner(
+			`Checking it against @${sanitizeForTerm(account!)}'s keys on the Blurt chain…`,
+			() => (deps.checkChain ?? ((a: string, p: string) => checkKeyOnChain(a, p)))(account!, publicKey)
+		);
+		for (const line of describeKeyOnChain(verdict, account!, publicKey)) {
+			console.log(`  ${sanitizeForTerm(line)}`);
+		}
 		console.log('');
-		console.log('To verify this is the correct key:');
-		console.log(`  1. Open @${sanitizeForTerm(account!)} on a Blurt block explorer —`);
-		console.log(`     https://blocks.blurtwallet.com/#/@${sanitizeForTerm(account!)}`);
-		console.log('  2. Find the "Active Auth" (active authority) public key.');
-		console.log('  3. It should match the "Public key" shown above exactly.');
-		console.log('');
-		console.log('If they match, this server holds the right active key.');
-		console.log('If they differ, run `sudo morphit-ops edit-active-key` and');
-		console.log("supply the account's ACTIVE key (a posting or owner key will");
-		console.log('not work for operator registration).');
-		console.log('');
+		if (verdict.kind === 'wrong' || verdict.kind === 'weak') {
+			console.log('  To put the right key in place, on this server:');
+			console.log('    sudo morphit-ops edit-active-key');
+			console.log('');
+			return 1;
+		}
+		if (verdict.kind === 'no-account') {
+			// The key is not the problem: the account name is. edit-active-key
+			// cannot change it (review, 2026-10-29).
+			const relayEnv = `${process.env.MORPHIT_ENV_ROOT ?? ''}/etc/morphit/relay.env`;
+			const both = existsSync(relayEnv);
+			console.log(
+				`  The name comes from the line MORPHIT_RELAY_ACCOUNT=… in ${loaded.infraPath}` +
+					(both ? ` and in ${relayEnv} (the relay reads that one last).` : '.')
+			);
+			console.log('  Check it on this server:');
+			console.log(`    sudo nano ${loaded.infraPath}`);
+			if (both) console.log(`    sudo nano ${relayEnv}`);
+			console.log('');
+			return 1;
+		}
+		if (verdict.kind === 'unknown') {
+			console.log('  Run this again once the chain can be reached, on this server:');
+			console.log('    sudo morphit-ops show-key');
+			console.log('');
+		}
 		return 0;
 	} catch (err) {
+		// Ctrl+C at the passphrase: stopped, not "could not load the key".
+		if (isAbortError(err)) throw err;
 		console.log(`✗ Could not load the key: ${sanitizeForTerm(errMsg(err))}`);
 		return 1;
 	} finally {
 		// Clear the decrypted secret reference promptly.
 		wif = '';
 	}
-}
-
-// ─── Helpers (shared shape with register.ts loadKeyWif) ──────────
-
-async function loadKeyWif(keyFile: string): Promise<string> {
-	const raw = readFileSync(keyFile, 'utf8').trim();
-	if (!raw.startsWith('{')) {
-		// Plaintext WIF — no passphrase needed.
-		return raw;
-	}
-	const envelope = JSON.parse(raw);
-	const passphrase = await askPassword(RELAY_KEY_UNLOCK_PROMPT);
-	if (passphrase.length === 0) {
-		throw new Error('passphrase required to unlock encrypted keystore');
-	}
-	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');
-	return decryptEnvelope(envelope, passphrase);
 }
 
 function errMsg(err: unknown): string {

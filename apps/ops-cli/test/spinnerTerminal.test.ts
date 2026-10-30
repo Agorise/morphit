@@ -43,5 +43,22 @@ await new Promise((r) => setTimeout(r, 5_000));`,
 		expect(hidden, 'the spinner never drew').toBeGreaterThanOrEqual(0);
 		expect(r.out.lastIndexOf('\u001b[?25h'), 'the cursor was left hidden').toBeGreaterThan(hidden);
 		expect(r.status).toBe(130);
+		// …and says what happened, as a Ctrl+C at a question does (v1.21.18
+		// review: it exited 130 with nothing said).
+		expect(r.out).toContain('Stopped — you pressed Ctrl+C.');
+	}, 30_000);
+
+	it('Ctrl-C while it turns, with another part handling Ctrl-C: the spinner steps aside', () => {
+		const r = runInTerminal(
+			'src/init/spinner.ts',
+			`$.startDotsSpinner('Waiting for something slow…');
+process.on('SIGINT', () => { console.log('OWN HANDLER'); process.exit(7); });
+setTimeout(() => process.kill(process.pid, 'SIGINT'), 300);
+await new Promise((r) => setTimeout(r, 5_000));`,
+			{ timeoutMs: 20_000 }
+		);
+		expect(r.out).toContain('OWN HANDLER');
+		expect(r.out).not.toContain('Stopped — you pressed Ctrl+C.');
+		expect(r.status).toBe(7);
 	}, 30_000);
 });

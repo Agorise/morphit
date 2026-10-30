@@ -180,8 +180,9 @@
 
 	<!-- Operator stance: which assets (MORPHIT_INDEXER_DISABLED_ASSETS) and
 	     payment methods (MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS, and
-	     `morphit-ops payment-method` to add one) a site supports. Peer
-	     instances' orders still appear regardless. -->
+	     `morphit-ops payment-method` to add one) a site supports. Orders
+	     it switched off are hidden on that site only, whichever instance
+	     posted them (apps/indexer/src/api/localHiding.ts). -->
 	<section class="mt-14">
 		<h2 class="font-display text-2xl font-bold">
 			{$_('run_a_node.asset_policy_heading')}

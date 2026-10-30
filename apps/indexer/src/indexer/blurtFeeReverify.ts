@@ -24,7 +24,8 @@
  *
  * DETERMINISM. Each op is judged AS OF ITS BLOCK: the owner set uses history
  * rows before the op's block, the listing floor uses the BLURT base pinned
- * before it, and the Sybil tier counts the payer's orders the live handler had already stored:
+ * before it (from the consensus activation time with the federation's default
+ * base and tolerance in place of this node's — fee/feeRulesAtBlock.ts), and the Sybil tier counts the payer's orders the live handler had already stored:
  * those whose creating op precedes this one in CHAIN ORDER (block, trx, op —
  * from the event log; V3-9), still live then (from status / updated_at /
  * expires_at). The stranger fee is re-run through its own handler, which is
@@ -89,7 +90,9 @@ import type { Database } from '$db/pool';
 import { transactionIdOf } from '$blurt/snapshotOpTrust';
 import { CANONICAL_TREASURY } from '../config/canonicalTreasury';
 import { listingFeeStatus, sumFeeTransfers } from '$indexer/fee';
-import { graceRecipientAt, operatorTagOf, ownerRecipientsFor } from '$indexer/feeRecipients';
+import { listingFeeInputsAt } from '$indexer/fee/feeRulesAtBlock';
+import { graceRecipientAt, operatorTagOf, ownerRecipientsAt } from '$indexer/feeRecipients';
+import { consensusV2Active } from '$indexer/consensusActivation';
 import { trackVerifiedBlurtFee } from '$indexer/loyalty';
 import { attributeBlurtFeeToOperator } from '$indexer/operatorEarnings';
 import strangerFeeHandler from '$indexer/handlers/strangerFee';
@@ -361,31 +364,35 @@ export class BlurtFeeReverifier {
 	 * registration block + 1, from which the strict rule accepts it) is judged
 	 * against: graceRecipientAt — in practice the FIRST account registered.
 	 * Empty from E on (the strict as-of-block rule applies, via
-	 * ownerRecipientsFor).
+	 * ownerRecipientsAt), and for every op in a block from the consensus
+	 * activation time: intake could never know an account registered after the
+	 * op, so the re-check must not either.
 	 */
 	private async graceOwners(
 		client: pg.PoolClient,
-		row: { block_num: string; operator_account: string; estar: string }
+		row: { block_num: string; block_time: Date; operator_account: string; estar: string }
 	): Promise<string[]> {
+		const opBlockTime = new Date(row.block_time);
+		if (consensusV2Active(opBlockTime)) return [];
 		if (!(Number(row.block_num) < Number(row.estar))) return [];
 		const r = await graceRecipientAt(client, row.operator_account, row.block_num);
 		return r === null ? [] : [r];
 	}
 
-	/** Owner-leg recipients for an order: ours plus the tagged operator's
-	 *  account as of the block (strict), plus the grace account below E. */
+	/** Owner-leg recipients for an order: the order handler's set as of the
+	 *  block (ownerRecipientsAt: before the consensus activation time ours plus
+	 *  the tagged operator's account, from it every operator's), plus the grace
+	 *  account below E (older ops only). */
 	private async ownersFor(
 		client: pg.PoolClient,
 		row: OrderCandidate,
 		payload: Record<string, unknown>,
 		blockNum: number
 	): Promise<string[]> {
-		const strict = await ownerRecipientsFor(
-			client,
-			this.deps.config.feeRecipient,
-			payload,
-			blockNum
-		);
+		const strict = await ownerRecipientsAt(client, this.deps.config.feeRecipient, payload, {
+			blockNum,
+			blockTime: new Date(row.block_time)
+		});
 		const grace = await this.graceOwners(client, row);
 		return [...new Set([...strict, ...grace])];
 	}
@@ -410,8 +417,19 @@ export class BlurtFeeReverifier {
 				);
 				if (fee !== null) {
 					const nth = (await sybilCountAsOf(client, row.account, row.permlink, blockTime, row)) + 1;
-					const base = (await pinnedBlurtBaseAsOf(client, blockNum)) ?? cfg.feeBaseBlurt;
-					if (listingFeeStatus(fee, nth, base, cfg.feeTolerance) === 'verified') {
+					// The live handler's inputs, as of the op's block: from the
+					// consensus activation time the pin in force there (the
+					// federation's default when none) and the federation's
+					// tolerance — feeRulesAtBlock, the rule the order handler uses.
+					const { baseBlurt, feeTolerance } = await listingFeeInputsAt(
+						client,
+						{ blockNum, blockTime },
+						async () => ({
+							baseBlurt: (await pinnedBlurtBaseAsOf(client, blockNum)) ?? cfg.feeBaseBlurt,
+							feeTolerance: cfg.feeTolerance
+						})
+					);
+					if (listingFeeStatus(fee, nth, baseBlurt, feeTolerance) === 'verified') {
 						const upd = await client.query(
 							`UPDATE orders SET fee_status = 'verified', updated_at = NOW()
 							  WHERE account = $1 AND permlink = $2 AND fee_status = 'underpaid'
@@ -635,7 +653,8 @@ async function sybilCountAsOf(
 
 /** The chain-pinned BLURT fee base in force before `blockNum` (the newest valid
  *  release op carrying a treasury.blurt.base), or null for "none — use the env
- *  fallback", as TreasurySource resolves it. */
+ *  fallback", as TreasurySource resolves it. For ops in blocks before the
+ *  consensus activation time only; from it, feeRulesAtBlock.treasuryPinAt. */
 async function pinnedBlurtBaseAsOf(
 	client: pg.PoolClient,
 	blockNum: number

@@ -31,6 +31,13 @@ import { isAccountName } from '../src/api/shared.ts';
 import { fakeConfig } from '../test/testutils/context.ts';
 import type { BlurtPriceSource } from '../src/indexer/price/source.ts';
 import type { Queryable } from '../src/indexer/strangerFeePricing.ts';
+import { CONSENSUS_V2_ACTIVATION_TIME } from '../src/indexer/consensusActivation.ts';
+
+/** A quote asked for before / after the consensus activation time: before it
+ *  the no-price fallback is the operator's own feeBaseBlurt, from it the
+ *  federation's shipped default (what the order handler then enforces). */
+const BEFORE_ACTIVATION = new Date(Date.parse(CONSENSUS_V2_ACTIVATION_TIME) - 86_400_000);
+const AFTER_ACTIVATION = new Date(Date.parse(CONSENSUS_V2_ACTIVATION_TIME) + 86_400_000);
 
 let failures = 0;
 let scenarios = 0;
@@ -123,7 +130,7 @@ await scenario('rpc_endpoints_healthy counts only endpoints with a real success 
 
 await scenario('listing-fee body: returns base + feature-fee + ttl', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, featureFeeBlurtPerHour: 50 });
-	const body = buildListingFeeBody(cfg, null);
+	const body = buildListingFeeBody(cfg, null, null, null, BEFORE_ACTIVATION);
 	assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt');
 	assertEqual(body.feature_fee_blurt_per_hour, 50, 'feature_fee_blurt_per_hour');
 	assertEqual(body.quote_ttl_seconds, 300, 'quote_ttl_seconds');
@@ -187,8 +194,49 @@ await scenario('listing-fee body: tracks operator-tunable feeBaseBlurt', () => {
 	// frontend (post-Option-1) reads it for fee math.  This is
 	// the federation-tunability invariant in API-body form.
 	const cfg = fakeConfig({ feeBaseBlurt: 80 });
-	const body = buildListingFeeBody(cfg, null);
+	const body = buildListingFeeBody(cfg, null, null, null, BEFORE_ACTIVATION);
 	assertEqual(body.base_fee_blurt, 80, 'base_fee_blurt');
+});
+
+await scenario('listing-fee body: from the activation time the no-price fallback and the featured-slot price are the federation’s', () => {
+	// The order handler judges an unpinned order by the shipped default (125)
+	// from then on, whatever this node's feeBaseBlurt; quoting 60 or 80 would
+	// make the user underpay. Same for a stale price and a non-USD operator.
+	for (const feeBaseBlurt of [60, 80, 200]) {
+		const none = buildListingFeeBody(fakeConfig({ feeBaseBlurt }), null, null, null, AFTER_ACTIVATION);
+		assertEqual(none.base_fee_blurt, 125, `no price, feeBaseBlurt ${feeBaseBlurt}`);
+		assertEqual(none.base_fee_blurt_live, false, 'base_fee_blurt_live false');
+		const stale = buildListingFeeBody(
+			fakeConfig({ feeBaseBlurt, priceFeedEnabled: true }),
+			makePriceSource({ price: 0.002, stale: true }),
+			null,
+			null,
+			AFTER_ACTIVATION
+		);
+		assertEqual(stale.base_fee_blurt, 125, `stale price, feeBaseBlurt ${feeBaseBlurt}`);
+	}
+	// The featured-slot price is the federation's too (50 BLURT/hour), and the
+	// node's own until then.
+	const cfg80 = fakeConfig({ featureFeeBlurtPerHour: 80 });
+	assertEqual(
+		buildListingFeeBody(cfg80, null, null, null, AFTER_ACTIVATION).feature_fee_blurt_per_hour,
+		50,
+		'feature price after'
+	);
+	assertEqual(
+		buildListingFeeBody(cfg80, null, null, null, BEFORE_ACTIVATION).feature_fee_blurt_per_hour,
+		80,
+		'feature price before'
+	);
+	// A live USD price still quotes the canonical target.
+	const live = buildListingFeeBody(
+		fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true }),
+		makePriceSource({ price: 0.002, stale: false }),
+		null,
+		null,
+		AFTER_ACTIVATION
+	);
+	assertEqual(live.base_fee_blurt, 62.5, 'live quote unchanged');
 });
 
 await scenario('listing-fee body: canonical display ignores feeBaseBlurt for the live amount', () => {
@@ -251,7 +299,7 @@ await scenario('listing-fee body (Model A): canonical display is independent of 
 
 await scenario('listing-fee body (Model A): base_fee_blurt_live false when no price', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60 });
-	const body = buildListingFeeBody(cfg, null);
+	const body = buildListingFeeBody(cfg, null, null, null, BEFORE_ACTIVATION);
 	assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt is pinned fallback');
 	assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false');
 });
@@ -259,7 +307,7 @@ await scenario('listing-fee body (Model A): base_fee_blurt_live false when no pr
 await scenario('listing-fee body (Model A): base_fee_blurt_live false when price stale', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0.002, stale: true });
-	const body = buildListingFeeBody(cfg, ps);
+	const body = buildListingFeeBody(cfg, ps, null, null, BEFORE_ACTIVATION);
 	assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt is pinned fallback when stale');
 	assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false');
 });
@@ -269,7 +317,7 @@ await scenario('listing-fee body (Model A): non-USD denomination keeps pinned ba
 	// the base stays the operator's pinned feeBaseBlurt (graceful).
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true, priceFeedDenominationFiat: 'EUR' });
 	const ps = makePriceSource({ price: 0.0018, stale: false });
-	const body = buildListingFeeBody(cfg, ps);
+	const body = buildListingFeeBody(cfg, ps, null, null, BEFORE_ACTIVATION);
 	assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt unscaled for non-USD');
 	assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false for non-USD');
 });

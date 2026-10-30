@@ -21,7 +21,6 @@ import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { ASSET_TICKERS_SET, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 import { isOrderLang } from '@morphit/operator-config';
-import { consensusV2Active } from '$indexer/consensusActivation';
 
 const SIDES = new Set(['buy', 'sell']);
 
@@ -405,17 +404,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	const v = validate(ctx.payload, ctx.blockTime);
 	if ('reason' in v) return { ok: false, reason: v.reason };
 
-	// The order handler's payment-method gate, applied to a replacement too
-	// (from CONSENSUS_V2_ACTIVATION_TIME): a replace could otherwise swap a
-	// live order's methods for ones this instance has turned off — every
-	// method offered disabled here, which the order handler refuses.
-	if (
-		consensusV2Active(ctx.blockTime) &&
-		ctx.config.disabledPaymentMethods.length > 0 &&
-		v.payment_methods.every((m) => ctx.config.disabledPaymentMethods.includes(m.toLowerCase()))
-	) {
-		return { ok: false, reason: 'payment_methods_all_disabled' };
-	}
+	// No payment-method gate here. A replacement is judged by chain data only:
+	// before CONSENSUS_V2_ACTIVATION_TIME it never had one, and from it the
+	// order handler no longer refuses an order whose methods this instance
+	// switched off either — each instance hides such orders on its own read
+	// side (api/localHiding.ts) instead, so every node keeps the same rows.
 
 	// Look up the target first so we can distinguish the three
 	// rejection reasons (not_found / not_live / window_expired)

@@ -25,6 +25,7 @@
 /** A recorded op from the snapshot's `ops` table, with just what we need to
  *  locate + match it against the chain. */
 import { ACTIVE_AUTH_OP_IDS, extractSigner } from '$blurt/verify';
+import { blockTimeOf } from '$indexer/blockTime';
 
 export interface StoredOpRef {
 	readonly blockNum: number;
@@ -163,11 +164,18 @@ const ACCOUNT_CREATE_OPS = new Set([
  * Was account `name` created in `block` — an account-creating op naming it,
  * in the transaction whose id is `createdTrxId` when the block lists its
  * transaction ids? PURE, fail-closed.
+ *
+ * With `recorded`, also: by the recorded creator, at the recorded creation time
+ * (the block's timestamp). From the consensus activation time the
+ * fee-attestation quorum reads both (Signal A, signalVerdicts.relatedEverHeld:
+ * same creator; and the attestor's account age), so a snapshot that rewrote an
+ * account's creator could move which attestations count.
  */
 export function verifyAccountCreatedInBlock(
 	name: string,
 	createdTrxId: string,
-	block: (BlockLike & { readonly transaction_ids?: readonly string[] }) | null
+	block: (BlockLike & { readonly transaction_ids?: readonly string[]; readonly timestamp?: unknown }) | null,
+	recorded?: { readonly creator: string; readonly createdBlockTime: Date }
 ): OpMatchResult {
 	if (!block || !Array.isArray(block.transactions)) return { ok: false, reason: 'block missing or has no transactions' };
 	for (let ti = 0; ti < block.transactions.length; ti++) {
@@ -175,11 +183,24 @@ export function verifyAccountCreatedInBlock(
 		if (!Array.isArray(ops)) continue;
 		for (const op of ops) {
 			if (!Array.isArray(op) || !ACCOUNT_CREATE_OPS.has(String(op[0]))) continue;
-			const body = op[1] as { new_account_name?: unknown } | undefined;
+			const body = op[1] as { new_account_name?: unknown; creator?: unknown } | undefined;
 			if (body?.new_account_name !== name) continue;
 			const ids = block.transaction_ids;
 			if (Array.isArray(ids) && ids[ti] !== undefined && ids[ti] !== createdTrxId) {
 				return { ok: false, reason: `created in transaction ${ids[ti]}, recorded ${createdTrxId}` };
+			}
+			if (recorded !== undefined) {
+				if (body.creator !== recorded.creator) {
+					return { ok: false, reason: `created by ${String(body.creator)}, recorded ${recorded.creator}` };
+				}
+				const at = typeof block.timestamp === 'string' ? blockTimeOf(block.timestamp).getTime() : NaN;
+				if (!Number.isFinite(at)) return { ok: false, reason: 'block has no readable timestamp' };
+				if (at !== recorded.createdBlockTime.getTime()) {
+					return {
+						ok: false,
+						reason: `created at ${new Date(at).toISOString()}, recorded ${recorded.createdBlockTime.toISOString()}`
+					};
+				}
 			}
 			return { ok: true };
 		}

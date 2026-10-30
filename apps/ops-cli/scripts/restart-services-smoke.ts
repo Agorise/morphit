@@ -125,8 +125,10 @@ console.log('\n── restart-services smoke (cp225) ──\n');
 		'edit.ts: restarts indexer, + relay when origin changed',
 		/morphit-indexer/.test(edit) &&
 			/originChanged\b[^\n]*\n?\s*unitsToRestart\.push\('morphit-relay'\)/.test(edit) &&
-			// v1.21.10: through restartWithWritten (old copies cleared, running env checked)
-			/restartWithWritten\([\s\S]*?offer: \(units\) => offerRestart\(units\)/.test(edit),
+			// v1.21.10: through restartWithWritten (old copies cleared, running env
+			// checked); v1.21.18: restartAndCheck, the same, also saying whether the
+			// running service was confirmed to have the new values.
+			/restartAndCheck\([\s\S]*?offer: \(units\) => offerRestart\(units\)/.test(edit),
 		''
 	);
 	expect(
@@ -139,8 +141,8 @@ console.log('\n── restart-services smoke (cp225) ──\n');
 	const alt = readFileSync(join(ROOT, 'src/commands/altAddress.ts'), 'utf-8');
 	expect('altAddress.ts: imports offerRestart from the helper', /import\s*\{[^}]*offerRestart[^}]*\}\s*from\s*'\.\.\/lib\/restartServices\.ts'/.test(alt), '');
 	expect(
-		'altAddress.ts: offers to restart the indexer (through restartWithWritten since v1.21.10)',
-		/restartWithWritten\(written, \['morphit-indexer'\]/.test(alt) && /offer: \(units\) => offerRestart\(units\)/.test(alt),
+		'altAddress.ts: offers to restart the indexer (through restartAndCheck since v1.21.18)',
+		/restartAndCheck\(written, \['morphit-indexer'\]/.test(alt) && /offer: \(units\) => offerRestart\(units\)/.test(alt),
 		''
 	);
 	expect(

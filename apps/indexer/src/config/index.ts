@@ -206,7 +206,12 @@ export interface Config {
 	 *  and the static-vs-dynamic fee divergence (F6/F17). The fee
 	 *  is what the operator picks; no live price affects whether
 	 *  a transfer verifies.  MUST match BASE_FEE_BLURT on the
-	 *  frontend. */
+	 *  frontend.
+	 *
+	 *  From CONSENSUS_V2_ACTIVATION_TIME (by block time) it no longer
+	 *  decides any verdict: an order is judged by the base pinned on
+	 *  chain at its block, or the federation default 125 when none
+	 *  (indexer/fee/feeRulesAtBlock.ts). */
 	readonly feeBaseBlurt: number;
 	/** Operator-level instance-wide asset disable list
 	 *  (the default-on rule for new assets).  Uppercase tickers — orders posted with a
@@ -214,7 +219,10 @@ export interface Config {
 	 *  empty (everything in the canonical registry is enabled).
 	 *  Federation: cross-instance read-only visibility is
 	 *  preserved; the operator just refuses to accept NEW orders
-	 *  from their own users for the disabled assets. */
+	 *  from their own users for the disabled assets.
+	 *  From CONSENSUS_V2_ACTIVATION_TIME (by block time) the order is
+	 *  stored on every instance alike and this one only HIDES it from
+	 *  its own listings (api/localHiding.ts). */
 	readonly disabledAssets: readonly string[];
 	/** Operator-level instance-wide payment-method disable list —
 	 *  the payment-method analogue of disabledAssets.  Lowercase
@@ -223,7 +231,10 @@ export interface Config {
 	 *  rejects an order whose payment methods are ALL disabled; the
 	 *  frontend's picker + orderbook filter hide the disabled
 	 *  methods.  Default empty (every canonical method is offered).
-	 *  Federation: cross-instance read-only visibility preserved. */
+	 *  Federation: cross-instance read-only visibility preserved.
+	 *  From CONSENSUS_V2_ACTIVATION_TIME (by block time) the order is
+	 *  stored on every instance alike and this one only HIDES it from
+	 *  its own listings (api/localHiding.ts). */
 	readonly disabledPaymentMethods: readonly string[];
 	/** public Matrix room alias for user→operator
 	 *  contact, exposed via /v1/instance.operator_matrix_room.
@@ -243,7 +254,11 @@ export interface Config {
 	 *  band only absorbs floating-point rounding (Graphene serializes
 	 *  BLURT amounts to 3 decimals; multiplication and division can
 	 *  introduce sub-millibBLURT drift). Must match FEE_TOLERANCE on
-	 *  frontend. */
+	 *  frontend.
+	 *
+	 *  Only for fees in blocks before CONSENSUS_V2_ACTIVATION_TIME; from
+	 *  it every indexer uses the federation's 0.001
+	 *  (indexer/fee/feeRulesAtBlock.ts). */
 	readonly feeTolerance: number;
 	/** Operator-tunable fallback for the chain's
 	 *  account_creation_fee, in BLURT.  Used by /v1/chain-fee
@@ -435,7 +450,11 @@ export interface Config {
 	 *  requested) to bid on a featured slot. Default 50 BLURT.
 	 *  Operator-tunable: raise to
 	 *  keep featured slots exclusive; lower to encourage more
-	 *  organic bidding traffic. */
+	 *  organic bidding traffic.
+	 *
+	 *  Only for bids in blocks before CONSENSUS_V2_ACTIVATION_TIME; from
+	 *  it every indexer charges the federation's 50 BLURT/hour
+	 *  (indexer/fee/feeRulesAtBlock.ts), and /v1/listing-fee says so. */
 	readonly featureFeeBlurtPerHour: number;
 
 	/** ADR-0011 sub-phase 4b: Bitcoin fee-collection address — the
@@ -1015,9 +1034,10 @@ const envSchema = z.object({
 	 *  Morphit instance.  Federation rules: orders for an asset
 	 *  disabled on instance A but enabled on instance B still
 	 *  appear in B's orderbook (the asset's chain history is
-	 *  shared); A simply refuses to ACCEPT new orders for that
-	 *  asset from its own users.  Cross-instance read-only
-	 *  visibility is preserved. */
+	 *  shared); A hides every order for that asset from its own
+	 *  pages, whichever instance posted it (api/localHiding.ts;
+	 *  before the consensus activation time A's order handler
+	 *  refused them). */
 	MORPHIT_INDEXER_DISABLED_ASSETS: z
 		.string()
 		.default('')

@@ -407,13 +407,180 @@ export interface WwwRuntime {
 	/** BunkerWeb was started by Docker Compose (so it can be recreated). */
 	composeManaged(): boolean;
 	/** What, besides the settings file, decides the edge's names: the keys its
-	 *  Compose service sets itself (`environment:`), and whether it reads the
-	 *  file at all; null when Compose could not say. */
+	 *  Compose service sets itself (`environment:`, with their values when
+	 *  Compose gives them), and whether it reads the file at all; null when
+	 *  Compose could not say. */
 	edgeSettingsSource(): {
 		readonly readsFile: boolean;
 		readonly overrides: readonly string[];
+		readonly values?: ReadonlyMap<string, string>;
 	} | null;
+	/** `nginx -T` inside BunkerWeb's edge: the config it really serves (its
+	 *  scheduler generates it from BunkerWeb's DATABASE, not from the
+	 *  container's environment), or null when it cannot be read. */
+	nginxConfig?(): string | null;
+	/** BunkerWeb's site list (its database's bw_services, in the order its
+	 *  generator reads it, drafts left out): on a single-site BunkerWeb (1.5, 1.6) the
+	 *  names nginx serves are exactly these. null when it cannot be read. */
+	siteList?(): SiteList | null;
+	/** Add `add` to BunkerWeb's (sqlite) site list as the scheduler's own,
+	 *  after a copy of the database, only while `first` stays first; the copy's
+	 *  path, or null when nothing was changed. */
+	addSiteNames?(add: readonly string[], first: string): { readonly backup: string } | null;
+	/** Take out Morphit's second copy of the www rule (the scheduler config
+	 *  file `morphit-www-redirect`, and BunkerWeb's database row made from it),
+	 *  after a copy of the database; true when it is gone. */
+	removeRuleCopy?(): boolean;
+	/** The scheduler's own reason when the last apply was refused, or null. */
+	lastRefusal?(): string | null;
+	/** The exact command that recreates BunkerWeb's services, or null. */
+	recreateCommand?(): string | null;
+	/** BunkerWeb's container names, for the commands in a message. */
+	containerNames?(): { readonly edge: string; readonly scheduler: string | null };
 }
+
+/** BunkerWeb's site list as its database holds it. */
+export interface SiteList {
+	/** sqlite (edited here), another database server, or none found. */
+	readonly db: 'sqlite' | 'other' | 'missing';
+	/** The site names, in the order BunkerWeb's generator reads them. */
+	readonly ids: readonly string[];
+}
+
+/** Special server blocks BunkerWeb always has; not a site name. */
+const NOT_A_SITE = new Set(['_', 'bwapi', 'healthcheck.bunkerweb.io']);
+
+/** The site names nginx serves (`server_name` lines of an `nginx -T` dump,
+ *  BunkerWeb's own special blocks left out). PURE. */
+export function nginxServerNames(conf: string): string[] {
+	const out: string[] = [];
+	for (const m of conf.matchAll(/^\s*server_name\s+([^;]*);/gm)) {
+		for (const raw of m[1]!.trim().split(/\s+/)) {
+			const n = raw.replace(/^['"]|['"]$/g, '').toLowerCase();
+			if (n !== '' && !NOT_A_SITE.has(n) && !out.includes(n)) out.push(n);
+		}
+	}
+	return out;
+}
+
+/** The config files (base names, without .conf) of an `nginx -T` dump that
+ *  hold the www rule for `domain`. PURE. */
+export function nginxRuleFiles(conf: string, domain: string): string[] {
+	const rule = wwwRedirectConf(domain);
+	const out: string[] = [];
+	let file = '';
+	for (const line of conf.split('\n')) {
+		const h = /^# configuration file (.+):\s*$/.exec(line);
+		if (h) {
+			file = h[1]!.slice(h[1]!.lastIndexOf('/') + 1).replace(/\.conf$/, '');
+			continue;
+		}
+		if (line.trim() === rule && !out.includes(file)) out.push(file);
+	}
+	return out;
+}
+
+/** The scheduler config file Morphit wrote (the "second way"). */
+export const WWW_RULE_FILE = 'morphit-www-redirect';
+/** The config BunkerWeb makes from WWW_REDIRECT_KEY ("CREATED BY ENV"). */
+const WWW_RULE_FROM_ENV = WWW_REDIRECT_KEY.replace(/^CUSTOM_CONF_SERVER_HTTP_/, '');
+
+/**
+ * Run inside BunkerWeb's scheduler (`docker exec -i -e MODE=… <scheduler>
+ * python3 -c …`; its image ships python3 and sqlite3). Its database is the one
+ * in its DATABASE_URI (BunkerWeb's default sqlite:////var/lib/bunkerweb/db.sqlite3,
+ * which /data/lib holds in its container).
+ *  - MODE=list: the site list (bw_services, drafts left out), in the order
+ *    BunkerWeb's generator reads it (no ORDER BY: the table's own order).
+ *  - MODE=add: the names in ADD join the site list as the scheduler's own
+ *    (method "scheduler", so its save keeps them while SERVER_NAME names them
+ *    and drops them once it does not), after a copy of the database next to
+ *    it; only while FIRST is the first site and none of them is there yet, and
+ *    undone unless FIRST is still first afterwards. BunkerWeb 1.6's table also
+ *    has creation_date / last_update (NOT NULL): filled the way BunkerWeb
+ *    writes them (local time), when the table has them. Anything that fails
+ *    leaves the database as it was and removes the copy (v1.21.18 audit, M5:
+ *    on 1.6 every upgrade left one more copy behind).
+ *  - MODE=unrule: Morphit's second copy of the www rule (database rows named
+ *    morphit-www-redirect, and its files) goes, after a copy of the database —
+ *    made only when there is a row to take out (L2).
+ */
+export const WWW_DB_PY = String.raw`
+import json, os, re, shutil, sqlite3, sys, time
+from datetime import datetime
+MODE = os.environ.get("MODE", "")
+URI = os.environ.get("DATABASE_URI") or "sqlite:////var/lib/bunkerweb/db.sqlite3"
+m = re.match(r"^sqlite(?:\+pysqlite)?:///(.+)$", URI)
+DB = m.group(1) if m else None
+if DB is not None and not os.path.isfile(DB) and os.path.isfile("/data/lib/db.sqlite3"):
+    DB = "/data/lib/db.sqlite3"
+def backup(s, tag):
+    bk = os.path.join(os.path.dirname(DB), "db.pre-morphit-%s-%d.sqlite3" % (tag, int(time.time())))
+    d = sqlite3.connect(bk)
+    s.backup(d)
+    d.close()
+    return bk
+if DB is None:
+    print(json.dumps({"db": "other", "ids": []}))
+    sys.exit(0)
+if not os.path.isfile(DB):
+    print(json.dumps({"db": "missing", "ids": []}))
+    sys.exit(0)
+if MODE == "list":
+    c = sqlite3.connect("file:%s?mode=ro" % DB, uri=True, timeout=30)
+    ids = [r[0] for r in c.execute("SELECT id FROM bw_services WHERE is_draft = 0")]
+    print(json.dumps({"db": "sqlite", "ids": ids}))
+elif MODE == "add":
+    add = [n for n in os.environ["ADD"].split(" ") if n]
+    first = os.environ["FIRST"]
+    s = sqlite3.connect(DB, timeout=30)
+    have = [r[0] for r in s.execute("SELECT id FROM bw_services")]
+    if not add or have[:1] != [first] or any(n in have for n in add):
+        print(json.dumps({"added": 0}))
+        sys.exit(0)
+    cols = [r[1] for r in s.execute("PRAGMA table_info(bw_services)")]
+    dated = "creation_date" in cols and "last_update" in cols
+    bk = backup(s, "sites")
+    try:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        for n in add:
+            if dated:
+                s.execute("INSERT INTO bw_services (id, method, is_draft, creation_date, last_update) VALUES (?, 'scheduler', 0, ?, ?)", (n, now, now))
+            else:
+                s.execute("INSERT INTO bw_services (id, method, is_draft) VALUES (?, 'scheduler', 0)", (n,))
+        ids = [r[0] for r in s.execute("SELECT id FROM bw_services WHERE is_draft = 0")]
+        if ids[:1] != [first] or any(n not in ids for n in add):
+            raise ValueError("the domain would not stay first in the site list")
+        s.commit()
+    except Exception as e:
+        s.rollback()
+        s.close()
+        os.remove(bk)
+        print(json.dumps({"added": 0, "error": str(e)[:200]}))
+        sys.exit(0)
+    s.close()
+    print(json.dumps({"added": len(add), "backup": bk}))
+elif MODE == "unrule":
+    name = os.environ["NAME"]
+    s = sqlite3.connect(DB, timeout=30)
+    q = "FROM bw_custom_configs WHERE name = ? AND method != 'scheduler'"
+    bk = None
+    n = 0
+    if s.execute("SELECT COUNT(*) " + q, (name,)).fetchone()[0] > 0:
+        bk = backup(s, "www-rule")
+        n = s.execute("DELETE " + q, (name,)).rowcount
+        s.commit()
+    s.close()
+    moved = 0
+    dest = os.path.join(os.path.dirname(DB), "morphit-removed-configs")
+    for root in ("/data/configs", "/etc/bunkerweb/configs"):
+        p = os.path.join(root, "server-http", name + ".conf")
+        if os.path.isfile(p):
+            os.makedirs(dest, exist_ok=True)
+            shutil.move(p, os.path.join(dest, "%d-%s.conf" % (int(time.time()), name)))
+            moved += 1
+    print(json.dumps({"rows": n, "moved": moved, "backup": bk}))
+`;
 
 /** Collected while the heal runs. */
 interface Run {
@@ -433,11 +600,14 @@ function later(rt: WwwRuntime): string {
 		? NEXT
 		: "it needs the upgrade's background step, which could not be started on this server (systemd-run)";
 }
-/** How the operator makes BunkerWeb read its settings file again. */
+/** How the operator makes BunkerWeb read its settings file again: the exact
+ *  Compose command when there is one (never "run the upgrade again", which
+ *  would only try the same thing). */
 function recreateHow(rt: WwwRuntime, envPath: string): string {
-	return rt.composeManaged()
-		? `on this server run: ${COMMAND}`
-		: `recreate the BunkerWeb container with the settings in ${envPath} (it was not started by Docker Compose)`;
+	if (!rt.composeManaged())
+		return `recreate the BunkerWeb container with the settings in ${envPath} (it was not started by Docker Compose)`;
+	const cmd = rt.recreateCommand?.() ?? null;
+	return `on this server run: ${cmd ?? COMMAND}`;
 }
 /** The settings file's path, for a message. */
 function envPathOf(rt: WwwRuntime): string {
@@ -447,14 +617,65 @@ function envPathOf(rt: WwwRuntime): string {
 function textHash(t: string): string {
 	return createHash('sha256').update(t).digest('hex');
 }
+/** "it needs a look" with the one thing to send. */
+function needsLook(what: string): string {
+	return `it needs a look: send the output of, on this server: ${what}`;
+}
+function names(rt: WwwRuntime): { edge: string; scheduler: string } {
+	const n = rt.containerNames?.() ?? null;
+	return {
+		edge: n?.edge || '<BunkerWeb container>',
+		scheduler: n?.scheduler || '<BunkerWeb scheduler container>'
+	};
+}
 
-/** Does the running BunkerWeb serve www (in its SERVER_NAME, with the rule)?
- *  null when its settings cannot be read. */
+/** Does the running BunkerWeb's CONTAINER ENVIRONMENT name www (in its
+ *  SERVER_NAME, with the rule)? null when it cannot be read. This is what the
+ *  containers were created with — not necessarily what nginx serves. */
 function liveHasWww(rt: WwwRuntime, www: { domain: string; alias: string }): boolean | null {
 	const live = rt.liveEnv();
 	if (live === null) return null;
-	const names = (live.get('SERVER_NAME') ?? '').trim().split(/\s+/);
-	return names.includes(www.alias) && live.get(WWW_REDIRECT_KEY) === wwwRedirectConf(www.domain);
+	const n = (live.get('SERVER_NAME') ?? '').trim().split(/\s+/);
+	return n.includes(www.alias) && live.get(WWW_REDIRECT_KEY) === wwwRedirectConf(www.domain);
+}
+
+/** What BunkerWeb really serves for www. */
+interface Served {
+	/** Read from the nginx it runs, or (when that cannot be read) from its
+	 *  containers' environment. */
+	readonly from: 'nginx' | 'env';
+	/** www.<domain> is one of its site names. */
+	readonly name: boolean;
+	/** The site names it serves. */
+	readonly names: readonly string[];
+	/** The config files holding the www rule (nginx), or [KEY] (env). */
+	readonly ruleFiles: readonly string[];
+}
+
+/** What BunkerWeb serves, judged from the RUNNING nginx config (its
+ *  scheduler builds that from its database, which can differ from the
+ *  container environment — morphit.io, v1.21.17); from the environment only
+ *  when nginx cannot be read. null when neither can. */
+function servedWww(rt: WwwRuntime, www: { domain: string; alias: string }): Served | null {
+	const conf = rt.nginxConfig?.() ?? null;
+	if (conf !== null) {
+		const n = nginxServerNames(conf);
+		return {
+			from: 'nginx',
+			name: n.includes(www.alias),
+			names: n,
+			ruleFiles: nginxRuleFiles(conf, www.domain)
+		};
+	}
+	const live = rt.liveEnv();
+	if (live === null) return null;
+	const n = (live.get('SERVER_NAME') ?? '').trim().split(/\s+/).filter(Boolean);
+	return {
+		from: 'env',
+		name: n.includes(www.alias),
+		names: n,
+		ruleFiles: live.get(WWW_REDIRECT_KEY) === wwwRedirectConf(www.domain) ? [WWW_RULE_FROM_ENV] : []
+	};
 }
 
 /** The www heal. `rt` is the box (tests pass a simulated one). */
@@ -475,18 +696,34 @@ export async function healBunkerWebWww(ctx: HealCtx, rt: WwwRuntime): Promise<He
 			detail: `www: ${envPath} could not be read, so nothing was changed.`
 		};
 	const vals = envValues(before);
-	const names = serverNames(before);
-	const domain = (names[0] ?? '').toLowerCase();
+	const siteNames = serverNames(before);
+	const domain = (siteNames[0] ?? '').toLowerCase();
 	const run: Run = { ctx, rt, parts: [], verified: true, strategy: 'already' };
 
 	// Which www work applies here.
 	let www: { domain: string; alias: string } | null = null;
 	let dns: WwwDns | null = null;
 	const alias = domain !== '' && !/[{$]/.test(domain) ? wwwAliasFor(domain) : null;
-	const multisite = (vals.get('MULTISITE') ?? 'no').trim().toLowerCase() === 'yes';
-	if (alias !== null && multisite) {
+	// What else decides BunkerWeb's settings: asked once, only when there is a www.
+	const src = alias !== null ? rt.edgeSettingsSource() : null;
+	// MULTISITE where BunkerWeb takes it from: its Compose service's own
+	// `environment:` entry wins over the file (v1.21.18 audit: one set there
+	// made the heal treat a multi-site BunkerWeb as a single site). A value
+	// Compose does not give is read from the running edge; unknown, nothing
+	// is changed.
+	let multisiteVal: string | null = vals.get('MULTISITE') ?? 'no';
+	if (src !== null && src.overrides.includes('MULTISITE')) {
+		const v = src.values?.get('MULTISITE');
+		multisiteVal = v !== undefined && !/\$/.test(v) ? v : (rt.liveEnv()?.get('MULTISITE') ?? null);
+	}
+	const multisite = multisiteVal !== null && multisiteVal.trim().toLowerCase() === 'yes';
+	if (alias !== null && multisiteVal === null) {
 		run.parts.push(
-			`BunkerWeb runs several sites here (MULTISITE=yes), so ${alias} was left as it is; to add it, put it in that site's SERVER_NAME and its certificate`
+			`BunkerWeb's Compose service sets MULTISITE itself and its value could not be read, so ${alias} was left as it is (whether BunkerWeb runs one site or several decides where www goes)`
+		);
+	} else if (alias !== null && multisite) {
+		run.parts.push(
+			`BunkerWeb runs several sites here (MULTISITE=yes${src?.overrides.includes('MULTISITE') ? ", set in its Compose service's environment" : ''}), so ${alias} was left as it is; to add it, put it in that site's SERVER_NAME and its certificate`
 		);
 	} else if (alias !== null) {
 		const stop = ctx.spinner(`Looking up where ${alias} points…`);
@@ -515,7 +752,6 @@ export async function healBunkerWebWww(ctx: HealCtx, rt: WwwRuntime): Promise<He
 	// else decides the edge's names (its Compose `environment:`, or it does not
 	// read this file), the file is not the place: said, nothing changed.
 	if (www !== null) {
-		const src = rt.edgeSettingsSource();
 		const over = src?.overrides.filter((k) => k === 'SERVER_NAME' || k === WWW_REDIRECT_KEY) ?? [];
 		if (src !== null && (!src.readsFile || over.length > 0)) {
 			run.verified = false;
@@ -530,50 +766,43 @@ export async function healBunkerWebWww(ctx: HealCtx, rt: WwwRuntime): Promise<He
 	}
 	const plan = planWwwEnv(before, www);
 	let loaded = true;
+	let recreated = false;
 	if (plan.changes.length > 0) {
 		const res = await applyEnv(run, envPath, before, plan, www);
 		if (res === null) return finish(run);
 		loaded = res === 'loaded';
-	} else if (www !== null && liveHasWww(rt, www) === false) {
-		// The file has www (a fresh install's, or an earlier run's) but the
-		// running containers were created before it: recreate them — once per
-		// file content (a recreate that did not give BunkerWeb www is not tried
-		// again until the file changes).
-		const marker = `${envPath}.www-recreated`;
-		if ((rt.readFile(marker) ?? '').trim() === textHash(before)) {
-			run.verified = false;
-			run.strategy = 'not-loaded';
-			run.parts.push(
-				`${envPath} names ${alias}, but BunkerWeb still runs without it after its services were recreated with this file; check what BunkerWeb's containers really read (\`docker inspect\` on its container), then ${recreateHow(rt, envPath)}`
-			);
-			return finish(run);
-		}
-		const res = rt.apply(`${www.alias} loaded from ${envPath}`, true);
-		loaded = res === 'loaded';
-		if (res === 'loaded' || res === 'refused') {
-			if (liveHasWww(rt, www) !== true) rt.writeFile(marker, `${textHash(before)}\n`, 0o600);
-		}
-		if (res === 'not-restarted' || res === 'no-time' || res === 'refused') {
-			run.verified = false;
-			run.strategy = 'not-loaded';
-			run.parts.push(
-				res === 'refused'
-					? `${envPath} names ${alias}, but BunkerWeb refused those settings when its services were recreated; it runs as before (without www)`
-					: res === 'no-time'
-						? `${envPath} names ${alias}, but BunkerWeb still runs without it; there was not enough time in this run to recreate its services: ${later(rt)}`
-						: `${envPath} names ${alias}, but BunkerWeb still runs without it (a container keeps the settings it was created with) and its services could not be recreated automatically; ${recreateHow(rt, envPath)}`
-			);
-			return finish(run);
-		}
-		run.strategy = 'loaded';
+		recreated = true;
 	}
-	if (www !== null) checkRedirect(run, www, plan.changes.length === 0, loaded);
+	// The file has www (a fresh install's, an earlier run's, or this run's):
+	// is it what BunkerWeb really serves? (Not while it is still loading.)
+	if (www !== null && loaded) {
+		const served = servedWww(rt, www);
+		// Not served — or the rule is not, and the containers were created
+		// without it (a recreate gives them the file's).
+		if (
+			served !== null &&
+			(!served.name || (served.ruleFiles.length === 0 && liveHasWww(rt, www) === false))
+		) {
+			const now = rt.readFile(envPath) ?? plan.text;
+			const res = bringWwwLive(run, envPath, now, www, served, recreated);
+			if (res === null) return finish(run);
+			loaded = res === 'loaded';
+		}
+	}
+	const redirectOk =
+		www !== null ? checkRedirect(run, www, plan.changes.length === 0, loaded) : true;
 
-	// 3. The certificate.
+	// 3. The certificate — only once www itself works: Let's Encrypt fetches its
+	// check through it, and the next upgrade adds www to the certificate by
+	// itself once it does.
 	const certName = certNameOf(
 		envValues(rt.readFile(envPath) ?? before).get('CUSTOM_SSL_CERT') ?? ''
 	);
-	if (www !== null) await certWithWww(run, www, certName, vals);
+	if (www !== null && redirectOk) await certWithWww(run, www, certName, vals);
+	else if (www !== null && certName !== null && !(rt.certNames(certName) ?? []).includes(www.alias))
+		run.parts.push(
+			`https://${www.alias} is not secure yet: the next upgrade adds it to the certificate by itself once ${www.alias} works`
+		);
 	// Only with no www record at all: a www that points elsewhere may be a
 	// proxy that hands Let's Encrypt's check on to this server.
 	else if (alias !== null && dns !== null && dns.kind === 'none')
@@ -595,6 +824,147 @@ function finish(run: Run): HealResult {
 		verified: run.verified,
 		detail: `www: ${run.parts.join('; ')}.`
 	};
+}
+
+/** The marker of an automatic attempt already made for one version of the
+ *  settings file: "v2 <sha256>" and, on the next line, what was found then
+ *  (said again on every later run instead of trying the same thing). */
+const MARKER_VERSION = 'v2';
+
+/**
+ * The settings file names www, but the nginx BunkerWeb runs does not serve it.
+ * One automatic attempt per version of the file:
+ *  - its containers were created with www, and BunkerWeb's site list lacks it:
+ *    BunkerWeb (1.5 and 1.6, single site) serves exactly the names in its site list
+ *    (Database.get_non_default_settings rebuilds SERVER_NAME from bw_services)
+ *    and only ever puts the FIRST name of SERVER_NAME there (save_config), so
+ *    www is dropped however often it is recreated (morphit.io, v1.21.17). The
+ *    missing names join the list as the scheduler's own (sqlite only, after a
+ *    copy of the database; the domain stays first), and the scheduler is
+ *    restarted so it generates its config again;
+ *  - otherwise its services are recreated (they read the file again).
+ * Then nginx is read again. When www is still not served, the real cause is
+ * named in one sentence with the one manual step that changes something (or
+ * what to send for a look), kept in the marker and said again on later runs.
+ * The ApplyResult, or null when the heal stops here.
+ */
+function bringWwwLive(
+	run: Run,
+	envPath: string,
+	before: string,
+	www: { domain: string; alias: string },
+	served: Served,
+	/** This run has just recreated BunkerWeb's services with this file. */
+	recreated = false
+): ApplyResult | null {
+	const { rt } = run;
+	const fail = (strategy: string, part: string): null => {
+		run.verified = false;
+		run.strategy = strategy;
+		run.parts.push(part);
+		return null;
+	};
+	const wanted = serverNames(before).map((n) => n.toLowerCase());
+	const lookLogs = needsLook(`sudo docker logs --tail 50 ${names(rt).scheduler}`);
+	const containersHave = liveHasWww(rt, www) === true;
+	const sites = served.from === 'nginx' ? (rt.siteList?.() ?? null) : null;
+	// BunkerWeb's containers have www and nginx does not serve it, and its site
+	// list is not in a sqlite file this upgrade edits: recreating its services
+	// cannot change the list (v1.21.18 audit, M4: they were recreated — the
+	// site down meanwhile — and the run ended with a sentence that blamed
+	// nginx). Said plainly, with the one step that adds it; nothing restarted.
+	if (containersHave && sites !== null && sites.db !== 'sqlite')
+		return fail(
+			'left-alone',
+			sites.db === 'other'
+				? `BunkerWeb serves only the names in its own site list, and keeps that list in a database server (its DATABASE_URI is not a sqlite file), which this upgrade does not edit, so ${www.alias} was not added and BunkerWeb was not restarted. To add it: in that database's bw_services table, add a row for ${www.alias} like the row for ${www.domain} (method "scheduler", is_draft 0), then on this server: sudo docker restart ${names(rt).scheduler}`
+				: `BunkerWeb serves only the names in its own site list, and its database file was not found in its scheduler (where its DATABASE_URI points), so ${www.alias} was not added and BunkerWeb was not restarted; ${lookLogs}`
+		);
+	const marker = `${envPath}.www-recreated`;
+	const [head = '', ...rest] = (rt.readFile(marker) ?? '').split('\n');
+	if (head.trim() === `${MARKER_VERSION} ${textHash(before)}`) {
+		const said = rest.join(' ').trim();
+		return fail(
+			'not-loaded',
+			said !== ''
+				? said
+				: `${envPath} names ${www.alias}, but BunkerWeb still runs without it after its services were recreated with this file; ${needsLook(`sudo docker logs --tail 50 ${names(rt).scheduler}`)}`
+		);
+	}
+	const missing = (l: SiteList | null): string[] =>
+		l === null ? [] : wanted.filter((n) => !l.ids.includes(n));
+	let fixed: string | null = null;
+	let res: ApplyResult;
+	if (
+		containersHave &&
+		sites !== null &&
+		sites.ids[0] === www.domain &&
+		missing(sites).length > 0
+	) {
+		const add = missing(sites);
+		const kept = `BunkerWeb kept only ${sites.ids.join(' ')} as this site's name (it serves the names in its own site list, and puts only the first name of SERVER_NAME there)`;
+		if (rt.addSiteNames === undefined)
+			return fail(
+				'left-alone',
+				`${kept}; ${add.join(' and ')} could not be added there from here; ${lookLogs}`
+			);
+		if (applyWaitMs(rt.timeLeftMs()) === null)
+			return fail(
+				'no-time',
+				`${kept}; there was not enough time in this run to add ${add.join(' and ')}: ${later(rt)}`
+			);
+		const done = rt.addSiteNames(add, www.domain);
+		if (done === null)
+			return fail(
+				'left-alone',
+				`${kept}; ${add.join(' and ')} could not be added to its site list from here; ${lookLogs}`
+			);
+		fixed = `${kept}; added ${add.join(' and ')} to its site list (the database as it was is kept in BunkerWeb's scheduler at ${done.backup})`;
+		res = rt.apply(`${add.join(' and ')} added to BunkerWeb's site list`, false);
+	} else if (recreated) {
+		// Just recreated with this file in this run: doing it again changes
+		// nothing; what it left is judged below.
+		res = 'loaded';
+	} else {
+		// The containers lack it (or the site list could not be read): recreating
+		// BunkerWeb's services makes them read the file again.
+		res = rt.apply(`${www.alias} loaded from ${envPath}`, true);
+	}
+	if (res === 'no-time')
+		return fail(
+			'not-loaded',
+			`${envPath} names ${www.alias}, but BunkerWeb still runs without it; there was not enough time in this run to recreate its services: ${later(rt)}`
+		);
+	if (res === 'not-restarted')
+		return fail(
+			'not-loaded',
+			fixed !== null
+				? `${fixed}, but BunkerWeb's scheduler could not be restarted to use it; on this server run: sudo docker restart ${names(rt).scheduler}`
+				: `${envPath} names ${www.alias}, but BunkerWeb still runs without it (a container keeps the settings it was created with) and its services could not be recreated automatically; ${recreateHow(rt, envPath)}`
+		);
+	if (fixed !== null) run.parts.push(fixed);
+	if (res === 'pending') {
+		// Still rebuilding: nothing concluded, nothing marked (the next upgrade
+		// looks again); the redirect check says it could not be checked yet.
+		run.strategy = fixed !== null ? 'site-list' : 'loaded';
+		return 'pending';
+	}
+	const after = servedWww(rt, www);
+	if (res === 'loaded' && after !== null && after.name) {
+		run.strategy = fixed !== null ? 'site-list' : 'loaded';
+		return 'loaded';
+	}
+	// The automatic options for this version of the file are used up: the cause,
+	// in one sentence, with the one step that changes something.
+	let cause: string;
+	if (res === 'refused')
+		cause = `BunkerWeb's scheduler refused its new config with ${www.alias} ("${rt.lastRefusal?.() ?? 'its own config test failed'}"), so it still serves its previous config; correct what that names in ${envPath}, and the next upgrade tries again by itself`;
+	else if (liveHasWww(rt, www) === false)
+		cause = `BunkerWeb's services were recreated, but its containers still run without ${www.alias} in their settings, so they are not created from ${envPath} as it is now; ${needsLook(`sudo docker inspect ${names(rt).edge} --format '{{json .Config.Env}}'`)}`;
+	else
+		cause = `BunkerWeb runs with ${www.alias} in its settings${fixed !== null ? ' and in its site list' : ''} and its scheduler reported no error, but the nginx it runs still answers only for ${(after?.names ?? served.names).join(' ') || 'other names'}; ${lookLogs}`;
+	rt.writeFile(marker, `${MARKER_VERSION} ${textHash(before)}\n${cause}\n`, 0o600);
+	return fail('not-loaded', cause);
 }
 
 /** Write the new settings, have BunkerWeb load them; put the old file back
@@ -678,16 +1048,27 @@ function answers(code: string): boolean {
 	return /^[1-5]\d\d$/.test(code) && code !== '403' && !/^5/.test(code);
 }
 
-/** http://www.<domain>/<path> must answer 301 → https://<domain>/<path>. When
- *  BunkerWeb runs with the rule in its settings and still does not, the rule
- *  is written a second way (a scheduler config file). Nothing is restarted on
- *  no answer at all, or when the running BunkerWeb lacks www. */
+/** The control request (http://<domain>/<path>, the same way as the www
+ *  test) answered as a working site does: sent on to https://<domain>/<path>,
+ *  or a page. PURE. */
+function controlAnswers(r: RequestResult, domain: string, path: string): boolean {
+	if (r.exit !== 0) return false;
+	if (/^30[1278]$/.test(r.code)) return r.location.startsWith(`https://${domain}`);
+	return /^2\d\d$/.test(r.code) || (r.code === '404' && path !== '');
+}
+
+/** http://www.<domain>/<path> must answer 301 → https://<domain>/<path>. A
+ *  control request for the domain itself, the same way, tells "www is not
+ *  set up" apart from "this server cannot be checked from itself". When nginx
+ *  serves www but not the rule, the rule is written a second way (a scheduler
+ *  config file), once. When it works and the rule is there twice, Morphit's
+ *  second copy is taken out. True when www sends visitors on. */
 function checkRedirect(
 	run: Run,
 	www: { domain: string; alias: string },
 	quietWhenOk: boolean,
 	loaded: boolean
-): void {
+): boolean {
 	const { rt, ctx } = run;
 	const path = `/morphit-www-check/${randomBytes(4).toString('hex')}?a=1`;
 	const probe = (): RequestResult => rt.request(`http://${www.alias}${path}`);
@@ -705,24 +1086,43 @@ function checkRedirect(
 		run.parts.push(
 			`${www.alias} could not be checked on this server (BunkerWeb did not answer on this machine: curl ${r.exit}); nothing was restarted`
 		);
-		return;
+		return false;
+	}
+	if (!good(r)) {
+		const c = rt.request(`http://${www.domain}${path}`);
+		if (!controlAnswers(c, www.domain, path)) {
+			run.verified = false;
+			run.strategy = 'unchecked';
+			run.parts.push(
+				`${www.alias} could not be checked from this server: a test request for ${www.domain} itself, made the same way, was answered ${c.exit !== 0 ? 'with nothing' : c.code} instead of as usual, so nothing was changed`
+			);
+			return false;
+		}
 	}
 	if (!good(r) && !loaded) {
+		run.verified = false;
 		run.parts.push(
 			`BunkerWeb was still loading its new settings, so ${www.alias} could not be checked yet; the next \`sudo morphit-ops upgrade\` checks it`
 		);
-		return;
+		return false;
 	}
-	if (!good(r) && liveHasWww(rt, www) === false) {
+	let served = good(r) ? null : servedWww(rt, www);
+	if (!good(r) && served !== null && !served.name) {
+		// Only when BunkerWeb's settings were not read before this check (they
+		// are, whenever they can be): the next upgrade tries to load them.
 		run.verified = false;
 		run.parts.push(
-			`BunkerWeb still runs without ${www.alias} (it answered ${r.code}): its containers were not created with the settings that name it; ${recreateHow(rt, envPathOf(rt))}`
+			`BunkerWeb still runs without ${www.alias} (it answered ${r.code}); ${recreateHow(rt, envPathOf(rt))}`
 		);
-		return;
+		return false;
 	}
-	if (!good(r)) {
-		const w = rt.writeSchedulerConf('morphit-www-redirect', wwwRedirectConf(www.domain));
-		if (w === 'written') {
+	let wrote: 'written' | 'unchanged' | 'failed' | null = null;
+	// The second way only when the nginx BunkerWeb runs is SEEN to serve www
+	// without the rule (never on a guess: on morphit.io a guess from the
+	// container environment wrote a second copy of a rule that was loaded).
+	if (!good(r) && served !== null && served.from === 'nginx' && served.ruleFiles.length === 0) {
+		wrote = rt.writeSchedulerConf(WWW_RULE_FILE, wwwRedirectConf(www.domain));
+		if (wrote === 'written') {
 			rt.apply('the www rule written as a config file', false);
 			r = probe();
 			if (good(r)) run.strategy = 'applied-config-file';
@@ -733,12 +1133,57 @@ function checkRedirect(
 			run.parts.push(
 				`http://${www.alias} and https://${www.alias} now send every visitor to https://${www.domain} (checked on this server)`
 			);
-		return;
+		dedupeRule(run, www, probe, good);
+		return true;
 	}
 	run.verified = false;
+	served = servedWww(rt, www);
+	const where =
+		served?.from === 'nginx' && served.ruleFiles.length > 0
+			? 'although the nginx BunkerWeb runs serves that name and has the rule'
+			: wrote === 'unchanged' || wrote === 'written'
+				? `although the rule is in ${envPathOf(rt)} and in BunkerWeb's config folder`
+				: `although the rule is in ${envPathOf(rt)}`;
 	run.parts.push(
-		`${liveHasWww(rt, www) === true ? `BunkerWeb runs with ${www.alias} in its settings, but a` : 'A'} test request for ${www.alias} was answered ${r.code}${r.location ? ` → ${r.location}` : ''} instead of being sent on to https://${www.domain}; on this server run: ${COMMAND}`
+		`a test request on this server for ${www.alias} was answered ${r.code}${r.location ? ` → ${r.location}` : ''} instead of being sent on to https://${www.domain}, ${where}; ${needsLook(`sudo docker exec ${names(rt).edge} nginx -T | grep -n -e server_name -e '${www.alias}'`)}`
 	);
+	return false;
+}
+
+/** www works and BunkerWeb runs the rule from its settings AND from Morphit's
+ *  scheduler config file (the second way of an earlier upgrade): the file's
+ *  copy goes, BunkerWeb reloads, and www is checked again; only when BunkerWeb
+ *  refused its new config or www then fails is the file written back. Still
+ *  loading ('pending', a slow box) is neither: the copy stays out, and the
+ *  next upgrade sees what BunkerWeb runs (v1.21.18 audit, L2: writing it back
+ *  then repeated the whole round on every upgrade, a database copy and a moved
+ *  file each time). Nothing when there is no time for a reload. */
+function dedupeRule(
+	run: Run,
+	www: { domain: string; alias: string },
+	probe: () => RequestResult,
+	good: (r: RequestResult) => boolean
+): void {
+	const { rt } = run;
+	if (rt.removeRuleCopy === undefined) return;
+	const s = servedWww(rt, www);
+	if (s?.from !== 'nginx') return;
+	if (!s.ruleFiles.includes(WWW_RULE_FROM_ENV) || !s.ruleFiles.includes(WWW_RULE_FILE)) return;
+	if (applyWaitMs(rt.timeLeftMs()) === null) return;
+	if (!rt.removeRuleCopy()) return;
+	const res = rt.apply('the second copy of the www rule taken out', false);
+	const works = res === 'loaded' && good(probe());
+	if (works) {
+		run.strategy = run.strategy === 'already' ? 'deduplicated' : run.strategy;
+		run.parts.push(
+			`BunkerWeb had the www rule twice (from ${envPathOf(rt)} and from the config file ${WWW_RULE_FILE}.conf an earlier upgrade wrote); that file's copy was taken out`
+		);
+		return;
+	}
+	if (res !== 'refused' && res !== 'loaded') return;
+	// Put it back as it was: www worked with both.
+	if (rt.writeSchedulerConf(WWW_RULE_FILE, wwwRedirectConf(www.domain)) === 'written')
+		rt.apply('the config file copy of the www rule put back', false);
 }
 
 /** Is https://<name>/ served with a certificate this machine trusts? */
@@ -792,7 +1237,7 @@ async function certWithWww(
 			run.verified = false;
 			run.parts.push(
 				st === 'bad-cert'
-					? `the certificate names ${www.alias}, but https://${www.alias} did not pass a certificate check on this server; on this server run: ${COMMAND}`
+					? `the certificate names ${www.alias}, but https://${www.alias} did not pass a certificate check on this server after BunkerWeb reloaded it; ${recreateHow(rt, envPathOf(rt))}`
 					: `https://${www.alias} could not be checked on this server (no answer)`
 			);
 		}
@@ -887,7 +1332,7 @@ async function certWithWww(
 		run.verified = false;
 		run.parts.push(
 			st === 'bad-cert'
-				? `Let's Encrypt added ${www.alias} to the certificate, but BunkerWeb was still serving the old one when checked; it loads the new one within a day by itself, or on this server run: ${COMMAND}`
+				? `Let's Encrypt added ${www.alias} to the certificate, but BunkerWeb was still serving the old one when checked; it loads the new one within a day by itself`
 				: `Let's Encrypt added ${www.alias} to the certificate; https://${www.alias} could not be checked on this server (no answer)`
 		);
 	}

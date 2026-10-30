@@ -18,12 +18,15 @@
  * Flags:
  *   --dry-run        Print the exact op and exit.  No key, no network.
  *   --signer <acct>  Signing account (default: morphit).
- *   --node <url>     Use exactly this RPC node (default: the six clearnet
- *                    DEFAULT_BLURT_RPC_ENDPOINTS, health-ranked).
- *   --include-hidden Also rank the 14 hidden (.onion / .b32.i2p) nodes, through
- *                    this machine's Tor SOCKS / i2pd proxy (env
- *                    MORPHIT_INDEXER_TOR_SOCKS / MORPHIT_INDEXER_I2P_HTTP_PROXY).
- *                    Off by default: a laptop may run neither.
+ *   --node <url>     Use exactly this RPC node (default: every node this
+ *                    machine reaches, health-ranked: the six clearnet
+ *                    DEFAULT_BLURT_RPC_ENDPOINTS, the .onion ones when Tor runs
+ *                    here, the .b32.i2p ones when i2pd does — see
+ *                    scripts/lib/signOnceBroadcast.ts chooseNodes).
+ *   --no-hidden      Clearnet nodes only.
+ *   --include-hidden Ask all 14 hidden nodes whatever the Tor / I2P check
+ *                    found (env MORPHIT_INDEXER_TOR_SOCKS /
+ *                    MORPHIT_INDEXER_I2P_HTTP_PROXY).
  *
  * The transaction is SIGNED ONCE and that exact transaction is offered to the
  * ranked nodes in turn (v1.20.0, D12 — see scripts/lib/signOnceBroadcast.ts);
@@ -39,7 +42,12 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { PrivateKey } from '@beblurt/dblurt';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import { askHidden, broadcastCustomJsonOnce, candidateNodes } from './lib/signOnceBroadcast.ts';
+import {
+	askHidden,
+	broadcastCustomJsonOnce,
+	hiddenModeFromArgs,
+	prepareNodes
+} from './lib/signOnceBroadcast.ts';
 import { waitForHistoryListing } from './lib/historyListing.ts';
 
 import {
@@ -61,19 +69,18 @@ const argv = process.argv.slice(2);
 let dryRun = false;
 let signer = RELEASE_SIGNER_DEFAULT;
 let nodeOverride: string | null = null;
-let includeHidden = false;
+const hidden = hiddenModeFromArgs(argv);
 let fileArg: string | null = null;
 for (let i = 0; i < argv.length; i++) {
 	const a = argv[i];
 	if (a === '--dry-run') dryRun = true;
 	else if (a === '--signer') signer = argv[++i] ?? signer;
 	else if (a === '--node') nodeOverride = argv[++i] ?? null;
-	else if (a === '--include-hidden') includeHidden = true;
 	else if (!a.startsWith('--') && fileArg === null) fileArg = a;
 }
 if (!fileArg) {
 	die(
-		'usage: tsx release-broadcast.ts <release.json> [--dry-run] [--signer <acct>] [--node <url>] [--include-hidden]\n' +
+		'usage: tsx release-broadcast.ts <release.json> [--dry-run] [--signer <acct>] [--node <url>] [--no-hidden | --include-hidden]\n' +
 			'  build the file first:  tsx release-build-payload.ts > /tmp/morphit-release.json'
 	);
 }
@@ -95,9 +102,16 @@ try {
 } catch (e) {
 	die(errMsg(e));
 }
-const nodes = nodeOverride
+const nodesShown = nodeOverride
 	? [nodeOverride]
-	: [...DEFAULT_BLURT_RPC_ENDPOINTS, ...(includeHidden ? ['(+ 14 hidden nodes)'] : [])];
+	: [
+			...DEFAULT_BLURT_RPC_ENDPOINTS,
+			...(hidden === 'off'
+				? []
+				: hidden === 'on'
+					? ['(+ the 14 hidden nodes)']
+					: ['(+ the hidden nodes this machine reaches over Tor / I2P)'])
+		];
 
 process.stderr.write(
 	'\n┌─────────────────────────────────────────────────────────────┐\n' +
@@ -107,7 +121,7 @@ process.stderr.write(
 );
 process.stderr.write(`Operation id : ${op.id}\n`);
 process.stderr.write(`Signed by    : @${op.required_posting_auths[0]} (posting authority)\n`);
-process.stderr.write(`RPC node(s)  : ${nodes.join(', ')}\n`);
+process.stderr.write(`RPC node(s)  : ${nodesShown.join(', ')}\n`);
 process.stderr.write('\nExact json that will be signed + broadcast:\n');
 process.stderr.write(`${op.json}\n`);
 
@@ -175,9 +189,10 @@ async function main(): Promise<void> {
 		json: op.json
 	};
 
+	const nodes = await prepareNodes({ nodeOverride, hidden });
 	let res: Awaited<ReturnType<typeof broadcastCustomJsonOnce>>;
 	try {
-		res = await broadcastCustomJsonOnce(opData, priv, { nodeOverride, includeHidden });
+		res = await broadcastCustomJsonOnce(opData, priv, { nodes });
 	} catch (e) {
 		die(errMsg(e));
 	}
@@ -197,7 +212,7 @@ async function main(): Promise<void> {
 		`\nWaiting until the nodes list ${res.trxId} in @${op.required_posting_auths[0]}'s history (up to 5 minutes) …\n`
 	);
 	const listing = await waitForHistoryListing({
-		nodes: candidateNodes({ nodeOverride, includeHidden }),
+		nodes,
 		account: op.required_posting_auths[0],
 		trxId: res.trxId
 	});

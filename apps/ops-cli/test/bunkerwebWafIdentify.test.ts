@@ -241,7 +241,7 @@ const st = JSON.parse(fs.readFileSync(process.env.FAKE_DOCKER_STATE, 'utf8'));
 const urls = a.filter((x, i) => /^https?:/.test(x) && a[i - 1] === '/dev/null');
 if (urls.length === 3) { st.repeatProbes = (st.repeatProbes || 0) + 1; const t = process.env.FAKE_DOCKER_STATE + '.' + process.pid; fs.writeFileSync(t, JSON.stringify(st)); fs.renameSync(t, process.env.FAKE_DOCKER_STATE); if (st.repeatDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, st.repeatDelayMs); process.stdout.write(st.repeatAnswer ?? (st.limitLoaded ? '200 200 200 ' : '200 200 429 ')); process.exit(st.repeatAnswer === undefined ? 0 : 7); }
 if (a.some((x) => x.includes('/v1/chat-identity/zz.morphit-probe'))) { st.errorProbes = (st.errorProbes || 0) + 1; st.errorProbeArgs = a; const t = process.env.FAKE_DOCKER_STATE + '.' + process.pid; fs.writeFileSync(t, JSON.stringify(st)); fs.renameSync(t, process.env.FAKE_DOCKER_STATE); process.stdout.write(st.errorAnswer ?? (st.errorsPass ? '{"status":"error","code":"not_found","message":"no chat identity for @zz.morphit-probe"}\n404' : '<!doctype html> <html lang="en"> <head></head></html>\n404')); process.exit(st.errorAnswer === undefined ? 0 : 28); }
-process.stdout.write(a.join(' ').includes('v1/health') ? (process.env.FAKE_CURL_API || '200') : (process.env.FAKE_CURL_HOME || '200'));
+process.stdout.write(a.join(' ').includes('/relay/v1/health') ? (process.env.FAKE_CURL_RELAY || process.env.FAKE_CURL_API || '200') : a.join(' ').includes('v1/health') ? (process.env.FAKE_CURL_API || '200') : (process.env.FAKE_CURL_HOME || '200'));
 `
 	);
 	writeFileSync(
@@ -539,6 +539,39 @@ describe('healBunkerWebWaf keeps ONE copy of the API exemption and reads BunkerW
 		expect(r.out).toMatch(/built, tested and loaded its new settings/);
 		expect(r.out).toMatch(/exemption verified live .*stored 1 time/);
 		expect(r.st.restoredCount).toBe(0);
+	});
+
+	it('inside an upgrade: one plain ✓ line for what passed, the relay asked too (v1.21.17 audit, L1/L2)', async () => {
+		const box = morphitIo({ env: STEADY, ruleCopies: TWO(), edgeLive: CLEAN });
+		process.env.MORPHIT_UPGRADE_SUMMARIZES = '1';
+		try {
+			const r = await withCurl('200', '403', () =>
+				box.run(() => healBunkerWebWaf(box.envPath, box.build))
+			);
+			expect(r.out).toMatch(
+				/✓ Web firewall \(BunkerWeb\), checked on this server: the API and the relay get through/
+			);
+			expect(r.out).not.toMatch(
+				/stored \d+ time|ModSecurity blocks elsewhere|exemption verified live/
+			);
+		} finally {
+			delete process.env.MORPHIT_UPGRADE_SUMMARIZES;
+		}
+	});
+
+	it('the relay blocked while the API passes: said, and only the API is claimed', async () => {
+		const box = morphitIo({ env: STEADY, ruleCopies: TWO(), edgeLive: CLEAN });
+		process.env.FAKE_CURL_RELAY = '403';
+		try {
+			const r = await withCurl('200', '403', () =>
+				box.run(() => healBunkerWebWaf(box.envPath, box.build))
+			);
+			expect(r.out).toMatch(/blocks the relay \(\/relay\/: .*403\)/);
+			expect(r.out).toMatch(/checked on this server: the API gets through/);
+			expect(r.out).not.toMatch(/the API and the relay get through|\/v1\/ \+ \/relay\/ exemption/);
+		} finally {
+			delete process.env.FAKE_CURL_RELAY;
+		}
 	});
 
 	it('BunkerWeb refusing the rebuilt config is reported with nginx’s own reason — never as success', async () => {

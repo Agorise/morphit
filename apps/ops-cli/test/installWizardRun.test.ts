@@ -119,9 +119,13 @@ vi.mock('../src/init/systemCheck.ts', () => ({
 	}
 }));
 vi.mock('../src/init/saveSecrets.ts', () => ({
-	promptSaveSecrets: async (secrets: unknown) => void (S.secrets = secrets)
+	promptSaveSecrets: async (secrets: unknown) => {
+		S.secrets = secrets;
+		if (S.saveAbort instanceof Error) throw S.saveAbort;
+	}
 }));
-vi.mock('../src/init/assembleInstall.ts', () => ({
+vi.mock('../src/init/assembleInstall.ts', async (orig) => ({
+	...(await orig<typeof import('../src/init/assembleInstall.ts')>()),
 	assembleInstall: async () => {
 		S.order.push('playbook');
 		S.progressAtPlaybook = realFs.existsSync(
@@ -161,7 +165,25 @@ vi.mock('../src/commands/fastSync.ts', () => ({
 		S.duringFastSync?.();
 		return S.fastSyncRc;
 	},
-	stopIndexerAndWait: async () => true
+	stopIndexerAndWait: async () => true,
+	// The stop/restore/start itself is tested in installFastSync.test.ts; here
+	// only that the indexer is started again unless the restore must not be
+	// served.
+	withServicesStopped: async (
+		_running: unknown,
+		restore: () => number | Promise<number>
+	): Promise<number> => {
+		S.systemctl.push('stop morphit-indexer');
+		let rc = 1;
+		try {
+			rc = await restore();
+			return rc;
+		} finally {
+			if (rc !== 4) S.systemctl.push('start morphit-indexer');
+		}
+	},
+	serviceActive: () => false,
+	localIndexerHealthBase: () => 'http://127.0.0.1:8081'
 }));
 vi.mock('../src/init/installSummary.ts', async (orig) => {
 	const real = (await orig()) as typeof import('../src/init/installSummary.ts');
@@ -179,6 +201,7 @@ vi.mock('../src/init/installSummary.ts', async (orig) => {
 
 const { runAnsibleInstall } = await import('../src/init/runAnsibleInstall.ts');
 const { abortError } = await import('../src/init/prompt.ts');
+const { describeInstallError } = await import('../src/init/assembleInstall.ts');
 
 function rows(online: boolean): unknown[] {
 	return [
@@ -224,6 +247,7 @@ beforeEach(() => {
 	S.playbook = { ok: true };
 	S.sshAnswer = null;
 	S.secrets = null;
+	S.saveAbort = null;
 	S.rekeyOffered = false;
 	S.reviewShown = false;
 	S.progressAtPlaybook = null;
@@ -525,6 +549,24 @@ describe('Ctrl+C while the questions are asked', () => {
 		}
 		expect(S.order).not.toContain('playbook');
 		expect(process.listeners('SIGINT').filter((l) => !baseline.has(l))).toEqual([]);
+	});
+});
+
+describe('Ctrl+C at the password step, after the relay key was saved', () => {
+	it('says the key was saved and where — never "nothing was installed or changed"', async () => {
+		where('vps', false);
+		S.saveAbort = abortError();
+		const err = await install().then(
+			() => null,
+			(e: unknown) => e
+		);
+		expect(err).not.toBeNull();
+		expect(S.order).not.toContain('playbook');
+		const msg = describeInstallError(err, false, 'sudo morphit-ops install');
+		expect(msg).toContain(
+			`Your relay key was saved to ${join(ROOT, 'ks')}; nothing else was installed.`
+		);
+		expect(msg).not.toContain('Nothing was installed or changed');
 	});
 });
 

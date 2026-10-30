@@ -37,7 +37,9 @@ export interface Config {
 	 *  filter `accounts.creator = <relayAccount>` to count
 	 *  signups this operator's relay actually performed (vs.
 	 *  any other relay's signups also visible in the shared
-	 *  indexer DB). */
+	 *  indexer DB).  '' when this server's settings do not name
+	 *  it (see {@link relayAccountFromEnv}): there is no default,
+	 *  and main.ts stops `status` / `signups` with how to set it. */
 	readonly relayAccount: string;
 
 	/** This operator's fees-account name on Blurt.  Used as
@@ -147,10 +149,63 @@ function readDatabaseUrl(): string {
 	);
 }
 
+/** The relay account whose signups, balance and payouts this server's views
+ *  show, or null when this server's settings do not say (unknown). A guided
+ *  (Ansible) install writes it as MORPHIT_RELAY_ACCOUNT into morphit.env — the
+ *  same setting the relay itself runs with — so that is read when no
+ *  CLI-specific MORPHIT_OPS_RELAY_ACCOUNT is set. There is NO fallback: it
+ *  used to be "morphit-relay", morphit.io's relay, so a server whose setting
+ *  could not be read (no sudo: morphit.env is root-only) showed and graded
+ *  another operator's account (review v1.21.18). */
+export function relayAccountFromEnv(): string | null {
+	for (const key of [
+		'MORPHIT_OPS_RELAY_ACCOUNT',
+		'MORPHIT_RELAY_ACCOUNT',
+		'MORPHIT_INDEXER_RELAY_ACCOUNT'
+	]) {
+		const v = (process.env[key] ?? '').trim();
+		if (v !== '') return v;
+	}
+	return null;
+}
+
+/** The warning thresholds, from their env settings or the defaults. Needs no
+ *  database address, so a view that cannot load the full config (health, the
+ *  menu) grades exactly the way `status` does. */
+export function loadThresholds(): Config['thresholds'] {
+	return {
+		relayBalance: {
+			warn: envInt('MORPHIT_OPS_THRESHOLD_RELAY_BALANCE_WARN', 100),
+			error: envInt('MORPHIT_OPS_THRESHOLD_RELAY_BALANCE_ERROR', 30),
+			direction: 'lower_worse'
+		},
+		drainQueueAgeSec: {
+			warn: envInt('MORPHIT_OPS_THRESHOLD_DRAIN_AGE_WARN_SEC', 5 * 60),
+			error: envInt('MORPHIT_OPS_THRESHOLD_DRAIN_AGE_ERROR_SEC', 60 * 60),
+			direction: 'higher_worse'
+		},
+		indexerLagBlocks: {
+			warn: envInt('MORPHIT_OPS_THRESHOLD_INDEXER_LAG_WARN_BLOCKS', 5),
+			error: envInt('MORPHIT_OPS_THRESHOLD_INDEXER_LAG_ERROR_BLOCKS', 30),
+			direction: 'higher_worse'
+		},
+		signupsPercentOfCeiling: {
+			warn: envInt('MORPHIT_OPS_THRESHOLD_SIGNUPS_PCT_WARN', 80),
+			error: envInt('MORPHIT_OPS_THRESHOLD_SIGNUPS_PCT_ERROR', 100),
+			direction: 'higher_worse'
+		},
+		abuseAlerts24h: {
+			warn: envInt('MORPHIT_OPS_THRESHOLD_ABUSE_WARN', 10),
+			error: envInt('MORPHIT_OPS_THRESHOLD_ABUSE_ERROR', 50),
+			direction: 'higher_worse'
+		}
+	};
+}
+
 export function loadConfig(): Config {
 	return {
 		databaseUrl: readDatabaseUrl(),
-		relayAccount: envStr('MORPHIT_OPS_RELAY_ACCOUNT', 'morphit-relay'),
+		relayAccount: relayAccountFromEnv() ?? '',
 		feesAccount: envStr('MORPHIT_OPS_FEES_ACCOUNT', 'morphit-fees'),
 		// The federation-wide official account (release-signer). NOT the
 		// operator_blocks key — that's operatorAccount below.
@@ -165,33 +220,7 @@ export function loadConfig(): Config {
 			envStr('MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME', '') ||
 			envStr('MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME', 'morphit'),
 		signupDailyCeiling: envInt('MORPHIT_RELAY_SIGNUP_DAILY_CEILING', 50),
-		thresholds: {
-			relayBalance: {
-				warn: envInt('MORPHIT_OPS_THRESHOLD_RELAY_BALANCE_WARN', 100),
-				error: envInt('MORPHIT_OPS_THRESHOLD_RELAY_BALANCE_ERROR', 30),
-				direction: 'lower_worse'
-			},
-			drainQueueAgeSec: {
-				warn: envInt('MORPHIT_OPS_THRESHOLD_DRAIN_AGE_WARN_SEC', 5 * 60),
-				error: envInt('MORPHIT_OPS_THRESHOLD_DRAIN_AGE_ERROR_SEC', 60 * 60),
-				direction: 'higher_worse'
-			},
-			indexerLagBlocks: {
-				warn: envInt('MORPHIT_OPS_THRESHOLD_INDEXER_LAG_WARN_BLOCKS', 5),
-				error: envInt('MORPHIT_OPS_THRESHOLD_INDEXER_LAG_ERROR_BLOCKS', 30),
-				direction: 'higher_worse'
-			},
-			signupsPercentOfCeiling: {
-				warn: envInt('MORPHIT_OPS_THRESHOLD_SIGNUPS_PCT_WARN', 80),
-				error: envInt('MORPHIT_OPS_THRESHOLD_SIGNUPS_PCT_ERROR', 100),
-				direction: 'higher_worse'
-			},
-			abuseAlerts24h: {
-				warn: envInt('MORPHIT_OPS_THRESHOLD_ABUSE_WARN', 10),
-				error: envInt('MORPHIT_OPS_THRESHOLD_ABUSE_ERROR', 50),
-				direction: 'higher_worse'
-			}
-		},
+		thresholds: loadThresholds(),
 		color: readColorMode()
 	};
 }

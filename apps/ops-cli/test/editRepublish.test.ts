@@ -52,3 +52,32 @@ describe('edit, re-publishing the registration', () => {
 		expect(out).toContain('did not complete');
 	});
 });
+
+describe('edit, re-publish later: what it says about this instance', () => {
+	const later = async (o: { restarted: boolean; live?: boolean | null }): Promise<string> => {
+		const lines: string[] = [];
+		const r = await offerRepublish({
+			askYesNo: async () => false,
+			register: async () => 0,
+			print: (s) => void lines.push(s),
+			...o
+		});
+		expect(r).toBe('later');
+		return lines.join('\n');
+	};
+	it('"already uses the new value" only when the running service was checked to have it', async () => {
+		expect(await later({ restarted: true, live: true })).toMatch(
+			/already uses the new value — checked after\s+the restart above/
+		);
+	});
+	it('restarted, but the check found it down or on the old value: no such claim', async () => {
+		const out = await later({ restarted: true, live: false });
+		expect(out).not.toMatch(/already uses/);
+		expect(out).toMatch(/does not use the new value\s+yet — see what the check above found/);
+	});
+	it('restarted, nothing could be checked: says so, no claim', async () => {
+		const out = await later({ restarted: true, live: null });
+		expect(out).not.toMatch(/already uses/);
+		expect(out).toMatch(/could not be checked from here/);
+	});
+});

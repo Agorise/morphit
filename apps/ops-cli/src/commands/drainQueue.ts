@@ -9,6 +9,7 @@
  *                triage "what's been stuck a while?"  Examples:
  *                  --age=5m   show entries waiting >5 minutes
  *                  --age=1h   show entries waiting >1 hour
+ *   --offset=N   Skip the oldest N (the next page of a long list).
  *
  * Output:
  *   - default:   human-readable table, max 50 rows
@@ -19,6 +20,7 @@ import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt, error, blank } from '../render/term.ts';
+import { pageNote, parseOffset } from './signups.ts';
 
 interface DrainEntry {
 	readonly id: string;
@@ -36,6 +38,19 @@ interface DrainEntry {
 
 const HUMAN_LIMIT = 50;
 
+/** What a queue row pays for, in words (the indexer's reason codes:
+ *  handlers/feedback.ts, loyalty.ts, lowBalanceScanner.ts). Unknown codes are
+ *  shown as they are. PURE. */
+export function reasonText(reason: string): string {
+	if (reason === 'welcome_bonus_liquid') return 'welcome bonus (BLURT)';
+	if (reason === 'welcome_bonus_vesting') return 'welcome bonus (Blurt Power)';
+	if (reason === 'first_listing_fee_welcome') return 'first-listing welcome (Blurt Power)';
+	if (reason === 'dust_refill') return 'small top-up for fees';
+	const m = /^loyalty_milestone_(\d+)$/.exec(reason);
+	if (m) return `loyalty reward (${m[1]} BLURT milestone)`;
+	return reason;
+}
+
 export async function runDrainQueue(ctx: CommandCtx): Promise<number> {
 	let minAgeSec = 0;
 	if (ctx.flags.age !== undefined) {
@@ -48,26 +63,34 @@ export async function runDrainQueue(ctx: CommandCtx): Promise<number> {
 		minAgeSec = parsed;
 	}
 
+	const offset = parseOffset(ctx.flags.offset);
+	if (offset === null) {
+		error(`Invalid --offset value: ${ctx.flags.offset ?? ''}`);
+		info('It is how many to skip, a whole number: --offset=50');
+		return 1;
+	}
+
 	const cutoff = new Date(Date.now() - minAgeSec * 1000);
 	// Limit JSON output too — pulling 100k pending rows by accident
 	// would not be helpful.  10x the human limit gives plenty of
 	// room for jq pipelines without DoS-ing the operator's terminal.
 	const limit = ctx.flags.json === 'true' ? HUMAN_LIMIT * 10 : HUMAN_LIMIT;
 
-	const result = await whileReading(ctx, () =>
-		ctx.db.query<{
-			id: string;
-			recipient: string;
-			kind: 'liquid' | 'vesting' | 'delegation';
-			amount_blurt: string;
-			amount_bp: string | null;
-			reason: string;
-			created_at: Date;
-			last_error: string | null;
-			last_error_at: Date | null;
-			error_count: number;
-		}>(
-			`SELECT
+	const [result, countResult] = await whileReading(ctx, () =>
+		Promise.all([
+			ctx.db.query<{
+				id: string;
+				recipient: string;
+				kind: 'liquid' | 'vesting' | 'delegation';
+				amount_blurt: string;
+				amount_bp: string | null;
+				reason: string;
+				created_at: Date;
+				last_error: string | null;
+				last_error_at: Date | null;
+				error_count: number;
+			}>(
+				`SELECT
 		   id::text,
 		   recipient,
 		   kind,
@@ -81,18 +104,30 @@ export async function runDrainQueue(ctx: CommandCtx): Promise<number> {
 		 FROM relay_pending_transfers
 		 WHERE broadcast_at IS NULL
 		   AND created_at <= $1
-		 ORDER BY created_at ASC
-		 LIMIT $2`,
-			[cutoff, limit]
-		)
+		 ORDER BY created_at ASC, id ASC
+		 LIMIT $2 OFFSET $3`,
+				[cutoff, limit, offset]
+			),
+			ctx.db.query<{ count: string }>(
+				`SELECT COUNT(*)::text AS count
+		 FROM relay_pending_transfers
+		 WHERE broadcast_at IS NULL
+		   AND created_at <= $1`,
+				[cutoff]
+			)
+		])
 	);
 
 	const entries: DrainEntry[] = result.rows;
+	const total = parseInt(countResult.rows[0]?.count ?? String(entries.length), 10);
 
 	if (ctx.flags.json === 'true') {
 		emitJson({
 			min_age_sec: minAgeSec,
 			count: entries.length,
+			offset,
+			total,
+			truncated: total > offset + entries.length,
 			entries: entries.map((e) => ({
 				id: e.id,
 				recipient: e.recipient,
@@ -110,17 +145,30 @@ export async function runDrainQueue(ctx: CommandCtx): Promise<number> {
 		return 0;
 	}
 
-	renderHuman(entries, minAgeSec);
+	renderHuman(entries, minAgeSec, total, {
+		offset,
+		command: `sudo morphit-ops drain-queue${ctx.flags.age !== undefined ? ` --age=${ctx.flags.age.replace(/\s+/g, '')}` : ''}`
+	});
 	return 0;
 }
 
-function renderHuman(entries: readonly DrainEntry[], minAgeSec: number): void {
+function renderHuman(
+	entries: readonly DrainEntry[],
+	minAgeSec: number,
+	total: number,
+	page: { readonly offset: number; readonly command: string }
+): void {
 	const title =
 		minAgeSec > 0
 			? `Drain queue (entries older than ${formatDuration(minAgeSec)})`
 			: 'Drain queue (all pending)';
 	section(title);
 
+	if (entries.length === 0 && total > 0) {
+		const note = pageNote({ shown: 0, total, noun: 'payments', order: 'oldest first', ...page });
+		if (note !== null) info(fmt.dim(`  ${note}`));
+		return;
+	}
 	if (entries.length === 0) {
 		info(
 			minAgeSec > 0
@@ -164,16 +212,29 @@ function renderHuman(entries: readonly DrainEntry[], minAgeSec: number): void {
 				e.kind.padEnd(11) +
 				recipient.padEnd(20) +
 				amount.padEnd(12) +
-				e.reason +
+				reasonText(e.reason) +
 				errorTail
 		);
 	}
 
-	if (entries.length === HUMAN_LIMIT) {
+	const note = pageNote({
+		shown: entries.length,
+		total,
+		noun: 'payments',
+		order: 'oldest first',
+		...page
+	});
+	if (note !== null) {
+		blank();
+		info(fmt.dim(`  ${note}`));
+	}
+	if (entries.some((e) => e.error_count > 0)) {
 		blank();
 		info(
 			fmt.dim(
-				`  Showing first ${HUMAN_LIMIT}.  More entries may exist; ` + 'use --json for full export.'
+				'  A payment marked "errored" is retried by the relay a few times, then left for you. ' +
+					'Why it failed, on this server: sudo journalctl -u morphit-relay -e --no-pager. ' +
+					'What to do about each kind of failure: docs/OPERATIONS.md, "Responding to a relay-queue-stuck alert".'
 			)
 		);
 	}

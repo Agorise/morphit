@@ -22,7 +22,8 @@ import { spawnSync, spawn } from 'node:child_process';
 import { buildAnsiblePlaybookArgv, renderVarsFile } from './ansibleVars.ts';
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
 import { startDotsSpinner } from './spinner.ts';
-import { abortError } from './prompt.ts';
+import { abortError, stoppedLine } from './prompt.ts';
+import { loadInstallProgress } from './installProgress.ts';
 import { runSpinning, showOutput } from '../lib/spinRun.ts';
 
 /**
@@ -389,6 +390,64 @@ function errnoHint(code: string): string | undefined {
 }
 
 /**
+ * How far the guided install got, for the message when it stops:
+ *   none              nothing asked yet (its first question);
+ *   questions         its setup questions (answers saved as they are given);
+ *   configured        "Configure only": the setup wizard wrote this node's
+ *                     settings (morphit.config.env, morphit.env, the relay key);
+ *   keystore-written  the guided install saved the relay key in /etc/morphit
+ *                     (and sealed its passphrase), before the password step;
+ *   password-shown    a new database password was shown to be saved;
+ *   playbook          it began changing this server (installing Ansible, then
+ *                     the playbook).
+ * "Nothing was installed or changed" is said only while it is true (review,
+ * 2026-10-29: it was said after the settings or the relay key were written).
+ */
+export type InstallStage =
+	| 'none'
+	| 'questions'
+	| 'configured'
+	| 'keystore-written'
+	| 'password-shown'
+	| 'playbook';
+let installStage: InstallStage = 'none';
+/** What the install wrote before it began changing the server (see
+ *  {@link InstallStage}); kept through the later stages. */
+export interface InstallWritten {
+	/** "Configure only": the folder the setup wizard wrote its settings into. */
+	readonly settingsDir?: string;
+	/** The guided install: the relay key file, and the sealed passphrase if any. */
+	readonly keystore?: readonly string[];
+}
+let installWritten: InstallWritten = {};
+/** Record how far the install got (see {@link InstallStage}), and what it wrote. */
+export function noteInstallStage(stage: InstallStage, written?: InstallWritten): void {
+	installStage = stage;
+	if (stage === 'none') installWritten = {};
+	if (written !== undefined) installWritten = { ...installWritten, ...written };
+}
+
+/** What the install has changed so far, before the server itself is changed:
+ *  one true sentence. PURE given its arguments. */
+export function changedSoFar(w: InstallWritten = installWritten): string {
+	if (w.keystore !== undefined && w.keystore.length > 0) {
+		const [key, ...rest] = w.keystore;
+		return (
+			`Your relay key was saved to ${key}` +
+			(rest.length > 0 ? ` (and its unlock passphrase to ${rest.join(', ')})` : '') +
+			'; nothing else was installed.'
+		);
+	}
+	if (w.settingsDir !== undefined) {
+		return (
+			`The setup wizard saved your settings in ${w.settingsDir} (morphit.config.env, ` +
+			'morphit.env and your relay key); nothing else was installed.'
+		);
+	}
+	return 'Nothing was installed or changed on this server.';
+}
+
+/**
  * Turn ANY caught error into an actionable message — the GLOBAL backstop so no
  * failure anywhere in the wizard (including a bug in our own code) is ever a bare
  * stack trace or cryptic one-liner. Maps Node system errors + known Ansible
@@ -398,7 +457,12 @@ function errnoHint(code: string): string | undefined {
 export function describeInstallError(
 	err: unknown,
 	logExists = false,
-	restartCommand = 'sudo morphit-ops install'
+	restartCommand = 'sudo morphit-ops install',
+	where: {
+		readonly stage?: InstallStage;
+		readonly answersSaved?: boolean;
+		readonly written?: InstallWritten;
+	} = {}
 ): string {
 	const msg = err instanceof Error ? err.message : String(err);
 	const code =
@@ -410,15 +474,43 @@ export function describeInstallError(
 	// support address and no way back in).
 	const name = err instanceof Error ? err.name : '';
 	if (name === 'AbortError' || code === 'ABORT_ERR') {
-		return [
-			'Stopped \u2014 you pressed Ctrl+C.',
-			"Nothing is left half-installed that a re-run can't recover.",
-			again,
-			'\nIt offers to reuse the answers you already gave, and asks again only for',
-			'what is never saved to disk (your relay account\u2019s active key, the alerts',
-			'step, a home dynamic-DNS URL). If it shows you a database password, it is a',
-			'NEW one: save that one (the earlier one is no longer used).'
-		].join('\n');
+		// Only what applies to how far it got (review, 2026-10-29: a closed input
+		// at the first question read "you pressed Ctrl+C", then saved answers
+		// and a NEW database password, although nothing had been asked).
+		const stage = where.stage ?? installStage;
+		const written = where.written ?? installWritten;
+		const saved =
+			where.answersSaved ??
+			(() => {
+				try {
+					return loadInstallProgress() !== null;
+				} catch {
+					return false;
+				}
+			})();
+		// Ctrl+C, the input ending, or no answer in time on an open pipe — each
+		// said as what it was (prompt.ts).
+		const out = [stoppedLine(err)];
+		if (stage === 'playbook') {
+			out.push("Nothing is left half-installed that a re-run can't recover.");
+		} else {
+			out.push(changedSoFar(written));
+		}
+		out.push(again);
+		if (saved) {
+			out.push(
+				'\nIt offers to reuse the answers you already gave, and asks again only for',
+				'what is never saved to disk (your relay account\u2019s active key, the alerts',
+				'step, a home dynamic-DNS URL).'
+			);
+		}
+		if (stage === 'password-shown' || stage === 'playbook') {
+			out.push(
+				'The next run makes a NEW database password: save that one (the one shown',
+				'this time is no longer used).'
+			);
+		}
+		return out.join('\n');
 	}
 	const hint = errnoHint(code) ?? FAILURE_HINTS.find((h) => h.re.test(msg))?.hint;
 	const out: string[] = ['The install hit an unexpected problem and stopped.'];
@@ -765,10 +857,13 @@ export async function assembleInstall(
 	try {
 		// 2. Make the operator save the generated secrets BEFORE we install —
 		//    if anything later fails, they already have their copy.
+		if (plan.secretsToSave.length > 0) noteInstallStage('password-shown');
 		await promptSave(plan.secretsToSave);
 		checkStop();
 
-		// 3. Ansible must be runnable.
+		// 3. Ansible must be runnable. From here this server is being changed
+		//    (Ansible may be installed with apt, then the playbook runs).
+		noteInstallStage('playbook');
 		const haveAnsible = await ensureAnsible(dirname(plan.playbookPath));
 		checkStop();
 		if (!haveAnsible) {

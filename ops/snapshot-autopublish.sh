@@ -164,11 +164,30 @@ if [ -r "$KEY_FILE" ]; then
 		|| die "auto-broadcast failed"
 	log "✓ anchored on-chain"
 else
-	log "snapshot pinned but NOT anchored (anchoring is done on the laptop)."
-	log "  broadcast manually from your laptop (prompts for the @morphit POSTING WIF):"
-	log "    scp -O root@<this-node>:$PAYLOAD .      (-O: hardened boxes turn SFTP off)"
-	log "    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts $(basename "$PAYLOAD")            (dry run: shows the op)"
-	log "    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts $(basename "$PAYLOAD") --broadcast"
+	# The exact commands, with this server's own name (v1.21.17 audit, M4): the
+	# "<this-node>" placeholder left the operator to fill it in, and the step
+	# went undone for weeks while every new node fast-synced from an old one.
+	_HOST=""
+	for _f in "$REPO/morphit.config.env" "$REPO/morphit.env" "$INDEXER_ENV"; do
+		[ -r "$_f" ] || continue
+		for _k in MORPHIT_INSTANCE_ORIGIN MORPHIT_INDEXER_PUBLIC_ORIGIN; do
+			[ -n "$_HOST" ] && break
+			_HOST="$(sed -n "s/^[[:space:]]*$_k=//p" "$_f" | tail -1 | tr -d "\"' \t\r" | sed -E 's#^[A-Za-z]+://([^/:]+).*#\1#')"
+		done
+	done
+	[ -n "$_HOST" ] || _HOST="$(hostname)"
+	_FILE="$(basename "$PAYLOAD")"
+	log "pinned on this server, but NOT anchored on chain yet. Anchoring is a step on your laptop: it needs the @morphit posting key, which never lives on a server."
+	log "  Until it is anchored, new nodes fast-sync from the last anchored snapshot, and the part they must catch up grows every day."
+	log "  On your laptop, in your Morphit folder:"
+	log "    scp -O root@$_HOST:$PAYLOAD ."
+	log "    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts $_FILE --dry-run"
+	log "    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts $_FILE --broadcast"
+	log "  (the first shows what would be sent and sends nothing; the second asks for the @morphit posting key and anchors it.)"
+	log "  If this server refuses root logins (PermitRootLogin no), copy the payload in two steps instead of the first command above:"
+	log "    on this server:  sudo install -m 0644 $PAYLOAD /tmp/"
+	log "    on your laptop:  scp -O <your-login>@$_HOST:/tmp/$_FILE ."
+	log "  (the payload holds only public data: the snapshot's CID, hash and block.)"
 fi
 
 # ── 5. ROTATE ──────────────────────────────────────────────────────

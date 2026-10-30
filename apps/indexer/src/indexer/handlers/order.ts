@@ -24,7 +24,7 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { listingFeeStatus, sumFeeTransfers } from '$indexer/fee';
-import { ownerRecipientsFor } from '$indexer/feeRecipients';
+import { ownerRecipientsAt } from '$indexer/feeRecipients';
 import { trackVerifiedBlurtFee } from '$indexer/loyalty';
 import { attributeBlurtFeeToOperator } from '$indexer/operatorEarnings';
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
@@ -32,6 +32,8 @@ import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { addressModePermlink, allocateBtcFeeAddress, btcPinAt } from '$indexer/fee/btcFeeAddressIndex';
 import { xmrBindingFor, xmrPrimaryAt, type XmrBinding } from '$indexer/fee/xmrBinding';
+import { externalFeeAmountOf, listingFeeInputsAt, treasuryPinAt } from '$indexer/fee/feeRulesAtBlock';
+import { consensusV2Active } from '$indexer/consensusActivation';
 import { xmrIntegratedAddress } from '@morphit/release-schema';
 import { logger } from '$log';
 import { ASSET_TICKERS_SET, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
@@ -627,14 +629,22 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// (the default-on rule for new assets).  If the operator has listed this asset in
 	// MORPHIT_INDEXER_DISABLED_ASSETS, refuse the order even if
 	// it would otherwise validate.  Other instances may still
-	// accept this asset's orders — federation visibility is
-	// preserved because all orders flow through the chain — but
-	// THIS instance refuses to write the row to its own DB.
+	// accept this asset's orders (all orders flow through the
+	// chain), but THIS instance refuses to write the row to its
+	// own DB, so it never shows it.
 	//
 	// We compare uppercase so 'usdt' / 'USDT' / 'Usdt' all match
 	// the config value 'USDT'.  The config-loader normalizes to
 	// uppercase at boot.
-	if (ctx.config.disabledAssets.includes(v.asset)) {
+	//
+	// Only for an order in a block before the consensus activation time.
+	// From it the order is applied on every instance whatever this one
+	// switched off — refusing it here made this node's orders table, and
+	// every verdict that reads it (a trade completed, a review, a feature
+	// bid), differ from its peers'. This instance only HIDES what it switched
+	// off, on its own read side (api/localHiding.ts).
+	const nodeGates = !consensusV2Active(ctx.blockTime);
+	if (nodeGates && ctx.config.disabledAssets.includes(v.asset)) {
 		return { ok: false, reason: 'asset_disabled_on_instance' };
 	}
 
@@ -647,6 +657,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// from the picker + orderbook filter.  Compare lowercase; the
 	// config-loader normalizes disabledPaymentMethods to lowercase.
 	if (
+		nodeGates &&
 		ctx.config.disabledPaymentMethods.length > 0 &&
 		v.payment_methods.every((m) =>
 			ctx.config.disabledPaymentMethods.includes(m.toLowerCase())
@@ -944,24 +955,39 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			}
 		}
 
-		const verifier = v.fee_method === 'btc' ? ctx.feeVerifiers.btc : ctx.feeVerifiers.xmr;
-		if (verifier === undefined) {
-			// Operator hasn't configured this fee method. Reject
-			// cleanly so the frontend can surface a message telling
-			// the user to pay in BLURT (or pick a different node).
-			return { ok: false, reason: `fee_method_not_configured_${v.fee_method}` };
-		}
-
-		const expectedAmount: number | bigint | undefined =
-			v.fee_method === 'btc' ? ctx.feeAmounts.btcSatoshis : ctx.feeAmounts.xmrPiconero;
-		if (expectedAmount === undefined || expectedAmount === 0 || expectedAmount === 0n) {
-			// A verifier exists but the fee amount is unset. Same
-			// operator-misconfiguration case; reject clearly.
-			// ctx.feeAmounts uses the same chain-pin >
-			// env precedence as feeVerifiers, so this also catches
-			// the case where the verifier was rebuilt for a
-			// chain-pinned address but the env-only amount was 0.
-			return { ok: false, reason: `fee_amount_not_configured_${v.fee_method}` };
+		if (nodeGates) {
+			// Before the consensus activation time: this node's own view.
+			const verifier = v.fee_method === 'btc' ? ctx.feeVerifiers.btc : ctx.feeVerifiers.xmr;
+			if (verifier === undefined) {
+				// Operator hasn't configured this fee method. Reject
+				// cleanly so the frontend can surface a message telling
+				// the user to pay in BLURT (or pick a different node).
+				return { ok: false, reason: `fee_method_not_configured_${v.fee_method}` };
+			}
+			const expectedAmount: number | bigint | undefined =
+				v.fee_method === 'btc' ? ctx.feeAmounts.btcSatoshis : ctx.feeAmounts.xmrPiconero;
+			if (expectedAmount === undefined || expectedAmount === 0 || expectedAmount === 0n) {
+				// A verifier exists but the fee amount is unset. Same
+				// operator-misconfiguration case; reject clearly.
+				// ctx.feeAmounts uses the same chain-pin >
+				// env precedence as feeVerifiers, so this also catches
+				// the case where the verifier was rebuilt for a
+				// chain-pinned address but the env-only amount was 0.
+				return { ok: false, reason: `fee_amount_not_configured_${v.fee_method}` };
+			}
+		} else if (
+			externalFeeAmountOf(await treasuryPinAt(client, ctx.blockNum), v.fee_method) === undefined
+		) {
+			// From the consensus activation time an order paying in BTC / XMR is
+			// accepted on every instance, whether or not THIS one checks that
+			// method, and judged by the amount a release pinned in force AT ITS
+			// BLOCK — the amount the re-check job asks the explorers for
+			// (fee/feeRulesAtBlock.ts). With none pinned there is no amount (or
+			// address) every instance knows, so it is refused everywhere alike.
+			// An instance that does not check the method leaves the order
+			// `pending_external` (the re-check skips it; it never shows on the
+			// book there) — see fee/externalFeeRecheck.ts.
+			return { ok: false, reason: `fee_amount_not_pinned_${v.fee_method}` };
 		}
 
 		// Finding O19 — fee-reuse check.  An external_tx_id can pay
@@ -1153,11 +1179,14 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// order's `operator_tag` registered on chain before this block —
 	// $indexer/feeRecipients has the rule. Before,
 	// every such order was `underpaid`, i.e. hidden, on every other instance.
-	const ownerRecipients = await ownerRecipientsFor(
+	// From the consensus activation time the owner leg may go to any
+	// operator's fees account registered on chain before this block, and no
+	// longer to this node's own setting (ownerRecipientsAt).
+	const ownerRecipients = await ownerRecipientsAt(
 		client,
 		ctx.config.feeRecipient,
 		ctx.payload,
-		ctx.blockNum
+		ctx
 	);
 	const fee = sumFeeTransfers(
 		ctx.siblingOps,
@@ -1190,14 +1219,24 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// canonical USD target live, and can sit up to
 		// FEE_PRICE_TOLERANCE below the pinned base between re-pins — so
 		// the acceptance floor relaxes by FEE_PRICE_TOLERANCE.  Still a
-		// floor (overpayment fine); an operator who set feeTolerance
-		// wider than 15% keeps it.  Bounded + not fork-controllable.
-		const feeBaseBlurt = ctx.feeAmounts.blurtBase ?? ctx.config.feeBaseBlurt;
+		// floor (overpayment fine); before the activation time an operator
+		// who set feeTolerance wider than 15% keeps it.  Bounded + not
+		// fork-controllable.
+		//
+		// From the consensus activation time (by this block's time) the base is
+		// the one pinned in force AT THIS BLOCK — not the poller's current pin,
+		// which on a rebuild or catch-up after a re-pin is a later one — with the
+		// federation's shipped default when none is pinned, and the tolerance is
+		// the federation's, not this node's setting (fee/feeRulesAtBlock.ts).
+		const { baseBlurt, feeTolerance } = await listingFeeInputsAt(client, ctx, () => ({
+			baseBlurt: ctx.feeAmounts.blurtBase ?? ctx.config.feeBaseBlurt,
+			feeTolerance: ctx.config.feeTolerance
+		}));
 		// Floor = base × tier × (1 − max(feeTolerance, FEE_PRICE_TOLERANCE)) in
 		// exact milliBLURT (G8), then the canonical treasury's 10 % leg must be
 		// there — the canonical cut is not optional. Shared with the G1
 		// re-verification (blurtFeeReverify.ts) so both give one verdict.
-		feeStatus = listingFeeStatus(fee, nth, feeBaseBlurt, ctx.config.feeTolerance);
+		feeStatus = listingFeeStatus(fee, nth, baseBlurt, feeTolerance);
 	}
 
 	// INSERT ... ON CONFLICT DO NOTHING — idempotent. If the row

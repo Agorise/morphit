@@ -60,7 +60,16 @@ describe('systemctl at the terminal shows the turning spinner', () => {
 	it('mcp: enabling the MCP server', async () => {
 		const code = await runMcp(
 			{ flags: {}, positional: [], colorEnabled: false },
-			{ readState: () => 'inactive', confirm: async () => true }
+			{
+				// Stopped, then (after the enable) running and answering — runMcp
+				// now checks that before saying it is up.
+				readState: (() => {
+					let n = 0;
+					return () => (n++ === 0 ? 'inactive' : 'active');
+				})(),
+				probeHealth: async () => true,
+				confirm: async () => true
+			}
 		);
 		const screen = term!.out();
 		expect(code).toBe(0);

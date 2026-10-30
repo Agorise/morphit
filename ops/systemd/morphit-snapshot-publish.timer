@@ -1,7 +1,10 @@
 [Unit]
 Description=Morphit indexer-snapshot auto-publish timer — daily
 Documentation=https://git.agorise.net/agorise/morphit
-Requires=morphit-snapshot-publish.service
+# No Requires= on the service: systemd starts every Requires= unit as soon as
+# this timer starts (systemd.unit(5)), so each boot and each `enable --now` /
+# restart of the timer published at once. Unit= below is all a timer needs
+# (systemd.timer(5)).
 
 [Timer]
 # Daily. A ~1-day-old snapshot leaves a fresh node only ~28,800 blocks of tail

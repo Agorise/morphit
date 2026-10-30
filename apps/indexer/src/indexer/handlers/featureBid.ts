@@ -16,6 +16,15 @@
  *   bidder (they chose to pay more) but still just buys
  *   hours_requested hours of featured-slot time.
  *
+ *   FROM CONSENSUS_V2_ACTIVATION_TIME (by the bid's block time) the price is
+ *   the federation's (FEDERATION_FEATURE_FEE_BLURT_PER_HOUR, the shipped
+ *   default 50 BLURT/hour; MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR then
+ *   only prices bids in older blocks), the tolerance is the federation's,
+ *   and the 90 % leg may go to any operator's fees account registered on
+ *   chain before the bid's block (feeRecipients.chainFeePayeesAt). Each of
+ *   these was this node's own setting, so featured_slot_bids — chain-derived
+ *   state — differed between nodes. What follows is the rule for older bids.
+ *
  *   DELIBERATELY PER-INSTANCE (v1.20.0, G1). Listing fees and stranger
  *   fees now verify across instances (the owner leg may go to the fee
  *   account of the instance the user posted through). Feature bids do
@@ -71,6 +80,8 @@ import { logger } from '$log';
 import { localize, normalizeLocale } from '$indexer/pushLocalize';
 import { inSavepoint, isUniqueViolation } from '$indexer/savepoint';
 import { consensusV2Active } from '$indexer/consensusActivation';
+import { featureFeeBlurtPerHourAt, feeToleranceAt } from '$indexer/fee/feeRulesAtBlock';
+import { chainFeePayeesAt } from '$indexer/feeRecipients';
 
 const log = logger('featureBid');
 
@@ -204,10 +215,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// transfer when the recipient is canonical). Sum both legs, then confirm
 	// the canonical treasury received its cut.
 
+	// Before the consensus activation time only THIS node's own recipient
+	// counts (the per-instance rule in the module doc). From it the payee set
+	// is chain data — every operator's fees account registered before this
+	// block (feeRecipients.chainFeePayeesAt) — so every node stores the same
+	// featured_slot_bids rows.
 	const fee = sumFeeTransfers(
 		ctx.siblingOps,
 		ctx.signer,
-		ctx.config.feeRecipient,
+		consensusV2Active(ctx.blockTime)
+			? await chainFeePayeesAt(client, ctx.blockNum)
+			: ctx.config.feeRecipient,
 		CANONICAL_TREASURY.blurt,
 		`morphit-feature:${permlink}`
 	);
@@ -215,11 +233,16 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'fee_missing' };
 	}
 
-	const expectedBlurt = ctx.config.featureFeeBlurtPerHour * hours;
-	// Same tolerance as order-handler listing fees — fractional
-	// BLURT arithmetic on the client side can produce ±0.001
-	// rounding, so we accept within config.feeTolerance.
-	const minAcceptable = expectedBlurt * (1 - ctx.config.feeTolerance);
+	// The price per hour: this node's setting before the consensus activation
+	// time, the federation's shipped default from it (feeRulesAtBlock).
+	const expectedBlurt =
+		featureFeeBlurtPerHourAt(ctx.blockTime, ctx.config.featureFeeBlurtPerHour) * hours;
+	// Fractional BLURT arithmetic on the client side can produce ±0.001
+	// rounding, so we accept within the tolerance band: this node's
+	// config.feeTolerance for a bid in a block before the consensus
+	// activation time, the federation's constant from it (feeRulesAtBlock).
+	const minAcceptable =
+		expectedBlurt * (1 - feeToleranceAt(ctx.blockTime, ctx.config.feeTolerance));
 	// G8 — exact milliBLURT comparison (no float-sum boundary error).
 	if (!meetsMinimumMilli(fee.totalMilli, minAcceptable)) {
 		return { ok: false, reason: 'fee_underpaid' };

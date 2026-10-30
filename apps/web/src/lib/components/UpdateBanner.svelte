@@ -2,8 +2,8 @@
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import { runningVersion } from '$stores/release';
-	import { deployedVersionDiffers } from '$lib/updates/deployedVersion';
-	import { readServedVersion, SERVED_VERSION_REUSE_MS } from '$lib/updates/servedVersion';
+	import { createDeployedVersionPoll, deployedVersionDiffers } from '$lib/updates/deployedVersion';
+	import { readDeployedVersionQuick } from '$lib/updates/servedVersion';
 
 	// v1.20.2 (PageSpeed) — run `fn` once the page has finished loading and the
 	// browser is idle, so the ~80 KB verify.json poll never competes with the
@@ -38,6 +38,9 @@
 			if (timerId !== null) clearTimeout(timerId);
 		};
 	}
+
+	/** v1.21.18 — how often an open page asks which build is deployed. */
+	const UPDATE_POLL_INTERVAL_MS = 30_000;
 
 	let waitingWorker = $state<ServiceWorker | null>(null);
 	// Set true the instant "Load it now" is clicked, so the snackbar vanishes
@@ -175,22 +178,19 @@
 		// the update, even when reg.update() found no new worker because a proxy
 		// served /service-worker.js stale (the desktop case). Runs on mount, on
 		// tab-foreground, on reconnect, and on a slow timer.
-		// v1.20.2 — never closer than MIN_POLL_GAP_MS: verify.json is the full
-		// hash manifest (~80 KB on the wire), and a phone that switches apps
-		// every few seconds used to download it on every switch.
-		const MIN_POLL_GAP_MS = 2 * 60_000;
-		let lastPollAt = -Infinity;
-		// v1.20.3 — through the shared reader: the page-load poll (`reuse`) takes
-		// the answer the release check just read (one ~80 KB download, not two);
-		// every later poll asks afresh.
-		async function pollDeployedVersion(reuse = false): Promise<void> {
-			if (cancelled) return;
-			const now = Date.now();
-			if (now - lastPollAt < MIN_POLL_GAP_MS) return;
-			lastPollAt = now;
-			try {
-				const deployed = await readServedVersion({ maxAgeMs: reuse ? SERVED_VERSION_REUSE_MS : 0 });
-				if (cancelled || deployed === null) return;
+		// v1.21.18 — the poll reads /version.json, the build's version alone (a
+		// few bytes; verify.json, ~80 KB, only when the server has no such
+		// file). Asked every half minute while the page is in view, and at once
+		// when it comes back into view or online; never closer than
+		// MIN_POLL_GAP_MS. (It used to read verify.json at most every five
+		// minutes, so an open tab learned of an upgrade late, or not before the
+		// visitor left.)
+		// One poll at a time (v1.21.18 review): over Tor a read can outlast the
+		// half minute between polls; a poll asked meanwhile joins it.
+		const MIN_POLL_GAP_MS = 10_000;
+		const pollDeployedVersion = createDeployedVersionPoll({
+			read: readDeployedVersionQuick,
+			onVersion: async (deployed) => {
 				deployedVersion = deployed;
 				if (deployedVersionDiffers(deployed, runningVersion)) {
 					newerVersionDeployed = true;
@@ -198,10 +198,11 @@
 					const reg = await navigator.serviceWorker.getRegistration();
 					await reg?.update().catch(() => {});
 				}
-			} catch {
-				// Network/timeout/parse error — stay silent.
-			}
-		}
+			},
+			now: () => Date.now(),
+			minGapMs: MIN_POLL_GAP_MS,
+			cancelled: () => cancelled
+		});
 
 		try {
 			const remembered = window.sessionStorage.getItem(DISMISS_KEY);
@@ -222,14 +223,16 @@
 		}
 
 		void check();
-		const cancelFirstPoll = whenPageSettled(() => void pollDeployedVersion(true));
+		const cancelFirstPoll = whenPageSettled(() => void pollDeployedVersion());
 		// Re-check periodically while the tab is open.
 		const timer = setInterval(check, 60_000);
-		// Slower deployed-version poll: verify.json carries the full asset-hash
-		// manifest and is large, but it's the only path that notices a deploy on
-		// a long-open desktop tab whose SW byte-diff a proxy hid.
-		const POLL_INTERVAL_MS = 5 * 60_000;
-		const pollTimer = setInterval(() => void pollDeployedVersion(), POLL_INTERVAL_MS);
+		// The deployed-version poll: every half minute while the page is in
+		// view (a hidden tab is asked when it comes back, below). It is the path
+		// that notices a deploy whatever the service worker saw.
+		const POLL_INTERVAL_MS = UPDATE_POLL_INTERVAL_MS;
+		const pollTimer = setInterval(() => {
+			if (document.visibilityState === 'visible') void pollDeployedVersion();
+		}, POLL_INTERVAL_MS);
 
 		// Mobile browsers throttle background timers, so re-check the instant the
 		// tab is foregrounded and when connectivity returns.

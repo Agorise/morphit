@@ -135,18 +135,20 @@ describe('fast-sync and Ctrl+C (plain node)', () => {
 		expect(r.out).toContain('left STOPPED');
 	}, 60_000);
 
-	it('tells the restore when its caller starts the indexer, and only then', async () => {
-		const r0 = repo(
-			'echo "CALLER_STARTS=${MORPHIT_SNAPSHOT_CALLER_STARTS_INDEXER:-}" > "$PWD/env.txt"; exit 0'
-		);
-		await run(bundle(r0, r0, true), null);
+	it('"start the indexer" is said once, by fast-sync, and only when its caller does not start it', async () => {
+		// The restore is always told its caller says what comes next: it used to
+		// print the line too, so a node whose indexer was not running read it
+		// twice (review, 2026-10-29).
+		const script =
+			'echo "CALLER_STARTS=${MORPHIT_SNAPSHOT_CALLER_STARTS_INDEXER:-}" > "$PWD/env.txt"; exit 0';
+		const r0 = repo(script);
+		const started = await run(bundle(r0, r0, true), null);
 		expect(readFileSync(join(r0, 'env.txt'), 'utf8').trim()).toBe('CALLER_STARTS=1');
-		const r1 = repo(
-			'echo "CALLER_STARTS=${MORPHIT_SNAPSHOT_CALLER_STARTS_INDEXER:-}" > "$PWD/env.txt"; exit 0'
-		);
+		expect(started.out).not.toContain('sudo systemctl start morphit-indexer');
+		const r1 = repo(script);
 		const r = await run(bundle(r1, r1, false), null);
-		expect(readFileSync(join(r1, 'env.txt'), 'utf8').trim()).toBe('CALLER_STARTS=');
-		expect(r.out).toContain('sudo systemctl start morphit-indexer');
+		expect(readFileSync(join(r1, 'env.txt'), 'utf8').trim()).toBe('CALLER_STARTS=1');
+		expect(r.out.split('sudo systemctl start morphit-indexer').length - 1).toBe(1);
 	}, 60_000);
 
 	it('passes exit 4 (database replaced, not usable) on, and says not to start the indexer', async () => {

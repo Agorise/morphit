@@ -29,14 +29,29 @@
  *      and says to check the chain before running again — it never re-signs
  *      on its own, because the lost answer may have been an acceptance.
  *
- * HIDDEN NODES ARE OPT-IN (`--include-hidden`). These scripts run on the maintainer's
- * LAPTOP (Block 4 of the release ceremony), which may have no Tor or i2pd; a
- * default that waited on fourteen hidden nodes would slow every run for
- * nothing. With the flag, the node's Tor SOCKS / i2pd proxy settings are read
- * from the usual env names and hidden nodes are ranked alongside clearnet.
- * `--node <url>` still pins exactly one node (backward compatible).
+ * HIDDEN NODES ARE USED WHEREVER THIS MACHINE CAN REACH THEM (v1.21.18). The
+ * federation's RPC nodes are the six clearnet ones and fourteen hidden ones
+ * (.onion and .b32.i2p). These scripts run on the maintainer's LAPTOP (Block 4
+ * of the release ceremony), which may or may not run Tor or i2pd. So before
+ * ranking, the laptop is checked for a Tor SOCKS proxy (MORPHIT_INDEXER_TOR_SOCKS,
+ * else 127.0.0.1:9050, else Tor Browser's 127.0.0.1:9150 — it must answer as
+ * Tor does: the SOCKS5 greeting, then a CONNECT to an .onion name with "general
+ * failure" / "host unreachable") and an i2pd HTTP proxy
+ * (MORPHIT_INDEXER_I2P_HTTP_PROXY, else 127.0.0.1:4444 — it must answer with
+ * i2pd's own proxy page). `--node <an .onion>` and `--include-hidden` use the
+ * Tor found the same way. On a hidden-only Morphit server (its indexer.env has
+ * no clearnet RPC nodes, or its Kubo routes nothing) no clearnet node is ever
+ * asked. The .onion nodes join the ranking when
+ * Tor is there, the .b32.i2p ones when i2pd is, and the run says which. Every
+ * candidate is asked in parallel; once a node has answered, the rest get a few
+ * more seconds and any still silent are tried last — a dead hidden node never
+ * holds the ranking for its full timeout. `--no-hidden` keeps to clearnet;
+ * `--include-hidden` asks every hidden node whatever the check found;
+ * `--node <url>` still pins exactly one node.
  */
-import { readFileSync, statSync } from 'node:fs';
+import { connect } from 'node:net';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { Client, cryptoUtils, type PrivateKey } from '@beblurt/dblurt';
 import {
@@ -67,6 +82,346 @@ export function candidateNodes(opts: {
 }
 
 const isHidden = (url: string): boolean => /\.(onion|i2p)(:\d+)?(\/|$)/i.test(url);
+const isOnion = (url: string): boolean => /\.onion(:\d+)?(\/|$)/i.test(url);
+const isI2p = (url: string): boolean => /\.i2p(:\d+)?(\/|$)/i.test(url);
+
+/** Which hidden nodes to ask: as far as this machine reaches them, none, or all. */
+export type HiddenMode = 'auto' | 'off' | 'on';
+
+/** The proxies found on this machine (`host:port`), or null. */
+export interface LocalProxies {
+	readonly tor: string | null;
+	readonly i2p: string | null;
+}
+
+function splitHostPort(hp: string): { host: string; port: number } | null {
+	const m = /^\[?([^\]]+?)\]?:(\d{1,5})$/.exec(hp.trim());
+	if (!m) return null;
+	const port = Number(m[2]);
+	return port > 0 && port < 65536 ? { host: m[1]!, port } : null;
+}
+
+/** A name Tor refuses on its own, with no network: a v3 .onion whose version
+ *  byte and checksum are wrong (it never reaches a descriptor lookup). */
+const PROBE_ONION = `${'a'.repeat(56)}.onion`;
+
+/** Send an HTTP request and hand the reply (up to `max` bytes) to `answers`:
+ *  once the whole reply is in (the other side closed, its Content-Length
+ *  arrived, or its page's </title> did), else at `timeoutMs`. A reply that
+ *  does not start like HTTP is refused at once. */
+function httpReplyOf(
+	hp: string,
+	request: string,
+	answers: (all: string) => boolean,
+	timeoutMs: number,
+	max = 8_192
+): Promise<boolean> {
+	const a = splitHostPort(hp);
+	if (a === null) return Promise.resolve(false);
+	return new Promise((resolve) => {
+		let done = false;
+		let got = '';
+		const finish = (v: boolean): void => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			sock.destroy();
+			resolve(v);
+		};
+		const complete = (): boolean => {
+			if (got.length >= max || /<\/title>/i.test(got)) return true;
+			const end = got.indexOf('\r\n\r\n');
+			if (end < 0) return false;
+			const len = /\r\ncontent-length:[ \t]*(\d+)/i.exec(got.slice(0, end))?.[1];
+			return len !== undefined && got.length - (end + 4) >= Number(len);
+		};
+		const sock = connect(a.port, a.host);
+		const timer = setTimeout(() => finish(got !== '' && answers(got)), timeoutMs);
+		sock.once('connect', () => sock.write(request));
+		sock.on('data', (d: Buffer) => {
+			got = (got + d.toString('latin1')).slice(0, max);
+			if (got.length >= 5 && !got.startsWith('HTTP/')) return finish(false);
+			if (complete()) finish(answers(got));
+		});
+		sock.once('error', () => finish(false));
+		sock.once('close', () => finish(got !== '' && answers(got)));
+	});
+}
+
+/**
+ * A Tor SOCKS proxy: it answers the SOCKS5 greeting (05 00), and then a CONNECT
+ * to a .onion NAME (address type 3) with "general failure" (01) or "host
+ * unreachable" (04) — what Tor answers for an onion it cannot reach (and with
+ * ExtendedErrors, F0–F7). The name used is one Tor refuses locally, so nothing
+ * is looked up. Any other SOCKS5 proxy (an ssh -D tunnel, a generic proxy)
+ * that refuses the address type (08) or closes is not Tor: .onion nodes are
+ * not sent through it (v1.21.18 review: the greeting alone was trusted).
+ */
+export function answersSocks5(hp: string, timeoutMs = 3_000): Promise<boolean> {
+	const a = splitHostPort(hp);
+	if (a === null) return Promise.resolve(false);
+	return new Promise((resolve) => {
+		let done = false;
+		let stage: 'greeting' | 'connect' = 'greeting';
+		let got = Buffer.alloc(0);
+		const finish = (v: boolean): void => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			sock.destroy();
+			resolve(v);
+		};
+		const sock = connect(a.port, a.host);
+		const timer = setTimeout(() => finish(false), timeoutMs);
+		sock.once('connect', () => sock.write(Buffer.from([5, 1, 0])));
+		sock.on('data', (d: Buffer) => {
+			got = Buffer.concat([got, d]);
+			if (got.length < 2) return;
+			if (stage === 'greeting') {
+				if (got[0] !== 5 || got[1] !== 0) return finish(false);
+				stage = 'connect';
+				got = Buffer.alloc(0);
+				const name = Buffer.from(PROBE_ONION, 'latin1');
+				sock.write(
+					Buffer.concat([Buffer.from([5, 1, 0, 3, name.length]), name, Buffer.from([0, 80])])
+				);
+				return;
+			}
+			const rep = got[1]!;
+			finish(got[0] === 5 && (rep === 1 || rep === 4 || (rep >= 0xf0 && rep <= 0xf7)));
+		});
+		sock.once('error', () => finish(false));
+		sock.once('close', () => finish(false));
+	});
+}
+
+/** i2pd's HTTP proxy: a request for an .i2p name it does not know is answered
+ *  with its own page ("<title>I2Pd HTTP proxy</title>"). Any other HTTP server
+ *  on the port (v1.21.18 review: every "HTTP/" reply counted) is not i2pd. */
+export function answersHttpProxy(hp: string, timeoutMs = 3_000): Promise<boolean> {
+	return httpReplyOf(
+		hp,
+		'GET http://morphit-probe.i2p/ HTTP/1.1\r\nHost: morphit-probe.i2p\r\nConnection: close\r\n\r\n',
+		(t) => t.startsWith('HTTP/') && /<title>\s*I2Pd HTTP proxy\s*<\/title>/i.test(t),
+		timeoutMs
+	);
+}
+
+/** Where to look for this machine's proxies. A configured address is the only
+ *  one tried; otherwise Tor's two usual ports (the tor service, Tor Browser). */
+export function proxyCandidates(env: NodeJS.ProcessEnv): {
+	readonly tor: readonly string[];
+	readonly i2p: readonly string[];
+} {
+	const tor = env.MORPHIT_INDEXER_TOR_SOCKS?.trim();
+	const i2p = env.MORPHIT_INDEXER_I2P_HTTP_PROXY?.trim();
+	return {
+		tor: tor ? [tor] : ['127.0.0.1:9050', '127.0.0.1:9150'],
+		i2p: i2p ? [i2p] : ['127.0.0.1:4444']
+	};
+}
+
+/** The first candidate of each kind that really is that proxy. */
+export async function detectLocalProxies(
+	env: NodeJS.ProcessEnv = process.env,
+	check: {
+		readonly socks?: (hp: string) => Promise<boolean>;
+		readonly http?: (hp: string) => Promise<boolean>;
+	} = {}
+): Promise<LocalProxies> {
+	const socks = check.socks ?? answersSocks5;
+	const http = check.http ?? answersHttpProxy;
+	const c = proxyCandidates(env);
+	const first = async (
+		list: readonly string[],
+		ok: (hp: string) => Promise<boolean>
+	): Promise<string | null> => {
+		const res = await Promise.all(list.map((hp) => ok(hp).catch(() => false)));
+		const i = res.indexOf(true);
+		return i < 0 ? null : list[i]!;
+	};
+	const [tor, i2p] = await Promise.all([first(c.tor, socks), first(c.i2p, http)]);
+	return { tor, i2p };
+}
+
+/**
+ * Is the box this runs on a hidden-only Morphit node? 'yes' when its
+ * indexer.env sets an EMPTY clearnet RPC pool (`MORPHIT_INDEXER_RPC_ENDPOINTS=`,
+ * what the tor-only install writes) or its Kubo routes nothing
+ * (`Routing.Type` none); 'no' when indexer.env names clearnet nodes, or there
+ * is no Morphit config here at all (a laptop); 'unknown' when indexer.env is
+ * there but this user cannot read it and Kubo does not say. Reads files and
+ * asks the local `ipfs` only; never the network. MORPHIT_ENV_ROOT relocates
+ * the files (tests).
+ */
+export function hostHiddenOnly(
+	deps: {
+		readonly env?: NodeJS.ProcessEnv;
+		readonly readFile?: (path: string) => string;
+		readonly exists?: (path: string) => boolean;
+		readonly ipfsRoutingType?: () => string | null;
+	} = {}
+): 'yes' | 'no' | 'unknown' {
+	const env = deps.env ?? process.env;
+	const root = env.MORPHIT_ENV_ROOT ?? '';
+	const read = deps.readFile ?? ((p: string) => readFileSync(p, 'utf8'));
+	const exists = deps.exists ?? ((p: string) => existsSync(p));
+	const kubo = (): string | null => {
+		if (deps.ipfsRoutingType !== undefined) return deps.ipfsRoutingType();
+		const r = spawnSync('ipfs', ['config', 'Routing.Type'], {
+			encoding: 'utf8',
+			timeout: 5_000,
+			env: { ...process.env, IPFS_PATH: env.IPFS_PATH ?? '/var/lib/ipfs/.ipfs' }
+		});
+		return r.status === 0 && typeof r.stdout === 'string'
+			? r.stdout.trim().replace(/^"|"$/g, '')
+			: null;
+	};
+	let unreadable = false;
+	for (const f of [`${root}/etc/morphit/indexer.env`, `${root}/opt/morphit/indexer.env`]) {
+		if (!exists(f)) continue;
+		let text: string;
+		try {
+			text = read(f);
+		} catch {
+			unreadable = true;
+			continue;
+		}
+		let raw: string | undefined;
+		for (const m of text.matchAll(
+			/^[ \t]*(?:export[ \t]+)?MORPHIT_INDEXER_RPC_ENDPOINTS[ \t]*=(.*)$/gm
+		))
+			raw = m[1] ?? '';
+		if (raw === undefined) break; // not set: the indexer's shipped clearnet list
+		const v = raw
+			.replace(/\r$/, '')
+			.replace(/(^|[ \t])#.*$/, '')
+			.trim()
+			.replace(/^(["'])(.*)\1$/, '$2');
+		if (v.split(',').every((e) => e.trim() === '')) return 'yes';
+		return kubo() === 'none' ? 'yes' : 'no';
+	}
+	if (kubo() === 'none') return 'yes';
+	return unreadable ? 'unknown' : 'no';
+}
+
+/** The nodes a run asks, and what it says about the hidden ones. */
+export interface NodeChoice {
+	readonly nodes: readonly string[];
+	/** Lines for the operator: which hidden nodes are in, and why. */
+	readonly notes: readonly string[];
+	/** The proxies to route hidden nodes through (null: none needed). */
+	readonly proxies: { readonly torSocks: string; readonly i2pHttpProxy: string } | null;
+}
+
+/**
+ * Which nodes to ask. `--node` pins one; `off` keeps to clearnet; `on` asks
+ * every hidden node through the configured (or usual) proxies; `auto` (the
+ * default) adds the .onion nodes when Tor answers here and the .b32.i2p ones
+ * when i2pd does.
+ */
+export async function chooseNodes(
+	opts: { readonly nodeOverride: string | null; readonly hidden: HiddenMode },
+	deps: {
+		readonly env?: NodeJS.ProcessEnv;
+		readonly detect?: (env: NodeJS.ProcessEnv) => Promise<LocalProxies>;
+		/** This box is a hidden-only node (default: {@link hostHiddenOnly}). */
+		readonly hostHiddenOnly?: () => boolean;
+	} = {}
+): Promise<NodeChoice> {
+	const env = deps.env ?? process.env;
+	const c = proxyCandidates(env);
+	const onion = DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS.filter(isOnion);
+	const i2p = DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS.filter(isI2p);
+	const hiddenOnly = (deps.hostHiddenOnly ?? (() => hostHiddenOnly({ env }) === 'yes'))();
+	// The proxies this machine really has: the same look at Tor's two usual
+	// ports (the tor service, Tor Browser) for every mode that needs them.
+	const look = async (): Promise<LocalProxies> => {
+		try {
+			return await (deps.detect ?? ((e) => detectLocalProxies(e)))(env);
+		} catch {
+			return { tor: null, i2p: null };
+		}
+	};
+	if (opts.nodeOverride !== null && opts.nodeOverride !== '') {
+		const hidden = isHidden(opts.nodeOverride);
+		if (!hidden && hiddenOnly)
+			throw new Error(
+				`${opts.nodeOverride} is a clearnet node, and this server is hidden-only (its indexer.env has no clearnet RPC nodes): it is not asked. Name a .onion or .b32.i2p node.`
+			);
+		if (!hidden) return { nodes: [opts.nodeOverride], notes: [], proxies: null };
+		const found = await look();
+		const tor = found.tor ?? c.tor[0]!;
+		const i2pp = found.i2p ?? c.i2p[0]!;
+		const via = isOnion(opts.nodeOverride)
+			? found.tor !== null
+				? `through Tor at ${tor}`
+				: `through ${tor} (no Tor answered at ${c.tor.join(', ')}; tried anyway)`
+			: found.i2p !== null
+				? `through i2pd at ${i2pp}`
+				: `through ${i2pp} (no i2pd answered at ${c.i2p.join(', ')}; tried anyway)`;
+		return {
+			nodes: [opts.nodeOverride],
+			notes: [`${opts.nodeOverride} is asked ${via}.`],
+			proxies: { torSocks: tor, i2pHttpProxy: i2pp }
+		};
+	}
+	if (opts.hidden === 'off') {
+		if (hiddenOnly)
+			throw new Error(
+				'--no-hidden leaves only clearnet nodes, and this server is hidden-only (its indexer.env has no clearnet RPC nodes): nothing would be asked. Run it without --no-hidden.'
+			);
+		return {
+			nodes: [...DEFAULT_BLURT_RPC_ENDPOINTS],
+			notes: [`Hidden nodes: left out (--no-hidden).`],
+			proxies: null
+		};
+	}
+	const clearnet = hiddenOnly ? [] : [...DEFAULT_BLURT_RPC_ENDPOINTS];
+	const clearnetNote = hiddenOnly
+		? [
+				'This server is hidden-only (its indexer.env has no clearnet RPC nodes): no clearnet node is asked.'
+			]
+		: [];
+	if (opts.hidden === 'on') {
+		const found = await look();
+		const tor = found.tor ?? c.tor[0]!;
+		const i2pp = found.i2p ?? c.i2p[0]!;
+		return {
+			nodes: [...clearnet, ...DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS],
+			notes: [
+				...clearnetNote,
+				`Hidden nodes: all ${DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS.length} asked (--include-hidden), ` +
+					`.onion through ${tor}${found.tor === null ? ` (no Tor answered at ${c.tor.join(', ')})` : ''}, ` +
+					`.b32.i2p through ${i2pp}${found.i2p === null ? ` (no i2pd answered at ${c.i2p.join(', ')})` : ''}.`
+			],
+			proxies: { torSocks: tor, i2pHttpProxy: i2pp }
+		};
+	}
+	const found = await look();
+	const notes = [
+		...clearnetNote,
+		found.tor !== null
+			? `Tor on this machine (${found.tor}): the ${onion.length} .onion nodes are asked too.`
+			: `No Tor on this machine (looked at ${c.tor.join(', ')}): the ${onion.length} .onion nodes are left out. With Tor running (sudo apt install tor) they are asked too.`,
+		found.i2p !== null
+			? `I2P on this machine (${found.i2p}): the ${i2p.length} .b32.i2p nodes are asked too.`
+			: `No I2P on this machine (looked at ${c.i2p.join(', ')}): the ${i2p.length} .b32.i2p nodes are left out. With i2pd running (sudo apt install i2pd) they are asked too.`
+	];
+	const nodes = [
+		...clearnet,
+		...(found.tor !== null ? onion : []),
+		...(found.i2p !== null ? i2p : [])
+	];
+	return {
+		nodes,
+		notes,
+		proxies:
+			found.tor !== null || found.i2p !== null
+				? { torSocks: found.tor ?? '', i2pHttpProxy: found.i2p ?? '' }
+				: null
+	};
+}
 
 /** Ask one node for its head, bounded. */
 export async function probeNode(url: string, timeoutMs: number): Promise<NodeHealth> {
@@ -146,14 +501,58 @@ export async function rankNodes(
 	opts: {
 		readonly clearnetTimeoutMs?: number;
 		readonly hiddenTimeoutMs?: number;
+		/** Once a node has answered, how long the others still get (default:
+		 *  everyone gets their full timeout). A node still silent then is
+		 *  ranked last and still tried. */
+		readonly graceMs?: number;
 		readonly probe?: (url: string, timeoutMs: number) => Promise<NodeHealth>;
+		readonly now?: () => number;
 	} = {}
 ): Promise<NodeHealth[]> {
 	const probe = opts.probe ?? probeNode;
-	const all = await Promise.all(
-		urls.map((u) =>
-			probe(u, isHidden(u) ? (opts.hiddenTimeoutMs ?? 20_000) : (opts.clearnetTimeoutMs ?? 5_000))
-		)
+	const now = opts.now ?? Date.now;
+	const started = now();
+	const got: (NodeHealth | undefined)[] = new Array(urls.length);
+	await new Promise<void>((resolve) => {
+		let pending = urls.length;
+		let grace: ReturnType<typeof setTimeout> | null = null;
+		const done = (): void => {
+			if (grace !== null) clearTimeout(grace);
+			resolve();
+		};
+		if (pending === 0) return done();
+		urls.forEach((u, i) => {
+			const limit = isHidden(u)
+				? (opts.hiddenTimeoutMs ?? 20_000)
+				: (opts.clearnetTimeoutMs ?? 5_000);
+			void probe(u, limit)
+				.catch(
+					(e: unknown): NodeHealth => ({
+						url: u,
+						ok: false,
+						ms: now() - started,
+						headBlock: null,
+						reason: errMsg(e)
+					})
+				)
+				.then((h) => {
+					got[i] = h;
+					pending--;
+					if (pending === 0) return done();
+					if (h.ok && grace === null && opts.graceMs !== undefined)
+						grace = setTimeout(done, opts.graceMs);
+				});
+		});
+	});
+	const all: NodeHealth[] = urls.map(
+		(u, i) =>
+			got[i] ?? {
+				url: u,
+				ok: false,
+				ms: now() - started,
+				headBlock: null,
+				reason: `no answer in ${Math.round((now() - started) / 1000)} s (tried last)`
+			}
 	);
 	const best = Math.max(0, ...all.map((h) => h.headBlock ?? 0));
 	const tier = (h: NodeHealth): number => (!h.ok ? 2 : best - (h.headBlock ?? 0) <= 3 ? 0 : 1);
@@ -544,11 +943,73 @@ export async function signOnceAndBroadcast(
 	);
 }
 
-/** When hidden nodes are included, route .onion / .i2p through the local proxies. */
-export async function enableHiddenTransport(): Promise<void> {
+/** Route .onion / .i2p through the local proxies (clearnet stays direct). */
+export async function enableHiddenTransport(proxies?: {
+	readonly torSocks: string;
+	readonly i2pHttpProxy: string;
+}): Promise<void> {
 	const { hiddenServiceProxyConfigFromEnv } = await import('@morphit/hidden-transport');
 	const { installHiddenServiceDispatcher } = await import('@morphit/hidden-transport/router');
-	installHiddenServiceDispatcher(hiddenServiceProxyConfigFromEnv(process.env), 'allow');
+	const fromEnv = hiddenServiceProxyConfigFromEnv(process.env);
+	installHiddenServiceDispatcher(proxies ? { ...fromEnv, ...proxies } : fromEnv, 'allow');
+}
+
+/**
+ * Choose the nodes for a run (chooseNodes), say which hidden ones are in, and
+ * route those through this machine's proxies. Every laptop broadcast script
+ * calls this once and hands the result to the broadcast and to the history
+ * wait.
+ */
+export async function prepareNodes(
+	opts: { readonly nodeOverride: string | null; readonly hidden: HiddenMode },
+	err: NodeJS.WritableStream = process.stderr,
+	deps: {
+		readonly choose?: typeof chooseNodes;
+		readonly enable?: typeof enableHiddenTransport;
+		/** How the run ends when no node may be asked (default process.exit). */
+		readonly exit?: (code: number) => never;
+	} = {}
+): Promise<readonly string[]> {
+	if (opts.hidden === 'auto' && opts.nodeOverride === null)
+		err.write('\nLooking for Tor and I2P on this machine …\n');
+	let choice: NodeChoice;
+	try {
+		choice = await (deps.choose ?? chooseNodes)(opts);
+	} catch (e) {
+		// A choice that would break this box's own rules (a clearnet node on a
+		// hidden-only server): said plainly, nothing asked, no stack trace.
+		err.write(`\n✗ ${errMsg(e)}\n  Nothing was signed or sent.\n`);
+		return (deps.exit ?? ((c: number) => process.exit(c)))(1);
+	}
+	for (const n of choice.notes) err.write(`  ${n}\n`);
+	if (choice.proxies !== null) await (deps.enable ?? enableHiddenTransport)(choice.proxies);
+	return choice.nodes;
+}
+
+/** `--no-hidden` / `--include-hidden` / neither (auto), from argv. */
+export function hiddenModeFromArgs(argv: readonly string[]): HiddenMode {
+	if (argv.includes('--no-hidden')) return 'off';
+	if (argv.includes('--include-hidden')) return 'on';
+	return 'auto';
+}
+
+/** A braille spinner on a terminal while `work` runs; nothing otherwise. */
+async function withSpinner<T>(label: string, work: Promise<T>): Promise<T> {
+	const out = process.stderr;
+	if (!out.isTTY) {
+		out.write(`${label}\n`);
+		return work;
+	}
+	const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+	let i = 0;
+	out.write(`${frames[0]} ${label}`);
+	const t = setInterval(() => out.write(`\r${frames[++i % frames.length]} ${label}`), 100);
+	try {
+		return await work;
+	} finally {
+		clearInterval(t);
+		out.write(`\r\x1b[2K${label}\n`);
+	}
 }
 
 function errMsg(e: unknown): string {
@@ -564,15 +1025,19 @@ function errMsg(e: unknown): string {
 export async function broadcastCustomJsonOnce(
 	opData: { required_auths: string[]; required_posting_auths: string[]; id: string; json: string },
 	key: PrivateKey,
-	opts: { readonly nodeOverride: string | null; readonly includeHidden: boolean }
+	opts: { readonly nodes: readonly string[] }
 ): Promise<BroadcastResult> {
-	const nodes = candidateNodes(opts);
-	if (opts.includeHidden || nodes.some(isHidden)) await enableHiddenTransport();
-	process.stderr.write(
-		`\nChecking ${nodes.length} RPC node${nodes.length === 1 ? '' : 's'} ` +
-			`(up to ${nodes.some(isHidden) ? '20' : '5'} s) …\n`
-	);
-	const ranked = await rankNodes(nodes);
+	const nodes = opts.nodes;
+	const hidden = nodes.filter(isHidden).length;
+	const label =
+		`Checking ${nodes.length} RPC node${nodes.length === 1 ? '' : 's'}` +
+		(hidden > 0 ? ` (${nodes.length - hidden} clearnet, ${hidden} hidden)` : '') +
+		` …`;
+	process.stderr.write('\n');
+	// Hidden nodes answer over Tor/I2P in seconds; a dead one would hold the
+	// ranking for its full 20 s. Once one node has answered, the others get
+	// eight more seconds.
+	const ranked = await withSpinner(label, rankNodes(nodes, hidden > 0 ? { graceMs: 8_000 } : {}));
 	for (const h of ranked) {
 		process.stderr.write(
 			`  ${h.ok ? '✓' : '✗'} ${h.url}  ${h.ok ? `block ${h.headBlock}, ${h.ms} ms` : (h.reason ?? 'no answer')}\n`

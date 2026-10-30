@@ -17,8 +17,9 @@
  *        node_modules/.bin/tsx apps/indexer/scripts/rpc-directory-broadcast.ts dir.json
  *
  * Flags: --dry-run (print the op, no key, no network), --signer <acct>,
- *        --node <rpc-url> (use exactly this node), --include-hidden (also rank the
- *        hidden nodes through this machine's Tor/i2pd; off by default).
+ *        --node <rpc-url> (use exactly this node). The hidden nodes this machine
+ *        reaches over Tor / i2pd are ranked with the clearnet ones;
+ *        --no-hidden keeps to clearnet, --include-hidden asks them all.
  * Signed ONCE and offered to health-ranked nodes in turn (v1.20.0, D12).
  *
  * The JSON file (when given) is the payload: { "v": 1, "ts": "<ISO>",
@@ -28,7 +29,12 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { PrivateKey } from '@beblurt/dblurt';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import { askHidden, broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+import {
+	askHidden,
+	broadcastCustomJsonOnce,
+	hiddenModeFromArgs,
+	prepareNodes
+} from './lib/signOnceBroadcast.ts';
 
 import {
 	buildRpcDirectoryCustomJsonOp,
@@ -101,14 +107,13 @@ const argv = process.argv.slice(2);
 let dryRun = false;
 let signer = RPC_DIRECTORY_SIGNER_DEFAULT;
 let nodeOverride: string | null = null;
-let includeHidden = false;
+const hidden = hiddenModeFromArgs(argv);
 let fileArg: string | null = null;
 for (let i = 0; i < argv.length; i++) {
 	const a = argv[i]!;
 	if (a === '--dry-run') dryRun = true;
 	else if (a === '--signer') signer = argv[++i] ?? signer;
 	else if (a === '--node') nodeOverride = argv[++i] ?? null;
-	else if (a === '--include-hidden') includeHidden = true;
 	else if (!a.startsWith('--') && fileArg === null) fileArg = a;
 }
 
@@ -141,9 +146,16 @@ try {
 	die(errMsg(e));
 }
 
-const nodes = nodeOverride
+const nodesShown = nodeOverride
 	? [nodeOverride]
-	: [...DEFAULT_BLURT_RPC_ENDPOINTS, ...(includeHidden ? ['(+ 14 hidden nodes)'] : [])];
+	: [
+			...DEFAULT_BLURT_RPC_ENDPOINTS,
+			...(hidden === 'off'
+				? []
+				: hidden === 'on'
+					? ['(+ the 14 hidden nodes)']
+					: ['(+ the hidden nodes this machine reaches over Tor / I2P)'])
+		];
 
 process.stderr.write(
 	'\n\u250c\u2500 rpc-directory-broadcast \u2014 LAPTOP ONLY (uses the @morphit PRIVATE posting key). \u2500\u2510\n' +
@@ -151,6 +163,7 @@ process.stderr.write(
 );
 process.stderr.write(`Signed by    : @${op.required_posting_auths[0]} (posting authority)\n`);
 process.stderr.write(`Nodes in dir : ${pre.payload.nodes.length}\n`);
+process.stderr.write(`RPC node(s)  : ${nodesShown.join(', ')}\n`);
 process.stderr.write('\nExact json that will be signed + broadcast:\n');
 process.stderr.write(`${op.json}\n`);
 
@@ -211,7 +224,9 @@ async function main(): Promise<void> {
 
 	let res: Awaited<ReturnType<typeof broadcastCustomJsonOnce>>;
 	try {
-		res = await broadcastCustomJsonOnce(opData, priv, { nodeOverride, includeHidden });
+		res = await broadcastCustomJsonOnce(opData, priv, {
+			nodes: await prepareNodes({ nodeOverride, hidden })
+		});
 	} catch (e) {
 		die(errMsg(e));
 	}

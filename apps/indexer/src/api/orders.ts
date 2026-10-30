@@ -20,6 +20,7 @@ import { z } from 'zod';
 import type { Database } from '$db/pool';
 import type { AssetTicker } from '@morphit/asset-registry';
 import { decodeCursor, encodeCursor, errorBody, isCursorTime, isAccountName } from '$api/shared';
+import { andLocallyShown } from '$api/localHiding';
 import { tradeCountJoin, feedbackAggregateJoin } from '$api/reputationJoin';
 import { computeReputationScore } from '$indexer/reputation/score';
 import { validateOrderPermlink } from '$indexer/permlink';
@@ -221,10 +222,11 @@ const ORDER_SELECT = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_curr
 			 ${feedbackAggregateJoin('o')}
 ${tradeCountJoin('o')}`;
 
-/** Instance-local block: an account blocked on THIS instance has its
- *  listings hidden here too. */
+/** Instance-local hiding: an account blocked on THIS instance has its
+ *  listings hidden here too, and so has an order of an asset or payment
+ *  methods this instance switched off (api/localHiding.ts). */
 const notBlocked = (opParam: string): string =>
-	`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')`;
+	`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')${andLocallyShown('o')}`;
 
 /** GET /v1/accounts/:account/trades — the account's completed trades, BOTH
  *  sides (v1.21.17): orders it posted that were completed, and orders of

@@ -41,15 +41,26 @@ import { join } from 'node:path';
 import { classifySeeding, resolveHealthDiskPath, type SeedingProblem } from '@morphit/node-health';
 
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
-import { hostTorDaemonUnit } from '../lib/torUnit.ts';
+import { hostTorDaemonUnit, torDaemonUnit } from '../lib/torUnit.ts';
 import {
 	REHARDEN_SSH_COMMAND,
 	REVERTED_MARKER,
 	SSH_HARDENED_DIR,
-	sshClosedPortsNow
+	sshClosedPorts,
+	sshPortsFrom
 } from '../init/reachabilityRevert.ts';
+import { runAsync } from '../lib/spinRun.ts';
+import { loadThresholds, applyThreshold, type Threshold } from '../config.ts';
+import { envValueIn, relayEnvFiles } from '../lib/relayHealthEnvHeal.ts';
 import { parseCanaryTimestamp } from '../canaryTime.ts';
 import { startDotsSpinner } from '../init/spinner.ts';
+import {
+	parseRelayActiveKey,
+	relayKeyFix,
+	relayKeyFoundAs,
+	relayKeyMismatch,
+	type RelayActiveKeyState
+} from '../lib/relayActiveKey.ts';
 
 export interface HealthCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -178,6 +189,11 @@ export type ServiceState =
  *  Works for any user.  Returns 'unknown' if systemctl isn't on PATH
  *  or the call times out. */
 export function checkService(name: string): ServiceState {
+	// Asked already, in one go, while the report's spinner turned (runHealth).
+	const cached = cachedUnit(name === 'tor' ? cachedTorUnit() : name);
+	if (cached !== null) {
+		return serviceStateFrom(cached.LoadState, cached.ActiveState, cached.SubState);
+	}
 	// "tor" means the Tor daemon, which is tor@default on Ubuntu (lib/torUnit.ts).
 	const unit = name === 'tor' ? hostTorDaemonUnit() : name;
 	let out: string;
@@ -190,10 +206,101 @@ export function checkService(name: string): ServiceState {
 	} catch {
 		return 'unknown';
 	}
-	const load = /LoadState=(\S+)/.exec(out)?.[1];
+	return serviceStateFrom(
+		/LoadState=(\S+)/.exec(out)?.[1],
+		/ActiveState=(\S+)/.exec(out)?.[1],
+		/SubState=(\S+)/.exec(out)?.[1]
+	);
+}
+
+// ─── systemd, asked once and asynchronously (L6) ───────────────────
+//
+// Every check below used to run `systemctl` (and openssl, sshd -T, ss)
+// synchronously, one after the other: the spinner froze on its first frame
+// for the whole wait. runHealth now asks systemd ONCE, asynchronously, for
+// every unit it reports on, and the checks read the answers from here.
+
+type UnitProps = Readonly<Record<string, string>>;
+let systemdCache: Map<string, UnitProps> | null = null;
+
+/** The full unit name systemd reports as Id= (`ipfs` → `ipfs.service`). */
+function unitId(name: string): string {
+	return /\.(service|timer|socket|target|path|mount)$/.test(name) ? name : `${name}.service`;
+}
+
+function cachedUnit(name: string): UnitProps | null {
+	return systemdCache?.get(unitId(name)) ?? null;
+}
+
+/** The Tor daemon's unit from the cache (tor@default when it is loaded). */
+function cachedTorUnit(): string {
+	if (systemdCache === null) return 'tor';
+	return torDaemonUnit((u) => systemdCache?.get(unitId(u))?.LoadState ?? '');
+}
+
+/** Parse `systemctl show A B …` (blocks in order, blank-line separated) by
+ *  Id. PURE. */
+export function parseSystemctlShow(out: string): Map<string, UnitProps> {
+	const m = new Map<string, UnitProps>();
+	for (const block of out.split(/\n\s*\n/)) {
+		const props: Record<string, string> = {};
+		for (const line of block.split('\n')) {
+			const eq = line.indexOf('=');
+			if (eq > 0) props[line.slice(0, eq)] = line.slice(eq + 1).trim();
+		}
+		if (props.Id !== undefined) m.set(props.Id, props);
+	}
+	return m;
+}
+
+const SHOW_PROPS =
+	'--property=Id,LoadState,ActiveState,SubState,Result,ExecMainExitTimestamp,LastTriggerUSec';
+
+/** Ask systemd about `units` in one asynchronous call and keep the answers
+ *  for checkService / readServiceResult / readBackupTimerLastTrigger. A
+ *  systemd that cannot be asked leaves the cache empty (each check then
+ *  asks for itself, as before). */
+export async function prefetchSystemd(units: readonly string[]): Promise<void> {
+	const ids = units.map(unitId);
+	let r = await runAsync(
+		'systemctl',
+		['show', ...ids, SHOW_PROPS, '--timestamp=unix', '--no-pager'],
+		{
+			timeoutMs: 8000
+		}
+	);
+	// systemd before 247 has no --timestamp=unix.
+	if (r.status !== 0)
+		r = await runAsync('systemctl', ['show', ...ids, SHOW_PROPS, '--no-pager'], {
+			timeoutMs: 8000
+		});
+	if (r.status !== 0) return;
+	const parsed = parseSystemctlShow(r.stdout);
+	if (parsed.size > 0) systemdCache = parsed;
+}
+
+/** Forget the answers (the report is done). */
+export function clearSystemdCache(): void {
+	systemdCache = null;
+}
+
+/** A timestamp as systemd prints it: `@<secs>` (with --timestamp=unix), or a
+ *  date. Epoch ms, or null. PURE. */
+function systemdTimeMs(v: string | undefined): number | null {
+	const t = (v ?? '').trim();
+	if (t === '' || t === 'n/a' || t === '0') return null;
+	const unix = /^@(\d+)$/.exec(t)?.[1];
+	const ms = unix !== undefined ? Number(unix) * 1000 : Date.parse(t);
+	return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+
+/** A unit's state from its LoadState / ActiveState / SubState. PURE. */
+function serviceStateFrom(
+	load: string | undefined,
+	active: string | undefined,
+	sub: string | undefined
+): ServiceState {
 	if (load === 'not-found' || load === 'masked') return 'not-installed';
-	const active = /ActiveState=(\S+)/.exec(out)?.[1];
-	const sub = /SubState=(\S+)/.exec(out)?.[1];
 	switch (active) {
 		case 'active':
 			return 'active';
@@ -314,6 +421,24 @@ function tlsStatusFromDays(days: number, served: boolean): TlsCertStatus {
 	};
 }
 
+/** The status from the certificate served on 443 (days to expiry), or "no
+ *  HTTPS certificate" when none is served. PURE. */
+export function servedCertStatus(days: number | null): TlsCertStatus {
+	return days === null
+		? {
+				state: 'not-found',
+				daysLeft: null,
+				detail:
+					'no HTTPS certificate. A clearnet node must be reachable from the ' +
+					'internet on ports 80/443 for the Let\u2019s Encrypt challenge \u2014 a ' +
+					'home/CGNAT connection (no inbound) can never get one, so use tor-only ' +
+					'mode there. A tor-only node needs no certificate (.onion/.i2p are ' +
+					'self-authenticating). If this is a reachable clearnet host, certbot ' +
+					'may still be in progress \u2014 re-check shortly.'
+			}
+		: tlsStatusFromDays(days, true);
+}
+
 /** TLS certificate status. Prefers host certbot certs in `liveDir`; when none is
  *  found there, falls back to `servedProbe` (the cert actually served on 443) so
  *  a BunkerWeb-managed cert — which lives in BunkerWeb's own volume, not
@@ -322,22 +447,7 @@ export function checkTlsCert(
 	liveDir = '/etc/letsencrypt/live',
 	servedProbe?: () => number | null
 ): TlsCertStatus {
-	const servedFallback = (): TlsCertStatus => {
-		const days = servedProbe ? servedProbe() : null;
-		return days === null
-			? {
-					state: 'not-found',
-					daysLeft: null,
-					detail:
-						'no HTTPS certificate. A clearnet node must be reachable from the ' +
-						'internet on ports 80/443 for the Let\u2019s Encrypt challenge \u2014 a ' +
-						'home/CGNAT connection (no inbound) can never get one, so use tor-only ' +
-						'mode there. A tor-only node needs no certificate (.onion/.i2p are ' +
-						'self-authenticating). If this is a reachable clearnet host, certbot ' +
-						'may still be in progress \u2014 re-check shortly.'
-				}
-			: tlsStatusFromDays(days, true);
-	};
+	const servedFallback = (): TlsCertStatus => servedCertStatus(servedProbe ? servedProbe() : null);
 	let domains: string[];
 	try {
 		domains = readdirSync(liveDir, { withFileTypes: true })
@@ -368,6 +478,55 @@ export function checkTlsCert(
 	}
 	if (soonest === null) return servedFallback();
 	return tlsStatusFromDays(soonest, false);
+}
+
+/** {@link probeServedCertDaysLeft}, without blocking (the spinner turns). */
+export async function probeServedCertDaysLeftAsync(
+	hostPort = '127.0.0.1:443'
+): Promise<number | null> {
+	const r = await runAsync(
+		'bash',
+		[
+			'-c',
+			`echo | openssl s_client -connect ${hostPort} 2>/dev/null | openssl x509 -enddate -noout 2>/dev/null`
+		],
+		{ timeoutMs: 6000 }
+	);
+	const notAfter = /notAfter=(.+)/.exec(r.stdout)?.[1]?.trim();
+	if (notAfter === undefined || notAfter.length === 0) return null;
+	const exp = new Date(notAfter).getTime();
+	return Number.isNaN(exp) ? null : Math.floor((exp - Date.now()) / 86_400_000);
+}
+
+/** {@link checkTlsCert}, without blocking: openssl runs asynchronously. */
+export async function checkTlsCertAsync(
+	liveDir = '/etc/letsencrypt/live',
+	servedProbe: () => Promise<number | null> = () => probeServedCertDaysLeftAsync()
+): Promise<TlsCertStatus> {
+	let domains: string[] = [];
+	try {
+		domains = readdirSync(liveDir, { withFileTypes: true })
+			.filter((d) => d.isDirectory())
+			.map((d) => d.name);
+	} catch {
+		domains = [];
+	}
+	const days = await Promise.all(
+		domains.map(async (dom) => {
+			const certPath = join(liveDir, dom, 'cert.pem');
+			if (!existsSync(certPath)) return null;
+			const r = await runAsync('openssl', ['x509', '-enddate', '-noout', '-in', certPath], {
+				timeoutMs: 4000
+			});
+			const notAfter = /notAfter=(.+)/.exec(r.stdout)?.[1]?.trim();
+			if (r.status !== 0 || notAfter === undefined || notAfter.length === 0) return null;
+			const exp = new Date(notAfter).getTime();
+			return Number.isNaN(exp) ? null : Math.floor((exp - Date.now()) / 86_400_000);
+		})
+	);
+	const known = days.filter((d): d is number => d !== null);
+	if (known.length > 0) return tlsStatusFromDays(Math.min(...known), false);
+	return servedCertStatus(await servedProbe());
 }
 
 /** The alert MXID(s) the matrix-bot is configured to DM, from its env file.
@@ -988,12 +1147,11 @@ export function classifyHealthResult(args: {
 			summary: null,
 			exitCode: 2,
 			message:
-				'Could not reach the indexer. It may not be running yet, or it is ' +
-				'listening on a different host/port. Start it (or check the systemd ' +
-				'service), or pass --url / --port if it is not on the default ' +
-				'127.0.0.1:8081. Container/Docker deployments often bind the bridge ' +
-				'gateway rather than loopback — e.g. try ' +
-				'--url http://172.18.0.1:8081/v1/health. (This view never needs sudo.)'
+				'Could not reach the indexer. Look at it, on this server: ' +
+				'sudo systemctl status morphit-indexer   (start it: sudo systemctl restart morphit-indexer; ' +
+				'why it stopped: sudo journalctl -u morphit-indexer -e --no-pager). ' +
+				'If it listens somewhere other than 127.0.0.1:8081, name it: ' +
+				'morphit-ops health --url http://<address>:<port>/v1/health'
 		};
 	}
 	if (httpStatus !== null && (httpStatus < 200 || httpStatus >= 300)) {
@@ -1057,6 +1215,234 @@ export function classifyHealthResult(args: {
 				'catch up once an RPC endpoint recovers.'
 			: 'The indexer is running but still catching up to the chain head. This is normal ' +
 				'right after a (re)start; re-check in a moment.'
+	};
+}
+
+// ─── The relay's own verdict (M13) ──────────────────────────────────
+//
+// The relay answered through the INDEXER's classifier: a relay whose balance
+// had gone stale read "✓ up", one with every RPC node down read "answered,
+// but not as the relay (unknown)", a low balance was never mentioned, and
+// a relay that did not answer was called "optional" — every signup and
+// payment of a node goes through it.
+
+export interface RelayOutcome {
+	readonly kind: 'up' | 'degraded' | 'unreachable' | 'http-error' | 'not-relay';
+	readonly tone: 'ok' | 'warn' | 'error';
+	/** One line: the verdict. */
+	readonly headline: string;
+	/** What to do, with the exact commands. */
+	readonly hints: readonly string[];
+	readonly summary: HealthSummary | null;
+	/** The balance's grade, when it was reported. */
+	readonly balanceTone: 'ok' | 'warn' | 'error' | null;
+	/** The relay's own check of its key against the chain (its `active_key`
+	 *  block); null when it did not report one. Only `mismatch` is a problem. */
+	readonly activeKey: RelayActiveKeyState | null;
+}
+
+/** The relay-balance threshold the menu's "relay balance low" marker and
+ *  `status` use (thresholds.relayBalance), also when this user cannot load
+ *  the full config (no database address). */
+export function relayBalanceThreshold(): Threshold {
+	try {
+		return loadThresholds().relayBalance;
+	} catch {
+		// A threshold setting that is not a number: grade with the defaults.
+		return { warn: 100, error: 30, direction: 'lower_worse' };
+	}
+}
+
+function blurtAmount(s: string | null): number | null {
+	const m = /^([\d.]+)\s+BLURT$/.exec((s ?? '').trim());
+	return m ? Number(m[1]) : null;
+}
+
+/** A Blurt account name (3–16: lower-case letters, digits, '.', '-'). */
+const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
+
+/** The account this node's relay runs as — the one a low balance is topped
+ *  up on. Read from the relay's OWN env files, in its unit's order (the last
+ *  one wins), then from this process's environment; null when neither says.
+ *  A file this user cannot read (no sudo: they are root-only) that comes
+ *  after the last readable setting could override it, so the files then say
+ *  nothing. It used to fall back to "morphit-relay" — morphit.io's relay — so
+ *  without sudo every other node was told to fund someone else's account.
+ *  MORPHIT_ENV_ROOT relocates the files (tests). Never throws. */
+export function relayAccountForHint(
+	root = process.env.MORPHIT_ENV_ROOT ?? '',
+	env: NodeJS.ProcessEnv = process.env
+): string | null {
+	let fromFiles: string | null = null;
+	let hiddenAfter = false;
+	for (const f of relayEnvFiles(root)) {
+		let text: string;
+		try {
+			if (!existsSync(f)) continue;
+			text = readFileSync(f, 'utf8');
+		} catch {
+			hiddenAfter = true;
+			continue;
+		}
+		const v = envValueIn([text], 'MORPHIT_RELAY_ACCOUNT');
+		if (v !== null) {
+			fromFiles = v.trim();
+			hiddenAfter = false;
+		}
+	}
+	if (!hiddenAfter && fromFiles !== null && BLURT_ACCOUNT_RE.test(fromFiles)) return fromFiles;
+	for (const key of [
+		'MORPHIT_RELAY_ACCOUNT',
+		'MORPHIT_OPS_RELAY_ACCOUNT',
+		'MORPHIT_INDEXER_RELAY_ACCOUNT'
+	]) {
+		const v = (env[key] ?? '').trim();
+		if (BLURT_ACCOUNT_RE.test(v)) return v;
+	}
+	return null;
+}
+
+/** Where to send BLURT, in words: the account when it is known, else how to
+ *  see it (never a guessed account). PURE. */
+export function relayTopUpTarget(account: string | null): string {
+	return account !== null
+		? `@${account}`
+		: "this node's relay account (on this server, sudo morphit-ops status shows it)";
+}
+
+/** Classify the relay's /v1/health answer. PURE given its inputs (and the
+ *  relay account: read by {@link relayAccountForHint} when not given). */
+export function classifyRelayResult(args: {
+	readonly fetched: FetchedHealth;
+	readonly url: string;
+	readonly service: ServiceState;
+	readonly threshold: Threshold;
+	readonly relayAccount?: string | null;
+}): RelayOutcome {
+	const { fetched, url, service, threshold } = args;
+	const why = 'Every signup and payment of this node goes through the relay.';
+	const status = 'on this server: sudo systemctl status morphit-relay';
+	const journal = 'sudo journalctl -u morphit-relay -e --no-pager';
+	if (fetched.fetchError !== null) {
+		const hint =
+			service === 'failed'
+				? `morphit-relay stopped with an error. Why, on this server: ${journal}; start it again: sudo systemctl restart morphit-relay`
+				: service === 'inactive'
+					? 'morphit-relay is stopped. Start it, on this server: sudo systemctl start morphit-relay'
+					: service === 'activating'
+						? 'morphit-relay is starting. Check again in a moment: morphit-ops health'
+						: service === 'not-installed'
+							? 'There is no morphit-relay service on this server. If the relay runs elsewhere, this check cannot see it.'
+							: service === 'active'
+								? `morphit-relay runs, but does not answer at ${url}. Look at it, ${status}`
+								: `Look at it, ${status}`;
+		return {
+			kind: 'unreachable',
+			tone: 'error',
+			headline: `not answering (${url})`,
+			hints: [why, hint],
+			summary: null,
+			balanceTone: null,
+			activeKey: null
+		};
+	}
+	if (fetched.httpStatus !== null && (fetched.httpStatus < 200 || fetched.httpStatus >= 300)) {
+		return {
+			kind: 'http-error',
+			tone: 'error',
+			headline: `answered HTTP ${fetched.httpStatus} at ${url}`,
+			hints: [why, `Look at it, ${status}`],
+			summary: null,
+			balanceTone: null,
+			activeKey: null
+		};
+	}
+	const b = (fetched.body ?? {}) as Record<string, unknown>;
+	if (!fetched.jsonOk || typeof b.rpc_ok !== 'boolean' || 'chain_head_block' in b) {
+		return {
+			kind: 'not-relay',
+			tone: 'error',
+			headline: `something answered at ${url}, but not the relay`,
+			hints: [why, `Look at the relay, ${status}; and at what listens on that port: sudo ss -ltnp`],
+			summary: null,
+			balanceTone: null,
+			activeKey: null
+		};
+	}
+	const summary = summarizeHealth(b);
+	const hints: string[] = [];
+	let tone: RelayOutcome['tone'] = 'ok';
+	let kind: RelayOutcome['kind'] = 'up';
+	let headline = 'up';
+	if (b.rpc_ok === false) {
+		tone = 'error';
+		kind = 'degraded';
+		headline = 'up, but it cannot reach any Blurt RPC node';
+		hints.push(
+			`Signups and payments wait until a node answers. What it logs, on this server: ${journal}`
+		);
+	} else if (b.stale === true) {
+		tone = 'warn';
+		kind = 'degraded';
+		headline = 'up, but its BLURT balance is not current';
+		hints.push(
+			'It could not read its balance from the chain lately, so it refuses signups until it can. ' +
+				`If this stays, see why, on this server: ${journal}`
+		);
+	}
+	// The relay's own check of its key (its `active_key` block); it also names
+	// the account the relay signs as — the best source for where to top up.
+	const activeKey = parseRelayActiveKey(b);
+	const bal = blurtAmount(summary.relayBalance);
+	const fee =
+		typeof b.account_creation_fee_blurt === 'number' ? b.account_creation_fee_blurt : null;
+	let balanceTone: RelayOutcome['balanceTone'] = null;
+	if (bal !== null) {
+		balanceTone = fee !== null && bal < fee ? 'error' : applyThreshold(bal, threshold);
+		if (balanceTone !== 'ok') {
+			if (tone === 'ok' || balanceTone === 'error') tone = balanceTone;
+			if (kind === 'up') {
+				kind = 'degraded';
+				headline = 'up, but its BLURT balance is low';
+			}
+			const to = relayTopUpTarget(
+				activeKey?.account != null && !activeKey.noAccount
+					? activeKey.account
+					: args.relayAccount !== undefined
+						? args.relayAccount
+						: relayAccountForHint()
+			);
+			hints.push(
+				fee !== null && bal < fee
+					? `Its ${summary.relayBalance} is below one signup's fee (${fee} BLURT): it is refusing signups. Send BLURT to ${to}.`
+					: `Its ${summary.relayBalance} is running low (it pays every signup's fee). Send BLURT to ${to}.`
+			);
+		}
+	}
+	// The relay's key is not on its account's active authority: it signs
+	// nothing until the key file is fixed. The other states (not checked yet,
+	// the chain could not be asked) are not problems and are not said as one.
+	if (activeKey?.state === 'mismatch') {
+		tone = 'error';
+		kind = 'degraded';
+		// A problem the headline already named stays said, after the fix.
+		const also = headline === 'up' ? null : `Also: ${headline.replace(/^up, but /, '')}.`;
+		headline = `up, but ${relayKeyMismatch(activeKey)}`;
+		const foundAs = relayKeyFoundAs(activeKey);
+		hints.unshift(
+			...(foundAs !== null ? [foundAs] : []),
+			...relayKeyFix(activeKey),
+			...(also !== null ? [also] : [])
+		);
+	}
+	return {
+		kind,
+		tone,
+		headline,
+		hints,
+		summary,
+		balanceTone,
+		activeKey: activeKey?.state ?? null
 	};
 }
 
@@ -1390,7 +1776,7 @@ export function checkBackups(facts: BackupFacts, now: Date): BackupStatus {
 			state: 'not-configured',
 			detail:
 				'no /etc/morphit/backup.env — the built-in daily backup is not set up ' +
-				'(run `morphit-ops harden` and pick "Set up automatic daily database backups")',
+				'(set it up, on this server: sudo morphit-ops harden, and pick "Set up automatic daily database backups")',
 			...none
 		};
 	}
@@ -1484,6 +1870,8 @@ export function checkBackups(facts: BackupFacts, now: Date): BackupStatus {
  *  documented on the canary clock above. Anything unexpected degrades to null,
  *  which only costs the "fired but wrote nothing" check. */
 export function readBackupTimerLastTrigger(): number | null {
+	const cached = cachedUnit('morphit-backup.timer');
+	if (cached !== null) return systemdTimeMs(cached.LastTriggerUSec);
 	let out: string;
 	try {
 		out = execFileSync(
@@ -1606,6 +1994,14 @@ export function formatBackupSize(bytes: number): string {
  *  `failed`. `ranMs` is the age of the last completed run, or null if never run
  *  / unreadable. */
 export function readServiceResult(unit: string): { failed: boolean; ranMs: number | null } {
+	const cached = cachedUnit(unit);
+	if (cached !== null) {
+		const at = systemdTimeMs(cached.ExecMainExitTimestamp);
+		return {
+			failed: (cached.Result ?? 'success') !== 'success',
+			ranMs: at === null ? null : Date.now() - at
+		};
+	}
 	try {
 		const out = execFileSync(
 			'systemctl',
@@ -1684,7 +2080,7 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 			return {
 				state: 'not-configured',
 				detail:
-					'not set up — optional; enable with morphit-ops harden \u2192 \u201cSet up IPFS release hosting\u201d'
+					'not set up — optional; enable it, on this server: sudo morphit-ops harden \u2192 \u201cSet up IPFS release hosting\u201d'
 			};
 		case 'unreadable':
 			// One failed read of the ipfs daemon's state lands here too (node-health
@@ -2010,7 +2406,72 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	// feedback the prompt looks hung, so show a spinner immediately — but never in
 	// --json mode (it would corrupt machine-readable stdout).
 	const stopSpinner = json ? null : startDotsSpinner('Generating your health report…');
+	try {
+		return await healthReport(ctx, c, json, now, () => stopSpinner?.());
+	} finally {
+		stopSpinner?.();
+		clearSystemdCache();
+	}
+}
+
+/** Units the report looks at, asked of systemd in one asynchronous call. */
+const HEALTH_UNITS = [
+	'morphit-indexer',
+	'morphit-relay',
+	'morphit-matrix-bot',
+	'morphit-mcp',
+	'morphit-backup.service',
+	'morphit-backup.timer',
+	'morphit-aide-init',
+	'ipfs',
+	'morphit-ipfs-pin.timer',
+	'morphit-ipns-rebroadcast.timer',
+	'morphit-ipfs-pin.service',
+	'morphit-ipns-rebroadcast.service',
+	'tor@default.service',
+	'tor.service',
+	'i2pd'
+] as const;
+
+/** {@link sshClosedPortsNow}, without blocking: sshd -T, ssh.socket and ss
+ *  run asynchronously. Root only (ufw's rule files are root's). */
+async function sshClosedPortsAsync(): Promise<number[]> {
+	const read = (p: string): string | null => {
+		try {
+			return readFileSync(p, 'utf8');
+		} catch {
+			return null;
+		}
+	};
+	const out = async (cmd: string, args: string[]): Promise<string> =>
+		(await runAsync(cmd, args, { timeoutMs: 10_000 })).stdout;
+	const [sshdT, socket, ss] = await Promise.all([
+		out('sshd', ['-T']),
+		out('systemctl', ['show', 'ssh.socket', '-p', 'Listen']),
+		out('ss', ['-Htlnp'])
+	]);
+	return sshClosedPorts(
+		read('/etc/ufw/ufw.conf'),
+		read('/etc/default/ufw'),
+		read('/etc/ufw/user.rules'),
+		read('/etc/ufw/user6.rules'),
+		sshPortsFrom(sshdT, socket, ss)
+	);
+}
+
+async function healthReport(
+	ctx: HealthCtx,
+	c: ReturnType<typeof color>,
+	json: boolean,
+	now: Date,
+	stopSpinner: () => void
+): Promise<number> {
 	const gateways = bridgeGatewayHosts(networkInterfaces());
+	// systemd first, in one asynchronous call: every check below reads it.
+	await prefetchSystemd(HEALTH_UNITS);
+	const amRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+	const sshClosedP = amRoot ? sshClosedPortsAsync() : Promise.resolve([] as number[]);
+	const tlsP = checkTlsCertAsync('/etc/letsencrypt/live');
 
 	// ── Indexer: resolve primary, then auto-probe bridge gateways ──
 	const indexerPrimary = resolveHealthUrl(ctx.flags, process.env);
@@ -2031,8 +2492,19 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	const relayProbe = await probeHealth(
 		candidateHealthUrls(relayPrimary, relayExplicit, relayPort, gateways)
 	);
-	const relay = classifyHealthResult(relayProbe.fetched);
-	const relayUp = relay.kind === 'synced' || relay.kind === 'behind';
+	const relay = classifyRelayResult({
+		fetched: relayProbe.fetched,
+		url: relayProbe.url,
+		service: checkService('morphit-relay'),
+		threshold: relayBalanceThreshold()
+	});
+	// It answered as the relay (its details are shown).
+	const relayAnswered = relay.kind === 'up' || relay.kind === 'degraded';
+	// --json `relay.up` keeps its v1.21.17 meaning: answered as a working relay
+	// — false when it can reach none of its RPC nodes (that read "unknown"
+	// then). A stale or low balance, or a key mismatch, stays up: true, as it
+	// was; `outcome` and `verdict` say what is wrong.
+	const relayUp = relayAnswered && relay.summary?.rpcAllDown !== true;
 
 	// ── Services (read-only systemctl) + canary freshness ──
 	const services = [
@@ -2042,7 +2514,8 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	const canary = checkCanary(canaryFilePath(), now);
 	const backups = checkBackups(readBackupFacts(), now);
 	const aide = checkAideBaseline();
-	const tls = checkTlsCert('/etc/letsencrypt/live', () => probeServedCertDaysLeft());
+	const tls = await tlsP;
+	const sshClosed = await sshClosedP;
 	const matrixMxid = readMatrixMxid();
 	const ipfsSeeding = checkIpfsSeeding(readIpfsSeedingFacts());
 
@@ -2056,7 +2529,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 			: null;
 
 	// Gathering done — clear the spinner line before any report/JSON output.
-	stopSpinner?.();
+	stopSpinner();
 
 	if (json) {
 		console.log(
@@ -2067,10 +2540,14 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						url: relayProbe.url,
 						outcome: relay.kind,
 						up: relayUp,
+						verdict: relay.headline,
+						hints: relay.hints,
+						balance_status: relay.balanceTone,
 						version: relay.summary?.version ?? null,
 						uptime_sec: relay.summary?.uptimeSec ?? null,
 						web_push: relay.summary?.webPush ?? null,
-						blurt_balance: relay.summary?.relayBalance ?? null
+						blurt_balance: relay.summary?.relayBalance ?? null,
+						active_key: relay.activeKey
 					},
 					system: {
 						cpu_pct: sys.cpuPct,
@@ -2458,9 +2935,12 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	// ── Relay block ──
 	console.log('');
 	console.log(`  ${c.bold('Relay')}     ${c.dim(safe(relayProbe.url))}`);
-	if (relayUp) {
+	const relayTag =
+		relay.tone === 'ok' ? c.green('✓') : relay.tone === 'warn' ? c.yellow('⚠') : c.red('✗');
+	console.log(`  ${relayTag} ${relay.headline}`);
+	for (const h of relay.hints) console.log(`      ${relay.tone === 'ok' ? c.dim(h) : h}`);
+	if (relayAnswered) {
 		const rs = relay.summary;
-		console.log(`  ${c.green('✓')} up`);
 		if (rs?.version != null) console.log(`      Version:       ${safe(rs.version)}`);
 		console.log(`      Uptime:        ${fmtUptime(rs?.uptimeSec ?? null)}`);
 		if (rs?.webPush != null) {
@@ -2473,15 +2953,17 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		// balance gates signup readiness — the relay refuses signups when
 		// it can't cover the fee plus a small margin.
 		if (rs?.relayBalance != null) {
-			console.log(`      BLURT balance: ${safe(rs.relayBalance)}`);
+			const bal = safe(rs.relayBalance);
+			console.log(
+				`      BLURT balance: ${
+					relay.balanceTone === 'error'
+						? c.red(bal)
+						: relay.balanceTone === 'warn'
+							? c.yellow(bal)
+							: bal
+				}`
+			);
 		}
-	} else if (relay.kind === 'unreachable') {
-		console.log(`  ${c.red('✗')} not reachable on loopback or any bridge gateway`);
-		console.log(`      ${c.dim('the relay is optional — only needed if your node broadcasts')}`);
-		console.log(`      ${c.dim('user-signed ops. If you run it, check that its container or')}`);
-		console.log(`      ${c.dim('systemd service is up and publishes its port to the host.')}`);
-	} else {
-		console.log(`  ${c.yellow('⚠')} answered, but not as the relay (${relay.kind})`);
 	}
 
 	// ── System resources block (local host, read-only) ──
@@ -2593,8 +3075,8 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	// SSH shut out by the firewall (the v1.21.6 revert did this on fresh VPSes:
 	// no rule left, firewall on — the next login fails). Only as root: ufw's
 	// rule files are root's.
-	if (typeof process.getuid === 'function' && process.getuid() === 0) {
-		const w = sshFirewallWarning(sshClosedPortsNow());
+	if (amRoot) {
+		const w = sshFirewallWarning(sshClosed);
 		if (w !== null)
 			console.log(`      ${c.yellow('⚠')} ${'SSH and the firewall'.padEnd(22)} ${c.dim(w)}`);
 	}

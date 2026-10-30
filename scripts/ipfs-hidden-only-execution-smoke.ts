@@ -249,7 +249,8 @@ console.log('\nipfs-hidden-only-execution-smoke\n' + '─'.repeat(56));
 		});
 		check(
 			'seed: a Tor probe that fails once and then answers is a working .onion',
-			/✓ Tor: the \.onion serves the release/.test(r.out) && !/⚠ Tor/.test(r.out),
+			// (since the v1.21.17 review: one ✓ line naming what checked out)
+			/✓ Seeded v9\.9\.9 to IPFS: .*over Tor/.test(r.out) && !/⚠ Tor/.test(r.out),
 			r.out.slice(-600)
 		);
 		r = run(sb, SEED, ['v9.9.9'], {
@@ -350,8 +351,8 @@ console.log('\nipfs-hidden-only-execution-smoke\n' + '─'.repeat(56));
 				.join(' ')
 		);
 		check(
-			'seed, piped: still says the CID matches the anchored one',
-			/✓ CID matches the anchored ipfs_cid/.test(piped.out),
+			'seed, piped: still says the bytes match the signed release (its one ✓ line)',
+			/✓ Seeded v9\.9\.9 to IPFS: the same bytes as the signed release/.test(piped.out),
 			piped.out.slice(-300)
 		);
 		const verbose = run(sb, SEED, ['v9.9.9', CID], {

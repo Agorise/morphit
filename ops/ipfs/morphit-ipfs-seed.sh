@@ -56,6 +56,11 @@ log() { echo "morphit-ipfs-seed: $*" >&2; }
 if [ -t 2 ] || [ "${MORPHIT_SEED_VERBOSE:-}" = 1 ]; then SEED_VERBOSE=1; else SEED_VERBOSE=0; fi
 export SEED_VERBOSE
 step() { [ "$SEED_VERBOSE" = 1 ] && log "$@"; return 0; }
+# What checked out, said in ONE plain line at the end ("✓ … (each checked)");
+# each check's own line is a step (v1.21.17 audit, L1: four ✓ lines naming
+# CIDs, ipfs_cid and "host from env" for one result). Problems are said at once.
+_passed=""
+passed() { _passed="${_passed:+$_passed, }$1"; }
 
 # Braille spinner shown on stderr while a background PID runs, so the operator
 # is never left staring at a frozen terminal during a slow step. TTY-guarded
@@ -173,7 +178,8 @@ if [ -n "$EXPECTED" ]; then
 		log "  Staging drifted or Kubo defaults changed. NOT the canonical bytes; refusing silently to seed a divergent CID."
 		exit 1
 	fi
-	log "✓ CID matches the anchored ipfs_cid ($CID)."
+	step "✓ CID matches the anchored ipfs_cid ($CID)."
+	passed "the same bytes as the signed release"
 fi
 
 # 5. Announce it promptly so gateways + other instances can find it (best-effort).
@@ -316,7 +322,8 @@ if [ "$_gw" != "200" ]; then
 	log "⚠ WARNING: the local IPFS gateway is NOT serving $CID (127.0.0.1:${GW_PORT} → ${_gw:-none})."
 	log "  Content is pinned but unreachable — this box is NOT a usable seeder."
 elif [ "$_fe" = "200" ]; then
-	log "✓ local gateway and the frontend both serve the release (clearnet path OK, host from ${_hostsrc})."
+	step "✓ local gateway and the frontend both serve the release (clearnet path OK, host from ${_hostsrc})."
+	passed "served through this site"
 elif [ "$_fe_skip_hidden" = "1" ]; then
 	: # already explained above — a hidden origin has no clearnet edge to probe
 elif [ -z "$_fe" ]; then
@@ -432,7 +439,8 @@ if [ -n "${_onion:-}" ]; then
 	done
 	rm -f "$_tef"
 	if [ "$_t" = "200" ]; then
-		log "✓ Tor: the .onion serves the release — hidden-only peers can upgrade from this box."
+		step "✓ Tor: the .onion serves the release — hidden-only peers can upgrade from this box."
+		passed "over Tor"
 	else
 		_needs_operator=1
 		_terr=$(printf '%s' "$_terr" | tr -d '\r' | head -n 1 | cut -c1-160)
@@ -443,7 +451,8 @@ fi
 if [ -n "${_i2p:-}" ]; then
 	_i=$(_code "http://${_i2p}${PROBE_PATH}" 240 -x "http://127.0.0.1:4444")
 	if [ "$_i" = "200" ]; then
-		log "✓ I2P: the .b32.i2p serves the release — hidden-only peers can upgrade from this box."
+		step "✓ I2P: the .b32.i2p serves the release — hidden-only peers can upgrade from this box."
+		passed "over I2P"
 	elif [ -z "${_i:-}" ] || [ "$_i" = "000" ]; then
 		# No HTTP reply at all: the local proxy is unreachable or the tunnel has
 		# not been built yet. THIS is the case that genuinely warrants patience.
@@ -475,6 +484,12 @@ if [ "$HIDDEN_ONLY" = yes ]; then
 	step "done. Peers fetch it from this node's hidden addresses at /ipfs/$CID/morphit-latest.tar.gz"
 else
 	step "done. Resolve: https://ipfs.io/ipfs/$CID/metadata.json  |  ipns://<name>/morphit-latest.tar.gz"
+fi
+# The one line for what checked out (problems were said above).
+if [ "$_needs_operator" = 0 ]; then
+	log "✓ Seeded $TAG to IPFS${_passed:+: $_passed (each checked on this server)}."
+elif [ -n "$_passed" ]; then
+	log "Seeded $TAG to IPFS; what checked out: $_passed."
 fi
 # Seeded, but a "⚠" above needs the operator: not a clean result (exit 3).
 [ "$_needs_operator" = 0 ] || exit 3

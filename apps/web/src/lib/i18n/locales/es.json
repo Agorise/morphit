@@ -56,19 +56,20 @@
 			"type_warning_body": "Si sospechas que esta instancia es deshonesta, no puedes confiar en estos enlaces — una instancia hostil puede mostrar el texto \"morphit.io\" mientras el URL real apunta a otro sitio. Escribe las direcciones a mano en una pestaña limpia."
 		},
 		"asset_stance": {
-			"explain": "Morphit es un mercado federado. Cada operador elige para qué activos negociables su instancia acepta nuevas órdenes — por defecto se admite todo el registro canónico, pero un operador puede deshabilitar cualquier activo solo-de-comercio (p. ej. USDT) si prefiere especializar su instancia en activos privacy-first o decentralization-first. Esta es la postura actual de TU instancia. Nota de federación: las órdenes publicadas en otras instancias aún aparecen en tu orderbook independientemente — el bloqueo solo aplica a nuevas órdenes publicadas DESDE AQUÍ.",
+			"explain": "Morphit es un mercado federado. Cada operador elige qué activos negociables ofrece su instancia — por defecto se admite todo el registro canónico, pero un operador puede deshabilitar cualquier activo solo-de-comercio (p. ej. USDT) si prefiere especializar su instancia en activos privacy-first o decentralization-first. Esta es la postura actual de TU instancia. Nota de federación: las órdenes de un activo deshabilitado no se muestran en esta instancia, tampoco las publicadas en otras instancias. Las instancias que ofrecen ese activo siguen mostrándolas.",
 			"disabled_label": "Activos deshabilitados",
 			"disabled_none": "Ninguno — esta instancia acepta todos los activos negociables.",
-			"disabled_suffix": "(deshabilitado por el operador en esta instancia; negociable en instancias pares)",
+			"disabled_suffix": "(deshabilitado en esta instancia: no se ofrece aquí y sus órdenes no se muestran aquí)",
 			"federation_note": "¿Quieres una postura diferente? Explora /operators para encontrar una instancia cuya política coincida con tu preferencia, o ejecuta la tuya — ver /run-a-node."
 		},
 		"payment_stance": {
-			"explain": "Cada operador también elige qué métodos de pago ofrece su instancia. El valor predeterminado es todos los métodos del registro canónico; un operador puede desactivar cualquiera de ellos —con mayor frecuencia el trueque (bienes/servicios)— para mantener su instancia solo con dinero o más enfocada. Esta es la postura actual de TU instancia. Nota sobre la federación: los pedidos de otras instancias que usan un método desactivado siguen apareciendo en tu libro de órdenes; la restricción solo afecta a los nuevos pedidos publicados desde aquí.",
+			"explain": "Cada operador también elige qué métodos de pago ofrece su instancia. El valor predeterminado es todos los métodos del registro canónico; un operador puede desactivar cualquiera de ellos —con mayor frecuencia el trueque (bienes/servicios)— para mantener su instancia solo con dinero o más enfocada. Esta es la postura actual de TU instancia. Nota sobre la federación: un pedido cuyos métodos de pago están todos desactivados aquí no se muestra en esta instancia, aunque se haya publicado en otra instancia; un pedido que aún ofrece un método que esta instancia ofrece sí se muestra. Las instancias que ofrecen esos métodos siguen mostrándolo.",
 			"disabled_label": "Métodos desactivados",
 			"disabled_none": "Ninguno: esta instancia ofrece todos los métodos de pago.",
-			"disabled_suffix": "(desactivado por el operador en esta instancia; utilizable en instancias pares)"
+			"disabled_suffix": "(desactivado en esta instancia: no se ofrece aquí, y los pedidos que solo ofrecen métodos desactivados no se muestran aquí)"
 		},
-		"fee_recipient_unregistered": "La cuenta de comisiones de esta instancia, @{account}, aún no figura en el registro en cadena de su operador, por lo que las demás instancias de la federación ocultan las órdenes pagadas aquí en BLURT y no entregan a sus usuarios los primeros mensajes enviados desde aquí. El operador lo soluciona ejecutando sudo morphit-ops register en el servidor."
+		"fee_recipient_unregistered": "La cuenta de comisiones de esta instancia, @{account}, aún no figura en el registro en cadena de su operador, por lo que las demás instancias de la federación ocultan las órdenes pagadas aquí en BLURT y no entregan a sus usuarios los primeros mensajes enviados desde aquí. El operador lo soluciona ejecutando sudo morphit-ops register en el servidor. Desde el 1 de noviembre de 2026, hasta que esté registrada, las comisiones pagadas en este sitio van a la tesorería de Morphit.",
+		"fee_recipient_unregistered_to_treasury": "La cuenta de comisiones de esta instancia aún no figura en el registro en cadena de su operador, por lo que las comisiones pagadas en este sitio van a la tesorería de Morphit (@{treasury}). El operador lo soluciona ejecutando sudo morphit-ops register en el servidor."
 	},
 	"admin": {
 		"setup_wizard": {
@@ -3896,7 +3897,7 @@
 			"title": "La verificación de integridad de la build falló",
 			"pubkey_mismatch_body": "El último anuncio de versión de Morphit en la blockchain de Blurt está firmado con una clave distinta de la clave de @morphit en la que confía esta versión. O @morphit cambió su clave o alguien se hizo con la cuenta @morphit. No se usa nada de ese anuncio, ni siquiera las direcciones de la tarifa de publicación. No pagues tarifas de publicación hasta que se resuelva.",
 			"invalid_payload_body": "La carga del release on-chain está malformada. Puede que el operador esté en medio de un despliegue, o que la página la sirva un atacante.",
-			"asset_mismatch_body": "Algunos archivos que sirvió este sitio no coinciden con los hashes de la versión que @morphit firmó en la blockchain de Blurt. Puede deberse a una página antigua en caché (prueba a recargar por completo). Si no, este sitio está sirviendo código modificado: por accidente, tras una intrusión o a propósito.",
+			"asset_mismatch_body": "Algunos archivos que sirvió este sitio no coinciden con los hashes de la versión que @morphit firmó en la blockchain de Blurt. Puede deberse a una página antigua en caché (prueba a recargar por completo). Si no, este sitio está sirviendo código antiguo o modificado: por accidente, tras una intrusión o a propósito.",
 			"show_files": "Mostrar detalles",
 			"hide_files": "Ocultar detalles",
 			"what_to_do": "Qué hacer",
@@ -3929,7 +3930,7 @@
 		"asset_policy_heading": "Tu instancia, tus políticas de activos y métodos de pago",
 		"asset_policy_body": "La federación permite a cada operador elegir qué activos negociables admite su sitio. Puedes excluir activos uno por uno e incluso configurar qué métodos de pago debe admitir tu sitio, como efectivo, PayPal, Klarna, etc.",
 		"asset_policy_federation_label": "La federación permanece intacta.",
-		"asset_policy_federation_body": "Desactivar un activo en tu instancia no oculta a tus usuarios las órdenes de otras instancias — el historial de la cadena es compartido, así que tu libro de órdenes puede seguir mostrándolas.",
+		"asset_policy_federation_body": "Desactivar un activo en tu instancia oculta sus órdenes solo en tu propio sitio, incluidas las publicadas en otras instancias. Las instancias que ofrecen ese activo siguen mostrándolas a sus usuarios.",
 		"requirements_heading": "Requisitos de recursos",
 		"req_hw_label": "Hardware",
 		"req_hw_value": "2+ CPU, 4+ GB RAM, 80+ GB de espacio en disco (mejor SSD)",

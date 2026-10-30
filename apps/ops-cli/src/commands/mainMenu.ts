@@ -78,9 +78,9 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 			{
 				label: 'Fast-sync from a federation snapshot (recommended for a fresh node)',
 				blurb:
-					'Restore the newest on-chain-anchored snapshot so the orderbook is live in minutes, not days.',
+					'Start from the newest snapshot @morphit has published on-chain, instead of replaying the whole chain from the start.',
 				subcommand: 'fast-sync',
-				tip: 'Downloads + verifies (sha256 three ways + a chain spot-check) the newest snapshot published by @morphit, then catches up the short tail. Prefer zero trust? Skip this and full-replay from genesis.'
+				tip: 'Checks the download against the fingerprint published on-chain, tells you how old the snapshot is, and asks before it replaces anything. Your indexer then catches up the blocks since the snapshot.'
 			}
 		]
 	},
@@ -113,11 +113,12 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				blurb:
 					'Let your users get a short note on Matrix, Session, XMPP, Telegram or email when a chat message arrives while they are away.',
 				subcommand: 'offline-notify',
-				tip: 'Optional. You set up an account for each app (each one is tested before it is saved); users then choose in Settings. On a Tor-only site only .onion servers work.'
+				tip: 'Optional. You set up an account for each app; users then choose in Settings. Before it is saved: Matrix has its sign-in checked by its server, and a test note to you is optional; Telegram has its bot token checked by Telegram; email always sends you a test note; XMPP sends you one too (an XMPP account made here can be saved without it); Session is tested only by a test note, which you may skip. On a Tor-only site only .onion servers work.'
 			},
 			{
 				label: 'Manage payment methods',
-				blurb: "List, add, or remove this instance's payment-method additions.",
+				blurb:
+					'List, add or remove the extra payment methods this instance offers (beyond the built-in ones).',
 				subcommand: 'payment-method',
 				positional: ['menu']
 			},
@@ -150,7 +151,7 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				blurb:
 					'Ubuntu/SSH/firewall/fail2ban/TLS + BunkerWeb + backups — generate a personalized checklist and walk each step.',
 				subcommand: 'harden',
-				tip: 'Recommended for any public server. Safe to re-run — it re-checks what\u2019s still missing.'
+				tip: 'Recommended for any public server. Each option first checks what is already set up on this server, then gives the steps for what is not.'
 			},
 			{
 				label: 'SSL/TLS certificate (HTTPS)',
@@ -193,11 +194,11 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				tip: 'Holds no keys, signs no trades \u2014 it hands the user off to your web UI for the actual key-signing. Disabling it never affects human traders, only AI-agent discovery.'
 			},
 			{
-				label: 'Matrix alerts: set / clear your alert username',
+				label: 'Matrix alerts: set up, change, test or turn off',
 				blurb:
-					'Get operator alerts (low balance, service down, security) DM\u2019d to your Matrix account. The matrix-bot auto-starts when you set a username and stops when you clear it.',
+					'Get operator alerts (low balance, service down, security) as direct messages on Matrix. The alert bot starts when you set an address and stops when you turn alerts off.',
 				subcommand: 'matrix',
-				tip: 'Set your personal MXID (@you:matrix.org) \u2014 NOT a #room alias (that would leak private alerts publicly). You also need a bot account access token in /etc/morphit/matrix-bot.env.'
+				tip: 'Set it up once here \u2014 the bot gets its own Matrix sign-in and DMs alerts to your personal address (@you:matrix.org, never a #room). Afterwards this item changes the address, sends a test, or turns alerts off.'
 			},
 			{
 				label: 'Status dashboard',
@@ -224,7 +225,7 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 			{
 				label: 'Moderation — review flags & block accounts',
 				blurb:
-					'Review reciprocity / related-account abuse flags, and block or unblock accounts on this instance.',
+					'Review all four reputation flags (mutual reviews, related accounts, pile-ons, review concentration), and block, unblock or clear them on this instance.',
 				subcommand: 'moderation'
 			}
 		]
@@ -347,10 +348,22 @@ const ROOT_REQUIRED_SUBCOMMANDS: ReadonlySet<string> = new Set([
 	'fast-sync'
 ]);
 
+/** Whether `subcommand` needs root (see ROOT_REQUIRED_SUBCOMMANDS). */
+export function needsRoot(subcommand: string): boolean {
+	return ROOT_REQUIRED_SUBCOMMANDS.has(subcommand);
+}
+
+/** True when this process runs as root (`sudo morphit-ops`). */
+export function runningAsRoot(): boolean {
+	return typeof process.getuid === 'function' && process.getuid() === 0;
+}
+
 /** A dim "(needs sudo)" tag for the FIRST LINE of menu items that require
- *  elevated privileges. Returns '' for items that run unprivileged. */
-export function rootTag(subcommand: string): string {
-	return ROOT_REQUIRED_SUBCOMMANDS.has(subcommand) ? '  ' + fmt.dim('(needs sudo)') : '';
+ *  elevated privileges. Returns '' for items that run unprivileged, and for
+ *  every item when the menu already runs as root (the tag told an operator who
+ *  had typed `sudo morphit-ops` to use sudo). */
+export function rootTag(subcommand: string, isRoot = false): string {
+	return !isRoot && needsRoot(subcommand) ? '  ' + fmt.dim('(needs sudo)') : '';
 }
 
 /**
@@ -358,15 +371,25 @@ export function rootTag(subcommand: string): string {
  * they chose to quit.  Caller dispatches the returned subcommand
  * through the normal main() path.
  */
-export async function runMainMenu(annotations?: MenuAnnotations): Promise<MenuSelection | null> {
+export async function runMainMenu(
+	annotations?: MenuAnnotations,
+	opts: { readonly isRoot?: boolean } = {}
+): Promise<MenuSelection | null> {
+	const isRoot = opts.isRoot ?? false;
 	console.log('');
 	console.log('━'.repeat(58));
 	console.log('  morphit-ops — what would you like to do?');
 	console.log('━'.repeat(58));
 	console.log('');
 	console.log('  Pick an action below.  (You can also run any of these');
-	console.log('  directly, e.g. `morphit-ops status` — run `morphit-ops');
-	console.log('  --help` to see every command and its flags.)');
+	console.log('  directly, e.g. `sudo morphit-ops status` — run');
+	console.log('  `morphit-ops --help` to see every command and its options.)');
+	if (!isRoot) {
+		console.log('');
+		console.log('  You started this without sudo, so only the items without');
+		console.log('  "(needs sudo)" will work. For everything: Quit, then run');
+		console.log('    sudo morphit-ops');
+	}
 	console.log('');
 
 	// Flatten into a single numbered list, but print group headings
@@ -383,7 +406,7 @@ export async function runMainMenu(annotations?: MenuAnnotations): Promise<MenuSe
 			// the suffix marker. The suffix glyph/text says which alert.
 			const label = emphasis !== null ? fmt.boldBrightYellow(item.label) : item.label;
 			lines.push(
-				`    ${flat.length}. ${label}${rootTag(item.subcommand)}${itemSuffix(item.subcommand, annotations)}`
+				`    ${flat.length}. ${label}${rootTag(item.subcommand, isRoot)}${itemSuffix(item.subcommand, annotations)}`
 			);
 			lines.push(`        ${item.blurb}`);
 			if (item.tip !== undefined) {

@@ -40,8 +40,13 @@ import { localCondenser } from '../lib/hiddenOnly.ts';
 import { parseShellValue } from '../lib/offlineNotifyEnv.ts';
 import {
 	findSignedReleaseAnchor,
+	releaseRecordHint,
+	RECORD_MAX_PAGES_HIDDEN,
+	RECORD_PAGE_SIZE_HIDDEN,
+	RECORD_READ_TIMEOUT_HIDDEN_MS,
 	type CondenserRead,
-	type ReleaseAnchor
+	type ReleaseAnchor,
+	type ReleaseRecordHint
 } from '../lib/releaseAnchor.ts';
 import {
 	MORPHIT_RELEASE_ACCOUNT,
@@ -153,6 +158,9 @@ export async function isHiddenOnly(opts: HiddenOnlyOptions): Promise<boolean> {
 interface ReleaseTargetResponse {
 	version: string;
 	distribution: { source_sha256?: string; ipns_name?: string; ipfs_cid?: string } | null;
+	/** Where the indexer applied the op from (apps/indexer/src/api/release.ts). */
+	source_block_num?: unknown;
+	source_trx_id?: unknown;
 }
 interface DirectoryResponse {
 	instances?: Array<{
@@ -259,6 +267,30 @@ export async function readOnchainReleaseTag(
 	}
 }
 
+/**
+ * v1.21.18: where THIS node's authenticated indexer says @morphit's release op
+ * for `tag` is (the block and transaction its `/v1/release` names), or null
+ * when it cannot say (no answer, another version, no block). Never throws.
+ * Only a place to look: lib/releaseAnchor.ts checks the op in that block as it
+ * checks one from the history, so the record is read with one small read.
+ */
+export async function readReleaseRecordHint(
+	opts: LocalIndexerOptions,
+	tag: string,
+	timeoutMs = 8_000
+): Promise<ReleaseRecordHint | null> {
+	try {
+		const rel = await getLocalIndexerJson<ReleaseTargetResponse>(
+			locateLocalIndexer(opts),
+			'/v1/release',
+			timeoutMs
+		);
+		return releaseRecordHint(rel, tag);
+	} catch {
+		return null;
+	}
+}
+
 /** How an instance is named to the operator: its site name, else its
  *  operator's, else its tag, else its address. Terminal-safe (printable,
  *  short). */
@@ -342,14 +374,27 @@ export async function tryResolveHiddenUpgrade(
 	opts.onStatus?.(
 		`Reading @${MORPHIT_RELEASE_ACCOUNT}'s signed record for v${version} over Tor/I2P`
 	);
+	// v1.21.18: every read here goes through this node's indexer, which on this
+	// path reaches the chain over Tor/I2P: one 1000-entry page of @morphit's
+	// history never arrived there (morphitlat, v1.21.16). So the block the
+	// indexer's /v1/release names is checked first (one small read), then the
+	// history in small pages, each with time for a slow Tor/I2P answer
+	// (lib/releaseAnchor.ts RECORD_*_HIDDEN).
 	const read: CondenserRead =
 		opts.chainRead ??
-		((method, params) => localCondenser(method, params, { bases: [base], timeoutMs: 60_000 }));
+		((method, params) =>
+			localCondenser(method, params, {
+				bases: [base],
+				timeoutMs: RECORD_READ_TIMEOUT_HIDDEN_MS
+			}));
 	const anchorArgs = {
 		tag: version,
 		signer: MORPHIT_RELEASE_ACCOUNT,
 		pinnedPubkey: opts.postingPubkey ?? MORPHIT_OFFICIAL_POSTING_PUBKEY,
-		chainId: BLURT_MAINNET_CHAIN_ID
+		chainId: BLURT_MAINNET_CHAIN_ID,
+		pageSize: RECORD_PAGE_SIZE_HIDDEN,
+		maxPages: RECORD_MAX_PAGES_HIDDEN,
+		hint: releaseRecordHint(rel, version)
 	};
 	const clock = {
 		...(opts.anchorWait?.now !== undefined ? { now: opts.anchorWait.now } : {}),

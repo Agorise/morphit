@@ -213,7 +213,9 @@ describe('clearLaterShadows', () => {
 			{ unit: 'morphit-indexer', file: IDX(), keys: ['MORPHIT_INSTANCE_CONTACT_URL'] }
 		]);
 		expect(readFileSync(IDX(), 'utf8')).toBe(OLD_IDX);
-		expect(describeShadowFix(r)[0]).toMatch(/could not remove .* sudo systemctl restart indexer/);
+		expect(describeShadowFix(r)[0]).toMatch(
+			/could not remove .* sudo systemctl restart morphit-indexer$/
+		);
 	});
 
 	it('a write that did not stick (read back) is a failure, not a success', () => {
@@ -263,7 +265,7 @@ describe('confirmRunning', () => {
 			runtime: env({ MORPHIT_INSTANCE_CONTACT_URL: 'mailto:operator@example.org' }),
 			tries: 1
 		});
-		expect(r).toEqual({ ok: true, unreadable: false, wrong: [] });
+		expect(r).toEqual({ ok: true, unreadable: false, down: [], wrong: [] });
 	});
 
 	it('names the key when the running indexer still has the old value', async () => {
@@ -356,13 +358,15 @@ describe('restartWithWritten (what edit and alt-address run after saving)', () =
 		expect(r.text).toMatch(/✓ checked: the running indexer use/);
 	});
 
-	it('says so, with the command, when the running indexer still has the old value', async () => {
+	it('says so, with how to see why, when the running indexer still has the old value', async () => {
 		const r = await run(['MORPHIT_INSTANCE_CONTACT_URL'], {
 			running: { MORPHIT_INSTANCE_CONTACT_URL: 'https://matrix.to/#/#morphit:matrix.org' }
 		});
 		expect(r.text).toMatch(
-			/still has MORPHIT_INSTANCE_CONTACT_URL=https:\/\/matrix\.to.*its settings give mailto:operator@example\.org.*sudo systemctl restart indexer/
+			/did not pick up the new MORPHIT_INSTANCE_CONTACT_URL after the restart: it runs with https:\/\/matrix\.to.*its settings give mailto:operator@example\.org.*sudo journalctl -u morphit-indexer -n 50 --no-pager$/m
 		);
+		// Just restarted: "restart it" again would be circular.
+		expect(r.text).not.toMatch(/systemctl restart/);
 		expect(r.text).not.toMatch(/✓ checked/);
 	});
 

@@ -260,8 +260,12 @@ tarball, plus a systemd timer. Sequence on a caught-up node:
    `scripts/eli5-release.sh`).
 7. Rotate: keep last N pins; IPNS + the newest on-chain op are the durable pointers.
 
-**Cadence:** daily. A 1-day-old snapshot leaves only ~28,800 blocks of tail
-(~a few minutes to catch up). Tighten later if desired. Only morphit.io / morphitlat
+**Cadence:** daily export and pin (`morphit-snapshot-publish.timer`; it skips a
+run while the indexer is behind). A 1-day-old snapshot leaves only ~28,800 blocks
+of tail (~a few minutes to catch up). Tighten later if desired. Anchoring (step 5)
+is not on that timer: it is done by hand on the laptop that holds the `@morphit`
+posting key, so the anchored snapshot is only as new as the last time that was
+done (the publish job prints the commands; OPERATIONS.md §52). Only morphit.io / morphitlat
 publish the *canonical* (`@morphit`-signed) snapshot; any operator can publish their own
 under their own account for their own boxes.
 

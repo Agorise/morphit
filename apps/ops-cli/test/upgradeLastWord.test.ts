@@ -236,6 +236,75 @@ describe('the background web heal in the last word (A-F1)', () => {
 	});
 });
 
+describe('one web-heal problem is said once and counted once (v1.21.17, morphit.io)', () => {
+	it('a warning relayed from the background log is not followed by a second warning, nor repeated in "Left for you"', async () => {
+		const { up, web, term } = await fresh();
+		const startedMs = Date.now();
+		const now = new Date(startedMs).toISOString();
+		writeFileSync(
+			join(d, 'web-heal.log'),
+			[
+				"  · WAF: real-IP verified live — BunkerWeb uses each visitor's own address.",
+				'  · WAF: /v1/ + /relay/ exemption verified live (…); stored 1 time(s).',
+				'✓ Web firewall (BunkerWeb), checked on this server: the API and the relay get through, visitors keep their own address.',
+				'[WARN] www: a test request on this server for www.example.org was answered 403 instead of being sent on to https://example.org.',
+				''
+			].join('\n')
+		);
+		// The heal phase (child): starts the background heal, follows it to its end.
+		process.env.MORPHIT_UPGRADE_SUMMARIZES = '1';
+		const out = await captured(async () => {
+			await up.startWebProxyHeals({ isBunkerWeb: () => true, launch: () => 'launched' });
+			web.writeWebHealState({
+				state: 'done',
+				startedAt: now,
+				finishedAt: now,
+				result: 'already',
+				except: 'the www address',
+				warnings: 1
+			});
+			await up.showWebProxyResult();
+			up.printRoutineSummary();
+		});
+		up.recordChildWarnings();
+		delete process.env.MORPHIT_UPGRADE_SUMMARIZES;
+		expect(out.match(/\[WARN\]/g)).toHaveLength(1);
+		// its result is shown here, mid-way — never promised "at the end" (L7)
+		expect(out).not.toMatch(/shown at the end of this upgrade/);
+		// the WAF's details stay in its log; its one ✓ line is shown
+		expect(out).not.toMatch(/verified live|stored 1 time/);
+		expect(out).toMatch(/✓ Web firewall \(BunkerWeb\), checked on this server/);
+		expect(term.warningCount()).toBe(1);
+		expect(out).not.toMatch(/already in place/);
+		// The upgrade (parent, a fresh process): its last word.
+		const parent = await fresh();
+		const t = parent.up
+			.upgradeSummaryLines(parent.up.gatherUpgradeSummary(base(startedMs)))
+			.join('\n');
+		expect(t).toMatch(/One warning above/);
+		expect(t).not.toMatch(/web-proxy settings \(BunkerWeb\)/i);
+		expect(t).not.toMatch(/already in place/);
+	});
+
+	it('a heal that ended with the www address not working never says "already in place"', async () => {
+		const { web } = await fresh();
+		const t = '2026-10-06T12:00:00.000Z';
+		const s = {
+			state: 'done' as const,
+			startedAt: t,
+			finishedAt: t,
+			result: 'already',
+			except: 'the www address',
+			warnings: 1
+		};
+		expect(web.describeWebHeal(s, Date.parse(t))).toMatch(/^in place, except the www address/);
+		expect(web.webHealStatusRow(s)).toEqual({
+			value: 'in place, except the www address',
+			status: 'warn'
+		});
+	});
+});
+
 describe('the heal phase reports a web-heal outcome as what it is', () => {
 	it('rolled back: a warning, never one of the checks that "found nothing to change"', async () => {
 		const { up, term } = await fresh();
@@ -474,7 +543,10 @@ describe('lines that ask the operator to act are counted (A-F2)', () => {
 		const { up } = await fresh();
 		const r = await seed(up, '200');
 		expect(r.code).toBe(0);
-		expect(r.out).toMatch(/✓ Seeded v9\.9\.9 to IPFS\./);
+		// One ✓ line for the seed and what it checked — not one per check
+		// (v1.21.17 audit, L1).
+		expect(r.out).toMatch(/✓ Seeded v9\.9\.9 to IPFS: over Tor \(each checked on this server\)\./);
+		expect(r.out.match(/✓/g)).toHaveLength(1);
 		childLeftCount(up);
 		expect(lastWord(up, Date.now())).toMatch(/Nothing else to do\./);
 	}, 60_000);

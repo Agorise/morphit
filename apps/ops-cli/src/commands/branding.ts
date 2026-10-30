@@ -55,7 +55,7 @@
  */
 
 import { existsSync, readFileSync, accessSync, constants as fsConstants } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { isAbsolute, join, resolve } from 'node:path';
 import { DEFAULT_BRAND_NAME, sanitizeBrandName, INSTANCE_ENV } from '@morphit/operator-config';
 import {
@@ -756,7 +756,113 @@ export function anyExistingFileUnreadable(
 	});
 }
 
+/** The hidden sub-command the CLI runs in a child process to apply branding
+ *  (see applyBrandingAsync). Not listed anywhere; operators never type it. */
+export const APPLY_CHILD = '__apply-child';
+const RESULT_MARK = '__MORPHIT_BRANDING_RESULT__';
+
+type ApplyOpts = Parameters<typeof applyBranding>[0];
+
+/** The child's side: read the options from stdin, apply, print the result. */
+async function runApplyChild(): Promise<number> {
+	let input = '';
+	process.stdin.setEncoding('utf8');
+	for await (const chunk of process.stdin) input += chunk as string;
+	let out: { ok: true; result: BrandingResult } | { ok: false; message: string };
+	try {
+		out = { ok: true, result: applyBranding(JSON.parse(input) as ApplyOpts) };
+	} catch (err) {
+		out = { ok: false, message: err instanceof Error ? err.message : String(err) };
+	}
+	process.stdout.write(`\n${RESULT_MARK}${JSON.stringify(out)}\n`);
+	return 0;
+}
+
+/**
+ * applyBranding draws the icons and launch screens with rsvg-convert or
+ * ImageMagick, one synchronous call after another. Run in THIS process it
+ * blocks the event loop, so the spinner shown for it froze on its first frame
+ * for the whole wait. Here it runs in a child process (this same CLI, the
+ * hidden `branding __apply-child`) while the spinner turns. When this process
+ * is not the CLI (a test harness) or the child cannot be started, it runs
+ * here, as before.
+ */
+export async function applyBrandingAsync(
+	opts: ApplyOpts,
+	/** The child to run (default: this CLI's own entry, `branding __apply-child`). */
+	childCmd?: { readonly cmd: string; readonly args: readonly string[] }
+): Promise<BrandingResult> {
+	const entry = process.argv[1] ?? '';
+	const how =
+		childCmd ??
+		(/(^|[\\/])main\.(ts|js|mjs|cjs)$/.test(entry)
+			? { cmd: process.execPath, args: [...process.execArgv, entry, 'branding', APPLY_CHILD] }
+			: null);
+	if (how === null || process.env.MORPHIT_BRANDING_IN_PROCESS === '1') return applyBranding(opts);
+	return new Promise<BrandingResult>((resolvePromise, reject) => {
+		let stdout = '';
+		let stderr = '';
+		let settled = false;
+		const inProcess = (): void => {
+			if (settled) return;
+			settled = true;
+			try {
+				resolvePromise(applyBranding(opts));
+			} catch (err) {
+				reject(err);
+			}
+		};
+		let child: ReturnType<typeof spawn>;
+		try {
+			child = spawn(how.cmd, [...how.args], {
+				stdio: ['pipe', 'pipe', 'pipe'],
+				env: process.env
+			});
+		} catch {
+			inProcess();
+			return;
+		}
+		child.stdout?.setEncoding('utf8');
+		child.stderr?.setEncoding('utf8');
+		child.stdout?.on('data', (d: string) => (stdout += d));
+		child.stderr?.on('data', (d: string) => (stderr = (stderr + d).slice(-4000)));
+		child.on('error', inProcess);
+		child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+			if (settled) return;
+			const at = stdout.lastIndexOf(RESULT_MARK);
+			if (at < 0) {
+				settled = true;
+				const how =
+					signal !== null ? ` (stopped by ${signal})` : code !== null ? ` (exit code ${code})` : '';
+				reject(
+					new Error(
+						`the branding helper stopped without a result${how}${stderr.trim() !== '' ? `: ${stderr.trim().split('\n').slice(-3).join(' ')}` : ''}`
+					)
+				);
+				return;
+			}
+			settled = true;
+			try {
+				const out = JSON.parse(stdout.slice(at + RESULT_MARK.length).split('\n')[0]!) as
+					| { ok: true; result: BrandingResult }
+					| { ok: false; message: string };
+				if (out.ok) resolvePromise(out.result);
+				else reject(new Error(out.message));
+			} catch (err) {
+				reject(err);
+			}
+		});
+		// A child that stops before it reads its input (it failed to start
+		// properly, or exited at once) makes this write fail with EPIPE. Without
+		// a listener that error would end this whole process; the child's end is
+		// what is reported, on 'close' above.
+		child.stdin?.on('error', () => {});
+		child.stdin?.end(JSON.stringify(opts));
+	});
+}
+
 export async function runBranding(ctx: BrandingCtx): Promise<number> {
+	if (ctx.positional[0] === APPLY_CHILD) return runApplyChild();
 	const sub = ctx.positional[0] ?? 'status';
 	const json = ctx.flags.json === 'true';
 	const dryRun = ctx.flags['dry-run'] === 'true';
@@ -856,7 +962,7 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 		spinOut
 	);
 	try {
-		result = applyBranding({
+		result = await applyBrandingAsync({
 			buildDir,
 			settings,
 			dryRun: sub === 'status' || dryRun,

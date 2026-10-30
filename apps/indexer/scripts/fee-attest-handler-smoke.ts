@@ -133,6 +133,12 @@ await scenario('launch phase: admits on age-only', async () => {
 		orderSeed('pending_external'),
 		eligibilitySeed(60, 0),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
+		// The order's newest attestation (block time + number): before the
+		// consensus activation time, so the pre-activation count runs.
+		{
+			match: 'MAX(observed_at)',
+			rows: [{ as_of: new Date('2026-04-19T12:00:00Z'), as_of_block: '100' }]
+		},
 		{
 			match: 'SELECT DISTINCT fa.attestor',
 			// The INDEPENDENT attestors (never the poster, never a pair flagged
@@ -151,6 +157,12 @@ await scenario('launch phase: admits on loyalty-only', async () => {
 		orderSeed('pending_external'),
 		eligibilitySeed(5, 150),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
+		// The order's newest attestation (block time + number): before the
+		// consensus activation time, so the pre-activation count runs.
+		{
+			match: 'MAX(observed_at)',
+			rows: [{ as_of: new Date('2026-04-19T12:00:00Z'), as_of_block: '100' }]
+		},
 		{
 			match: 'SELECT DISTINCT fa.attestor',
 			// The INDEPENDENT attestors (never the poster, never a pair flagged
@@ -169,6 +181,12 @@ await scenario('steady phase: admits when both gates pass', async () => {
 		orderSeed('pending_external'),
 		eligibilitySeed(60, 500),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
+		// The order's newest attestation (block time + number): before the
+		// consensus activation time, so the pre-activation count runs.
+		{
+			match: 'MAX(observed_at)',
+			rows: [{ as_of: new Date('2026-04-19T12:00:00Z'), as_of_block: '100' }]
+		},
 		{
 			match: 'SELECT DISTINCT fa.attestor',
 			// The INDEPENDENT attestors (never the poster, never a pair flagged
@@ -211,6 +229,12 @@ await scenario('promotes order when ≥2 independent attestors + eligibility pas
 		orderSeed('pending_external'),
 		eligibilitySeed(60, 500),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
+		// The order's newest attestation (block time + number): before the
+		// consensus activation time, so the pre-activation count runs.
+		{
+			match: 'MAX(observed_at)',
+			rows: [{ as_of: new Date('2026-04-19T12:00:00Z'), as_of_block: '100' }]
+		},
 		{
 			match: 'SELECT DISTINCT fa.attestor',
 			// The INDEPENDENT attestors (never the poster, never a pair flagged

@@ -14,7 +14,7 @@
 import { CANONICAL_TREASURY } from '../../../indexer/src/config/canonicalTreasury.ts';
 import { INDEXER_ENV_FILES, readEffectiveEnv } from './relayHiddenHeal.ts';
 import { chainRead, type ChainAccessDeps } from './chainAccess.ts';
-import { localIndexerJson } from './hiddenOnly.ts';
+import { isHiddenOnlyNode, localIndexerJson } from './hiddenOnly.ts';
 
 /** The project-canonical Blurt account-name regex (as the indexer's). */
 const ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
@@ -175,7 +175,14 @@ export async function acceptedRegistration(
 /** This node's /v1/instance view of its fees account. `registered` is null
  *  when the indexer does not report it (a pre-v1.20 indexer) or could not tell. */
 export interface LocalFeeView {
+	/** Where this site tells its users to pay BLURT fees (`fee_recipient`).
+	 *  From the consensus activation time, while the configured account is
+	 *  verified unregistered, that is the canonical treasury. */
 	readonly feeRecipient: string | null;
+	/** The CONFIGURED fees account, the one `registered` is about
+	 *  (`configured_fee_recipient`, served to local callers by v1.21.18+);
+	 *  null when the indexer does not report it. */
+	readonly configuredFeeRecipient: string | null;
 	readonly registered: boolean | null;
 	/** Did the indexer's answer carry the field at all (v1.20+)? */
 	readonly reportsRegistration: boolean;
@@ -187,19 +194,38 @@ export async function localFeeView(
 	try {
 		const b = await localIndexerJson<Record<string, unknown> | null>(
 			'/v1/instance',
-			{},
+			// A local caller: the indexer adds `configured_fee_recipient`.
+			{ headers: { 'x-morphit-local-health': '1' } },
 			{ timeoutMs: opts.timeoutMs ?? 8_000, bases: opts.bases }
 		);
 		if (b === null || typeof b !== 'object') return null;
 		const reg = b.fee_recipient_registered;
 		return {
 			feeRecipient: typeof b.fee_recipient === 'string' ? b.fee_recipient : null,
+			configuredFeeRecipient:
+				typeof b.configured_fee_recipient === 'string' ? b.configured_fee_recipient : null,
 			registered: typeof reg === 'boolean' ? reg : null,
 			reportsRegistration: 'fee_recipient_registered' in b
 		};
 	} catch {
 		return null;
 	}
+}
+
+/** The account `view.registered` is about: the indexer's
+ *  `configured_fee_recipient` when it reports one; else, for an indexer that
+ *  does not, what the indexer service's env files configure
+ *  (configuredFeeRecipient) when it differs from the advertised account only
+ *  because that is the treasury; else the advertised account (an older
+ *  indexer advertises the configured one). */
+export function configuredAccountOf(
+	view: LocalFeeView,
+	fromEnv: () => string = () => configuredFeeRecipient().recipient
+): string | null {
+	// typeof: a view built by an older caller may lack the field altogether.
+	if (typeof view.configuredFeeRecipient === 'string') return view.configuredFeeRecipient;
+	if (view.feeRecipient === CANONICAL_BLURT_TREASURY && view.registered === false) return fromEnv();
+	return view.feeRecipient;
 }
 
 /** The newest register op `account` signed, read from the chain's account
@@ -223,29 +249,71 @@ type HistoryEntry = [number, { trx_id?: unknown; block?: unknown; op?: unknown }
 export const HISTORY_PAGES = 10;
 export const HISTORY_PAGE_SIZE = 1000;
 
+/**
+ * v1.21.18: the same read on a HIDDEN-ONLY node, where this node's indexer
+ * relays it over Tor/I2P. One 1000-entry page never arrived there (morphitlat:
+ * 10 entries of history took 33.7 s; 100 none within 240 s), so the 20 s the
+ * read had always ran out and every check fell back to "could not read". Now:
+ * pages of 10 entries, 90 s each, two pages. That finds the registration when
+ * it is among the newest entries — always so for the read-back right after
+ * `register` or the upgrade heal broadcast it — within the 300 s the upgrade
+ * gives its heal. A registration that is OLDER than that is not "not found":
+ * the read throws, and every caller then says it could not check, as it did
+ * before, instead of treating an incomplete search as no registration.
+ */
+export const HISTORY_PAGES_HIDDEN = 2;
+export const HISTORY_PAGE_SIZE_HIDDEN = 10;
+export const HISTORY_READ_TIMEOUT_HIDDEN_MS = 90_000;
+
 export async function latestChainRegistration(
 	account: string,
 	deps: ChainAccessDeps = {},
 	read: typeof chainRead = chainRead
 ): Promise<ChainRegistration> {
+	const hidden = (deps.hiddenOnly ?? (() => isHiddenOnlyNode()))();
+	const pages = hidden ? HISTORY_PAGES_HIDDEN : HISTORY_PAGES;
+	const pageSize = hidden ? HISTORY_PAGE_SIZE_HIDDEN : HISTORY_PAGE_SIZE;
+	const readDeps: ChainAccessDeps = hidden
+		? {
+				...deps,
+				hiddenOnly: () => true,
+				hiddenReadTimeoutMs: deps.hiddenReadTimeoutMs ?? HISTORY_READ_TIMEOUT_HIDDEN_MS
+			}
+		: deps;
 	let start = -1;
-	for (let page = 0; page < HISTORY_PAGES; page++) {
-		const limit = start === -1 ? HISTORY_PAGE_SIZE : Math.min(HISTORY_PAGE_SIZE, start);
-		if (limit <= 0) break;
+	let atStart = false;
+	for (let page = 0; page < pages; page++) {
+		const limit = start === -1 ? pageSize : Math.min(pageSize, start);
+		if (limit <= 0) {
+			atStart = true;
+			break;
+		}
 		const entries = await read<HistoryEntry[] | null>(
 			'get_account_history',
 			[account, start, limit],
-			deps
+			readDeps
 		);
-		if (!Array.isArray(entries) || entries.length === 0) break;
+		if (!Array.isArray(entries) || entries.length === 0) {
+			atStart = true;
+			break;
+		}
 		// Ascending by sequence: newest last.
 		for (let i = entries.length - 1; i >= 0; i--) {
 			const hit = registerOpIn(entries[i], account);
 			if (hit !== null) return hit;
 		}
 		const first = entries[0]?.[0];
-		if (typeof first !== 'number' || first <= 0) break;
+		if (typeof first !== 'number' || first <= 0) {
+			atStart = true;
+			break;
+		}
 		start = first - 1;
+	}
+	if (hidden && !atStart) {
+		throw new Error(
+			`no register op among the newest ${pages * (pageSize + 1)} entries of @${account}'s chain history ` +
+				'(over Tor/I2P only those are read), so this could not be checked'
+		);
 	}
 	return { found: false };
 }

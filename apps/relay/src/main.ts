@@ -53,6 +53,8 @@ import { maxBodyBytes, securityHeaders } from './middleware/security.ts';
 import { accessLog } from './middleware/access_log.ts';
 import { logger } from '$log';
 import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
+import { PrivateKey } from '@beblurt/dblurt';
+import { ActiveKeyGuard } from './policy/activeKeyGuard.ts';
 import { installHiddenServiceDispatcher, routerInstallPolicy } from '@morphit/hidden-transport/router';
 
 // Scoped loggers per phase so operators can filter journalctl by
@@ -97,14 +99,20 @@ async function main(): Promise<void> {
 	// and is shaped correctly), then exit. Runs BEFORE unlockActiveKey
 	// so it NEVER prompts for a passphrase — safe for `morphit-ops
 	// doctor` to call non-interactively. We report whether the key is
-	// an encrypted envelope (so the operator knows the relay will ask
-	// for a passphrase at real start) without decrypting it.
+	// an encrypted envelope without decrypting it. The shipped unit
+	// (ops/systemd/morphit-relay.service, also what Ansible installs)
+	// unlocks it with LoadCredentialEncrypted=: systemd decrypts the
+	// sealed credential at every start and the relay reads it from
+	// MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE (config/unlock.ts) — no
+	// prompt; a missing credential file fails the unit's start.
 	if (process.argv.includes('--check-config')) {
 		const encrypted = lockedCfg.relayActiveKeyEnvelope !== undefined;
 		// eslint-disable-next-line no-console
 		console.log(
 			`[check-config] relay config OK (active key: ${
-				encrypted ? 'encrypted — will prompt for passphrase at start' : 'plaintext'
+				encrypted
+					? 'encrypted — the morphit-relay service unlocks it at every start from the sealed credential /etc/morphit/relay_passphrase.cred (no prompt; without that file the service does not start)'
+					: 'plaintext'
 			})`
 		);
 		process.exit(0);
@@ -256,6 +264,34 @@ async function main(): Promise<void> {
 	});
 	await rpcDirSync.first;
 
+	// ─── The relay's key, checked against the chain (policy/activeKeyGuard) ──
+	// A key that is not on the account's active authority cannot sign anything
+	// the relay sends. The relay then refuses to sign (signups refused, payments
+	// held) and logs one plain line with the fix — it does not exit, because the
+	// unit restarts it for ever and an exit would be a silent crash loop. An
+	// unanswered check refuses nothing.
+	let relayPublicKey: string | null = null;
+	try {
+		relayPublicKey = PrivateKey.fromString(cfg.relayActiveKeyWif).createPublic('BLT').toString();
+	} catch {
+		relayPublicKey = null; // the guard reports it and refuses to sign
+	}
+	const activeKeyGuard = new ActiveKeyGuard({
+		account: cfg.relayAccount,
+		publicKey: relayPublicKey,
+		lookup: (name) => blurt.activeAuthorityAgreed(name),
+		log: logger('relay-key')
+	});
+	// Not awaited (review, 2026-10-29): the first check could hold the relay's
+	// start — and its health, name checks and Web Push — for up to 30 s while
+	// the chain answered slowly, yet until it is done the state is `unchecked`,
+	// which refuses nothing. It runs in the background and logs its own result.
+	void activeKeyGuard.start().catch((err: unknown) => {
+		bootLog.warn('active_key_check_failed', {
+			note: `${err instanceof Error ? err.message : String(err)}; signing goes on and the key is checked again in the background`
+		});
+	});
+
 	// ─── Signup-state directory: persisted ceiling + kill-switch file (D3) ──
 	// Both protections need a writable directory. Create it and PROVE it is
 	// writable, then say plainly which protections are active.
@@ -335,7 +371,8 @@ async function main(): Promise<void> {
 		cfg.altchaTriggerCount,
 		altcha,
 		inviteTokens,
-		killSwitch
+		killSwitch,
+		activeKeyGuard
 	);
 	// Layer 8 detector — Null when the operator has explicitly
 	// disabled it via env var.  See policy/sequentialDetector.ts.
@@ -359,9 +396,11 @@ async function main(): Promise<void> {
 		killSwitch,
 		cfg.highValueNamePolicy,
 		cfg.highValueShortNameThreshold,
-		sequentialDetector
+		sequentialDetector,
+		activeKeyGuard
 	);
-	const queueDrainer = new RelayQueueDrainer(cfg, db, blurt);
+	const queueDrainer = new RelayQueueDrainer(cfg, db, blurt, activeKeyGuard);
+	healthService.setActiveKeyStatusProvider(() => activeKeyGuard.status());
 	healthService.setQueueStatsProvider(() => queueDrainer.queueStats());
 
 	// ── Web Push ───────────────────────────────
@@ -622,6 +661,7 @@ async function main(): Promise<void> {
 		altcha.close();
 		healthService.close();
 		rpcDirSync.stop();
+		activeKeyGuard.stop();
 		notifyWorker?.stop();
 		// Stop the queue drainer (awaits in-flight broadcasts).
 		// We don't await here because the callback pattern of

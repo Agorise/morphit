@@ -119,6 +119,12 @@ describe('feeAttest handler — insertion + promotion', () => {
 				]
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
+			// The order's newest attestation (block time + number): before the
+			// consensus activation time, so the pre-activation count runs.
+			{
+				match: 'MAX(observed_at)',
+				rows: [{ as_of: new Date('2026-04-19T12:00:00Z'), as_of_block: '100' }]
+			},
 			{
 				match: 'SELECT DISTINCT fa.attestor',
 				// The non-poster, non-related attestors; each is then checked for the
@@ -135,10 +141,10 @@ describe('feeAttest handler — insertion + promotion', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		// Order lookup, eligibility, INSERT, attestors, one reciprocity check.
-		// No UPDATE.
-		expect(mock.queries).toHaveLength(5);
-		expect(mock.queries[3]!.text).toContain('SELECT DISTINCT fa.attestor');
+		// Order lookup, eligibility, INSERT, newest attestation, attestors, one
+		// reciprocity check. No UPDATE.
+		expect(mock.queries).toHaveLength(6);
+		expect(mock.queries[4]!.text).toContain('SELECT DISTINCT fa.attestor');
 	});
 
 	// The poster can never attest their own order: the
@@ -181,6 +187,12 @@ describe('feeAttest handler — insertion + promotion', () => {
 				]
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
+			// The order's newest attestation (block time + number): before the
+			// consensus activation time, so the pre-activation count runs.
+			{
+				match: 'MAX(observed_at)',
+				rows: [{ as_of: new Date('2026-04-19T12:00:00Z'), as_of_block: '100' }]
+			},
 			{
 				match: 'SELECT DISTINCT fa.attestor',
 				// The non-poster, non-related attestors; each is then checked for the
@@ -202,12 +214,13 @@ describe('feeAttest handler — insertion + promotion', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries).toHaveLength(7);
+		expect(mock.queries).toHaveLength(8);
 		// The UPDATE should scope to pending_external to avoid
-		// accidentally overwriting other states.  Index 6: order
-		// SELECT (0), eligibility (1), attestation INSERT (2),
-		// attestors (3), two reciprocity checks (4, 5), UPDATE (6).
-		const update = mock.queries[6]!;
+		// accidentally overwriting other states.  Index 7: order
+		// SELECT (0), eligibility (1), attestation INSERT (2), newest
+		// attestation (3), attestors (4), two reciprocity checks (5, 6),
+		// UPDATE (7).
+		const update = mock.queries[7]!;
 		expect(update.text).toContain('verified_by_attestation');
 		expect(update.text).toContain('pending_external');
 	});
@@ -231,6 +244,12 @@ describe('feeAttest handler — insertion + promotion', () => {
 				]
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
+			// The order's newest attestation (block time + number): before the
+			// consensus activation time, so the pre-activation count runs.
+			{
+				match: 'MAX(observed_at)',
+				rows: [{ as_of: new Date('2026-04-19T12:00:00Z'), as_of_block: '100' }]
+			},
 			{
 				match: 'SELECT DISTINCT fa.attestor',
 				// The non-poster, non-related attestors; each is then checked for the
@@ -252,8 +271,9 @@ describe('feeAttest handler — insertion + promotion', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		// ... attestors (3), two reciprocity checks (4, 5), UPDATE (6).
-		expect(mock.queries).toHaveLength(7);
+		// ... newest attestation (3), attestors (4), two reciprocity checks
+		// (5, 6), UPDATE (7).
+		expect(mock.queries).toHaveLength(8);
 	});
 
 	it('does NOT promote when order is already verified', async () => {
@@ -461,6 +481,12 @@ describe('feeAttest handler — Finding I eligibility gate', () => {
 				]
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
+			// The order's newest attestation (block time + number): before the
+			// consensus activation time, so the pre-activation count runs.
+			{
+				match: 'MAX(observed_at)',
+				rows: [{ as_of: new Date('2026-04-19T12:00:00Z'), as_of_block: '100' }]
+			},
 			{
 				match: 'SELECT DISTINCT fa.attestor',
 				// The non-poster, non-related attestors; each is then checked for the

@@ -45,17 +45,21 @@ import {
 	chmodSync,
 	closeSync,
 	constants as fsConstants,
+	existsSync,
 	fstatSync,
 	lstatSync,
 	mkdirSync,
 	openSync,
+	readdirSync,
 	readFileSync,
 	renameSync,
 	unlinkSync,
 	writeSync
 } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { hostname } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { loadConfig } from '../src/config/index.ts';
 import { bootChainClient, installChainRouting } from '../src/indexer/bootChainClient.ts';
 import { INDEXER_SNAPSHOT_SIGNER_DEFAULT } from '../src/blurt/indexerSnapshotOp.ts';
@@ -234,6 +238,125 @@ function writeState(s: MirrorState): void {
 	}
 }
 
+/** How old the anchored snapshot is, in words ("about 21 days old"), from its
+ *  block and the chain's head; null when the head is not known. PURE. */
+export function snapshotAgeWords(
+	anchoredBlock: number,
+	headBlock: number | null,
+	blockMs = 3000
+): { readonly words: string; readonly days: number } | null {
+	if (headBlock === null || !Number.isFinite(headBlock) || headBlock < anchoredBlock) return null;
+	const ms = (headBlock - anchoredBlock) * blockMs;
+	const days = ms / 86_400_000;
+	const hours = Math.round(ms / 3_600_000);
+	const words =
+		days >= 1.5
+			? `about ${Math.round(days)} days old`
+			: hours >= 2
+				? `about ${hours} hours old`
+				: 'less than two hours old';
+	return { words, days };
+}
+
+/** Exports pinned on this box (pin-indexer-snapshot.sh's payloads) newer than
+ *  the anchored block, newest first. */
+export function waitingExports(
+	dir: string,
+	anchoredBlock: number
+): Array<{ readonly block: number; readonly path: string }> {
+	let names: string[] = [];
+	try {
+		names = readdirSync(dir);
+	} catch {
+		return [];
+	}
+	return names
+		.map((n) => ({ n, m: /^indexer-snapshot-payload-(\d+)\.json$/.exec(n) }))
+		.filter((x) => x.m !== null && Number(x.m[1]) > anchoredBlock)
+		.map((x) => ({ block: Number(x.m![1]), path: join(dir, x.n) }))
+		.sort((a, b) => b.block - a.block);
+}
+
+/** After a stale anchored snapshot (over two days) on the box that publishes
+ *  it: how many exports wait to be anchored, and the exact commands that
+ *  anchor the newest one, on the operator's laptop. PURE. */
+export function anchorReminder(o: {
+	readonly days: number;
+	readonly waiting: ReadonlyArray<{ readonly block: number; readonly path: string }>;
+	readonly host: string | null;
+}): string[] {
+	if (o.days <= 2) return [];
+	if (o.waiting.length === 0)
+		return [
+			'  This box publishes the snapshot, but no newer export is pinned here yet: the daily publish job makes one once the indexer is caught up (its log, on this server: sudo journalctl -u morphit-snapshot-publish -n 30).'
+		];
+	const newest = o.waiting[0]!;
+	const file = newest.path.slice(newest.path.lastIndexOf('/') + 1);
+	// This server's own name when it has no web address: never a placeholder
+	// to fill in (plain `hostname`, as the shell scripts — no DNS lookup).
+	const where = o.host ?? hostname();
+	return [
+		`  This box publishes the snapshot: ${o.waiting.length === 1 ? 'one newer export is' : `${o.waiting.length} newer exports are`} pinned here but not anchored on chain (anchoring is done on your laptop). To anchor the newest (block ${newest.block.toLocaleString()}), on your laptop, in your Morphit folder:`,
+		`    scp -O root@${where}:${newest.path} .`,
+		`    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts ${file} --dry-run`,
+		`    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts ${file} --broadcast`,
+		'  (the last one asks for the @morphit posting key; the next upgrade, or the weekly mirror run, then mirrors it here.)',
+		'  If this server refuses root logins (PermitRootLogin no), copy the export in two steps instead of the first command above:',
+		`    on this server:  sudo install -m 0644 ${newest.path} /tmp/`,
+		`    on your laptop:  scp -O <your-login>@${where}:/tmp/${file} .`
+	];
+}
+
+/**
+ * Where the publisher keeps its exports: WORKDIR from its own settings
+ * (/etc/morphit/snapshot-publish.env, which its unit loads and
+ * pin-indexer-snapshot.sh reads), else its default, `<ipfs repo>/indexer-snapshots`.
+ * It used to read MORPHIT_SNAPSHOT_WORKDIR, which nothing sets (review,
+ * 2026-10-29). Read as text, never sourced: the last assignment wins, one
+ * layer of quotes removed. PURE.
+ */
+export function publishWorkdir(envText: string | null, ipfsRepo: string): string {
+	let v: string | null = null;
+	for (const raw of (envText ?? '').split(/\r?\n/)) {
+		const m = /^\s*(?:export\s+)?WORKDIR=(.*)$/.exec(raw);
+		if (m === null) continue;
+		let x = m[1]!.trim();
+		if (x.length >= 2 && (x[0] === '"' || x[0] === "'") && x.endsWith(x[0]!)) x = x.slice(1, -1);
+		else x = x.replace(/\s+#.*$/, '');
+		v = x;
+	}
+	return v !== null && v.startsWith('/') ? v : join(ipfsRepo, 'indexer-snapshots');
+}
+
+/** The box's public host name, for a command run elsewhere; null when unknown. */
+function publicHost(origin: string | undefined): string | null {
+	try {
+		return origin ? new URL(origin).hostname : null;
+	} catch {
+		return null;
+	}
+}
+
+/** How old the snapshot anchored at `block` is, from the chain's head (read
+ *  with a 30 s limit); null when the head could not be read. Never throws. */
+async function anchoredAge(
+	blurt: ReturnType<typeof bootChainClient>,
+	block: number,
+	blockMs: number
+): Promise<ReturnType<typeof snapshotAgeWords>> {
+	let head: number | null = null;
+	try {
+		const p = await Promise.race([
+			blurt.callCondenser<{ head_block_number?: unknown }>('get_dynamic_global_properties', []),
+			new Promise<null>((r) => setTimeout(() => r(null), 30_000).unref())
+		]);
+		head = typeof p?.head_block_number === 'number' ? p.head_block_number : null;
+	} catch {
+		head = null;
+	}
+	return snapshotAgeWords(block, head, blockMs);
+}
+
 /** A peer's CAR into kubo, pinning only the anchored CID (importCarWith). */
 function importCar(bytes: Uint8Array, cid: string, budgetMs?: number): boolean {
 	return importCarWith(ipfs, bytes, cid, budgetMs);
@@ -304,16 +427,41 @@ async function main(): Promise<void> {
 	} catch (e) {
 		stopReading();
 		say(
-			`could not read the chain right now (${e instanceof Error ? e.message : String(e)}) — will retry on the next run.`
+			`could not read the chain right now (${e instanceof Error ? e.message : String(e)}) — will retry on the next run. ` +
+				'How old the anchored snapshot is could not be read either.'
 		);
 		return;
 	}
 	stopReading();
 	if (!resolved.ok) {
-		say(`${resolved.reason} Nothing was pinned; will retry on the next run.`);
+		say(
+			`${resolved.reason} Nothing was pinned; will retry on the next run. ` +
+				'How old the anchored snapshot is could not be read.'
+		);
 		return;
 	}
 	const op = resolved.selected.payload;
+	// How old is it? A publisher whose anchoring lags (it is a manual laptop
+	// step) left morphit.io's mirrors on a 21-day-old snapshot while the line
+	// said only "newest" (v1.21.17 audit, M4). Said on every way this run ends
+	// from here, not only when it was already mirrored (review, 2026-10-29).
+	const age = await anchoredAge(blurt, op.last_applied_block, config.blockIntervalMs);
+	const ageWords = age?.words ?? 'its age could not be read';
+	/** On the box that publishes it: the exports waiting to be anchored. */
+	const remindToAnchor = (): void => {
+		const publishEnv =
+			process.env.MORPHIT_SNAPSHOT_PUBLISH_ENV ?? '/etc/morphit/snapshot-publish.env';
+		if (age === null || !existsSync(publishEnv)) return;
+		for (const l of anchorReminder({
+			days: age.days,
+			waiting: waitingExports(
+				publishWorkdir(readOwnFile(publishEnv), IPFS_REPO),
+				op.last_applied_block
+			),
+			host: publicHost(config.instanceOrigin) ?? publicHost(config.publicOrigin)
+		}))
+			say(l);
+	};
 
 	// Chain gate. Mirroring another chain's state would hand newcomers a snapshot
 	// their own node must reject — refuse rather than waste everyone's time.
@@ -332,15 +480,16 @@ async function main(): Promise<void> {
 		const pinned = ipfs(['pin', 'ls', '--type=recursive', op.ipfs_cid], 30_000);
 		if (pinned !== null && pinned.includes(op.ipfs_cid)) {
 			say(
-				`already mirroring the newest snapshot (block ${op.last_applied_block.toLocaleString()}) — nothing to do.`
+				`already mirroring the newest anchored snapshot (block ${op.last_applied_block.toLocaleString()}, ${ageWords}) — nothing to do.`
 			);
+			remindToAnchor();
 			return;
 		}
 		say('state says we mirror this snapshot but kubo does not hold it — re-pinning.');
 	}
 
 	say(
-		`newest snapshot: block ${op.last_applied_block.toLocaleString()} · schema v${op.schema_version} · ` +
+		`newest snapshot: block ${op.last_applied_block.toLocaleString()} (${ageWords}) · schema v${op.schema_version} · ` +
 			`indexer v${op.indexer_version} · ${Math.max(1, Math.round(op.size_bytes / 1024))} kB · CID ${op.ipfs_cid}`
 	);
 
@@ -469,7 +618,10 @@ async function main(): Promise<void> {
 		mirroredAt: new Date().toISOString()
 	});
 
-	say('\u2713 this instance now mirrors the federation snapshot.');
+	say(
+		`\u2713 this instance now mirrors the federation snapshot (block ${op.last_applied_block.toLocaleString()}, ${ageWords}).`
+	);
+	remindToAnchor();
 	// v1.21.6: name only the addresses this instance has (a hidden-only node has
 	// no clearnet origin; not every node has both hidden addresses).
 	const hidden = [
@@ -509,11 +661,13 @@ async function main(): Promise<void> {
 // flight are abandoned, but an abandoned RPC call keeps retrying in the
 // background until its own timeout (a minute for .onion/.i2p), holding the
 // process open for nothing.
-main().then(
-	() => process.exit(0),
-	(err) => {
-		// Never fail: this runs inside upgrades and on a timer.
-		say(`unexpected error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
-		process.exit(0);
-	}
-);
+// Run only as the script (its pure helpers are imported by its test).
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+	main().then(
+		() => process.exit(0),
+		(err) => {
+			// Never fail: this runs inside upgrades and on a timer.
+			say(`unexpected error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+			process.exit(0);
+		}
+	);

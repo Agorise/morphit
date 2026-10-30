@@ -12,7 +12,8 @@ by root). `sudo morphit-ops` with no arguments opens a menu of everything;
 Many subcommands change the server (install, upgrade, harden, edit,
 branding, register, block, …); the database views (status, signups,
 drain-queue, abuse, failed-broadcasts, loyalty, attestations, flags) only
-read.
+read. A command that needs root, typed without `sudo`, stops at once and
+prints the same command with `sudo` in front.
 
 Never run it through `npx`: outside the install folder `npx` looks the name
 up on the public npm registry, which is not where Morphit comes from. Before
@@ -59,7 +60,8 @@ permanent once claimed.
 sudo morphit-ops status
 ```
 
-It finds the database URL in the instance's own env files; set
+It finds the database URL and the relay account (`MORPHIT_RELAY_ACCOUNT`)
+in the instance's own env files, which only root can read; set
 `MORPHIT_OPS_DATABASE_URL` only to point it somewhere else.
 
 You should see a multi-section dashboard summarizing indexer
@@ -67,18 +69,19 @@ health, drain queue, today's signups, and 24h moderation flags.
 
 ## Configuration
 
-The CLI reads its database connection from environment variables.
-Only the database URL is required; everything else has a
-sensible default.
+The CLI reads these from the instance's own env files (`/opt/morphit/morphit.env`
+and the files next to it), and from its own environment. Only the
+database URL is required; for `status` and `signups` the relay account
+is required too.
 
 | Variable                             | Required           | Default         | Notes                                                                 |
 | ------------------------------------ | ------------------ | --------------- | --------------------------------------------------------------------- |
 | `MORPHIT_OPS_DATABASE_URL`           | Yes (or alt below) | —               | Postgres connection string                                            |
 | `MORPHIT_INDEXER_DATABASE_URL`       | Alt                | —               | Falls back to this if MORPHIT_OPS_DATABASE_URL is unset               |
 | `DATABASE_URL`                       | Alt                | —               | Final fallback                                                        |
-| `MORPHIT_OPS_RELAY_ACCOUNT`          | No                 | `morphit-relay` | Matched against accounts.creator for signup queries                   |
+| `MORPHIT_OPS_RELAY_ACCOUNT`          | No                 | `MORPHIT_RELAY_ACCOUNT` | The relay account whose signups, balance and payouts are shown. No built-in default: when neither is set, `status` and `signups` stop and say which line to add |
 | `MORPHIT_OPS_FEES_ACCOUNT`           | No                 | `morphit-fees`  | Currently informational; used in future subcommands                   |
-| `MORPHIT_RELAY_SIGNUP_DAILY_CEILING` | No                 | `50`            | Snapshot of relay's ceiling, used to compute "X / Y" on dashboard     |
+| `MORPHIT_RELAY_SIGNUP_DAILY_CEILING` | No                 | `50`            | The relay's daily signup limit, for "X / Y" on the dashboard. Read from the relay's own env files, as its service reads them (`/etc/morphit/relay.env` wins); `50`, the relay's own default, when none sets it |
 | `MORPHIT_OPS_COLOR`                  | No                 | `auto`          | `auto` (TTY-aware), `always`, or `never`. `NO_COLOR` env also honored |
 
 ### Threshold tunables
@@ -114,8 +117,8 @@ Override any of them via env:
 | `branding [status\|setup\|apply\|reset]` | Your logo, icons and site name (`docs/BRANDING.md`) |
 | `alt-address` | Guided Tor / Lokinet / I2P address setup |
 | `register` | Publish (or update) your operator registration on-chain |
-| `show-key` | Show the public key your saved active key derives to |
-| `edit-active-key` | Rotate the relay account's active key |
+| `show-key` | Show the public key of the relay's saved active key, and check it against the account on the chain (✓ matches / ✗ which key it is instead) |
+| `edit-active-key` | Replace the relay account's active key; it checks the new key against the chain before saving |
 | `import-altnet-key` / `export-altnet-key --network=tor\|lokinet\|i2p` | Encrypt / decrypt an alt-network service key |
 | `payment-method [add\|remove\|list]` | Instance-specific payment methods |
 | `upgrade [--check-only] [--yes] [--json] [--from-file=PATH] [--allow-downgrade]` | Check for and apply a newer release |
@@ -123,16 +126,17 @@ Override any of them via env:
 | `ssl [status\|setup]` | HTTPS certificate status / setup steps |
 | `bunkerweb` | BunkerWeb WAF status / install |
 | `health [--json]` | Node health: indexer, relay, services, canary |
-| `mcp` / `matrix [set <mxid>\|clear\|test]` | MCP server on/off; Matrix alert username |
+| `mcp` / `matrix [setup\|set <mxid>\|clear\|test]` | MCP server on/off; Matrix alerts: guided setup, the alert address, turn off, test alert |
+| `offline-notify [status]` | The Matrix, Session, XMPP, Telegram and email accounts your users' offline notes are sent from |
 | `status` | One-screen dashboard: indexer state, drain queue, signups today, moderation flags 24h |
-| `drain-queue [--age=DUR]` | Pending relay transfers, oldest first |
-| `signups [--since=DUR]` | Accounts created via this relay (default 24h) |
-| `abuse [--since=DUR]` | Persistent broadcast failures + new reciprocity/related-account flags |
-| `failed-broadcasts [--since=DUR]` | Relay broadcasts that errored |
+| `drain-queue [--age=DUR] [--offset=N]` | Pending relay transfers, oldest first (`--offset` skips the first N) |
+| `signups [--since=DUR] [--offset=N]` | Accounts created via this relay (default 24h) |
+| `abuse [--since=DUR]` | Persistent broadcast failures + new flags of all four kinds (reciprocity, related accounts, pile-on, review concentration); default 24h |
+| `failed-broadcasts [--since=DUR] [--offset=N]` | Relay broadcasts that errored, each marked sent, waiting for confirmation, may have been sent, or not sent |
 | `loyalty [--since=DUR]` | Loyalty milestone delegations (default 7d) |
 | `attestations` | Orders awaiting fee-attestation verification (BTC/XMR fee path) |
-| `flags [--type=reciprocity\|related] [--since=DUR]` | Moderation flags drill-down |
-| `moderation` | Review flags, block/unblock accounts (interactive) |
+| `flags [--type=reciprocity\|related\|pile_on\|concentration] [--since=DUR]` | Moderation flags of all four kinds (default 7d; `--since=all` for every one) |
+| `moderation [--type=…] [--since=DUR]` | Review the flags (all time by default), block/unblock accounts, clear a flag or undo a clearance (interactive) |
 | `block <account> [reason]` / `unblock <account>` | Hide / un-hide an account's listings on this instance |
 | `fast-sync [--from-file PATH]` / `fast-forward [BLOCK]` | Restore a federation snapshot / skip ahead |
 
@@ -153,6 +157,7 @@ Override any of them via env:
 Number followed by unit: `s` (seconds), `m` (minutes), `h` (hours), `d` (days).
 Examples: `30s`, `5m`, `24h`, `7d`. Case-insensitive on the unit;
 whitespace between number and unit is tolerated (`5 m` works).
+`all` means no window at all (every row, however old).
 
 ## JSON output
 
@@ -173,14 +178,22 @@ oldest=$(morphit-ops status --json | jq '.drain_queue.oldest_age_sec // 0')
 
 ## Troubleshooting
 
-**"No database URL configured."**
-Set `MORPHIT_OPS_DATABASE_URL` to the same connection string the
-indexer uses. See your operator config or systemd unit.
+**"That needs administrator rights on this server. Run it with sudo"**
+The instance's settings files are readable only by root. Run the
+command it prints (the same one with `sudo` in front), on the server.
 
-**Status shows 0 signups but you know there were some.**
-The CLI matches `accounts.creator = MORPHIT_OPS_RELAY_ACCOUNT`.
-If your relay's account name isn't `morphit-relay`, set
-`MORPHIT_OPS_RELAY_ACCOUNT` to the actual name.
+**"No database URL configured."**
+With `sudo`, it reads the database address from the instance's env
+files. If it still says this, they do not name one: set
+`MORPHIT_OPS_DATABASE_URL` to the same connection string the indexer
+uses (`MORPHIT_INDEXER_DATABASE_URL` in `/opt/morphit/morphit.env`).
+
+**"This server's relay account is not set"** (`status`, `signups`).
+The CLI matches `accounts.creator` against the relay account, read from
+the `MORPHIT_RELAY_ACCOUNT` line of `/opt/morphit/morphit.env` (the
+guided install writes it). Add that line with your relay account's name,
+on the server: `sudo nano /opt/morphit/morphit.env`. To look at another
+relay account, set `MORPHIT_OPS_RELAY_ACCOUNT`.
 
 **Failed-broadcasts list is empty but the relay's logs show errors.**
 The CLI sees only persisted DB state. In-flight or never-queued
@@ -203,7 +216,8 @@ Some basic SSH sessions have spotty UTF-8 support. Pass
 - **Multi-relay views.** The CLI assumes one relay account
   per instance. Operators running multiple relays would
   invoke the CLI multiple times with different
-  `MORPHIT_OPS_RELAY_ACCOUNT` values.
+  `MORPHIT_OPS_RELAY_ACCOUNT` values (for example
+  `sudo MORPHIT_OPS_RELAY_ACCOUNT=alice-relay morphit-ops signups`).
 
 ## Source
 

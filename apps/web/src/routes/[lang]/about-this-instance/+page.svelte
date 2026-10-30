@@ -28,7 +28,7 @@
 	import Head from '$components/Head.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import { instance } from '$stores/instance';
-	import { showFeeRecipientUnregistered } from '$stores/feeRecipient';
+	import { feeRecipientNote } from '$stores/feeRecipient';
 	import { integritySummary } from '$stores/release';
 	import { findPaymentMethod } from '$lib/payments/registry';
 
@@ -77,6 +77,9 @@
 	});
 
 	const manifestFileCount = $derived(verify ? Object.keys(verify.hash_manifest).length : 0);
+	const feeNote = $derived(
+		feeRecipientNote($instance.fee_recipient_registered, $instance.fee_recipient)
+	);
 
 	/** The operator's re-branding disclosure (ops-cli writes it into verify.json):
 	 *  the name the site calls itself and how many files it re-branded. A
@@ -222,17 +225,26 @@
 					</div>
 				{/if}
 			</dl>
-			{#if showFeeRecipientUnregistered($instance.fee_recipient_registered)}
+			{#if feeNote}
 				<!-- v1.20.0 (G1): only on a VERIFIED "not registered" (never on
 				     null = unknown). Informational, not an alarm: it is the
-				     operator's to-do, and visitors' funds are unaffected. -->
+				     operator's to-do, and visitors' funds are unaffected. From
+				     1 November 2026 the fees go to the treasury, so the note
+				     says that instead of naming the treasury as this
+				     instance's fees account (feeRecipientNote). -->
 				<p
 					class="mt-4 rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm text-ink-800 dark:text-ink-100"
 					data-testid="fee-recipient-unregistered"
 				>
-					{$_('about_this_instance.fee_recipient_unregistered', {
-						values: { account: $instance.fee_recipient }
-					})}
+					{#if feeNote.kind === 'paid_to_treasury'}
+						{$_('about_this_instance.fee_recipient_unregistered_to_treasury', {
+							values: { treasury: feeNote.treasury }
+						})}
+					{:else}
+						{$_('about_this_instance.fee_recipient_unregistered', {
+							values: { account: feeNote.account }
+						})}
+					{/if}
 				</p>
 			{/if}
 		</section>

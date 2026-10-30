@@ -30,6 +30,11 @@ vi.mock('../src/lib/operatorFeeRecipient.ts', async (orig) => ({
 	...(await orig<typeof import('../src/lib/operatorFeeRecipient.ts')>()),
 	localFeeView: async () => null
 }));
+// status reads the relay account's balance from the chain (v1.21.18); no chain here.
+vi.mock('../src/init/chainCheck.ts', async (orig) => ({
+	...(await orig<typeof import('../src/init/chainCheck.ts')>()),
+	lookupBlurtAccount: async () => null
+}));
 
 const BRAILLE = /[⠀-⣿]/;
 

@@ -137,11 +137,12 @@ try {
 		/await\s+checkMcpAnswers\(mcpHost, mcpPort\)/.test(upgradeSrc) &&
 			/await withSpinner\([^)]*,\s*\(\) =>\s*probeMcpHealth\(/.test(checkFn.slice(0, 600))
 	);
-	// The probe lives inside the MCP-unit-installed block AND after the restart.
-	const runIdx = upgradeSrc.indexOf('export async function runUpgrade(');
+	// The probe lives inside the MCP-unit-installed step (redeployMcpOnUpgrade,
+	// called by runUpgrade since v1.21.17's review) AND after the (re)start.
+	const runIdx = upgradeSrc.indexOf('export async function redeployMcpOnUpgrade(');
 	const mcpBlockIdx = upgradeSrc.indexOf('morphit-mcp.service', runIdx);
 	const probeIdx = upgradeSrc.indexOf('await checkMcpAnswers('); // the CALL site, not the def
-	const restartIdx = upgradeSrc.indexOf("['restart', 'morphit-mcp.service']");
+	const restartIdx = upgradeSrc.indexOf("'restart' : 'start', 'morphit-mcp.service']", runIdx);
 	check(
 		'probe is wired after the MCP restart',
 		restartIdx !== -1 && probeIdx !== -1 && probeIdx > restartIdx

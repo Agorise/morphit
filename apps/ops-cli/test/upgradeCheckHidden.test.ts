@@ -415,7 +415,9 @@ describe('upgrade --check-only on a clearnet node', () => {
 			});
 			expect(rc).toBe(5);
 			const out = [...said, ...logged].join('\n');
-			expect(out).toMatch(/could not reach any release source/i);
+			expect(out).toMatch(
+				/no place that publishes it could be reached, so nothing was downloaded/i
+			);
 			expect(out).toMatch(/on-chain release record names v1\.18\.0/);
 		} finally {
 			await idx.close();

@@ -17,7 +17,9 @@ async function run(ctx: CommandCtx, action: BlockAction): Promise<number> {
 
 	const rawAccount = ctx.positional[0];
 	if (rawAccount === undefined || rawAccount === '') {
-		printError(`Usage: morphit-ops ${action} <account>${action === 'block' ? ' [reason]' : ''}`);
+		printError(
+			`Usage, on this server: sudo morphit-ops ${action} <account>${action === 'block' ? ' [reason]' : ''}`
+		);
 		return 1;
 	}
 	const account = normalizeAccount(rawAccount);
@@ -50,7 +52,7 @@ async function run(ctx: CommandCtx, action: BlockAction): Promise<number> {
 		info(
 			`  @${account}'s listings are now hidden on this instance. They'll see a notice with a link to the Matrix chatroom.`
 		);
-		info(`  Reverse with: morphit-ops unblock ${account}`);
+		info(`  To undo it, on this server: sudo morphit-ops unblock ${account}`);
 	} else if (changed && action === 'unblock') {
 		info(`  @${account}'s listings will show on this instance again.`);
 	}

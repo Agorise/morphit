@@ -25,7 +25,8 @@ import {
 	askChoice,
 	step,
 	explain,
-	examples
+	examples,
+	isAbortError
 } from './prompt.ts';
 import {
 	lookupBlurtAccount,
@@ -36,6 +37,7 @@ import {
 } from './chainCheck.ts';
 import { withSpinner } from './spinner.ts';
 import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
+import { fieldProblem } from '../lib/altAddressValidate.ts';
 import {
 	isReservedTag,
 	impersonatesReservedName
@@ -370,6 +372,9 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 			console.log('');
 			return { name, account, chainLookupSucceeded: true };
 		} catch (err) {
+			// A stop at the question inside (Ctrl+C, or the input ended) is not
+			// a failed lookup: it stops the step, as everywhere else.
+			if (isAbortError(err)) throw err;
 			// err.message can carry chain-RPC response
 			// text (HTTP server's error body) which is attacker-
 			// influenceable.  describeAccountLookupFailure sanitizes it
@@ -532,7 +537,10 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 
 export async function stepFeesAccount(
 	defaultAccount: string | undefined,
-	instanceName?: string
+	instanceName?: string,
+	/** `edit` with no valid fees account set now: Enter keeps it that way
+	 *  (returns ''), and this says what that means. */
+	opts: { readonly keepUnset?: string } = {}
 ): Promise<string> {
 	step(6, TOTAL_STEPS, 'Fees account');
 	const base = instanceName ? suggestAccountBase(instanceName) : '';
@@ -553,6 +561,8 @@ export async function stepFeesAccount(
 	examples(base ? [`${base}-fees`] : ['yourbrand-fees', 'acme-fees']);
 	if (defaultAccount !== undefined) {
 		console.log(`Default (press Enter): keep ${defaultAccount}`);
+	} else if (opts.keepUnset !== undefined) {
+		console.log(`Default (press Enter): leave it as it is — ${opts.keepUnset}`);
 	}
 	console.log('');
 
@@ -560,6 +570,7 @@ export async function stepFeesAccount(
 		const v = await ask('Fees account name', defaultAccount);
 		if (v.length === 0) {
 			if (defaultAccount !== undefined) return defaultAccount;
+			if (opts.keepUnset !== undefined) return '';
 			console.log('  ✗ Please enter the account where your fees should land.\n');
 			continue;
 		}
@@ -671,7 +682,20 @@ export interface AltNetworkResult {
 
 // ─── Step 9: Public origin URL ───────────────────────────────────
 
-export async function stepOrigin(): Promise<string | null> {
+/** `morphit-ops edit` re-asks a few of these steps. It passes what is set now:
+ *  Enter keeps it (never a silent wipe), and the text no longer says things
+ *  that are only true during the first setup. */
+export interface EditCurrent<T> {
+	readonly current: T;
+}
+
+/** Ask "really remove …?" with No as the default (the safe answer). */
+async function confirmRemove(what: string, consequence: string): Promise<boolean> {
+	console.log(`  ${consequence}`);
+	return askYesNo(`Really remove your ${what}?`, false);
+}
+
+export async function stepOrigin(edit?: EditCurrent<string | null>): Promise<string | null> {
 	step(9, TOTAL_STEPS, 'Public origin URL (optional but recommended)');
 	explain(
 		'This is the public web address of YOUR instance — the domain\n' +
@@ -695,16 +719,38 @@ export async function stepOrigin(): Promise<string | null> {
 			"URL.  Without it, your instance won't appear in the federation\n" +
 			'directory and users on other Morphit instances cannot find you.\n' +
 			'\n' +
-			'You can skip this step and set MORPHIT_INSTANCE_ORIGIN later;\n' +
-			"the wizard won't ask again.\n" +
+			(edit === undefined
+				? 'You can skip this step and set MORPHIT_INSTANCE_ORIGIN later;\n' +
+					"the wizard won't ask again.\n"
+				: edit.current !== null
+					? `Now set: ${sanitizeForTerm(edit.current)}\n` +
+						'Press Enter to keep it, or type a new address.\n'
+					: 'Now set: nothing.  Press Enter to leave it unset.\n') +
 			'\n' +
 			"NOTE: this is your own site's address (the URL users visit),\n" +
 			'NOT a Blurt RPC endpoint and NOT a block explorer.'
 	);
 
 	while (true) {
-		const v = await ask('Public origin URL (leave blank to skip)');
-		if (v.length === 0) return null;
+		const question =
+			edit === undefined
+				? 'Public origin URL (leave blank to skip)'
+				: edit.current !== null
+					? 'Public origin URL ([Enter] keeps the current one, "-" removes it)'
+					: 'Public origin URL ([Enter] leaves it unset)';
+		const v = await ask(question);
+		if (v.length === 0) return edit === undefined ? null : edit.current;
+		if (edit !== undefined && v === '-') {
+			if (edit.current === null) return null;
+			const sure = await confirmRemove(
+				'public origin URL',
+				'Without it, other instances no longer link to your web address (your\n' +
+					'  registration can then list only your Tor address, if you have one).'
+			);
+			if (sure) return null;
+			console.log(`  Kept ${sanitizeForTerm(edit.current)}.\n`);
+			return edit.current;
+		}
 		let parsed: URL;
 		try {
 			parsed = new URL(v);
@@ -898,15 +944,28 @@ export async function stepSeo(): Promise<SeoResult> {
 	if (!wantsOverride) {
 		return { title: null, description: null, keywords: null };
 	}
-	const title = await ask(
+	// Each is held to what the indexer accepts (INDEXER_TEXT_LIMITS, as
+	// `edit` does): a longer one would stop the site from starting.
+	const limited = async (q: string, key: string): Promise<string> => {
+		for (;;) {
+			const v = await ask(q, '');
+			const problem = fieldProblem(key, v);
+			if (problem === null) return v;
+			console.log(`  ✗ ${problem}.  Try again (Enter to skip).\n`);
+		}
+	};
+	const title = await limited(
 		'Homepage <title> tag (e.g. "Acme P2P Marketplace — no KYC, no custody")',
-		''
+		'MORPHIT_INSTANCE_SEO_TITLE'
 	);
-	const description = await ask(
+	const description = await limited(
 		'Homepage <meta description> — one sentence, ~150 chars (Enter to skip)',
-		''
+		'MORPHIT_INSTANCE_SEO_DESCRIPTION'
 	);
-	const keywords = await ask('Homepage <meta keywords>, comma-separated (Enter to skip)', '');
+	const keywords = await limited(
+		'Homepage <meta keywords>, comma-separated (Enter to skip)',
+		'MORPHIT_INSTANCE_SEO_KEYWORDS'
+	);
 	return {
 		title: title.length > 0 ? title : null,
 		description: description.length > 0 ? description : null,
@@ -957,8 +1016,31 @@ export interface BackupResult {
 	readonly dbUser: string;
 }
 
-export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
-	step(17, TOTAL_STEPS, 'Daily DB backup');
+/** How a step is shown outside the setup wizard (`morphit-ops harden` on a
+ *  running node): no "Step N of 23" header, no wizard wording, and the way
+ *  back is harden itself, not `init`. */
+export interface StandaloneStepOpts {
+	readonly standalone?: boolean;
+	/** stepBackup: the folder offered (the morphit user's home + /backups). */
+	readonly defaultBackupDir?: string;
+}
+
+/** A plain header for a step shown outside the wizard. */
+function standaloneHeader(title: string): void {
+	const rule = '━'.repeat(58);
+	console.log('');
+	console.log(rule);
+	console.log(`  ${title}`);
+	console.log(rule);
+	console.log('');
+}
+
+export async function stepBackup(
+	databaseUrl: string,
+	opts: StandaloneStepOpts = {}
+): Promise<BackupResult> {
+	if (opts.standalone === true) standaloneHeader('Daily database backup');
+	else step(17, TOTAL_STEPS, 'Daily DB backup');
 	explain(
 		"The indexer's PostgreSQL database is rebuildable from the\n" +
 			'Blurt blockchain in case of total loss, but a same-day\n' +
@@ -984,9 +1066,12 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 	const enabled = await askYesNo('Enable daily DB backup automation?', true);
 	if (!enabled) {
 		console.log(
-			'  ⚠  Backups disabled.  You can enable later by running\n' +
-				'     `morphit-ops init` again, or follow the manual recipe\n' +
-				'     in docs/RUN-A-MORPHIT-NODE.md §9.\n'
+			opts.standalone === true
+				? '  ⚠  Backups not set up.  To set them up later, on this server:\n' +
+						'     sudo morphit-ops harden   (pick the database backups)\n'
+				: '  ⚠  Backups disabled.  You can enable later by running\n' +
+						'     `morphit-ops init` again, or follow the manual recipe\n' +
+						'     in docs/RUN-A-MORPHIT-NODE.md §9.\n'
 		);
 		return {
 			enabled: false,
@@ -999,12 +1084,11 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 	}
 
 	let backupDir = '';
+	const offeredDir = opts.defaultBackupDir ?? '/home/morphit/backups';
 	while (true) {
-		backupDir = (await ask('Backup directory', '/home/morphit/backups')).trim();
+		backupDir = (await ask('Backup directory', offeredDir)).trim();
 		if (backupDir.startsWith('/')) break;
-		console.log(
-			'  ✗ Use an absolute path (starting with /), e.g. /home/morphit/backups.  Try again.\n'
-		);
+		console.log(`  ✗ Use an absolute path (starting with /), e.g. ${offeredDir}.  Try again.\n`);
 	}
 	const retainDays = await askInt('Days of backups to keep', {
 		min: 1,
@@ -1044,13 +1128,12 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 	};
 }
 
-// ─── Edit-only step: Blurt RPC endpoints ─────────────────────────
+// ─── Step 20: Blurt RPC endpoints ─────────────────────────────────
 //
-// Used by `morphit-ops edit` when an operator needs to update the
-// Blurt RPC endpoint list — typically because a community RPC node
-// went offline or a new one came online.  The init wizard does NOT
-// prompt for this (the canonical defaults work for first-time
-// setup); this step is reachable only via `edit`.
+// Asked by the setup wizard (`morphit-ops init`, with the shipped
+// defaults: Enter accepts them) and by `morphit-ops edit` when an
+// operator needs to update the Blurt RPC endpoint list — typically
+// because a community RPC node went offline or a new one came online.
 //
 // The validation rules mirror the indexer's Zod schema in
 // apps/indexer/src/config/index.ts:
@@ -1113,7 +1196,12 @@ export function parseRpcEndpoints(raw: string): readonly string[] | string {
 
 export async function stepRpcEndpoints(
 	current: readonly string[] | null,
-	opts: { readonly hiddenOnly?: boolean } = {}
+	opts: {
+		readonly hiddenOnly?: boolean;
+		/** The caller (`edit`) offers the indexer restart itself afterwards, so
+		 *  the step does not tell the operator to run it by hand. */
+		readonly restartOffered?: boolean;
+	} = {}
 ): Promise<readonly string[]> {
 	step(20, TOTAL_STEPS, 'Blurt RPC endpoints (defaults are fine for most operators)');
 	// A hidden-only node reads the chain only over Tor/I2P: its clearnet list
@@ -1154,11 +1242,13 @@ export async function stepRpcEndpoints(
 			'\n' +
 			'Format: comma-separated https:// URLs, no spaces.\n' +
 			'\n' +
-			'Press Enter to keep the current value.  When you change\n' +
-			'this, you must restart the indexer service for the new\n' +
-			'list to take effect:\n' +
-			'\n' +
-			'  sudo systemctl restart morphit-indexer\n' +
+			(opts.restartOffered === true
+				? 'Press Enter to keep the current value.\n'
+				: 'Press Enter to keep the current value.  When you change\n' +
+					'this, you must restart the indexer service for the new\n' +
+					'list to take effect, on this server:\n' +
+					'\n' +
+					'  sudo systemctl restart morphit-indexer\n') +
 			'\n' +
 			'Best practice: KEEP THE FULL SHIPPED DEFAULT SET (many\n' +
 			'clearnet nodes plus hidden Tor/I2P nodes). The pool tests\n' +
@@ -1179,6 +1269,10 @@ export async function stepRpcEndpoints(
 			console.log(`  ✗ ${result}  Try again.\n`);
 			continue;
 		}
+		// Enter keeps the list shown: nothing changes, so nothing is checked.
+		// (Checking it asked "Use this list anyway?" — default No — and, with
+		// no node answering, Enter then asked again for ever.)
+		if (result.join(',') === defaultDisplay) return result;
 
 		// Reachability probe (beta5 item B): a real
 		// get_dynamic_global_properties call to each endpoint, so the
@@ -2257,20 +2351,77 @@ export async function stepDisabledPaymentMethods(): Promise<DisabledPaymentMetho
 // deployed at-reference amounts; the wizard recomputes them from live
 // prices when Coingecko is reachable, falling back to these otherwise.
 const DEFAULT_LISTING_FEE_TARGET_USD = LISTING_FEE_USD.btc;
-const DEFAULT_LISTING_FEE_BTC_SATOSHIS = 416;
-const DEFAULT_LISTING_FEE_XMR_PICONERO = 781_250_000;
-const DEFAULT_FALLBACK_BLURT_PRICE_USD = 0.002;
 
-export async function stepListingFee(): Promise<ListingFeeResult> {
+/** What the indexer uses when a setting is not set anywhere — its own schema
+ *  defaults (apps/indexer/src/config/index.ts: MORPHIT_INDEXER_BTC_FEE_SATOSHIS,
+ *  _XMR_FEE_PICONERO, _PRICE_FEED_STATIC_FLOOR, _PRICE_FEED_DENOMINATION_FIAT).
+ *  `edit` shows these as the value in force for a setting no file sets, so Enter
+ *  keeps exactly what the indexer runs with. Tied to the indexer's real
+ *  loadConfig() by test/listingFeeDefaults.test.ts. */
+export const INDEXER_LISTING_FEE_DEFAULTS = {
+	btcSatoshis: 416,
+	xmrPiconero: 781_250_000,
+	fallbackBlurtPriceUsd: 0.001,
+	denominationFiat: 'USD'
+} as const;
+
+const DEFAULT_LISTING_FEE_BTC_SATOSHIS = INDEXER_LISTING_FEE_DEFAULTS.btcSatoshis;
+const DEFAULT_LISTING_FEE_XMR_PICONERO = INDEXER_LISTING_FEE_DEFAULTS.xmrPiconero;
+/** The fallback price the setup wizard SUGGESTS (and writes): not the
+ *  indexer's own default, which applies only when nothing is written. */
+const SUGGESTED_FALLBACK_BLURT_PRICE_USD = 0.002;
+
+/** What `morphit-ops edit` passes to {@link stepListingFee}: the values in
+ *  force now (from the settings files, else the indexer's own defaults), used
+ *  as every question's default so Enter keeps them. */
+export interface ListingFeeCurrent {
+	/** The USD target the setup wizard used (it is kept only as a comment it
+	 *  writes), or null. Not a setting: shown only when new amounts are worked
+	 *  out from a target. */
+	readonly targetUsd: number | null;
+	readonly btcSatoshis: number | null;
+	readonly xmrPiconero: number | null;
+	readonly fallbackBlurtPriceUsd: number | null;
+	readonly denominationFiat: string | null;
+}
+
+/** The display-unit choices. No "(default)" in a label: the list marks the
+ *  default itself (it read "USD — US Dollar (default) (default)"). */
+export const COMMON_FIATS: ReadonlyArray<{ ticker: string; label: string }> = [
+	{ ticker: 'USD', label: 'USD — US Dollar' },
+	{ ticker: 'EUR', label: 'EUR — Euro' },
+	{ ticker: 'GBP', label: 'GBP — British Pound' },
+	{ ticker: 'JPY', label: 'JPY — Japanese Yen' },
+	{ ticker: 'BRL', label: 'BRL — Brazilian Real' },
+	{ ticker: 'CNY', label: 'CNY — Chinese Yuan' },
+	{ ticker: 'INR', label: 'INR — Indian Rupee' },
+	{ ticker: 'RUB', label: 'RUB — Russian Ruble' },
+	{ ticker: 'AED', label: 'AED — UAE Dirham' },
+	{ ticker: 'XDR', label: 'XDR — IMF Special Drawing Rights basket' },
+	{ ticker: 'XAU', label: 'XAU — Gold ounces (hard-currency hedge)' },
+	{ ticker: 'OTHER', label: 'Other (enter a 3-8 character uppercase ticker)' }
+];
+
+export async function stepListingFee(
+	edit?: EditCurrent<ListingFeeCurrent>,
+	opts: { readonly hiddenOnly?: boolean } = {}
+): Promise<ListingFeeResult> {
+	const cur = edit?.current;
+	const defTarget = cur?.targetUsd ?? DEFAULT_LISTING_FEE_TARGET_USD;
+	const defBtc = cur?.btcSatoshis ?? DEFAULT_LISTING_FEE_BTC_SATOSHIS;
+	const defXmr = cur?.xmrPiconero ?? DEFAULT_LISTING_FEE_XMR_PICONERO;
+	const defFallback = cur?.fallbackBlurtPriceUsd ?? SUGGESTED_FALLBACK_BLURT_PRICE_USD;
+	const haveCurrentAmounts =
+		cur !== undefined && cur.btcSatoshis !== null && cur.xmrPiconero !== null;
+	const hiddenOnly = opts.hiddenOnly ?? isHiddenOnlyNode();
 	step(15, TOTAL_STEPS, 'Listing fee + fallback BLURT price');
 	explain(
 		'Two operator-tunable amounts:\n' +
 			'\n' +
-			'  1. Listing fee USD target.  Users posting orders pay\n' +
-			'     a listing fee.  The default targets $0.25 USD,\n' +
-			'     converted to BTC satoshis and XMR piconero using\n' +
-			'     live exchange rates at wizard-run time.  Users\n' +
-			'     paying in BLURT get an automatic 50% discount\n' +
+			'  1. Listing fee.  Users posting orders pay a listing fee.\n' +
+			'     The default targets $0.25 USD, converted to BTC\n' +
+			'     satoshis and XMR piconero using live exchange rates.\n' +
+			'     Users paying in BLURT get an automatic 50% discount\n' +
 			'     (~$0.125 worth) — that discount is configured\n' +
 			'     separately and not editable here.\n' +
 			'\n' +
@@ -2281,82 +2432,163 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 			'     on-platform data behind it.  When those are unreachable AND nothing\n' +
 			'     has cached, the indexer falls back to this number.\n' +
 			'     Display-only — fee verification is BLURT-native\n' +
-			'     and does not consult USD prices.  Default $0.002.\n' +
-			'\n' +
-			'Both can be edited later via:\n' +
-			'   morphit-ops edit  →  Listing fee + fallback BLURT price\n' +
-			'or directly in morphit.config.env (and restart).'
+			'     and does not consult USD prices.' +
+			(edit === undefined
+				? `  Suggested $${SUGGESTED_FALLBACK_BLURT_PRICE_USD}.\n` +
+					'\n' +
+					'Both can be edited later via:\n' +
+					'   morphit-ops edit  →  Listing fee + fallback BLURT price\n' +
+					'or directly in morphit.config.env (and restart).'
+				: '\n\nEach question starts from what is in force now: press Enter to keep it.')
 	);
 
-	// ─── Listing fee USD target ──
-	console.log('  ── Listing fee USD target ──\n');
-	const targetUsd = await askFloat('  USD target per listing fee', {
-		min: 0.01,
-		max: 100,
-		default: DEFAULT_LISTING_FEE_TARGET_USD
-	});
-
-	// Attempt live recompute via Coingecko.
-	console.log('');
-	let btcSatoshis = DEFAULT_LISTING_FEE_BTC_SATOSHIS;
-	let xmrPiconero = DEFAULT_LISTING_FEE_XMR_PICONERO;
+	let targetUsd = defTarget;
+	let btcSatoshis = defBtc;
+	let xmrPiconero = defXmr;
 	let source: 'coingecko' | 'manual' | 'default' = 'default';
+	/** Whether a USD target was asked (and so is worth showing). */
+	let targetAsked = false;
 
-	try {
-		const prices = await withSpinner('Fetching live BTC/USD and XMR/USD from Coingecko…', () =>
-			fetchBtcXmrPricesFromCoingecko()
+	const askByHand = async (btc: number, xmr: number): Promise<void> => {
+		source = 'manual';
+		kept = false;
+		btcSatoshis = await askInt('  BTC fee amount in satoshis', {
+			min: 1,
+			max: 100_000_000_000,
+			default: btc
+		});
+		xmrPiconero = await askInt('  XMR fee amount in piconero', {
+			min: 1,
+			default: xmr
+		});
+	};
+	const keepLabel = haveCurrentAmounts
+		? `Keep your current amounts (${defBtc.toLocaleString()} satoshis, ${defXmr.toLocaleString()} piconero)`
+		: 'Keep the shipped amounts (set for $0.25 at ~$60K BTC / ~$320 XMR, probably out of date)';
+	let kept = false;
+	const keepAmounts = (): void => {
+		kept = true;
+		source = haveCurrentAmounts ? 'manual' : 'default';
+		btcSatoshis = defBtc;
+		xmrPiconero = defXmr;
+	};
+	/** No live prices: keep what is set (or the shipped amounts), or type them. */
+	const noLivePrices = async (): Promise<void> => {
+		const choice = await askChoice(
+			'What would you like to do?',
+			[keepLabel, 'Enter amounts by hand'],
+			0
 		);
-		console.log('');
-		const computed = computeFeeAmounts(targetUsd, prices);
-		btcSatoshis = computed.btcSatoshis;
-		xmrPiconero = computed.xmrPiconero;
-		source = 'coingecko';
-		console.log(
-			`  ✓ BTC/USD: $${prices.btcUsd.toLocaleString()}` +
-				`  XMR/USD: $${prices.xmrUsd.toLocaleString()}\n`
-		);
-		console.log(`  → BTC: ${btcSatoshis.toLocaleString()} satoshis`);
-		console.log(`  → XMR: ${xmrPiconero.toLocaleString()} piconero\n`);
-		const ok = await askYesNo('  Accept these amounts?', true);
-		if (!ok) {
-			source = 'manual';
-			btcSatoshis = await askInt('  BTC fee amount in satoshis', {
-				min: 1,
-				max: 100_000_000_000,
-				default: btcSatoshis
-			});
-			xmrPiconero = await askInt('  XMR fee amount in piconero', {
-				min: 1,
-				default: xmrPiconero
-			});
+		if (choice === 1) await askByHand(defBtc, defXmr);
+		else keepAmounts();
+	};
+	/** Live prices for `target`: the amounts they give, or null (said why). */
+	const livePrices = async (
+		target: number
+	): Promise<{ btcSatoshis: number; xmrPiconero: number } | null> => {
+		try {
+			const prices = await withSpinner('Fetching live BTC/USD and XMR/USD from Coingecko…', () =>
+				fetchBtcXmrPricesFromCoingecko()
+			);
+			console.log('');
+			const computed = computeFeeAmounts(target, prices);
+			console.log(
+				`  ✓ BTC/USD: $${prices.btcUsd.toLocaleString()}` +
+					`  XMR/USD: $${prices.xmrUsd.toLocaleString()}\n`
+			);
+			console.log(`  → BTC: ${computed.btcSatoshis.toLocaleString()} satoshis`);
+			console.log(`  → XMR: ${computed.xmrPiconero.toLocaleString()} piconero\n`);
+			return computed;
+		} catch (err) {
+			console.log(
+				`  ⚠ Coingecko unreachable: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}\n`
+			);
+			return null;
 		}
-	} catch (err) {
-		console.log(
-			`  ⚠ Coingecko unreachable: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}\n`
-		);
-		console.log('  You can enter BTC sat + XMR piconero amounts by hand,');
-		console.log('  or keep the hardcoded defaults (calibrated for $0.25 at');
-		console.log('  ~$60K BTC / ~$320 XMR — likely stale by now).');
+	};
+	const hiddenNote = (): void => {
+		console.log('  This node is hidden-only, so live BTC/XMR prices are not fetched');
+		console.log('  (Coingecko is a clearnet service; asking it would show this');
+		console.log("  server's address).");
 		console.log('');
-		const choice = await askChoice('What would you like to do?', [
-			'Enter amounts manually',
-			'Keep hardcoded defaults (may be stale)'
-		]);
+	};
+
+	if (edit !== undefined) {
+		// ─── Listing fee amounts (edit): keep them unless asked otherwise ──
+		// The amounts in force are the default; new ones are worked out from
+		// live prices only when the operator picks that.
+		console.log('  ── Listing fee amounts ──\n');
+		console.log(
+			`  Now: ${defBtc.toLocaleString()} satoshis (BTC), ${defXmr.toLocaleString()} piconero (XMR)\n`
+		);
+		if (hiddenOnly) hiddenNote();
+		const options = hiddenOnly
+			? [keepLabel, 'Enter amounts by hand']
+			: [
+					keepLabel,
+					'Work out new amounts from a USD target and live prices',
+					'Enter amounts by hand'
+				];
+		const choice = await askChoice('What would you like to do?', options, 0);
 		if (choice === 0) {
-			source = 'manual';
-			btcSatoshis = await askInt('  BTC fee amount in satoshis', {
-				min: 1,
-				max: 100_000_000_000,
-				default: DEFAULT_LISTING_FEE_BTC_SATOSHIS
-			});
-			xmrPiconero = await askInt('  XMR fee amount in piconero', {
-				min: 1,
-				default: DEFAULT_LISTING_FEE_XMR_PICONERO
-			});
+			keepAmounts();
+		} else if (options[choice] === 'Enter amounts by hand') {
+			await askByHand(defBtc, defXmr);
 		} else {
-			source = 'default';
-			btcSatoshis = DEFAULT_LISTING_FEE_BTC_SATOSHIS;
-			xmrPiconero = DEFAULT_LISTING_FEE_XMR_PICONERO;
+			if (cur !== undefined && cur.targetUsd !== null)
+				console.log(`  (The target your setup used: $${cur.targetUsd.toFixed(2)} USD.)`);
+			targetUsd = await askFloat('  USD target per listing fee', {
+				min: 0.01,
+				max: 100,
+				default: defTarget
+			});
+			targetAsked = true;
+			console.log('');
+			const computed = await livePrices(targetUsd);
+			if (computed === null) {
+				console.log('  You can enter BTC sat + XMR piconero amounts by hand,');
+				console.log('  or keep the amounts set now.');
+				console.log('');
+				await noLivePrices();
+			} else if (await askYesNo('  Use these new amounts?', true)) {
+				source = 'coingecko';
+				btcSatoshis = computed.btcSatoshis;
+				xmrPiconero = computed.xmrPiconero;
+			} else {
+				keepAmounts();
+				console.log('  Kept your current amounts.');
+			}
+		}
+	} else {
+		// ─── Listing fee USD target ──
+		console.log('  ── Listing fee USD target ──\n');
+		targetUsd = await askFloat('  USD target per listing fee', {
+			min: 0.01,
+			max: 100,
+			default: defTarget
+		});
+		targetAsked = true;
+
+		// Live recompute via Coingecko — never from a hidden-only node: Coingecko is
+		// a clearnet service, and asking it would show this server's address.
+		console.log('');
+		if (hiddenOnly) {
+			hiddenNote();
+			await noLivePrices();
+		} else {
+			const computed = await livePrices(targetUsd);
+			if (computed === null) {
+				console.log('  You can enter BTC sat + XMR piconero amounts by hand,');
+				console.log('  or keep the shipped amounts.');
+				console.log('');
+				await noLivePrices();
+			} else {
+				btcSatoshis = computed.btcSatoshis;
+				xmrPiconero = computed.xmrPiconero;
+				source = 'coingecko';
+				const ok = await askYesNo('  Accept these amounts?', true);
+				if (!ok) await askByHand(btcSatoshis, xmrPiconero);
+			}
 		}
 	}
 
@@ -2367,7 +2599,7 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 		{
 			min: 0.000001,
 			max: 1,
-			default: DEFAULT_FALLBACK_BLURT_PRICE_USD
+			default: defFallback
 		}
 	);
 
@@ -2386,35 +2618,31 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 			"doesn't affect what currencies traders can post orders in\n" +
 			'(orders carry their own fiat_currency); it only affects the\n' +
 			'small "~$0.12" subtext next to listing-fee BLURT amounts on\n' +
-			'this instance.\n' +
-			'\n' +
-			'You can change this later by editing the env var\n' +
-			'MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT and restarting.'
+			'this instance.' +
+			(edit === undefined
+				? '\n\nYou can change this later by editing the env var\n' +
+					'MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT and restarting.'
+				: '')
 	);
-	const COMMON_FIATS: ReadonlyArray<{ ticker: string; label: string }> = [
-		{ ticker: 'USD', label: 'USD — US Dollar (default)' },
-		{ ticker: 'EUR', label: 'EUR — Euro' },
-		{ ticker: 'GBP', label: 'GBP — British Pound' },
-		{ ticker: 'JPY', label: 'JPY — Japanese Yen' },
-		{ ticker: 'BRL', label: 'BRL — Brazilian Real' },
-		{ ticker: 'CNY', label: 'CNY — Chinese Yuan' },
-		{ ticker: 'INR', label: 'INR — Indian Rupee' },
-		{ ticker: 'RUB', label: 'RUB — Russian Ruble' },
-		{ ticker: 'AED', label: 'AED — UAE Dirham' },
-		{ ticker: 'XDR', label: 'XDR — IMF Special Drawing Rights basket' },
-		{ ticker: 'XAU', label: 'XAU — Gold ounces (hard-currency hedge)' },
-		{ ticker: 'OTHER', label: 'Other (enter a 3-8 character uppercase ticker)' }
-	];
+	const curFiat = cur?.denominationFiat ?? null;
+	const listed = COMMON_FIATS.findIndex((f) => f.ticker === curFiat);
+	const otherIdx = COMMON_FIATS.length - 1;
+	const defaultFiatIdx =
+		curFiat === null ? 0 : listed >= 0 ? listed : /^[A-Z]{3,8}$/.test(curFiat) ? otherIdx : 0;
 	const fiatChoiceIdx = await askChoice(
 		'  Pick the fiat the indexer should display prices in:',
 		COMMON_FIATS.map((f) => f.label),
-		0 // default USD
+		defaultFiatIdx
 	);
 	const chosen = COMMON_FIATS[fiatChoiceIdx]!;
 	let denominationFiat: string;
 	if (chosen.ticker === 'OTHER') {
+		const otherDefault =
+			curFiat !== null && listed < 0 && /^[A-Z]{3,8}$/.test(curFiat) ? curFiat : undefined;
 		while (true) {
-			const raw = (await ask('  Enter ticker (3-8 uppercase letters)')).trim().toUpperCase();
+			const raw = (await ask('  Enter ticker (3-8 uppercase letters)', otherDefault))
+				.trim()
+				.toUpperCase();
 			if (/^[A-Z]{3,8}$/.test(raw)) {
 				denominationFiat = raw;
 				break;
@@ -2426,10 +2654,12 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 	}
 
 	console.log('\n  ✓ Listing fee configured:');
-	console.log(`     Target:        $${targetUsd.toFixed(2)} USD`);
+	if (targetAsked) console.log(`     Target:        $${targetUsd.toFixed(2)} USD`);
 	console.log(`     BTC:           ${btcSatoshis.toLocaleString()} satoshis`);
 	console.log(`     XMR:           ${xmrPiconero.toLocaleString()} piconero`);
-	console.log(`     Source:        ${source}`);
+	console.log(
+		`     Source:        ${edit !== undefined && kept ? 'unchanged (kept as it was)' : source}`
+	);
 	console.log(`     Fallback:      $${fallbackBlurtPriceUsd} BLURT/USD`);
 	console.log(`     Display unit:  ${denominationFiat}\n`);
 
@@ -2445,7 +2675,8 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 
 // ─── Step 18: Operator tag ────────────────────────────
 
-/** Result of step 18 — the operator tag for this instance. */
+/** Result of step 18 — the operator tag for this instance ('' only from
+ *  `edit`, when no tag was set and none was typed: leave it unset). */
 export interface OperatorTagResult {
 	/** The operator tag, an identifier matching the regex
 	 *  `^[a-z0-9._-]+$`, 1..64 chars.  Canonical morphit.io uses
@@ -2485,7 +2716,19 @@ const OPERATOR_TAG_MAX = 64;
  * launch — otherwise their indexer recognizes no incoming
  * ops as "ours" and queues nothing.
  */
-export async function stepOperatorTag(origin: string | null): Promise<OperatorTagResult> {
+/** What `morphit-ops edit` passes to {@link stepOperatorTag}. */
+export interface OperatorTagCurrent {
+	/** The tag set in morphit.config.env now. */
+	readonly current: string | null;
+	/** The tag this account is registered under on chain (from the local
+	 *  indexer), or null: not registered, or it could not be checked. */
+	readonly registered: string | null;
+}
+
+export async function stepOperatorTag(
+	origin: string | null,
+	edit?: OperatorTagCurrent
+): Promise<OperatorTagResult> {
 	step(18, TOTAL_STEPS, 'Operator tag');
 
 	// Derive a sensible default from the public origin's hostname.
@@ -2494,9 +2737,27 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 	// your federation identity to the site users already see.  If no
 	// origin was set (federation-invisible install) we fall back to a
 	// neutral placeholder rather than the reserved canonical `morphit`.
+	//
+	// From `edit`, the default is the tag already registered on chain, else
+	// the one set now: the tag is PERMANENT once registered, so Enter must
+	// never change it (it used to default to the domain, silently replacing a
+	// registered tag; the chain then refuses every re-register as
+	// tag_immutable and the relay pays nothing).
 	const domainTag = origin !== null ? tagFromOrigin(origin) : null;
+	const registered = edit?.registered ?? null;
+	/** `edit` with no tag in force and none registered: Enter leaves it unset
+	 *  (it never puts a tag in that the operator did not type). */
+	const editUnset =
+		edit !== undefined &&
+		registered === null &&
+		(edit.current === null || edit.current.length === 0);
 	const suggestedDefault =
-		domainTag !== null && domainTag.length > 0 ? domainTag : DEFAULT_FALLBACK_TAG;
+		registered ??
+		(edit?.current !== null && edit?.current !== undefined && edit.current.length > 0
+			? edit.current
+			: domainTag !== null && domainTag.length > 0
+				? domainTag
+				: DEFAULT_FALLBACK_TAG);
 
 	explain(
 		"Your operator tag is your instance's unique, PERMANENT\n" +
@@ -2520,28 +2781,52 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 			'    origin and contact you can update anytime by running\n' +
 			'    register again).  So choose a tag you are happy to keep.\n' +
 			'\n' +
-			(domainTag !== null && domainTag.length > 0
-				? 'We have defaulted it to your domain (' +
-					suggestedDefault +
-					'), which\n' +
-					'is a great choice — unique and recognizable.  Press Enter\n' +
-					'to accept it, or type a different tag.\n'
-				: 'Pick a unique tag (no public origin was set, so we cannot\n' +
-					'suggest your domain).  Do NOT use the reserved canonical\n' +
-					'name.\n') +
+			(registered !== null
+				? 'Your account is already registered on chain with the tag\n' +
+					`"${sanitizeForTerm(registered)}".  It cannot change: press Enter to keep it.\n` +
+					(edit?.current !== registered
+						? `(Your settings file says "${sanitizeForTerm(edit?.current ?? '(nothing)')}" — Enter puts\n` +
+							'the registered tag back, so your relay earns again.)\n'
+						: '')
+				: edit !== undefined && edit.current !== null && edit.current.length > 0
+					? `Now set: ${sanitizeForTerm(edit.current)}.  Press Enter to keep it.\n` +
+						'If this tag is already registered on chain, changing it here\n' +
+						'breaks your earnings: the chain refuses a different tag.\n'
+					: editUnset
+						? 'No tag is set now, so your relay queues no payouts.  Type one\n' +
+							'to set it' +
+							(domainTag !== null && domainTag.length > 0
+								? ` (your domain, ${domainTag}, is a good choice)`
+								: '') +
+							', or press\nEnter to leave it unset.\n'
+						: domainTag !== null && domainTag.length > 0
+							? 'We have defaulted it to your domain (' +
+								suggestedDefault +
+								'), which\n' +
+								'is a great choice — unique and recognizable.  Press Enter\n' +
+								'to accept it, or type a different tag.\n'
+							: 'Pick a unique tag (no public origin was set, so we cannot\n' +
+								'suggest your domain).  Do NOT use the reserved canonical\n' +
+								'name.\n') +
 			'\n' +
 			'Canonical morphit.io uses `morphit` (reserved — community\n' +
-			'operators cannot register it).  After wizard setup, register\n' +
-			'your tag on chain with `sudo morphit-ops register`.\n' +
+			'operators cannot register it).' +
+			(edit === undefined
+				? '  After wizard setup, register\nyour tag on chain with `sudo morphit-ops register`.\n'
+				: '\n') +
 			'\n' +
 			'Constraints: lowercase letters, digits, dots, underscores,\n' +
 			'hyphens; 1..64 characters.'
 	);
 
 	while (true) {
-		const raw = await ask('  Operator tag', suggestedDefault);
+		const raw = await ask('  Operator tag', editUnset ? undefined : suggestedDefault);
 		const trimmed = raw.trim();
 		if (trimmed.length === 0) {
+			if (editUnset) {
+				console.log('  Left unset.\n');
+				return { tag: '' };
+			}
 			console.log('  ✗ Empty.  Try again.\n');
 			continue;
 		}
@@ -2557,7 +2842,7 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 		// on-chain register handler rejects them anyway (reason
 		// `tag_reserved`), so catching it here saves the operator a
 		// failed broadcast later.
-		if (isReservedTag(trimmed)) {
+		if (isReservedTag(trimmed) && trimmed !== registered) {
 			console.log(
 				`  ✗ "${trimmed}" is reserved by the Morphit project and cannot\n` +
 					'    be registered by community operators.  Pick a tag that\n' +
@@ -2565,13 +2850,26 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 			);
 			continue;
 		}
+		// A registered tag cannot change: the chain refuses the re-register
+		// (tag_immutable) and nothing is updated — refuse it here instead.
+		if (registered !== null && trimmed !== registered) {
+			console.log(
+				`  ✗ Your account is registered with the tag "${sanitizeForTerm(registered)}", and a\n` +
+					'    registered tag can never change (the chain refuses it, and your relay\n' +
+					`    would earn nothing).  Press Enter to keep "${sanitizeForTerm(registered)}".\n`
+			);
+			continue;
+		}
 		console.log(`\n  ✓ Operator tag: ${trimmed}\n`);
-		console.log(
-			'  ⚠ Remember to register this tag on chain via\n' +
-				'    `sudo morphit-ops register` before launch, otherwise your\n' +
-				'    instance will not receive operator-payout (90% of\n' +
-				'    BLURT-paid fees).\n'
-		);
+		// From `edit` the re-publish step that follows says what to run.
+		if (registered === null && edit === undefined) {
+			console.log(
+				'  ⚠ Remember to register this tag on chain via\n' +
+					'    `sudo morphit-ops register` before launch, otherwise your\n' +
+					'    instance will not receive operator-payout (90% of\n' +
+					'    BLURT-paid fees).\n'
+			);
+		}
 		return { tag: trimmed };
 	}
 }
@@ -2798,8 +3096,9 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 // What enabling does:
 //   - Installs the morphit-mcp systemd service alongside the
 //     existing relay/indexer services
-//   - Binds to 127.0.0.1:8124 (loopback only — operators
-//     who want public exposure configure their reverse proxy)
+//   - Port 8124. The program's own default is 127.0.0.1; the
+//     guided (Ansible) install sets MORPHIT_MCP_HTTP_HOST=0.0.0.0
+//     behind the firewall (group_vars morphit_mcp_bind_host)
 //   - Documents the MCP install URL in the operator's
 //     `morphit-ops status` output so AI agent configurators
 //     can copy-paste it
@@ -2843,9 +3142,10 @@ export async function stepMcpServer(): Promise<McpServerResult> {
 			'    MCP enlarges the shared AI-discoverable surface for the\n' +
 			'    project.  Opting out shrinks it.\n' +
 			'\n' +
-			'  • ~30 MB RAM, negligible CPU.  Binds to 127.0.0.1:8124\n' +
-			'    by default (loopback only); operators who want public\n' +
-			'    exposure proxy it via nginx.  See OPERATIONS.md §45.'
+			'  • ~30 MB RAM, negligible CPU.  Port 8124.  The program on\n' +
+			'    its own listens on 127.0.0.1 only; the guided install sets\n' +
+			'    it to listen on 0.0.0.0, behind the firewall (BunkerWeb\n' +
+			'    proxies /mcp/).  See OPERATIONS.md §45.'
 	);
 	const enabled = await askYesNo('Install the MCP server alongside the relay + indexer?', true);
 	if (enabled) {
@@ -2985,14 +3285,21 @@ export interface HardeningResult {
 	readonly intrusionDetection?: boolean;
 }
 
-export async function stepHardening(bunkerWebEnabled: boolean): Promise<HardeningResult> {
-	step(23, TOTAL_STEPS, 'Server hardening checklist (strongly recommended)');
+export async function stepHardening(
+	bunkerWebEnabled: boolean,
+	opts: StandaloneStepOpts = {}
+): Promise<HardeningResult> {
+	const standalone = opts.standalone === true;
+	if (standalone) standaloneHeader('Server hardening checklist');
+	else step(23, TOTAL_STEPS, 'Server hardening checklist (strongly recommended)');
 	explain(
-		'Your Morphit config is done.  The last thing standing between\n' +
-			'a working instance and a SAFE one is host hardening: locking\n' +
-			'down SSH, turning on a firewall + fail2ban, automatic security\n' +
-			'updates, and TLS.  None of it is Morphit-specific — it is the\n' +
-			'baseline every internet-facing Ubuntu box needs.\n' +
+		(standalone
+			? 'What stands between a working instance and a SAFE one is host\n' + 'hardening:\n'
+			: 'Your Morphit config is done.  The last thing standing between\n' +
+				'a working instance and a SAFE one is host hardening:\n') +
+			'locking down SSH, turning on a firewall + fail2ban, automatic\n' +
+			'security updates, and TLS.  None of it is Morphit-specific — it\n' +
+			'is the baseline every internet-facing Ubuntu box needs.\n' +
 			'\n' +
 			'Two ways to apply it, both already shipped in this repo:\n' +
 			'\n' +
@@ -3056,11 +3363,14 @@ export async function stepHardening(bunkerWebEnabled: boolean): Promise<Hardenin
 		true
 	);
 	if (generateChecklist) {
-		console.log(
-			'  ✓ Checklist will be written next to your config files.  Work\n' +
-				'    through it before you expose the instance publicly.  It is\n' +
-				'    a plain Markdown file — open it in any editor.\n'
-		);
+		// Outside the wizard the caller writes it and says where (and whether
+		// that worked); only the wizard writes it later, with the config.
+		if (!standalone)
+			console.log(
+				'  ✓ Checklist will be written next to your config files.  Work\n' +
+					'    through it before you expose the instance publicly.  It is\n' +
+					'    a plain Markdown file — open it in any editor.\n'
+			);
 	} else {
 		console.log(
 			'  ⓘ Skipped.  You can still harden by hand from OPERATIONS.md\n' +

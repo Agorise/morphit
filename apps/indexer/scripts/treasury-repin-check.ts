@@ -44,6 +44,7 @@ import {
 	type RepinPrices
 } from '../src/lib/treasuryRepin.ts';
 import { describeQuotes, fetchAgreedPrices } from './treasury-repin-prices.ts';
+import { repinHiddenOnlyStop } from './lib/repinHiddenOnlyStop.ts';
 
 function errMsg(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
@@ -71,6 +72,20 @@ if (!Number.isFinite(threshold) || threshold <= 0 || threshold >= 0.15) {
 	// Must stay inside the verifier's FEE_PRICE_TOLERANCE (0.15) band.
 	out(`invalid --threshold ${threshold} (must be >0 and <0.15)`);
 	process.exit(1);
+}
+
+// The detect-only check asks clearnet too: the prices (CoinGecko, CoinPaprika,
+// Kraken) and, by default, a clearnet indexer. A hidden-only server (the unit
+// runs this by default) stops here, before anything is asked, as the
+// broadcast does (lib/repinHiddenOnlyStop.ts).
+{
+	const stop = repinHiddenOnlyStop(
+		'the re-pin check needs clearnet — prices from CoinGecko, CoinPaprika and Kraken'
+	);
+	if (stop !== null) {
+		out(stop);
+		process.exit(1);
+	}
 }
 
 async function fetchJson(url: string): Promise<unknown> {

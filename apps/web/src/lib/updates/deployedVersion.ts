@@ -86,3 +86,59 @@ export function deployedVersionDiffers(
 export function verifyJsonPollUrl(now: number = Date.now()): string {
 	return `${VERIFY_JSON_PATH}?cb=${now}`;
 }
+
+/** v1.21.18 — the build's version alone (`{"morphit_version": "…"}`, a few
+ *  bytes; written next to verify.json at build time). The update check asks
+ *  it every half minute; verify.json stays the fallback for a server that
+ *  does not serve it. */
+export const VERSION_JSON_PATH = '/version.json';
+
+/** The cache-busted version.json URL for one poll (same reason as above). */
+export function versionJsonPollUrl(now: number = Date.now()): string {
+	return `${VERSION_JSON_PATH}?cb=${now}`;
+}
+
+/**
+ * v1.21.18 review — the update check's poll, one at a time. Over Tor a read
+ * may take up to its 45 s budget (and the verify.json fallback another one),
+ * longer than the half-minute between polls, and the tab coming back into view
+ * or online asks too: polls piled up, each with its own download. A poll asked
+ * while one is still running joins it; a new one starts only after it ends,
+ * and never less than `minGapMs` after the previous one started.
+ */
+export function createDeployedVersionPoll(deps: {
+	/** The deployed version, or null (not known this time). */
+	read(): Promise<string | null>;
+	/** What to do with a version read. */
+	onVersion(version: string): void | Promise<void>;
+	now(): number;
+	minGapMs: number;
+	/** True once the page is gone: nothing more is asked or reported. */
+	cancelled?(): boolean;
+}): () => Promise<void> {
+	let inflight: Promise<void> | null = null;
+	let lastStartAt = -Infinity;
+	return () => {
+		if (inflight !== null) return inflight;
+		if (deps.cancelled?.() === true) return Promise.resolve();
+		const now = deps.now();
+		if (now - lastStartAt < deps.minGapMs) return Promise.resolve();
+		lastStartAt = now;
+		const run = (async () => {
+			// Cross an await first: a reader that throws at once must not reach
+			// `finally` before `inflight` is set (it would stay "running" forever).
+			await Promise.resolve();
+			try {
+				const v = await deps.read();
+				if (v === null || deps.cancelled?.() === true) return;
+				await deps.onVersion(v);
+			} catch {
+				// Network / timeout / parse error: stay silent.
+			} finally {
+				inflight = null;
+			}
+		})();
+		inflight = run;
+		return run;
+	};
+}

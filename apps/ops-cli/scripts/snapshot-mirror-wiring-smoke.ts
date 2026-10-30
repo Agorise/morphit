@@ -314,7 +314,9 @@ ok(
 // timer itself or the whole feature is inert on the canonical box.
 ok(
 	'upgrade installs + enables the mirror timer itself (Ansible never runs on a manual install)',
-	/enable', '--now', 'morphit-snapshot-mirror\.timer/.test(upgrade)
+	// (armSnapshotTimers since the v1.21.17 review: enable --now, then read back)
+	/arm\('morphit-snapshot-mirror\.timer'/.test(upgrade) &&
+		/'enable', '--now', timer\]/.test(upgrade)
 );
 ok(
 	'timer install is idempotent (skips an identical unit already in place)',
@@ -908,7 +910,9 @@ ok(
 );
 ok(
 	'…that runs BEFORE the restore guards (nothing is written, so they do not apply)',
-	fs2.indexOf('REHEARSAL') < fs2.indexOf('never restore under a LIVE indexer')
+	// v1.21.18: the first guard is the read of this node's own database.
+	fs2.indexOf('REHEARSAL') > -1 &&
+		fs2.indexOf('REHEARSAL') < fs2.indexOf('state = await readNodeState(ctx)')
 );
 
 // ── V. every RPC consumer must use the WHOLE node list ──────────────

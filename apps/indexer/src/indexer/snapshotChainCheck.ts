@@ -16,7 +16,9 @@
  *     forged `orders` row with no op behind it used to pass, since only the
  *     op log was ever compared.
  *   - accounts: chain-created rows drawn at random must each have an
- *     account-creating op for that name in their recorded block.
+ *     account-creating op for that name in their recorded block, by their
+ *     recorded creator, at their recorded creation time (the creator is
+ *     what Signal A compares in the fee-attestation quorum).
  *   - waiver_trade_transfers (v70): rows drawn at random must each be, in a
  *     block read with agreement (BlurtClient.condenserAgreed, the trusted
  *     quorum), a transfer at their recorded position, in the transaction with
@@ -311,8 +313,14 @@ export async function checkSnapshotAgainstChain(
 	let nthAccount = 0;
 	for (const i of accountPicks) {
 		const a = (
-			await db.query<{ name: string; created_block_num: string; created_trx_id: string }>(
-				`SELECT name, created_block_num::text, created_trx_id FROM accounts
+			await db.query<{
+				name: string;
+				created_block_num: string;
+				created_trx_id: string;
+				creator: string;
+				created_block_time: Date;
+			}>(
+				`SELECT name, created_block_num::text, created_trx_id, creator, created_block_time FROM accounts
 				  WHERE created_block_num > 0 ORDER BY name OFFSET $1 LIMIT 1`,
 				[i]
 			)
@@ -325,7 +333,10 @@ export async function checkSnapshotAgainstChain(
 			unreachable++;
 			continue;
 		}
-		const m = verifyAccountCreatedInBlock(a.name, a.created_trx_id, block as never);
+		const m = verifyAccountCreatedInBlock(a.name, a.created_trx_id, block as never, {
+			creator: a.creator,
+			createdBlockTime: new Date(a.created_block_time)
+		});
 		if (m.ok) verified++;
 		else failures.push(`accounts row ${a.name} (block ${a.created_block_num}): ${m.reason}`);
 	}

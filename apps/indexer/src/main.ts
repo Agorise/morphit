@@ -16,6 +16,7 @@
  * closes the DB pool.
  */
 
+import { setLocalOrderHiding } from '$api/localHiding';
 import { Hono } from 'hono';
 import { serve, type ServerType } from '@hono/node-server';
 
@@ -741,6 +742,10 @@ async function main(): Promise<void> {
 	// officialAccountName would silently ignore every block (the rows are
 	// keyed by operatorAccountName). fix.
 	app.use('/v1/orderbook/stream', rateLimit('list', config.listRatePerMin));
+	// What this instance switched off (assets, payment methods) is hidden from
+	// its own order listings; from the consensus activation time such orders
+	// are stored on every instance alike (api/localHiding.ts).
+	setLocalOrderHiding(config);
 	app.route('/v1/orderbook/stream', orderbookStreamRoute(apiDb, poller, config.operatorAccountName));
 
 	const orderbookApp = new Hono();

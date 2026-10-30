@@ -400,13 +400,27 @@ grep MORPHIT_RELAY_ACCOUNT /etc/morphit/relay.env
 
 > **Running the on-chain `morphit-ops` commands on a systemd deploy:**
 > `payment-method`, `register`, and `show-key` read
-> `MORPHIT_RELAY_ACCOUNT` (and the operator key-file path) straight from
-> `morphit.env`. On a systemd install that file is sourced only by the
-> unit — not by your interactive shell — and is usually root-owned, so
-> run these with **sudo**. They are tagged `(needs sudo)` in the menu,
-> and `morphit-ops` now auto-loads `morphit.env` + `morphit.config.env`
-> from the install root when you run them, so `sudo morphit-ops
-> payment-method …` works without manually sourcing the env first.
+> `MORPHIT_RELAY_ACCOUNT` and the relay's key file
+> (`MORPHIT_RELAY_ACTIVE_KEY_FILE`) from `morphit.env`. On a systemd
+> install that file is sourced only by the unit — not by your
+> interactive shell — and is usually root-owned, so run these with
+> **sudo**, on your server. They are tagged `(needs sudo)` in the menu
+> when you open it without sudo, and `morphit-ops` loads `morphit.env` +
+> `morphit.config.env` from the install root by itself, so `sudo
+> morphit-ops payment-method …` works without sourcing anything first.
+>
+> `payment-method add` and `remove` sign with the relay account's
+> **active** key, the same key file `register` signs with (a
+> `MORPHIT_OPERATOR_POSTING_KEY_FILE` you set yourself is still used
+> instead, when set). Your indexer accepts a payment-method change only
+> from the account it treats as this instance's operator:
+> `MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME` (else
+> `MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME`) in the indexer's settings. If
+> that is a different account from `MORPHIT_RELAY_ACCOUNT`, the command
+> says so before it asks anything and sends nothing: set
+> `MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME` to your relay account in
+> `/etc/morphit/indexer.env`, then, on your server,
+> `sudo systemctl restart morphit-indexer`.
 
 ### Funding the @morphit account (~10 BLURT, small fixed cost)
 
@@ -610,7 +624,13 @@ the indexer).
 `sudo morphit-ops status` → "Fees account (federation)" shows whether
 your registration carries the account — which is what makes other
 instances accept it (`/v1/instance` reports the same as
-`fee_recipient_registered`; `null` = could not tell). `sudo morphit-ops register` prints `Fees account: @…` before
+`fee_recipient_registered`; `null` = could not tell). **From
+2026-11-01 00:00 UTC (by block time; v1.21.18) your own indexer
+accepts the 90 % share only at a registered fees account too**, and
+while your account is verified unregistered `/v1/instance` advertises
+the Morphit treasury as `fee_recipient`, so your users pay their
+whole fee there (one transfer, accepted everywhere) until you
+register (§40.7, "The same fee rules on every node"). `sudo morphit-ops register` prints `Fees account: @…` before
 it broadcasts. Every `morphit-ops upgrade` runs "the fees-account
 registration heal": if this node is registered and its on-chain
 registration lacks or differs from the resolved fees account, it
@@ -788,11 +808,21 @@ back-fill.
 > reading JSON, `morphit-ops health` (menu: "Check & operate" →
 > "Node health — indexer, relay, system, services, canary") gives one
 > consolidated view of the whole node:
-> - **Indexer** and **Relay** — each hits its own `/v1/health` and
->   prints synced/behind (with the lag in blocks) or unreachable,
->   plus version, uptime, and the healthy/total RPC count. Both
->   auto-probe the bridge gateway if loopback doesn't answer (see the
->   note above). The relay is reported as optional.
+> - **Indexer** — asks the indexer's own `/v1/health` and prints
+>   synced/behind (with the lag in blocks) or unreachable, plus
+>   version, uptime, and the healthy/total RPC count.
+> - **Relay** — asks the relay's own `/v1/health` and gives the relay
+>   its own verdict, because every signup and payment goes through it:
+>   up; or up, but with no Blurt RPC node reachable, a balance it could
+>   not read lately, a balance running low or below one signup's fee,
+>   or a key that is not on its account's active authority
+>   (`active_key` mismatch: it signs nothing until
+>   `sudo morphit-ops edit-active-key` fixes it); or not answering
+>   (with whether its service is stopped, failed or starting, and the
+>   command to look or start it), an HTTP error, or something else
+>   answering on its port. Then its version, uptime, Web Push state and
+>   BLURT balance. Both checks also try the Docker bridge gateway when
+>   loopback doesn't answer (see the note above).
 > - **System** — CPU, memory, and root-disk usage of the box itself,
 >   read locally (unprivileged: `os` counters, `/proc/meminfo`, and a
 >   `statfs` on `/` — no config or DB access, so it works regardless of
@@ -804,9 +834,15 @@ back-fill.
 >   reason an indexer starts lagging.
 > - **Services** — the read-only `systemctl` active-state of
 >   `morphit-matrix-bot` and `morphit-mcp`. (The MCP runs the hardened
->   Streamable-HTTP transport bound to `127.0.0.1:8124`, so besides the
->   systemd service state you can curl its liveness directly:
->   `curl http://127.0.0.1:8124/health` → `{"status":"ok","transport":"http"}`.)
+>   Streamable-HTTP transport on port 8124. The program's own default
+>   address is `127.0.0.1`; the guided install sets `0.0.0.0` in
+>   `/etc/morphit/mcp.env`, so the site's web server in Docker can
+>   reach it, and the firewall keeps the public out. Either way,
+>   besides the systemd service state you can check its liveness
+>   directly, on your server:
+>   `curl http://127.0.0.1:8124/health` → `{"status":"ok","transport":"http"}`
+>   (if `MORPHIT_MCP_HTTP_HOST` in `mcp.env` names one address, such as
+>   the Docker bridge gateway, use that address instead).)
 > - **Canary** — whether `apps/web/build/canary.txt` is current
 >   (parsed from its `Valid through:` line) or overdue for its weekly
 >   regeneration. Since v1.3.5 the generator writes the sitewide human
@@ -1173,6 +1209,46 @@ can be down for hours without user-visible impact: pending
 bonuses land eventually, new signups route to the normal
 signup endpoint which doesn't require the drainer.
 
+### The relay checks its own key against the chain
+
+At start, and again while it runs, the relay compares the public key of
+the key it unlocked with the relay account's active keys on the chain (its
+owner key is accepted too). It decides the key is wrong only when two Blurt
+RPC operators agree, so one node cannot make it stop by naming other keys or
+by saying the account does not exist. With only one RPC operator configured,
+that one's answer can say the key is right, never that it is wrong. When the
+key is not one of the account's active keys — a
+posting key pasted at install, another account's key, a key changed on
+the chain since — the relay **refuses to sign**: it keeps running, new
+signups are refused ("signups unavailable") and queued payments wait
+(none are lost; they go out once the key is right). It writes one log
+line, `active_key_not_on_chain`, with what is wrong and the command that
+fixes it, at every check while the problem lasts. The quickest look, on
+your server, is the line **Relay key:** of
+
+```sh
+sudo morphit-ops status
+```
+
+and the relay's log lines of the last fifteen minutes, on your server:
+
+```sh
+sudo journalctl -u morphit-relay --since "-15min" --no-pager | grep active_key
+```
+
+`active_key_matches_chain` means the key is right. When the chain
+cannot be asked (or the RPC nodes do not agree), the relay logs
+`active_key_check_unanswered`, asks again within a minute, and keeps its
+last answer: if the chain had already said the key is wrong, it still
+signs nothing; otherwise it signs as normal. Only a new answer from the
+chain (normally: the key is right) ends a refusal. The relay's `/v1/health`, asked from the server itself, carries the same result in
+its `active_key` block (`state`: `ok`, `mismatch`, `unknown` or
+`unchecked`). `sudo morphit-ops health` and `sudo morphit-ops status` show it
+too: a mismatch as ✗ with the fix commands. The fix, on your server: `sudo morphit-ops edit-active-key`
+(paste the relay account's ACTIVE private key), then
+`sudo systemctl restart morphit-relay`. The whole procedure:
+[RECOVERING-FROM-WRONG-RELAY-KEY.md](RECOVERING-FROM-WRONG-RELAY-KEY.md).
+
 ### Forgot the passphrase
 
 See section 8 (owner-key rotation). You'll need to rotate the
@@ -1228,7 +1304,9 @@ sudo journalctl -u morphit-indexer.service \
    release (§40.3a): every federated indexer enforces the same
    floor, and `MORPHIT_INDEXER_FEE_BASE_BLURT` is only a fallback
    used before the pin is read. Raising it on your node does not
-   change what users pay.
+   change what users pay. For listings in blocks from 2026-11-01
+   00:00 UTC it is not used at all: every indexer judges by the base
+   pinned at the listing's block, or 125 when none is pinned (§40.7, "The same fee rules on every node").
 
    So the runbook step is now: review the chain's new
    account-creation fee and whether your relay's balance still
@@ -1355,35 +1433,49 @@ hour is not.
 
 ## 6a. Moderating accounts — reviewing flags and blocking
 
-The indexer raises two account-level abuse signals as it follows
-the chain:
+The indexer raises four account-level abuse signals as it follows
+the chain. Each one can suppress a reputation:
 
 - **suspicious_reciprocity** (Self-trade Signal B) — two accounts
   mutually exchanging high-star reviews with no other
   counterparties (a likely self-trade ring inflating reputation).
 - **related_accounts** (Self-trade Signal A) — accounts created
   in close temporal proximity by the same creator.
+- **one-way pile-on** (Signal C) — several new, narrowly active
+  accounts posting low-star reviews of the same account within a
+  short time (a likely coordinated attack on its reputation).
+- **review concentration** (Signal D) — a reviewer who puts most of
+  their reviews, all high-star, on one account.
 
 A flag is a *signal, not a verdict.* Investigate before acting —
 many legitimate users review each other or sign up together.
 
 ### Reviewing flags
 
+On your server:
+
 ```bash
-sudo morphit-ops moderation              # last 7d, both signals
-sudo morphit-ops moderation --since=30d  # wider window
+sudo morphit-ops moderation              # all four signals, all time
+sudo morphit-ops moderation --since=30d  # only the last 30 days
 sudo morphit-ops moderation --type=related
 sudo morphit-ops moderation --json       # machine-readable, no prompt
 ```
 
-Or run bare `morphit-ops` on a terminal and pick **Moderation —
-review flags & block accounts** from the menu. The menu also shows
-a `⚠ N to review` marker next to that item when there are recent
-flags with no block applied to either named account.
+`--type` takes `reciprocity`, `related`, `pile_on` or `concentration`.
+With no `--since`, every flag is shown, however old: a suppression does
+not run out with time.
+
+Or run `sudo morphit-ops` on a terminal and pick **Moderation —
+review flags & block accounts** from the menu. The menu shows a
+`⚠ N to review` marker next to that item when there are flags (all
+four signals, all time — the same count as the screen) with no block
+applied to either named account.
 
 The screen lists each flag annotated with the involved accounts'
 current block status (`[BLOCKED]`). On an interactive terminal it
-then offers block/unblock as the resolution action.
+then offers **Block an account**, **Unblock an account**, **Clear a
+flag (restore an account)**, **Undo a clearance** and **Done** —
+also when there is no flag to show. Enter picks **Done**.
 
 ### Blocking an account (instance-local)
 
@@ -1515,23 +1607,54 @@ generated offline.
    ```sh
    sudo morphit-ops edit-active-key
    ```
-   It reads the keystore path from your config
-   (`MORPHIT_RELAY_ACTIVE_KEY_FILE`; `/etc/morphit/relay.keystore`
-   on a guided install), asks for the new active WIF (not echoed)
-   and, for an encrypted keystore, a passphrase (Enter keeps the
-   current one). It writes the new keystore atomically, keeps a
-   timestamped `.bak-<time>` copy of the old one, and re-seals
-   `/etc/morphit/relay_passphrase.cred` with the passphrase, so the
-   relay still unlocks unattended. If it cannot re-seal, it prints
-   the one `systemd-creds encrypt … --with-key=host` command to run.
+   It reads the key file's path from your config
+   (`MORPHIT_RELAY_ACTIVE_KEY_FILE` in `/opt/morphit/morphit.env`;
+   `/etc/morphit/relay.keystore` on a guided install) and asks for
+   the new active key (not shown on screen). It **checks the key
+   against the chain before anything is written**: a key that is not
+   one of the account's active keys is refused, and it says which key
+   you pasted instead (posting, memo, another account's). If the chain
+   cannot be read, it asks whether to save the key without the check
+   (default **No**, which changes nothing).
 
-5. Delete the `.bak-<time>` copy once the relay runs on the new
-   key (`sudo shred -u <path>.bak-<time>`): it holds the old key.
+   Then it asks **Keep the same unlock passphrase?** (default **Yes**).
+   It opens the current key file with the relay's sealed copy of the
+   passphrase, so there is nothing to type; only when that copy is
+   missing or does not open the file does it ask you for the current
+   passphrase. If you choose a new passphrase, it is sealed for the
+   relay in `/etc/morphit/relay_passphrase.cred`, and the Tor / I2P /
+   Lokinet address key files (encrypted with the same passphrase) are
+   moved to the new one. If it cannot seal it, it prints the one
+   `systemd-creds encrypt … --with-key=host` command to run.
 
-6. Restart the relay: `sudo systemctl restart
-   morphit-relay.service`. There is no passphrase prompt; it
-   unlocks from the sealed credential. Verify `/v1/health`
-   returns OK and the queue drainer runs a cycle successfully.
+   Then it asks whether to **keep a copy of the old key file** on the
+   server (default **Yes**: a copy named `<file>.bak-<number>`, next to
+   it). Answer **No** when the old key was exposed: the old key is then
+   overwritten (random bytes, then zeros) and no copy stays. It writes
+   the new key file (keeping the old file's owner and mode, so the
+   relay can read it), reads it back, and prints what to run next.
+
+5. Restart the relay, on the relay host:
+   `sudo systemctl restart morphit-relay`. There is no passphrase
+   prompt; it unlocks from the sealed credential. At start, and again
+   while it runs, the relay checks its key against the chain (it calls the
+   key wrong only when two Blurt RPC operators agree; with only one
+   configured, never). To see the result, on the relay host:
+
+   ```sh
+   sudo journalctl -u morphit-relay --since "-15min" --no-pager | grep active_key
+   ```
+
+   `active_key_matches_chain` means all is well. `active_key_not_on_chain`
+   means the relay is running but signs nothing: new signups are
+   refused and queued payments wait (nothing is lost; they go out once
+   the key is right). The same line says what is wrong and the command
+   that fixes it. The relay's `/v1/health`, asked from the server itself,
+   shows the same in its `active_key` block.
+
+6. Once the relay works with the new key, delete the copy of the old
+   key file, on the relay host (the command printed its exact name):
+   `sudo shred -u <file>.bak-<number>`. It holds the old key.
 
 7. **Securely destroy the old active-key paper backup**. Shred
    or burn.
@@ -2305,16 +2428,19 @@ skip this section** — Caddy handles TLS automatically when the
 config has a public hostname (this is what RUN-A-MORPHIT-NODE.md
 recommends).
 
-> **`morphit-ops ssl` surfaces all of this.** Run `morphit-ops
-> ssl` (or the "SSL/TLS certificate (HTTPS)" menu item) for a
-> read-only status — whether you have a valid cert for your
-> domain, when it expires, and whether the auto-renewal timer is
-> actually running. `morphit-ops ssl setup` checks prerequisites
-> and prints the exact certbot commands below, tailored to your
-> configured domain. (It does not run certbot or edit nginx for
-> you — cert issuance changes your web server, so you run the
-> steps and review the changes, the same reason service install
-> is a hands-on step.)
+> **`morphit-ops ssl` surfaces all of this.** Run `sudo morphit-ops
+> ssl` on your server (or the "SSL/TLS certificate (HTTPS)" menu
+> item) for a read-only status — whether you have a valid cert for
+> your domain, when it expires, and whether it will renew: both the
+> renewal timer and the way certbot renews this certificate. It
+> reads your domain from your settings (`MORPHIT_INSTANCE_ORIGIN`);
+> to check another name, give it: `sudo morphit-ops ssl status
+> <domain>`. `sudo morphit-ops ssl setup` checks prerequisites and
+> prints the exact certbot commands for your domain and for what
+> holds port 80 on this server (BunkerWeb, a host nginx, or
+> nothing). (It does not run certbot or edit nginx for you — cert
+> issuance changes your web server, so you run the steps and review
+> the changes, the same reason service install is a hands-on step.)
 
 #### Prerequisites
 
@@ -2776,9 +2902,11 @@ you're ready to also serve `https://`:
 1. Buy a domain and point an **A record** at the box's public IP (home
    nodes: forward ports 80 + 443 to the box, and set up dynamic DNS —
    §"Dynamic DNS").
-2. Obtain the certificate and bring up the clearnet edge with
-   `morphit-ops ssl setup <domain>` (this runs the TLS role + BunkerWeb for
-   the domain; the onion keeps working alongside it).
+2. Obtain the certificate and bring up the clearnet edge. On your server,
+   `sudo morphit-ops ssl setup <domain>` checks the prerequisites and
+   prints the exact certbot commands for that domain; it runs nothing
+   itself. Run them, then bring up BunkerWeb with
+   `sudo morphit-ops bunkerweb` (the onion keeps working alongside it).
 3. Update your advertised origin: set `MORPHIT_INSTANCE_ORIGIN=https://<domain>`
    and run `sudo morphit-ops register` again — registration is an update keyed
    on your relay account, so the re-run replaces the old origin (only the tag
@@ -3350,9 +3478,14 @@ a raw `systemctl`:
   and it triggers the bot's OWN client over loopback rather than opening a
   second Matrix client — the test DM goes through the same client and
   path as a genuine alert. See "Verifying end-to-end delivery" below.
-- `morphit-ops matrix` (or the menu → **Check & operate → Matrix alerts**)
-  — shows the username, readiness, and service state, and offers to
-  start/stop the bot if it's out of sync.
+- `sudo morphit-ops matrix` (or the menu → **Matrix alerts: set up,
+  change, test or turn off**) — shows the alert address and the
+  service state. With nothing set up yet, it offers the guided setup
+  (`sudo morphit-ops matrix setup`). Set up but stopped, it offers to
+  start the bot; crashing, it shows the bot's last log lines and offers
+  a restart. Set up and running, it offers **Change the alert
+  address**, **Send a test alert**, **Turn Matrix alerts off** and
+  **Done**.
 
 `morphit-ops upgrade` re-checks the alert username on every upgrade and
 brings the service into line automatically (enable + restart when set,
@@ -5066,7 +5199,7 @@ against by turning it off — a broken fast path can only fail
 to make things fast.)
 
 **Checking status.** The simplest check is the node-health
-view — `morphit-ops health` (main menu item #13) — which
+view — `sudo morphit-ops health` (menu: "Node health — indexer, relay, system, services, canary") — which
 shows a **Fast path:** line right below the price feeds:
 `keeping up @ head block N (M delivered)` (or `— K block(s)
 behind head`) when it's live and current, `lagging — K blocks
@@ -5116,8 +5249,10 @@ it reloads; harmless and self-healing.
 Finding I mitigates a sybil-attack path on BTC/XMR fee
 attestation by requiring each attestor to meet loyalty
 or age (≥30 days on the Blurt chain) thresholds. The
-gate runs in two phases controlled by the
-`MORPHIT_INDEXER_ATTESTATION_PHASE` env var.
+gate has two phases. For attestations in blocks before
+2026-11-01 00:00 UTC each node used the one its
+`MORPHIT_INDEXER_ATTESTATION_PHASE` setting names; from then on
+every node uses `'launch'` (below).
 
 **The loyalty threshold** is ≥100 BLURT cumulative paid to
 the **canonical Morphit treasury** in listing fees. Only the
@@ -5131,42 +5266,40 @@ This measure applies to attestation ops in blocks stamped from
 fee legs). The treasury-share counter itself only counts fees paid from that
 time on (older fees are not stored leg by leg anywhere chain-derived), so on
 2026-11-01 it starts at 0 for every account: under `'launch'` attestors then
-qualify by age alone until they have paid again, and under `'steady'` nobody
-qualifies on loyalty for a while — do not switch to `'steady'` around that date
-(the traffic-trigger query below reads the same counter).
+qualify by age alone until they have paid again (the query below reads the
+same counter).
 
-**Default is `'launch'` (OR gate).** An attestor qualifies
+**`'launch'` (OR gate).** An attestor qualifies
 by meeting **either** loyalty OR age. This is the
 ecosystem-bootstrap mode. Be clear about what it means: an
 account at least 30 days old qualifies **without paying
 anything**, so aged sock accounts cost an attacker nothing
 but time.
 
-**Transition to `'steady'` (AND gate).** Attestor must
+**`'steady'` (AND gate).** Attestor must
 meet **both** loyalty AND age: 30 days AND the treasury-share
 threshold above for every sock account.
 
-**A known gap.** The phase is a node-local setting, yet it
-decides whether an attestation op is applied or rejected —
-a verdict every node should reach the same way. Until the
-phase is pinned on chain, flip it on every node you control
-at the same time, and expect nodes on different phases to
-disagree about attested orders.
+**From 2026-11-01 00:00 UTC the phase is the same on every node
+(v1.21.18).** Whether an attestation is recorded decides an order's
+fee status, which every node must agree on. So for attestations in
+blocks stamped from that time on (by the chain's block time, not your
+server's clock), every node uses `'launch'`, whatever
+`MORPHIT_INDEXER_ATTESTATION_PHASE` says. The setting now only decides
+attestations in older blocks, so history keeps the verdicts every node
+already recorded. `GET /v1/attestor-eligibility/<account>` reports the
+phase the next attestation will be judged by (`launch` once the chain
+has passed that time).
 
-### When to flip
-
-Whichever comes first of:
-- **90 days** after the ADR-0011 activation (the calendar
-  trigger guarantees migration eventually happens
-  regardless of traffic).
-- **500 accounts** on the chain that already meet BOTH
-  gates (the traffic trigger lets us migrate sooner if
-  the ecosystem grows faster than the calendar).
-
-### How to check if the traffic trigger is met
+There is nothing to flip any more. Moving the federation to `'steady'`
+needs a Morphit release that changes the rule for everyone, with its
+own start time; the old steps (change the setting on each node, restart
+the indexer) no longer change anything from 2026-11-01. For planning that
+move, this counts the accounts that already meet BOTH gates (on your
+server):
 
 ```sh
-psql "$MORPHIT_INDEXER_DATABASE_URL" <<'SQL'
+sudo -u postgres psql -d morphit_indexer <<'SQL'
 SELECT COUNT(*) AS eligible_for_steady
   FROM accounts a
   LEFT JOIN account_loyalty al ON al.account = a.name
@@ -5175,53 +5308,10 @@ SELECT COUNT(*) AS eligible_for_steady
 SQL
 ```
 
-If the result is ≥500, the traffic trigger is met.
-
-### How to flip
-
-Update the indexer's env file (on an Ansible install the
-playbook writes it from `morphit_indexer_attestation_phase` in
-`group_vars/all.yml`; change it there too, or the next run puts
-it back):
-
-```sh
-sudo sed -i 's/^MORPHIT_INDEXER_ATTESTATION_PHASE=.*/MORPHIT_INDEXER_ATTESTATION_PHASE=steady/' /etc/morphit/indexer.env
-grep -q '^MORPHIT_INDEXER_ATTESTATION_PHASE=' /etc/morphit/indexer.env \
-  || echo 'MORPHIT_INDEXER_ATTESTATION_PHASE=steady' | sudo tee -a /etc/morphit/indexer.env
-sudo systemctl restart morphit-indexer.service
-```
-
-(A systemd `Environment=` line would lose to the env files the
-unit sources inside `ExecStart`.)
-
-Or in a docker-compose deployment, update the `environment`
-block and restart the container. **No redeploy required** —
-just an env var flip + process restart.
-
-### Verifying the flip landed
-
-```sh
-# After restart, verify the new phase is active by
-# checking a known-ineligible account's eligibility response
-# and confirming the AND gate fires:
-curl -s "http://localhost:PORT/v1/attestor-eligibility/<account>" | jq .phase
-# Should report "steady"
-```
-
-### Don't flip before the trigger fires
-
-Flipping prematurely locks legitimate early attestors out
-of the feeAttest handler (returning `attestor_young_account`
-or `attestor_insufficient_loyalty`) and prevents any BTC/XMR
-orders from reaching `verified_by_attestation`. The whole
-attestation path stalls. Wait for the trigger.
-
-### Don't refuse to flip after the trigger fires
-
-Leaving `launch` permanently means the AND gate never
-activates, and any patient attacker can still sybil-attest
-their own orders with two ≥30-day-old accounts. The OR gate
-is a bootstrap mode, not a permanent posture.
+Leaving `launch` for good means any patient attacker can still
+sybil-attest their own orders with two ≥30-day-old accounts that are
+not linked to the poster. The OR gate is a bootstrap mode, not a
+permanent posture.
 
 ### v1.18.0 — marketplace hardening (fees, reviews, federation)
 
@@ -5242,7 +5332,16 @@ free, public, "fee-paid" listing, repeatable forever. Now:
   rejected with `attestor_is_poster`. It takes **two** attestors who are
   independent of the poster. An account the anti-review-ring signals have
   flagged as a pair with the poster (`related_accounts`,
-  `suspicious_reciprocity`) does not count.
+  `suspicious_reciprocity`) does not count. From 2026-11-01 00:00 UTC (by
+  the newest attestation's block time; v1.21.18) every node counts this the
+  same way, from chain data only: an attestor does not count when the same
+  account created both it and the poster (an instance's relay, which creates
+  all its users' accounts, does not count as such) and their first Morphit
+  activity was within five minutes of each other (Signal A), or when, within
+  one week, the two gave each other at least three high-star reviews each way
+  and reviewed nobody else (Signal B).
+  Your own flag clearances, and which relay is yours, no longer change
+  whether an order counts as paid.
 - **New BTC/XMR orders are verified outside the block.** An order paid by a
   BTC or XMR txid is stored as `pending_external` when its block is indexed;
   the explorer check runs afterwards, outside the block transaction — within
@@ -5691,7 +5790,9 @@ deliberately want a different local floor.  Rarely worth
 changing on a single instance — listings posted on your
 instance with non-standard fees look unusual to other
 operators indexing the chain. Federation uniformity is
-the value; deviation is a cost.
+the value; deviation is a cost. **From 2026-11-01 00:00 UTC
+(by block time) it is ignored** for new listings: every indexer
+uses the base pinned at the listing's block, or 125 (§40.7, "The same fee rules on every node").
 
 The fee model is BLURT-native (per the ADR-0011
 amendment).  Earlier versions of this doc referenced
@@ -5703,9 +5804,10 @@ BLURT's price drifts.
 
 **Featured-slot bid floor.**
 `MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR` (default `50`).
-BLURT cost per hour of featured-slot time. Raise to make
-featured slots more exclusive; lower to encourage more
-bidding.
+BLURT cost per hour of featured-slot time, for bids in blocks
+before 2026-11-01 00:00 UTC. From then on every indexer prices a
+bid at 50 BLURT/hour whatever this says, so a featured slot costs
+the same on every instance (§40.7, "The same fee rules on every node").
 
 **Verbose health.** `MORPHIT_INDEXER_VERBOSE_HEALTH`
 (default `false`). Gates the fuller `/v1/health?verbose=1`
@@ -5873,13 +5975,13 @@ curl -s -H 'X-Morphit-Local-Health: 1' "http://localhost:8081/v1/health?verbose=
 curl -s "http://localhost:PORT/v1/attestor-eligibility/<account>" | jq
 
 # Finding I — count accounts eligible to attest under 'steady' phase
-# (for planning the launch → steady transition)
+# (for planning a future move to 'steady': that needs a release, §20)
 psql "$MORPHIT_INDEXER_DATABASE_URL" -c \
   "SELECT COUNT(*) AS eligible_for_steady
      FROM accounts a
      LEFT JOIN account_loyalty al ON al.account = a.name
     WHERE a.created_block_time <= NOW() - INTERVAL '30 days'
-      AND COALESCE(al.cumulative_blurt_paid, 0) >= 100;"
+      AND COALESCE(al.canonical_blurt_paid, 0) >= 100;"
 
 # Finding H layer-2 — check if a chat pair is admitted
 curl -s "http://localhost:PORT/v1/chat-admission/<me>/<peer>" | jq
@@ -5927,6 +6029,13 @@ The indexer reads these at startup and includes them in its instance announce; t
 - **Lokinet** — **no prefix vanity.** A `.loki` is the SNApp's ed25519 pubkey and Lokinet generates that keyfile itself (set `keyfile=` in `lokinet.ini` `[network]`, restart, read the address). There is no vanity-key import path and no `lokinet-vanity` tool. A readable `name.loki` is **ONS**: burn OXEN on-chain via the Oxen wallet (1–10 yr). `scripts/generate-lokinet.sh` prints the setup + ONS steps.
 
 **Key-security model** (unchanged, matches `generate-onion.sh`'s long-standing design): vanity keys are generated on **operator hardware**, never committed (`hidden-services/` is git-ignored), and hand-carried to the box over SSH. Only the **public address** ever enters `morphit.config.env` → footer. For encrypting an alt-network service key at rest under the relay passphrase, see `import-altnet-key` / `export-altnet-key`. Since v1.18.0 `export-altnet-key --out=PATH` only creates a NEW file (mode 0600): if `PATH` already exists, or is a symlink, it writes nothing and says so. Delete a leftover file before exporting again, so no other user can pre-create the file and read the key.
+
+**Putting a vanity Tor or I2P key in place.** A vanity key replaces the key files of the hidden service the installer already runs, so Tor or i2pd then serves the new address with no other change:
+
+- **Tor:** the files `hs_ed25519_secret_key`, `hs_ed25519_public_key` and `hostname` in `/var/lib/tor/morphit`. They must belong to Tor's user (`debian-tor`), and the folder stays mode `700`, or Tor refuses them.
+- **I2P:** the file `/var/lib/i2pd/morphit-web.dat`, owned by `i2pd`. The `[morphit-web]` tunnel in `/etc/i2pd/tunnels.conf` already uses that file.
+
+Add no `HiddenServiceDir` lines to `torrc` and no second i2pd tunnel: the installer already set up and manages the hidden service and the tunnel. Copy the key to the server with `scp -O` (plain `scp` fails on a hardened server, which turns SFTP off). You do not need to type any of this from memory: on your server, `sudo morphit-ops alt-address` → Tor or I2P b32 → **Set it up** / **Replace it with a new one** prints the exact commands, each with the machine it runs on (your computer or the server), keeping a copy of the current key first. After you paste and save the new address, it checks whether this server's Tor (its `hostname` files) or i2pd (its `morphit-web` tunnel) really serves it, and says so.
 
 ---
 
@@ -6807,7 +6916,7 @@ ops/systemd/morphit-backup.timer    # daily at 04:00 local
 
 ### Verifying backups ran (status dashboard)
 
-`morphit-ops status` (main-menu item #10, "Status dashboard") ends with a **Backups** section that lists the backup directory and the **3 most recent** backup files — each with its age and size — so you can confirm at a glance that the timer is actually producing backups. It resolves the directory from `MORPHIT_BACKUP_DIR`, else `BACKUP_DIR` in `/etc/morphit/backup.env`, else the default `/home/morphit/backups`. The section prints the on-disk path so you can copy a file off the host (e.g. `scp -O root@<server>:<file> .` — `-O` because hardened servers turn SFTP off) to download it or hand it to a developer. It is read-only — it never creates, deletes, or rotates backups; rotation stays the timer's job. (`--json` includes the same data under a `backups` key for scripting.)
+`sudo morphit-ops status` (menu: "Status dashboard") ends with a **Backups** section that lists the backup directory and the **3 most recent** backup files — each with its age and size — so you can confirm at a glance that the timer is actually producing backups. It resolves the directory from `MORPHIT_BACKUP_DIR`, else `BACKUP_DIR` in `/etc/morphit/backup.env`, else the default `/home/morphit/backups`. The section prints the on-disk path so you can copy a file off the host to download it or hand it to a developer. If your server still lets root log in with a key, on your laptop: `scp -O root@<server>:<file> .` (`-O` because hardened servers turn SFTP off). The hardening step turns root login off (`PermitRootLogin no`) once a non-root login with an SSH key exists; then copy it in three steps. On your server: `sudo install -m 0600 -o <your-login> <file> /tmp/`. On your laptop: `scp -O <your-login>@<server>:/tmp/<filename> .`. Then, on your server, delete that copy: `rm /tmp/<filename>` (a backup holds your whole database). It is read-only — it never creates, deletes, or rotates backups; rotation stays the timer's job. (`--json` includes the same data under a `backups` key for scripting.)
 
 ### Wizard flow
 
@@ -6839,20 +6948,22 @@ Also: if your backup directory already exists and is owned by **root** — e.g. 
 
 ### Clearing a self-trade flag (restoring an account)
 
-Signals A and B are heuristics, and honest activity can trip them — two accounts created from the same machine and reviewing each other looks, to a detector, exactly like self-dealing. A flagged account loses its reputation card, and its reviews are shown subdued behind a "Not counted toward rating — reviewers flagged as related" pill.
+The four signals are heuristics, and honest activity can trip them — two accounts created from the same machine and reviewing each other looks, to a detector, exactly like self-dealing. A flagged account loses its reputation card, and its reviews are shown subdued behind a "Not counted toward rating — reviewers flagged as related" pill.
 
-Since v1.8.9, `morphit-ops` → **Moderation** offers **"Clear a flag (restore an account)"** alongside block and unblock. Pick the signal, name the two accounts (either order), and confirm. The account is restored immediately — the reputation card returns and the reviews stop being subdued — because every reputation and review query still reads the flag tables and the pair is simply no longer in them.
+On your server, `sudo morphit-ops` → **Moderation** offers **"Clear a flag (restore an account)"** alongside block and unblock. Pick the signal (or all four), name the two accounts (either order), and confirm. The account is restored immediately — the reputation card returns and the reviews stop being subdued — because every reputation and review query still reads the flag tables and the pair is simply no longer in them.
 
-The clearance is also recorded, and that half matters just as much: the detectors re-run continuously and would re-raise the identical flag on their next pass, so **deleting a flag row on its own appears to work and then silently undoes itself.** A recorded clearance is what makes the restore permanent.
+The clearance is also recorded, and that half matters just as much: the detectors re-run continuously and would re-raise the identical flag on their next pass, so **deleting a flag row on its own appears to work and then silently undoes itself.** A recorded clearance is what makes the restore last; every one of the four detectors honours it. If no flag was there, the clearance is recorded anyway, so the pair is not flagged for that signal later.
 
-**The two signals are cleared with different lifetimes, on purpose.**
+**The signals are cleared with different lifetimes, on purpose.**
 
 - **Related accounts (Signal A) — permanent.** It keys on account-*creation* facts: same creator, first activity minutes apart. That evidence is immutable, so a clearance that expired would re-flag the same pair forever on the same unchangeable evidence, and you would be clearing it on a treadmill.
 - **Mutual reviews (Signal B) — forgiven, then watched.** It is behavioural, so clearing records a *watermark*: the pair's mutual-review count at that moment. Everything up to the mark is forgiven; the flag re-fires only once they accumulate another full signal's worth beyond it. A pair cleared by mistake is therefore still caught by *new* behaviour, while an honest pair is never re-flagged on the same forgiven history. Note that a fixed time window would do the opposite — it re-flags on the old evidence the moment it expires.
+- **One-way pile-on (Signal C) — permanent for that pair.** The reviews between the two accounts are not counted as part of a pile-on again. Other reviewers can still raise one against the same account.
+- **Review concentration (Signal D) — forgiven, then watched,** like Signal B: the pair is flagged again if they keep reviewing only each other beyond the concentration that was forgiven.
 
-Because a pair that trips one signal usually trips both, the menu offers **"Both signals for this pair"** as the leading option; the clearances list shows each one's lifetime (`permanent`, or `watched from N mutual reviews`).
+Because a pair that trips one signal usually trips another, the menu offers **"ALL signals for this pair"** as the leading option; after a clearance it says how long each one lasts, and the clearances list shows each one's lifetime (`permanent`, or `watched beyond N mutual reviews` / `watched beyond N reviews`).
 
-Clearances are instance-local, like blocking: nothing is broadcast, and no other instance's view of those accounts changes. The same menu lists the clearances in force so you can review or undo them; undoing simply makes the pair eligible for flagging again — it does not re-raise a flag by hand.
+Clearances are instance-local, like blocking: nothing is broadcast, and no other instance's view of those accounts changes. **Undo a clearance**, in the same menu, lists the clearances in force (newest first) with their lifetimes; pick one and confirm (the default is No). Undoing makes the pair eligible for flagging again at the detector's next pass, if their activity still warrants it — it does not re-raise a flag by hand.
 
 **Then let `morphit-ops health` watch it for you.** Since v1.8.9 the health report carries a `Backups` line beside `Services` and `Canary`:
 
@@ -7004,7 +7115,7 @@ The Ansible playbook's `bunkerweb` role deploys this directory verbatim.  Operat
 
 > **Concurrent-connection caps for the chat SSE paths (`/v1/chat/:a/:b/stream`, `/v1/chat-activity`).** The indexer rate-limits opening these streams (the `list` tier) and caps open streams itself (24 per client, 2,000 in total, 1,500 for all Tor/I2P visitors together — of which at most 1,000 without a ticket — and since v1.21.14 12 per account for a ticketed chat stream through that shared path, `apps/indexer/src/api/streamCaps.ts`; both chat streams also need a ticket signed by the account, §24). The relevant DoS surface here is not request *rate* but concurrent-connection *count*: one client (or a botnet) holding thousands of open streams. So the proxy in front of the indexer must enforce a **per-IP concurrent-connection cap** on those paths — BunkerWeb's connection-rate + slow-loris guards cover the common case; if you want an explicit ceiling, the `frontend` nginx (`ops/bunkerweb/frontend/nginx.conf`) is the natural place for an nginx `limit_conn` zone keyed on the real client IP scoped to the `.../stream` and `/v1/chat-activity` locations (a generous cap — e.g. a few dozen per IP — so legitimate multi-tab / multi-device users are unaffected while a single source can't exhaust connection slots). This does not touch fast-path latency: the stream itself is server-push, and the cap only bounds how many streams one source may hold open at once. If you run WITHOUT BunkerWeb, this cap is your responsibility to add at whatever proxy fronts the indexer.
 
- (menu: "Secure the server" → "Web firewall (BunkerWeb): install / status") inspects whether the `bunkerweb` and `bunkerweb-scheduler` containers are running and healthy. If they already are — or if you pass `--json`, or run it non-interactively (no TTY) — it is **read-only**: it reports status and prints the bring-up commands, nothing more. If BunkerWeb **isn't up yet and you're at an interactive terminal**, it offers a **guided, ELI5 installer** that confirms before each step: it copies the shipped `ops/bunkerweb/` config into `/etc/bunkerweb` (never clobbering an existing config), prompts for your domain (`SERVER_NAME`) and validates it, guards against the missing-TLS-certificate crash-loop (it stops and points you at `morphit-ops ssl` first if the cert isn't there yet), then runs `docker compose pull` and `docker compose up -d` and re-verifies. BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
+**`sudo morphit-ops bunkerweb`**, on your server (menu: "Web firewall (BunkerWeb): install / status"), finds BunkerWeb and its scheduler by their image, not by container name, and says whether they are running and healthy (exit code `0` when running, `1` otherwise, so it suits monitoring). When they run, it prints how to watch, restart or stop them, and changes nothing. When Docker does not answer, it says so, shows Docker's own words and how to look at Docker, and offers no install. A BunkerWeb that runs from its own setup (not the shipped `/etc/bunkerweb`) is never given a second copy: the command prints how to start that one. With `--json` or `--status`, or without a terminal, it is **read-only**: it reports status and prints the bring-up commands, nothing more. If the shipped BunkerWeb **isn't up yet and you're at an interactive terminal**, it offers a **guided, ELI5 installer** that confirms before each step: it copies the shipped `ops/bunkerweb/` config into `/etc/bunkerweb` (never clobbering an existing config), prompts for your domain (`SERVER_NAME`) and validates it, guards against the missing-TLS-certificate crash-loop (it stops and points you at `morphit-ops ssl` first if the cert isn't there yet), then runs `docker compose pull` and `docker compose up -d` and re-verifies. BunkerWeb's Docker images are pulled from BunkerWeb's own registry; Morphit ships only the config, not the images.
 
 Reasons you might NOT want BunkerWeb:
 
@@ -7259,12 +7370,14 @@ PROXY_BUFFERING_URL_3=^/v1/(?:.*/stream|login-pairing/[^/]+/wait)$
 
 ### www.(your domain)
 
-For a domain of its own (`vigilante.trading`, `example.com.mx` — not a subdomain such as `morphit.timeapp.foundation`), BunkerWeb also answers for `www.<domain>` and sends every request for it, on http and https, to `https://<domain>` with the same path (one `301`). Without it, `www.<domain>` reached the server and got BunkerWeb's "403 Forbidden" page: BunkerWeb serves only the names in `SERVER_NAME`, and refuses every other (`DISABLE_DEFAULT_SERVER=yes`).
+For a domain of its own (`vigilante.trading`, `example.com.mx` — not a subdomain such as `morphit.timeapp.foundation`), BunkerWeb also answers for `www.<domain>` and sends every request for it, on http and https, to `https://<domain>` with the same path (one `301`). Without it, `www.<domain>` reached the server and got BunkerWeb's "403 Forbidden" page: BunkerWeb serves only the names it is set up for (`SERVER_NAME`; on BunkerWeb 1.5, its own site list — below), and refuses every other (`DISABLE_DEFAULT_SERVER=yes`).
 
 - **DNS.** A `CNAME` record `www` → `<domain>` (or A/AAAA records with the same addresses as the domain's). To check it, on any computer: `getent ahosts www.<domain>` should list the same addresses as `getent ahosts <domain>`.
 - **bunkerweb.env.** `SERVER_NAME=<domain> www.<domain>` (the domain first: BunkerWeb takes the first name for its certificate and settings) and `CUSTOM_CONF_SERVER_HTTP_morphit_www_redirect='if ($host = www.<domain>) { return 301 https://<domain>$request_uri; }'` — single-quoted, because Docker Compose replaces `$name` in an env file and `$host` / `$request_uri` would arrive empty. With two names, `CUSTOM_SSL_CERT` / `CUSTOM_SSL_KEY` must name the domain itself, not `${SERVER_NAME}`.
 - **Certificate.** The same Let's Encrypt certificate names both. Let's Encrypt checks `www` through the redirect (it follows it to `https://<domain>/.well-known/acme-challenge/…`, served from the web build), so it renews the same way the domain does, and checks every name at each renewal.
 - **Installs and upgrades.** The guided install sets it up: it asks Let's Encrypt for the domain, then adds `www` to the same certificate (while `www` does not point at the server yet, only that addition is refused). `sudo morphit-ops upgrade` does it on installed servers once `www` points at the server (looked up from DNS servers directly — systemd-resolved's upstream servers when it runs, not the hosts file): it writes the two settings (a copy of the old file is kept next to it, `bunkerweb.env.bak-<number>`), recreates BunkerWeb's services (a plain `docker restart` keeps a container's old settings), checks the redirect live, proves Let's Encrypt's path with a test file, adds `www` to the certificate — keeping the certificate's own deploy hook, preferred chain and key reuse (not OCSP Must-Staple, which Let's Encrypt no longer issues) — and checks `https://www.<domain>` passes a certificate check. When BunkerWeb refuses the settings, or the site stops answering, the old file goes back. A settings file that names `www` while the running containers do not is loaded by recreating them, once per version of the file; when the Compose service sets `SERVER_NAME` itself (`environment:`) or does not read the file, the file is left alone and the upgrade names what to change. When `www` has no DNS record, it says which record to add; when a certificate names `www` but `www` has no record any more, it is issued again without it (a renewal would fail otherwise). It runs in the upgrade's background part and leaves a step for the next upgrade rather than start one that would not finish in that run's time.
+
+- **BunkerWeb 1.5 with one site.** BunkerWeb serves only the names in its own site list (`bw_services`, in its database) and puts only the first name of `SERVER_NAME` there, so `www.<domain>` was left out however often the containers were recreated. When `nginx -T` inside BunkerWeb shows that `www` is not served although the running containers have it in `SERVER_NAME`, the upgrade adds `www.<domain>` to that list (after a copy of BunkerWeb's database, `db.pre-morphit-sites-<number>.sqlite3`, next to the database inside the scheduler container; the domain stays first), restarts the scheduler so it builds its config again, and checks with `nginx -T` again. It does this only for BunkerWeb's default SQLite database; with another database, or when it cannot add the name, it says so and names the one command whose output to send for a look.
 
 ### What BunkerWeb does NOT do
 
@@ -7612,10 +7725,23 @@ sudo morphit-ops doctor   # on the server, from any folder
 
 What it does, and why it's trustworthy:
 
-- It sources `morphit.env` exactly the way a real start does
-  (`set -a; . morphit.env; set +a`) and runs each service's **own**
-  config loader via an internal `--check-config` mode that loads
-  config and exits. Because it uses the services' real loaders, its
+- For each service it reads exactly the settings files that
+  service's systemd unit reads, in the unit's order and the unit's
+  way (the last value wins): for the indexer `/opt/morphit/morphit.env`,
+  `/opt/morphit/morphit.config.env` and `/etc/morphit/indexer.env`;
+  for the relay the same two, then `/etc/morphit/relay.env`,
+  `relay-vapid.env` and `relay-notify.env` (in `/etc/morphit`). The
+  unit reads those files as the service's own user
+  (`morphit-indexer`, `morphit-relay`), not as root, so doctor tries
+  each file as that user (with `runuser`). A file that user cannot
+  read, or a folder on the way that is closed to it, fails the check,
+  as it stops the real start, and doctor prints the exact `sudo chown`
+  / `sudo chmod` line that fixes it. A file the start-up helper fixes
+  by itself at every start is not counted. Settings in your own shell
+  are left out, as the unit starts without them. Run it with `sudo`:
+  typed without it, it stops at once and says so. It then runs each service's **own** config loader via
+  an internal `--check-config` mode that loads config and exits.
+  Because it uses the services' real loaders and their real files, its
   verdict cannot drift from what the services actually require.
 - It reports `✓ will start` / `✗ will NOT start` per service, and for
   a failure it surfaces the validation lines (not a stack trace) plus
@@ -7624,12 +7750,13 @@ What it does, and why it's trustworthy:
   services. It does make a few READ-ONLY network calls (RPC
   reachability, and the federation batch-size probe below); `--no-rpc`
   skips all of them for a purely local check. The relay check runs
-  *before* the passphrase-unlock step, so it never prompts; instead it reports
-  whether the active key is plaintext or an encrypted envelope (i.e.
-  whether the relay will ask for a passphrase at real start).
+  *before* the passphrase-unlock step, so it never prompts; the
+  security audit below reports whether the active key is plaintext or
+  an encrypted envelope.
 - Exit code: `0` if both services validate, `1` if either fails, `2`
-  if you're not in an install directory. `--json` emits a structured
-  result for scripting.
+  if Morphit's program files are not found in the install folder
+  (`/opt/morphit`; it finds that by itself, whichever folder you run it
+  from). `--json` emits a structured result for scripting.
 
 This is the recommended first step before `systemctl start` on a
 fresh install, and the first thing to reach for when a node that used
@@ -7649,11 +7776,16 @@ which would advertise a weak key to attackers). It reports:
   from the passphrase sealed with this host's systemd credential key
   (`/etc/morphit/relay_passphrase.cred`); nothing is typed.
 - **Active-key file permissions** — whether anyone besides root and
-  the relay's group can read the key file.
-- **Secret-file permissions** — ⚠ if `morphit.env` or
-  `morphit.config.env` is group/other-readable; `morphit.env` holds
-  the database password and is not permission-checked at boot, so
-  this catches a real at-rest leak.
+  the relay's group can read the key file, by the rule the relay
+  itself applies at start (owner-only, or `root:morphit-relay`
+  `0640`/`0440`); anything looser is a warning with the exact fix.
+- **Secret-file permissions** — `morphit.env` and
+  `morphit.config.env` pass when only their owner can read them, or
+  when they are `root:morphit` `0640`/`0440` (the shape the services'
+  start-up helper gives them, so the services can read them through
+  their group). Anything looser is a ⚠ that says who can read it and
+  the exact command to fix it; `morphit.env` holds the database
+  password, so this catches a real at-rest leak.
 - **Federation batch size** (v1.18.0) — whether your reverse proxy
   will accept a BATCH of chat messages from a peer instance.
 
@@ -9906,10 +10038,15 @@ from the paper backup onto new YubiKeys.
 credential, so set it up in this order and test it on your box
 before you rely on it:
 
-1. Make the YubiKey response the keystore passphrase: run
-   `sudo morphit-ops edit-active-key`, keep the same key, and
-   enter the output of `ykchalresp -2 "$(cat /etc/morphit/yubikey-challenge)"`
-   as the new passphrase.
+1. Make the YubiKey response the keystore passphrase. On the server,
+   with the YubiKey plugged in, first print the response:
+   `ykchalresp -2 "$(cat /etc/morphit/yubikey-challenge)"`. Then run
+   `sudo morphit-ops edit-active-key`, paste the same active key the
+   relay uses now (it is checked against the chain), answer **No** to
+   **Keep the same unlock passphrase?**, and enter the YubiKey response
+   as the new passphrase (twice). The Tor / I2P / Lokinet address key
+   files, encrypted with the same passphrase, are moved to the new one
+   too.
 2. Remove the sealed copy that command writes, so the passphrase
    no longer exists on disk:
    `sudo shred -u /etc/morphit/relay_passphrase.cred`.
@@ -11259,14 +11396,25 @@ key.
 `release-broadcast.ts`, `rpc-directory-`, `chain-snapshot-` and
 `indexer-snapshot-broadcast`: the transaction is **signed once** and that
 exact transaction is offered to the RPC nodes in health order (they are
-checked first — a line says so — for up to 5 s). It used to be re-signed
+checked first, with a spinner: a clearnet node gets up to 5 seconds to
+answer, a hidden one up to 20; when hidden nodes are among them, once one
+node has answered the others get eight more seconds, and one still silent
+then is tried last). It used to be re-signed
 per node, so a lost acceptance could put a SECOND op on chain. A node that
 answers "duplicate transaction" counts as success (an earlier attempt
 landed). If the transaction expires before any node confirms it, the
 script stops with the transaction id and asks you to look it up on a
-block explorer BEFORE running again — never re-run blindly. The optional
-`--include-hidden` flag also uses the 14 hidden nodes through your
-laptop's Tor/i2pd (off by default; a laptop may run neither); `--node
+block explorer BEFORE running again — never re-run blindly.
+
+**Which nodes (v1.21.18).** The six clearnet nodes, plus the hidden ones your
+laptop can reach: the scripts first look for Tor (`MORPHIT_INDEXER_TOR_SOCKS`,
+else `127.0.0.1:9050`, else Tor Browser's `127.0.0.1:9150`; it must answer a
+SOCKS5 greeting) and for i2pd (`MORPHIT_INDEXER_I2P_HTTP_PROXY`, else
+`127.0.0.1:4444`; it must answer HTTP). The seven `.onion` nodes join when Tor
+answers, the seven `.b32.i2p` ones when i2pd does, and the run prints which
+(and how to add the rest: `sudo apt install tor` / `i2pd`). All of them are
+ranked together and the best goes first. `--no-hidden` keeps to clearnet,
+`--include-hidden` asks all fourteen whatever the check found, and `--node
 <url>` still pins one node.
 
 ### 40.7 For community operators (running your own Morphit instance)
@@ -11319,14 +11467,89 @@ Default behavior:
    proofs.  Canonical morphit.io has no privileged
    role in your verification.
 
-If you want to run your own treasury wallet (collect
-XMR fees yourself instead of forwarding to canonical),
-fill in `MORPHIT_INDEXER_XMR_FEE_ADDRESS` with your
-own address.  Your XMR-fee orders won't appear on
-canonical's orderbook (the txid paid your address, not
-canonical's), but you keep 100% of the XMR.  Federation
-health monitors comparing `/v1/release.treasury` will
-show the divergence.  Permitted but visible.
+**You cannot collect BTC or XMR fees in a wallet of your
+own.** Putting your own address in
+`MORPHIT_INDEXER_XMR_FEE_ADDRESS` (or
+`MORPHIT_INDEXER_BTC_FEE_ADDRESS`) does not do that:
+
+- Your site shows its users only the treasury pinned on
+  chain by the signed release (`/v1/release.treasury`) as
+  the address to pay, never your setting. Your indexer, like
+  every other, also checks BTC/XMR fees against the pinned
+  treasury whenever a release pins one
+  (`apps/indexer/src/indexer/treasurySource.ts`: the chain
+  pin first, your setting only while no release pins an
+  address).
+- From 1 November 2026 (by block time) your setting is not
+  used at all: a BTC or XMR order is accepted only when the
+  release in force at the order's block pins its amount —
+  and that release pins the treasury address with it — and
+  is refused on every node otherwise (`fee_amount_not_pinned_xmr`).
+  Once a release pins `primary_address`, an XMR fee must be
+  paid to the integrated address made from that pinned
+  address for the one order (§40.13), on every node.
+
+So nothing changes for XMR-paid listings on your site: your
+users pay the Morphit treasury, every instance checks the
+payment the same way and shows the order once it is
+verified, and the fee goes 100% to the treasury, like BTC
+fees. What you earn is the 90% share of BLURT fees (item 3
+above). Your only choice for XMR is on (the default: leave
+the line out) or off (an explicitly empty
+`MORPHIT_INDEXER_XMR_FEE_ADDRESS=` line). Off, your site
+offers no XMR payment; from 1 November an XMR order posted
+on another instance is still stored on your node, kept
+pending and not shown on your pages (the BTC and XMR bullet
+below).
+
+#### The same fee rules on every node, from 1 November 2026 (v1.21.18)
+
+Every indexer stores whether a fee was paid, and every other verdict that
+reads it (a trade completed, a review, a featured slot) depends on it. Some
+of the inputs were each node's own settings, so two nodes fed the same
+blocks could disagree. From **2026-11-01 00:00 UTC, by the block's time**
+(not your server's clock), every node uses the same inputs. Orders, fees and
+bids in older blocks keep the result every node already recorded.
+
+- **Tolerance:** 0.1% (0.001) on every node.
+  `MORPHIT_INDEXER_FEE_TOLERANCE` only counts for older blocks.
+- **BLURT listing fee base:** the base pinned by the newest release in a
+  block before the listing's block, or 125 BLURT when no release pins one.
+  `MORPHIT_INDEXER_FEE_BASE_BLURT` only counts for older blocks.
+- **BTC and XMR listing fees:** judged by the amount the release in force
+  at the order's block pins (the same release rule), and accepted on every
+  node, also on one that does not check that method. With no amount pinned,
+  every node refuses the order alike. A node that does not check the method
+  (its address line set empty, or no explorer answers) still stores the
+  order, but keeps it pending, never promotes it by attestation, and does
+  not show it on its own pages; nodes that do check settle it.
+- **Featured slot:** 50 BLURT per hour on every node.
+  `MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR` only counts for older bids.
+- **Who may be paid the 90% leg** (listing fees, featured bids and first
+  messages to strangers): any operator's fees account registered on chain
+  in a block before the payment's, on every node. Your own
+  `MORPHIT_INDEXER_FEE_RECIPIENT` setting no longer counts by itself, not
+  even on your own node. So **register it**: while your indexer sees that it
+  is not in your on-chain registration, your site tells its users to pay
+  their whole fee to the Morphit treasury instead (one transfer, accepted
+  everywhere) until you run, on your server, `sudo morphit-ops register`.
+  To check, on your server: `sudo morphit-ops status`, section **Fees
+  account (federation)**: the line **BLURT fees go to:** must not say
+  "not registered on chain" (before 1 November) or "the Morphit treasury,
+  until your fees account … is registered on chain" (from then).
+- **Switched-off assets and payment methods**
+  (`MORPHIT_INDEXER_DISABLED_ASSETS`, `MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS`):
+  such orders are stored like on every other node and only hidden from your
+  own pages (orderbook, live stream, feeds, the featured strip, order pages
+  and lists). Before, your node refused them, so its records differed from
+  its peers'.
+- **Fee attestation** (BTC/XMR orders an explorer cannot settle): the
+  quorum is counted the same way on every node, and the phase is `'launch'`
+  on every node (§20).
+
+An instance that applies blocks from that time with an older release
+stores other verdicts than its peers, so **every instance must run
+v1.21.18 or later before then.**
 
 ### 40.8 Verifying federation propagation
 
@@ -11855,11 +12078,13 @@ For a community operator standing up
      peers; re-register it with `http://`. `alt_addresses.i2p_name` /
      `lokinet` must be real host names (letters, digits, hyphens,
      dots).
-   - To verify the saved key at any time:
+   - To verify the saved key at any time, on your server:
      `sudo morphit-ops show-key` prints the public key
-     it derives to (never the private key) so you can
-     compare it to your account's active authority on
-     a Blurt explorer.
+     it derives to (never the private key) and checks it
+     against the account's keys on the chain (through
+     this node's own indexer first): ✓ it matches, or ✗
+     it does not and which key it is instead, with
+     `sudo morphit-ops edit-active-key` as the fix.
 3. **Restart the indexer.**  It will pick up the
    new env var and start queueing payouts for ops
    carrying your tag.
@@ -12054,10 +12279,16 @@ value; there is no merge logic.
 ### Disabling specific assets instance-wide
 
 **`MORPHIT_INDEXER_DISABLED_ASSETS`** — comma-separated list of
-uppercase tickers from the canonical asset registry.  Orders
-posted with a disabled asset are rejected at handler time with
-`reason: 'asset_disabled_on_instance'`.  Default empty (every
-canonical-registry asset is enabled).
+uppercase tickers from the canonical asset registry.  Default empty
+(every canonical-registry asset is enabled).  **From 2026-11-01
+00:00 UTC (by the order's block time; v1.21.18) a disabled asset is
+hidden, not refused:** its orders are stored like on every other
+instance and hidden from this instance's pages (orderbook, live
+stream, feeds, the featured strip, order pages and lists), so your
+node's records match its peers'. Hiding applies to every stored
+order, so switching an asset off later also hides its older orders.
+Orders in older blocks were rejected at handler time with
+`reason: 'asset_disabled_on_instance'`, and stay so.
 
 **Parser is tolerant** of whitespace, mixed case, and trailing
 commas — write it however you like, the indexer normalizes
@@ -12145,12 +12376,13 @@ MORPHIT_INDEXER_DISABLED_ASSETS=""
 ```
 
 **Federation semantics:** disabling an asset is OPERATOR-level,
-not user-level.  Orders for a disabled asset still appear in
-your instance's read-only orderbook feeds (the chain history
-is shared across the federation), but your indexer refuses to
-accept NEW orders for that asset from your own users.  Users
-who prefer an instance that supports the asset switch to a
-different Morphit operator — federation is the point.
+not user-level.  Orders for a disabled asset are hidden from your
+instance's pages, whichever instance they were posted through;
+peer instances that have not disabled it still show them (from
+2026-11-01 every instance also stores them, so all agree on
+trades, reviews and bids).  Users who prefer an instance that
+supports the asset switch to a different Morphit operator —
+federation is the point.
 
 **Do NOT disable Category-A (fee-payable) assets — BTC, XMR,
 BLURT.**  The wizard step 13 cannot offer this (the
@@ -12192,11 +12424,14 @@ indexer's `/v1/instance` endpoint as the `disabled_assets` field
 - **`/about-this-instance`** renders a "This instance's asset
   policy" section that shows the current disabled-assets list.
   Empty array → emerald "None — this instance accepts every
-  tradable asset"; populated → "USDT (operator-disabled on this
-  instance; tradeable on peer instances)".  Federation note in
-  the same panel reminds users that peer instances' orders still
-  appear in the orderbook regardless — the gate is only on NEW
-  orders posted from THIS instance.
+  tradable asset"; populated → "USDT (disabled on this instance:
+  not offered here, and its orders are not shown here)".  The
+  federation note in the same panel says the same as the indexer
+  does: orders for a disabled asset are not shown on this
+  instance, including orders posted on other instances, and
+  instances that offer that asset still show them.  The
+  payment-method panel next to it says the same for an order whose
+  payment methods are all disabled here.
 - **`/run-a-node`** carries a "Your instance, your asset policy"
   panel explaining the env var to prospective operators with
   three pillars (default-on, opt-out env var, federation stays
@@ -12562,15 +12797,17 @@ instead.  This knob is for canonical methods only.
 
 ### Ingest + federation semantics
 
-The indexer rejects a NEW order only when **all** of its payment
-methods are disabled (`reason: 'payment_methods_all_disabled'`).
-An order that still offers at least one enabled method is accepted
-as-is. Like disabled assets, this is OPERATOR-scoped: peer-instance
-orders that use a method you disabled still appear in your
-read-only orderbook (chain history is shared across the
-federation); your users simply can't post orders that offer ONLY
-disabled methods, and the picker + orderbook filter hide the
-disabled methods.
+An order is affected only when **all** of its payment methods are
+disabled; one that still offers at least one enabled method is
+shown as-is. **From 2026-11-01 00:00 UTC (by the order's block
+time; v1.21.18) such an order is hidden, not refused:** it is
+stored like on every other instance and hidden from this
+instance's pages, whichever instance it was posted through. Orders
+in older blocks were rejected (`reason:
+'payment_methods_all_disabled'`), and stay so. Like disabled assets, this is OPERATOR-scoped: peer instances
+that have not disabled the methods still show such orders; on
+yours, the picker and the orderbook filter also leave the
+disabled methods out.
 
 The parser tolerance is pinned in CI by
 `apps/indexer/scripts/disabled-payment-methods-parse-smoke.ts` (12
@@ -13281,7 +13518,7 @@ binds.
 ### Disabling
 
 The grandma-friendly switch (priority #3) is the `morphit-ops` menu:
-run `morphit-ops` and choose **Check & operate → MCP server
+run `sudo morphit-ops` on your server and choose **Check & operate → MCP server
 (AI-agent discovery): turn on or off**, or go straight there with:
 
 ```
@@ -13435,24 +13672,31 @@ separately and are **not** touched by any of this.
 
 ### The reset
 
-1. **Stop the indexer:**
+All commands below run on your server.
+
+1. **Stop the indexer and the relay.** The relay goes too: it must start
+   again only after the indexer has started once on the new database.
 
    ```
-   sudo systemctl stop morphit-indexer
+   sudo systemctl stop morphit-indexer morphit-relay
    ```
 
 2. **Drop and recreate its database.** Use the database name + owner from
-   your `MORPHIT_INDEXER_DATABASE_URL` (in `morphit.env`). If your URL is
+   your `MORPHIT_INDEXER_DATABASE_URL` (in `/opt/morphit/morphit.env` or
+   `/etc/morphit/indexer.env`; the indexer reads both, and the last one wins).
+   If your URL is
    `postgresql://morphit_indexer:…@localhost/morphit_indexer`, the database is
    `morphit_indexer` and the owner is `morphit_indexer`:
 
    ```
-   sudo -u postgres psql -c "DROP DATABASE morphit_indexer;" \
-                         -c "CREATE DATABASE morphit_indexer OWNER morphit_indexer;"
+   sudo -u postgres psql -c 'DROP DATABASE "morphit_indexer" WITH (FORCE);' -c 'CREATE DATABASE "morphit_indexer" OWNER "morphit_indexer";'
    ```
 
-   (Substitute your own names. This is the same drop-and-recreate you'd do to
-   switch chains — see §25.)
+   (Substitute your own names. `WITH (FORCE)` closes any connection still
+   open to the database, which would otherwise stop the drop; it needs
+   PostgreSQL 13 or later. This is the same drop-and-recreate you'd do to
+   switch chains — see §25. When fast-sync leaves a database it must not
+   serve, it prints this command with your own names filled in.)
 
 3. **Start the indexer again:**
 
@@ -13463,6 +13707,13 @@ separately and are **not** touched by any of this.
    On boot it creates the current schema from scratch, then begins syncing
    from the chain. A fresh indexer reports `degraded` until it catches up —
    that's normal.
+
+   **Then start the relay**, once the indexer answers — when
+   `sudo morphit-ops health` shows the indexer answering:
+
+   ```
+   sudo systemctl start morphit-relay
+   ```
 
 4. **(Optional) Skip the long re-sync.** A full re-sync from genesis can take
    a while. To jump the cursor close to the chain head instead:
@@ -13858,9 +14109,10 @@ These change what your node does on the network without any setting to change.
 **The "no clearnet Matrix" leg reads the alert bot's real settings.** `clearnet_eliminated` used to check `MORPHIT_INSTANCE_MATRIX_HOMESERVER`, which nothing sets, so it always passed. It now reads `/etc/morphit/matrix-bot.env`, the file the bot's unit loads. The leg (`matrixClean` in `clearnet_eliminated_missing`) passes only when:
 
 - the file is absent, or has no `MORPHIT_MATRIX_BOT_ALERT_MXID` (the bot exits at start); or
-- the bot's `MORPHIT_MATRIX_BOT_HOMESERVER` is on this machine (loopback).
+- the bot's `MORPHIT_MATRIX_BOT_HOMESERVER` is on this machine (loopback); or
+- the homeserver is a `.onion` address and the bot reaches it through a Tor proxy on this machine (`MORPHIT_MATRIX_BOT_SOCKS_PROXY=socks5h://127.0.0.1:9050`, or the same with `socks5://`). A tor-only install, and `sudo morphit-ops matrix setup` on a tor-only node, write that proxy line for you.
 
-The default homeserver, `https://matrix.org`, is clearnet, so a tor-only node with Matrix alerts switched on no longer claims zero clearnet. The bot has no Tor route, so a `.onion` homeserver fails the leg too: the bot would ask your ISP's resolver for that name. The indexer runs as its own user (`morphit-indexer`) and cannot read the bot's env file, which holds the bot's access token, so it reads a secret-free summary instead: `/etc/morphit/matrix-bot.posture`, written by the `matrix_bot` role. If it cannot read either, the leg fails, because unknown is not clean. To keep the claim on a tor-only node, clear the alert address with `morphit-ops matrix clear`.
+The default homeserver, `https://matrix.org`, is clearnet, so a tor-only node with Matrix alerts switched on no longer claims zero clearnet. A `.onion` homeserver without that proxy, or an `.i2p` homeserver (the bot has no way to reach I2P), fails the leg: the bot would hand the name to the system's resolver. The indexer runs as its own user (`morphit-indexer`) and cannot read the bot's env file, which holds the bot's access token, so it reads a secret-free summary instead: `/etc/morphit/matrix-bot.posture`, written by the `matrix_bot` role. If it cannot read either, the leg fails, because unknown is not clean. To keep the claim on a tor-only node, clear the alert address, on your server: `sudo morphit-ops matrix clear`.
 
 ### If you run the Java I2P router instead of i2pd
 
@@ -14114,7 +14366,7 @@ Fast-sync depends on exactly one artifact: a small indexer snapshot (about 600 k
 
 ### One signer, many mirrors
 
-Only the canonical instance **generates and anchors** the snapshot. It exports its own indexer DB, pins the tarball, and broadcasts the CID and SHA-256 on-chain under one signature. That means there is exactly one trust decision in the whole system, and no operator ever has to judge whose database view to accept.
+Only the canonical instance **generates and anchors** the snapshot. Its daily job exports its own indexer DB and pins the tarball; it does **not** put it on the chain. That is a step on the publisher's laptop, which holds the `@morphit` posting key: it broadcasts the CID and SHA-256 on-chain under one signature. (The job broadcasts by itself only when a key file `/etc/morphit/snapshot-signing.wif` exists on the server, and then warns that the key does not belong there.) That means there is exactly one trust decision in the whole system, and no operator ever has to judge whose database view to accept.
 
 Every other instance **mirrors** it: pins that same CID to its own Kubo node and re-serves the bytes. Serving costs nothing extra — your frontend already proxies `/ipfs/` to the local gateway, so a pinned snapshot is immediately reachable over your clearnet origin, your `.onion` and your `.b32.i2p` alike, with no new routes and no new ports.
 
@@ -14130,8 +14382,8 @@ With mirrors in place, a hidden-only newcomer fetches from a peer's `.onion` or 
 
 | Job | Who runs it | When |
 | --- | --- | --- |
-| `morphit-snapshot-mirror.timer` → `ops/snapshot-mirror.sh` | every instance with IPFS hosting | weekly, ~15 min after boot, and on every `morphit-ops upgrade` |
-| `morphit-snapshot-publish.timer` → `ops/snapshot-autopublish.sh` | canonical publisher only (`morphit_snapshot_publisher: true`) | daily |
+| `morphit-snapshot-mirror.timer` → `ops/snapshot-mirror.sh` | every instance with IPFS hosting | weekly (a calendar timer at a fixed per-server time in the week; a run missed while the server was off happens at its next start), and on every `morphit-ops upgrade` |
+| `morphit-snapshot-publish.timer` → `ops/snapshot-autopublish.sh` | canonical publisher only (`morphit_snapshot_publisher: true`) | daily: exports and pins a new snapshot when the indexer is caught up. It does not anchor it on chain: that is a manual step on your laptop (below) |
 
 The mirror job:
 
@@ -14143,7 +14395,7 @@ The mirror job:
 
 Every step is best-effort. A box that cannot mirror right now is not a broken box; it just is not helping yet, and it retries on its next run.
 
-**Why weekly rather than monthly:** a mirror must not lag the publisher. The canonical box anchors a fresh snapshot daily and a newcomer looks up the *newest* anchored CID, so a mirror that last refreshed a month ago is holding a CID nobody is asking for. Weekly keeps mirrors in step for roughly 600 kB, and the job is a cheap no-op when nothing has changed. The timer is anchored to "7 days since the last run" with a randomised delay, so the federation does not all wake and hit the DHT at the same hour.
+**Why weekly rather than monthly:** a mirror must not lag the publisher. A newcomer looks up the *newest* anchored CID, so a mirror that last refreshed a month ago may hold a CID nobody is asking for. Weekly keeps mirrors in step for roughly 600 kB, and the job is a cheap no-op when nothing has changed. When this box already holds the newest anchored snapshot, the run says how old that snapshot is. On the box that publishes the snapshot (it has `/etc/morphit/snapshot-publish.env`), once the anchored one is more than two days old, the run also says how many newer exports wait here to be anchored and prints the exact commands to anchor the newest one on your laptop. It is a calendar timer (`OnCalendar=weekly`, `Persistent=true`): systemd keeps `Persistent=` only for calendar timers, so the earlier `OnUnitActiveSec=7d` timer kept no record of its last run (on morphit.io, `systemctl list-timers` on 29 October showed its last run on 25 September and the next one due on 5 November). `RandomizedDelaySec=6d` with `FixedRandomDelay=true` spreads the federation over the week, each server at its own steady time.
 
 ### Turning it off, and turning publishing on
 
@@ -14172,7 +14424,25 @@ On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast
 
 **What every downloaded copy must pass before it is unpacked (v1.21.7).** It must be exactly the size the signed record gives (a longer download is cut off there); the archive is read by fast-sync itself, not by `tar`, and only `manifest.json` and `indexer.sql.gz`, as plain files of bounded size, are accepted; the dump inside must match the signed SHA-256. A copy that fails any of these is thrown away and the next source is tried — one bad source can no longer stop the run or fill the disk.
 
-**If the restore went through but its checks did not (v1.21.7).** When the op-log spot-check quarantines the restored database, its clean-up fails, or the run is stopped (Ctrl+C) after the restore, fast-sync exits with code 4 and leaves the indexer **stopped**: the database was replaced, and must not be served. Run `sudo morphit-ops fast-sync` again to restore a fresh copy over it. If the spot-check says again that the snapshot does not match the chain, wait for the next snapshot (one is published daily) and tell the Morphit maintainers.
+**What `sudo morphit-ops fast-sync` does, in order.** Run it on your server.
+
+1. It reads what your indexer's database holds now. If the database does not answer, it says so and stops; nothing is stopped or changed.
+2. It finds the snapshot it would restore and tells you its block and how old it is, from the chain's own clock, and how many blocks your indexer then catches up by itself. A snapshot more than two days old gets a warning: new snapshots are anchored on the chain by hand, not on a schedule, so there may be no newer one yet. Nothing is downloaded for this. (With `--from-file`, it shows the file's block and when it was exported instead.)
+3. If your node already has its own indexer data, it shows your block next to the snapshot's, lists what only this node holds and a restore would lose (queued relay payouts, push subscriptions, offline-notice addresses, your moderation clearances and local blocks, view counts and price observations), and asks **Replace this node's database with the snapshot?** The default is **No**, which changes nothing. `--force` skips this question.
+4. It asks you to type `fast-sync` to go on. Anything else changes nothing.
+5. Only then does it stop the relay and the indexer (those that are running), restore, and start them again: the indexer first, and the relay once the indexer answers on the restored database. If the indexer does not answer in time, the relay is left stopped, and fast-sync prints the command to start it once `sudo morphit-ops health` shows the indexer answering.
+
+If you press Ctrl+C while the services are being stopped, nothing is restored and the services that were stopped are started again. A Ctrl+C during the restore goes to the restore itself. Stopped before it starts writing the database, the database stays as it was and the services are started again; stopped later, it can end as the next paragraph describes.
+
+**If the restore went through but its checks did not (v1.21.7).** When the op-log spot-check quarantines the restored database, its clean-up fails, or the run is stopped (Ctrl+C) after the restore began writing, fast-sync exits with code 4 and leaves the indexer **stopped** (and the relay, if it stopped it): the database was replaced, and must not be served. It then prints the two ways on, with the commands for your server:
+
+1. Restore a fresh copy (its checks run again, on a new sample). On your server:
+
+   ```
+   sudo morphit-ops fast-sync
+   ```
+
+2. If the snapshot fails its checks again, rebuild the indexer's database from the chain instead (§46, "The reset"). Nothing permanent is lost, because every order and review is on the chain, but replaying it is slow. Please also tell the Morphit maintainers that the snapshot failed its checks.
 
 **What fast-sync checks before it restores anything (v1.18.0).**
 
@@ -14196,13 +14466,23 @@ sudo systemctl enable --now morphit-snapshot-publish.timer
 sudo systemctl start morphit-snapshot-publish.service
 ```
 
-The job exports, pins, announces and writes a payload, then stops and prints two
-commands. Run those on a machine that holds the publisher's key (your own
-computer): copy the payload down — `scp -O root@<server>:<payload> .` (the
-payload sits inside the IPFS repo; the `morphit` service user has no login
-shell, and `-O` because hardened servers turn SFTP off) — and broadcast it.
-Nothing exists on-chain until you sign there, which is why the key never has to
-live on the server.
+The job exports, pins, announces and writes a payload, then stops and prints the
+exact commands, with this server's name and the payload's path filled in. Run
+them on your laptop, in your Morphit folder (the machine that holds the
+publisher's key): one copies the payload down with `scp -O root@<server>:…`
+(the payload sits inside the IPFS repo; the `morphit` service user has no
+login shell, and `-O` because hardened servers turn SFTP off), one shows what
+would be sent and sends nothing (`--dry-run`), and the last one asks for the
+`@morphit` posting key and anchors it (`--broadcast`). If your server refuses
+root logins (the hardening step sets `PermitRootLogin no` once a non-root
+login with an SSH key exists), copy the payload in two steps instead. On your
+server: `sudo install -m 0644 <payload path> /tmp/`. On your laptop:
+`scp -O <your-login>@<server>:/tmp/<payload file name> .` (the payload holds
+only public data: the snapshot's CID, hash and block). To read them again later, on your server:
+`sudo journalctl -u morphit-snapshot-publish -n 30`. Nothing exists on-chain
+until you sign on your laptop, which is why the key never has to live on the
+server. Until you do, new nodes fast-sync from the last anchored snapshot, and
+the part they must catch up by themselves grows.
 
 The job reads the indexer's own address from `/etc/morphit/indexer.env` to check
 it is in sync (`MORPHIT_HEALTH_URL` in `/etc/morphit/snapshot-publish.env`
@@ -14300,9 +14580,12 @@ edit, no certificate, nothing.
 
 **You edit the daemon config by hand, on purpose.** Morphit will not rewrite
 `lokinet.ini` or the i2pd tunnel config for you: a bad tunnel edit takes the site
-off the network, and that is not a risk worth automating. Add the SNApp service
-(with a `keyfile=` line so the address stays stable) or the i2pd server tunnel
-pointing at the frontend port, then restart the daemon.
+off the network, and that is not a risk worth automating. For Lokinet, add the
+SNApp service (with a `keyfile=` line so the address stays stable), then restart
+Lokinet. For I2P on a server the installer set up, add no tunnel: the
+`[morphit-web]` tunnel already exists, and a vanity `.b32.i2p` key replaces its
+key file, `/var/lib/i2pd/morphit-web.dat` (§23, "Putting a vanity Tor or I2P key
+in place"; `sudo morphit-ops alt-address` prints the commands).
 
 **Then record the addresses and re-publish**, or peers never learn them:
 
@@ -14441,10 +14724,18 @@ sudo morphit-ops offline-notify status   # what is on, nothing changed
 
 For each app it asks for the account your site sends from, **tests it** — a
 real note to an address you type (yours; it is not saved), or for Telegram the
-token checked with Telegram; for Session the test note is optional, and
-without one the wizard says the account was not tested — saves it, restarts the relay and asks the running
-relay whether the app is now offered. A failed test saves nothing unless you
-say so. Use accounts made for this, never your personal ones:
+token checked with Telegram — saves it, restarts the relay and asks the running
+relay whether the app is now offered. For email the test note is always sent.
+For Matrix the wizard signs in to the account for real, and the test note is
+optional. For Session the test note is optional; without one only the settings
+are checked, and the wizard says the account was not tested. For XMPP the test
+note is needed, except for an account the wizard has just made for you: that one
+it offers to save without a test note (only its settings are checked then). The default
+answer is Yes when the wizard also made its password, because that password is
+kept nowhere else and not saving would lose the account; it is No when you typed
+the password yourself.
+A failed test saves nothing unless you say so. Use accounts made for this, never
+your personal ones:
 
 | App | What you need | Notes |
 | --- | --- | --- |

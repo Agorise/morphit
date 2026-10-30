@@ -351,9 +351,12 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	// Existing users are unaffected.
 	'MORPHIT_RELAY_SIGNUP_ENABLED',
 
-	// ─── Assets and payment methods this instance refuses ─────
+	// ─── Assets and payment methods this instance hides ───────
 	// Comma-separated tickers / lowercase method keys (indexer).
-	// The wizard writes them here; an empty value accepts all.
+	// The wizard writes them here; an empty value shows all.
+	// Such orders are hidden from this site's pages; from
+	// 2026-11-01 00:00 UTC (by block time) they are still stored,
+	// as on every instance (before, this node refused them).
 	'MORPHIT_INDEXER_DISABLED_ASSETS',
 	'MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS',
 
@@ -363,7 +366,10 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	// window.  Fees are denominated directly in BLURT, no live-
 	// USD conversion at verification time.  A base pinned on
 	// chain by a release op takes precedence; this value is the
-	// fallback until one is pinned (indexer treasurySource.ts).
+	// fallback until one is pinned (indexer treasurySource.ts),
+	// and only for listings in blocks before 2026-11-01 00:00 UTC:
+	// from then on every indexer uses the base pinned at the
+	// listing's block, or 125 (indexer fee/feeRulesAtBlock.ts).
 	'MORPHIT_INDEXER_FEE_BASE_BLURT',
 	// ─── Listing fee — recipient account ──────────────────────
 	// The Blurt account that receives listing fees on THIS
@@ -379,16 +385,21 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	// USD value as the BLURT fee.  Default 416 satoshis.  Only a
 	// fallback: an amount pinned on chain by a release op takes
 	// precedence (apps/indexer/scripts/treasury-repin-*.ts).
+	// For orders in blocks from 2026-11-01 00:00 UTC only the
+	// pinned amount counts, on every indexer.
 	'MORPHIT_INDEXER_BTC_FEE_SATOSHIS',
 
 	// ─── Listing fee — XMR ────────────────────────────────────
 	// Operator-set piconero amount (1 XMR = 1e12 piconero).
-	// Default 781,250,000 piconero.  Only a fallback, like BTC's.
+	// Default 781,250,000 piconero.  Only a fallback, like BTC's
+	// (and, like BTC's, not used for orders from 2026-11-01).
 	'MORPHIT_INDEXER_XMR_FEE_PICONERO',
 
 	// ─── Featured-slot bid floor ──────────────────────────────
-	// BLURT cost per hour of featured-slot time. Raise to keep
-	// featured slots exclusive; lower to encourage more bidding.
+	// BLURT cost per hour of featured-slot time, for bids in
+	// blocks before 2026-11-01 00:00 UTC. From then on every
+	// indexer prices a bid at 50 BLURT/hour, whatever this says
+	// (indexer fee/feeRulesAtBlock.ts).
 	'MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR',
 
 	// ─── Price feed (BLURT, BTC, XMR in the instance's fiat) ──

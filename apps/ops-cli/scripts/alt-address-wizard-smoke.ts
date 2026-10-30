@@ -305,15 +305,21 @@ else bad('isValidEnsName');
 }
 
 {
+	// A new vanity Tor / I2P address is SERVED by installing its key into the
+	// hidden service the server already runs (vanitySteps), and after the save
+	// the wizard checks that Tor / i2pd here really serve it (reportHosting).
+	// It used to ask "also serve it?" and print vague steps that broke Tor
+	// (behaviour driven in test/altAddressServing.test.ts).
 	const aaSrc = readFileSync(join(OPS, 'src', 'commands', 'altAddress.ts'), 'utf8');
-	const hasOffer = /async function offerFrontendServing\(/.test(aaSrc);
-	const calledOnValidate = /if \(res\.ok\) \{\s*await offerFrontendServing\(/.test(aaSrc);
-	if (hasOffer && calledOnValidate)
-		ok('option 5 offers to serve the frontend on a newly-set vanity address');
+	// v1.21.18: with the home folder of the account the copies go to (sshTarget).
+	const printsSteps = /for \(const l of vanitySteps\(net, prefix, ssh\.target, repoRoot, ssh\.home\)\)/.test(aaSrc);
+	const checksHosting = /await reportHosting\(kind, address\b/.test(aaSrc);
+	if (printsSteps && checksHosting)
+		ok('option 5: a vanity address gets exact install steps, then a check that this server serves it');
 	else
 		bad(
-			'option 5 offers to serve the frontend on a newly-set vanity address',
-			`offer=${hasOffer} calledOnValidate=${calledOnValidate}`
+			'option 5: a vanity address gets exact install steps, then a check that this server serves it',
+			`steps=${printsSteps} hostingCheck=${checksHosting}`
 		);
 }
 

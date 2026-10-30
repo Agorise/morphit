@@ -136,6 +136,16 @@ case "$OUT" in
 	*"MORPHIT_SNAPSHOT_PAYLOAD="*) ok "payload locator emitted on stdout" ;;
 	*) no "no MORPHIT_SNAPSHOT_PAYLOAD locator — the caller would have to scan the filesystem" ;;
 esac
+# The copy for a server that refuses root logins (PermitRootLogin no): the
+# exact two steps, the server one with sudo, the laptop one as your own login.
+_PL="$(printf '%s\n' "$OUT" | sed -n 's/^MORPHIT_SNAPSHOT_PAYLOAD=//p' | tail -1)"
+if [ -n "$_PL" ] \
+	&& grep -qF "on this server:  sudo install -m 0644 $_PL /tmp/" <<<"$OUT" \
+	&& grep -qE "on your laptop:  scp -O <your-login>@[^:]+:/tmp/$(basename "$_PL") \.$" <<<"$OUT"; then
+	ok "prints the copy for a server that refuses root logins (sudo install to /tmp, then scp as your own login)"
+else
+	no "no exact copy steps for a server that refuses root logins"
+fi
 case "$OUT" in
 	*" kB"*) ok "size reported in kB (not a floored 0 MB)" ;;
 	*"0 MB"*) no "size still reports 0 MB for a sub-1MB snapshot" ;;

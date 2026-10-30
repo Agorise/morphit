@@ -35,7 +35,7 @@
  *   python3 -c "import json,sys; print(json.load(open(sys.argv[1])))" file.enc
  */
 
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, scrypt, scryptSync } from 'node:crypto';
 
 /** Current envelope version. Bump on any breaking change. */
 export const KEY_ENVELOPE_VERSION = 1;
@@ -104,6 +104,41 @@ export class KeyEnvelopeError extends Error {
  *  Returns a JSON-serializable envelope. Side effect: costs
  *  scrypt time; don't call in a tight loop. */
 export function encryptEnvelope(plaintext: string, passphrase: string): KeyEnvelope {
+	checkEncryptInputs(plaintext, passphrase);
+	const salt = randomBytes(SALT_LENGTH);
+	return sealWithKey(
+		plaintext,
+		salt,
+		scryptSync(passphrase, salt, KEY_LENGTH, {
+			N: SCRYPT_N,
+			r: SCRYPT_R,
+			p: SCRYPT_P,
+			maxmem: SCRYPT_MAXMEM
+		})
+	);
+}
+
+/** encryptEnvelope without blocking the event loop (the key derivation runs
+ *  on libuv's thread pool, so a terminal spinner keeps turning). */
+export async function encryptEnvelopeAsync(
+	plaintext: string,
+	passphrase: string
+): Promise<KeyEnvelope> {
+	checkEncryptInputs(plaintext, passphrase);
+	const salt = randomBytes(SALT_LENGTH);
+	const key = await new Promise<Buffer>((resolve, reject) =>
+		scrypt(
+			passphrase,
+			salt,
+			KEY_LENGTH,
+			{ N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P, maxmem: SCRYPT_MAXMEM },
+			(err, k) => (err ? reject(err) : resolve(k))
+		)
+	);
+	return sealWithKey(plaintext, salt, key);
+}
+
+function checkEncryptInputs(plaintext: string, passphrase: string): void {
 	if (plaintext.length === 0) {
 		throw new KeyEnvelopeError('refuse to encrypt an empty plaintext');
 	}
@@ -113,14 +148,11 @@ export function encryptEnvelope(plaintext: string, passphrase: string): KeyEnvel
 		// Real security comes from scrypt cost + passphrase entropy.
 		throw new KeyEnvelopeError('passphrase must be at least 8 characters');
 	}
-	const salt = randomBytes(SALT_LENGTH);
+}
+
+/** The AES-GCM half of encrypting, given the derived key (zeroed here). */
+function sealWithKey(plaintext: string, salt: Buffer, key: Buffer): KeyEnvelope {
 	const iv = randomBytes(IV_LENGTH);
-	const key = scryptSync(passphrase, salt, KEY_LENGTH, {
-		N: SCRYPT_N,
-		r: SCRYPT_R,
-		p: SCRYPT_P,
-		maxmem: SCRYPT_MAXMEM
-	});
 	try {
 		const cipher = createCipheriv('aes-256-gcm', key, iv);
 		const ctBody = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
@@ -149,6 +181,41 @@ export function encryptEnvelope(plaintext: string, passphrase: string): KeyEnvel
  *  success. Throws KeyEnvelopeError on malformed envelope,
  *  version mismatch, or wrong passphrase. */
 export function decryptEnvelope(envelope: unknown, passphrase: string): string {
+	const d = prepareDecrypt(envelope);
+	return finishDecrypt(
+		d,
+		scryptSync(passphrase, d.salt, KEY_LENGTH, { N: d.N, r: d.r, p: d.p, maxmem: SCRYPT_MAXMEM })
+	);
+}
+
+/** decryptEnvelope without blocking the event loop: the key derivation (the
+ *  slow part, about a second by design) runs on libuv's thread pool, so a
+ *  terminal spinner keeps turning while it works. Same checks, same errors. */
+export async function decryptEnvelopeAsync(envelope: unknown, passphrase: string): Promise<string> {
+	const d = prepareDecrypt(envelope);
+	const key = await new Promise<Buffer>((resolve, reject) =>
+		scrypt(
+			passphrase,
+			d.salt,
+			KEY_LENGTH,
+			{ N: d.N, r: d.r, p: d.p, maxmem: SCRYPT_MAXMEM },
+			(err, k) => (err ? reject(err) : resolve(k))
+		)
+	);
+	return finishDecrypt(d, key);
+}
+
+interface PreparedDecrypt {
+	readonly N: number;
+	readonly r: number;
+	readonly p: number;
+	readonly salt: Buffer;
+	readonly iv: Buffer;
+	readonly ctAndTag: Buffer;
+}
+
+/** Every check before the key derivation. */
+function prepareDecrypt(envelope: unknown): PreparedDecrypt {
 	const e = asEnvelope(envelope);
 	if (e.v !== KEY_ENVELOPE_VERSION) {
 		throw new KeyEnvelopeError(`unsupported envelope version ${e.v}`);
@@ -189,9 +256,14 @@ export function decryptEnvelope(envelope: unknown, passphrase: string): string {
 	if (ctAndTag.length < 16) {
 		throw new KeyEnvelopeError('ciphertext too short to contain a tag');
 	}
+	return { N, r, p, salt, iv, ctAndTag };
+}
+
+/** The AES-GCM half, given the derived key (zeroed here, whatever happens). */
+function finishDecrypt(d: PreparedDecrypt, key: Buffer): string {
+	const { iv, ctAndTag } = d;
 	const tag = ctAndTag.subarray(ctAndTag.length - 16);
 	const ct = ctAndTag.subarray(0, ctAndTag.length - 16);
-	const key = scryptSync(passphrase, salt, KEY_LENGTH, { N, r, p, maxmem: SCRYPT_MAXMEM });
 	const decipher = createDecipheriv('aes-256-gcm', key, iv);
 	decipher.setAuthTag(tag);
 	let plaintext: Buffer | undefined;

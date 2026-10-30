@@ -218,7 +218,9 @@ scenario('loadCurrentKeystore: refuses JSON that is not a valid envelope', () =>
 	if (thrown === undefined) {
 		throw new Error('expected throw');
 	}
-	assertContains(thrown.message, "isn't a valid encrypted envelope");
+	// Plain words (2026-10-29), and the file is left alone.
+	assertContains(thrown.message, 'is not a Morphit key file');
+	assertContains(thrown.message, 'Nothing was changed');
 });
 
 scenario('loadCurrentKeystore: refuses garbage that is neither envelope nor WIF', () => {
@@ -234,7 +236,7 @@ scenario('loadCurrentKeystore: refuses garbage that is neither envelope nor WIF'
 	if (thrown === undefined) {
 		throw new Error('expected throw');
 	}
-	assertContains(thrown.message, 'neither a JSON envelope nor a valid WIF');
+	assertContains(thrown.message, 'holds neither an encrypted key nor a private key');
 });
 
 scenario('loadCurrentKeystore: refuses missing file with actionable message', () => {
@@ -249,7 +251,10 @@ scenario('loadCurrentKeystore: refuses missing file with actionable message', ()
 	if (thrown === undefined) {
 		throw new Error('expected throw');
 	}
-	assertContains(thrown.message, 'Keystore file not found');
+	// Names the file and how to put a kept copy back, with sudo.
+	assertContains(thrown.message, ksPath);
+	assertContains(thrown.message, 'is missing');
+	assertContains(thrown.message, 'sudo cp ');
 });
 
 // ─── atomicWrite ───────────────────────────────────────────────

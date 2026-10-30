@@ -38,12 +38,17 @@
 import type { Config } from '$config';
 import type { BlurtPriceSource } from '$indexer/price/source';
 import { listingFeeBlurtBase, listingFeeSatoshis, listingFeePiconero } from '@morphit/asset-registry';
+import { consensusV2Active } from '$indexer/consensusActivation';
+import { FEDERATION_BLURT_BASE, featureFeeBlurtPerHourAt } from '$indexer/fee/feeRulesAtBlock';
 
 export function buildListingFeeBody(
 	config: Config,
 	priceSource: BlurtPriceSource | null,
 	btcSource: BlurtPriceSource | null = null,
-	xmrSource: BlurtPriceSource | null = null
+	xmrSource: BlurtPriceSource | null = null,
+	/** When the block the quoted order lands in is stamped — about now. A
+	 *  display quote, not a verdict: the order handler judges by its block. */
+	nextBlockTime: Date = new Date()
 ): Record<string, unknown> {
 	// Model A (canonical): `base_fee_blurt` is the amount the UI
 	// quotes and the user pays.  It tracks the CANONICAL USD target
@@ -60,12 +65,22 @@ export function buildListingFeeBody(
 	// non-USD operator the live USD figure isn't available here (no FX
 	// source threaded into this route), so we fall back to the pinned
 	// base — graceful, and the fiat echo still shows its live value.
+	//
+	// From the consensus activation time an order with no BLURT base pinned on
+	// chain is judged by the federation's shipped default (FEDERATION_BLURT_BASE,
+	// fee/feeRulesAtBlock.ts), not this node's MORPHIT_INDEXER_FEE_BASE_BLURT, so
+	// the fallback quoted here is that default too: an operator's own lower
+	// value would make every user underpay. (With a pin, the frontend clamps
+	// the quote into the pinned band.)
 	const isUsd = config.priceFeedDenominationFiat.toUpperCase() === 'USD';
-	let baseFeeBlurt = config.feeBaseBlurt;
+	let baseFeeBlurt = consensusV2Active(nextBlockTime) ? FEDERATION_BLURT_BASE : config.feeBaseBlurt;
 	let liveTracked = false;
 
 	const body: Record<string, unknown> = {
-		feature_fee_blurt_per_hour: config.featureFeeBlurtPerHour,
+		// From the consensus activation time every instance charges the
+		// federation's featured-slot price (feeRulesAtBlock), whatever this
+		// node's MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR says.
+		feature_fee_blurt_per_hour: featureFeeBlurtPerHourAt(nextBlockTime, config.featureFeeBlurtPerHour),
 		// UI consults this to refresh its quote when the TTL
 		// elapses. Keep it in sync with the frontend's quote
 		// freshness constant.

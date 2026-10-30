@@ -66,7 +66,7 @@ check(
 	'upgrade still rebuilds as a FALLBACK when no prebuilt is shipped',
 	// v1.21.3: the rebuild runs under the braille spinner (runStepWithSpinner)
 	// and a non-zero exit still stops the upgrade.
-	/No prebuilt frontend in this release[\s\S]{0,300}'npm',\s*\['run', 'build'\][\s\S]{0,200}if \(buildCode !== 0\) throw new Error/.test(upgrade)
+	/No prebuilt frontend in this release[\s\S]{0,300}'npm',\s*\['run', 'build'\][\s\S]{0,200}if \(buildCode !== 0\) throw stepFailed\(/.test(upgrade)
 );
 
 // ─── 4. build guard: `npm run build` deploys the shipped build if marked ───

@@ -8,7 +8,9 @@
  * morphit_operator_register_v1). Every registration made before v1.20.0 lacks
  * it, so until the operator re-registers, the orders their users pay in BLURT
  * stay hidden on every other instance and their first-contact DMs are dropped
- * there. Re-registering needs the relay's active key, which on a standard
+ * there; and from 1 November 2026 (by block time) the instance tells its users
+ * to pay the whole fee to the Morphit treasury instead (api/instance.ts
+ * advertisedFeeRecipient). Re-registering needs the relay's active key, which on a standard
  * install the box can unlock unattended (the relay's host-sealed credential —
  * what morphit-first-online uses), so the upgrade does it.
  *
@@ -46,6 +48,7 @@ import { isHiddenOnlyNode } from './hiddenOnly.ts';
 import {
 	CANONICAL_BLURT_TREASURY,
 	acceptedRegistration,
+	configuredAccountOf,
 	latestChainRegistration,
 	localFeeView,
 	otherRegistrationChanges,
@@ -60,8 +63,11 @@ import {
 	buildRegisterPayload,
 	loadRelayKeyUnattended,
 	readRegisterEnv,
+	RegisterTimeoutError,
 	type ValidEnv
 } from '../commands/register.ts';
+import { BroadcastOutcomeUnknownError } from './chainAccess.ts';
+import { consensusV2Active } from '../../../indexer/src/indexer/consensusActivation.ts';
 
 export type FeeRecipientHealOutcome =
 	| 'not_needed_canonical'
@@ -133,10 +139,21 @@ export async function healFeeRecipientRegistration(
 	// 1. The canonical treasury needs no registration.
 	if (env.feeRecipient === CANONICAL_BLURT_TREASURY) return 'not_needed_canonical';
 
+	// Whether the 1-November rule is in force: this node's indexer's own answer
+	// when step 2 reads it (it advertises the treasury instead of an
+	// unregistered account only from then), else this server's clock (the
+	// time the next block will carry).
+	let feesToTreasury: boolean | null = null;
 	const calm = (why: string): FeeRecipientHealOutcome => {
+		const after = feesToTreasury ?? consensusV2Active(new Date(now()));
 		deps.info(
 			`  Your fees account @${fees} is not in your on-chain operator registration yet${why}. ` +
-				`Until it is, other Morphit instances hide the orders your users pay to it. ` +
+				(after
+					? 'Until it is, this site tells its users to pay their BLURT fees whole to the Morphit ' +
+						'treasury, and you earn none of them. '
+					: 'Until it is, other Morphit instances hide the orders your users pay to it, and from ' +
+						'1 November 2026 this site tells its users to pay their BLURT fees whole to the ' +
+						'Morphit treasury instead. ') +
 				`To publish it, run on this server:  ${COMMAND_LINE}`
 		);
 		return 'needs_operator';
@@ -167,10 +184,14 @@ export async function healFeeRecipientRegistration(
 			view !== null &&
 			view.reportsRegistration &&
 			view.registered !== null &&
-			view.feeRecipient === env.feeRecipient
+			configuredAccountOf(view, () => env.feeRecipient) === env.feeRecipient
 		) {
 			already = view.registered;
 			via = "this node's indexer";
+			feesToTreasury =
+				view.registered === false &&
+				view.feeRecipient === CANONICAL_BLURT_TREASURY &&
+				env.feeRecipient !== CANONICAL_BLURT_TREASURY;
 		} else {
 			const chain = await (deps.chainRegistration ?? ((a: string) => latestChainRegistration(a)))(
 				env.account
@@ -256,7 +277,9 @@ export async function healFeeRecipientRegistration(
 				`). That was left as it is on chain; to publish your config, run on this server:  ${COMMAND_LINE}`
 		);
 	}
-	let trxId: string;
+	// null: the broadcast may have reached the network but gave no final answer
+	// (no transaction id known), so the read-back below decides.
+	let trxId: string | null;
 	try {
 		const r = await (deps.broadcast ?? broadcastRegistration)(
 			env.account,
@@ -266,11 +289,19 @@ export async function healFeeRecipientRegistration(
 		);
 		trxId = r.trx_id;
 	} catch (err) {
-		const why = err instanceof Error ? err.message : String(err);
-		return calm(` (publishing it failed: ${sanitizeForTerm(why.slice(0, 160))})`);
+		if (err instanceof BroadcastOutcomeUnknownError) {
+			// It may still land: look for it below instead of calling it a failure.
+			trxId = err.trxId;
+		} else if (err instanceof RegisterTimeoutError) {
+			trxId = null;
+		} else {
+			const why = err instanceof Error ? err.message : String(err);
+			return calm(` (publishing it failed: ${sanitizeForTerm(why.slice(0, 160))})`);
+		}
 	} finally {
 		wif = '';
 	}
+	const trxLabel = trxId ?? 'id not known';
 
 	// 4. VERIFY: read it back — this node's indexer when it reports the field
 	//    (v1.20+), else the chain history must show THIS transaction carrying it.
@@ -287,7 +318,10 @@ export async function healFeeRecipientRegistration(
 			try {
 				const view = await (deps.localFeeView ?? (() => localFeeView()))();
 				if (view !== null && view.reportsRegistration) {
-					if (view.registered === true && view.feeRecipient === env.feeRecipient) {
+					if (
+						view.registered === true &&
+						configuredAccountOf(view, () => env.feeRecipient) === env.feeRecipient
+					) {
 						confirmedVia = "this node's indexer";
 						break;
 					}
@@ -295,7 +329,11 @@ export async function healFeeRecipientRegistration(
 					const chain = await (
 						deps.chainRegistration ?? ((a: string) => latestChainRegistration(a))
 					)(env.account);
-					if (chain.found && chain.trxId === trxId && chain.feeRecipient === env.feeRecipient) {
+					if (
+						chain.found &&
+						(trxId === null || chain.trxId === trxId) &&
+						chain.feeRecipient === env.feeRecipient
+					) {
 						confirmedVia = `your account's chain history (block ${chain.block})`;
 						break;
 					}
@@ -310,13 +348,13 @@ export async function healFeeRecipientRegistration(
 	}
 	if (confirmedVia !== null) {
 		deps.info(
-			`  ✓ Fees account @${fees} published in your operator registration (transaction ${sanitizeForTerm(trxId)}; ` +
+			`  ✓ Fees account @${fees} published in your operator registration (transaction ${sanitizeForTerm(trxLabel)}; ` +
 				`confirmed via ${confirmedVia}).`
 		);
 		return 'published_verified';
 	}
 	deps.info(
-		`  Your registration with the fees account @${fees} was broadcast (transaction ${sanitizeForTerm(trxId)}) ` +
+		`  Your registration with the fees account @${fees} was broadcast (transaction ${sanitizeForTerm(trxLabel)}) ` +
 			'but was not seen on chain in time. `sudo morphit-ops status` shows whether it landed; if it ' +
 			`says the fees account is not registered, run on this server:  ${COMMAND_LINE}`
 	);

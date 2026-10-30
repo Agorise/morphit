@@ -12,6 +12,9 @@
  * exit 4, or the restore cut off once it had begun (the child leaves its
  * marker), whatever exit code it managed (review, 2026-10-12: a Ctrl+C on a
  * busy box ended it with 130, read as "nothing changed").
+ *
+ * v1.21.18: the relay is stopped and started with it (OPERATIONS.md §52), the
+ * relay last, once the indexer has started.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -53,9 +56,9 @@ beforeEach(() => {
 			`D=${dir}`,
 			'echo "$@" >> "$D/log"',
 			'case "$1" in',
-			'  is-active) if [ -f "$D/stopped" ]; then echo inactive; else echo active; fi ;;',
-			'  stop) touch "$D/stopped" ;;',
-			'  start) rm -f "$D/stopped" ;;',
+			'  is-active) if [ -f "$D/stopped-$2" ]; then echo inactive; else echo active; fi ;;',
+			'  stop) touch "$D/stopped-$2" ;;',
+			'  start) rm -f "$D/stopped-$2" ;;',
 			'esac',
 			''
 		].join('\n'),
@@ -63,6 +66,8 @@ beforeEach(() => {
 	);
 	process.env.PATH = `${dir}:${PATH}`;
 	vi.spyOn(process as unknown as { getuid: () => number }, 'getuid').mockReturnValue(0);
+	// The file a --from-file run names (fast-sync checks it is there first).
+	writeFileSync(join(dir, 'snap.tar.gz'), 'x');
 });
 afterEach(() => {
 	process.env.PATH = PATH;
@@ -70,10 +75,11 @@ afterEach(() => {
 	rmSync(dir, { recursive: true, force: true });
 });
 
-/** The indexer running again, an empty log: the next run starts as the first. */
+/** Both running again, an empty log: the next run starts as the first. */
 function fresh(): void {
 	writeFileSync(join(dir, 'log'), '');
-	rmSync(join(dir, 'stopped'), { force: true });
+	rmSync(join(dir, 'stopped-morphit-indexer'), { force: true });
+	rmSync(join(dir, 'stopped-morphit-relay'), { force: true });
 }
 
 async function run(flags: Record<string, string> = {}): Promise<{ code: number; log: string[] }> {
@@ -81,12 +87,23 @@ async function run(flags: Record<string, string> = {}): Promise<{ code: number; 
 		query: async () => ({ rows: [{ last_applied_block: '59646157', last_applied_at: null }] }),
 		close: async () => {}
 	};
-	const code = await runFastSync({
-		db: db as never,
-		config: {} as never,
-		flags,
-		positional: []
-	});
+	const code = await runFastSync(
+		{
+			db: db as never,
+			config: {} as never,
+			flags,
+			positional: []
+		},
+		{
+			peek: async () => ({
+				ok: true,
+				block: 59_700_000,
+				indexerVersion: '1.21.17',
+				lines: ['This snapshot is from block 59,700,000.']
+			}),
+			indexerAnswers: async () => true
+		}
+	);
 	const log = readFileSync(join(dir, 'log'), 'utf8')
 		.trim()
 		.split('\n')
@@ -94,19 +111,22 @@ async function run(flags: Record<string, string> = {}): Promise<{ code: number; 
 	return { code, log };
 }
 
+const BOTH_STOPPED = ['stop morphit-relay', 'stop morphit-indexer'];
+const BOTH_STOPPED_AND_STARTED = [...BOTH_STOPPED, 'start morphit-indexer', 'start morphit-relay'];
+
 describe('fast-sync and the indexer it stopped', () => {
 	it('a failed restore starts it again', async () => {
 		restoreRc = 1;
 		const { code, log } = await run();
 		expect(code).not.toBe(0);
-		expect(log).toEqual(['stop morphit-indexer', 'start morphit-indexer']);
+		expect(log).toEqual(BOTH_STOPPED_AND_STARTED);
 	});
 
 	it('a successful restore starts it again', async () => {
 		restoreRc = 0;
 		const { code, log } = await run();
 		expect(code).toBe(0);
-		expect(log).toEqual(['stop morphit-indexer', 'start morphit-indexer']);
+		expect(log).toEqual(BOTH_STOPPED_AND_STARTED);
 	});
 
 	it('exit 4 (replaced, not to be served) leaves it stopped — from the chain and from a file', async () => {
@@ -116,7 +136,7 @@ describe('fast-sync and the indexer it stopped', () => {
 			fresh();
 			const { code, log } = await run(flags);
 			expect(code).toBe(4);
-			expect(log).toEqual(['stop morphit-indexer']);
+			expect(log).toEqual(BOTH_STOPPED);
 		}
 	});
 
@@ -130,12 +150,12 @@ describe('fast-sync and the indexer it stopped', () => {
 					fresh();
 					const { code, log } = await run(flags);
 					expect(code, `exit ${rc} ${JSON.stringify(flags)}`).toBe(4);
-					expect(log, `exit ${rc} ${JSON.stringify(flags)}`).toEqual(['stop morphit-indexer']);
+					expect(log, `exit ${rc} ${JSON.stringify(flags)}`).toEqual(BOTH_STOPPED);
 				}
 			// It finished (exit 0): the database is restored and checked.
 			restoreRc = 0;
 			fresh();
-			expect((await run()).log).toEqual(['stop morphit-indexer', 'start morphit-indexer']);
+			expect((await run()).log).toEqual(BOTH_STOPPED_AND_STARTED);
 		} finally {
 			markerLeft = false;
 		}

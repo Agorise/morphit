@@ -16,9 +16,21 @@ import { spinnerFrames } from './helpers/pty.ts';
 
 vi.mock('../src/init/prompt.ts', async (orig) => ({
 	...(await orig<typeof import('../src/init/prompt.ts')>()),
-	askYesNo: async () => true, // "stop it now?" — yes
-	ask: async () => 'no' // "type fast-sync" — no: abort, and the indexer is started again
+	askYesNo: async () => true,
+	ask: async () => 'fast-sync'
 }));
+// The restore itself fails at once (database as it was): the indexer is
+// started again.
+vi.mock('node:child_process', async (orig) => {
+	const real = await orig<typeof import('node:child_process')>();
+	return {
+		...real,
+		spawnSync: ((cmd: string, ...rest: unknown[]) =>
+			cmd === 'bash'
+				? { status: 1, stdout: '', stderr: '', pid: 0, output: [], signal: null }
+				: (real.spawnSync as (...a: unknown[]) => unknown)(cmd, ...rest)) as typeof real.spawnSync
+	};
+});
 
 const { runFastSync } = await import('../src/commands/fastSync.ts');
 
@@ -34,7 +46,8 @@ beforeEach(() => {
 			'#!/bin/sh',
 			`D=${dir}`,
 			'case "$1" in',
-			'  is-active) n=$(cat "$D/n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$D/n";',
+			'  is-active) if [ "$2" = morphit-relay ]; then echo inactive; exit 3; fi;',
+			'             n=$(cat "$D/n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$D/n";',
 			'             if [ $n -le 2 ]; then echo active; else echo inactive; fi ;;',
 			'  stop) cp "$D/screen" "$D/at-stop" ;;',
 			'  start) cp "$D/screen" "$D/at-start" ;;',
@@ -62,16 +75,26 @@ describe('fast-sync: the indexer stop, wait and start show the turning spinner',
 			query: async () => ({ rows: [{ last_applied_block: '0', last_applied_at: null }] }),
 			close: async () => {}
 		};
-		const code = await runFastSync({
-			db: db as never,
-			config: {} as never,
-			flags: {},
-			positional: []
-		});
+		const code = await runFastSync(
+			{
+				db: db as never,
+				config: {} as never,
+				flags: {},
+				positional: []
+			},
+			{
+				peek: async () => ({
+					ok: true,
+					block: 59_700_000,
+					indexerVersion: null,
+					lines: ['This snapshot is from block 59,700,000.']
+				})
+			}
+		);
 		const screen = term.out();
 		term.restore();
 		term = null;
-		expect(code).toBe(1); // aborted at the confirmation, as scripted
+		expect(code).toBe(1); // the restore failed, as scripted
 
 		// While systemctl stop ran, the spinner was the current line.
 		const atStop = currentLine(readFileSync(join(dir, 'at-stop'), 'utf8'));
@@ -86,7 +109,7 @@ describe('fast-sync: the indexer stop, wait and start show the turning spinner',
 		);
 		// While systemctl start ran, the spinner was the current line.
 		const atStart = currentLine(readFileSync(join(dir, 'at-start'), 'utf8'));
-		expect(atStart).toMatch(frameRe('Starting the indexer again…'));
+		expect(atStart).toMatch(frameRe('Starting the indexer again (it goes on from its own data)…'));
 		// And the line is cleared at the end.
 		expect(screen.endsWith('\u001b[?25h')).toBe(true);
 	}, 30_000);

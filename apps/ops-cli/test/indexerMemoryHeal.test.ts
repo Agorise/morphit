@@ -94,6 +94,13 @@ describe('the indexer gets a memory cap on an installed box, read back from its 
 		expect(b.cgroupMax).toBe(String(INDEXER_MEMORY_MAX_BYTES));
 	});
 
+	it('a second run, the cap already read back from the running indexer: one of the upgrade\'s "other checks" (v1.21.17 audit L1)', async () => {
+		const { isRoutineHeal } = await import('../src/commands/upgrade.ts');
+		const b = new Box();
+		expect(isRoutineHeal(await b.run())).toBe(false);
+		expect(isRoutineHeal(await b.run())).toBe(true);
+	});
+
 	it('when the reload already applies it, nothing else is done to the running service', async () => {
 		const b = new Box();
 		b.reloadRealizes = true;

@@ -29,8 +29,11 @@ check('unverifiable (null) never blocks', operatorTagConflict(null, 'morphit.io'
 
 // ── wiring: register.ts pre-flights the guard and refuses on conflict ──
 const reg = readFileSync(join(REPO, 'apps/ops-cli/src/commands/register.ts'), 'utf8');
-check('register imports the guard', /operatorTagConflict|fetchRegisteredTag/.test(reg) && /operatorTagGuard/.test(reg));
-check('register fetches the existing on-chain tag', /fetchRegisteredTag\(account\)/.test(reg));
+check('register imports the guard', /operatorTagConflict/.test(reg) && /operatorTagGuard/.test(reg));
+// 2026-10-29: read from this node's indexer at the address it listens on
+// (localRegistration → localIndexerJson → localIndexerBases), not a fixed
+// 127.0.0.1:8081; driven for real in test/registerChecks.test.ts.
+check('register fetches the existing on-chain tag', /localRegistration\(account/.test(reg));
 check('register refuses on tag conflict (returns before broadcast)', /if \(operatorTagConflict\([\s\S]{0,1200}?return 1;/.test(reg));
 check('conflict message names tag_immutable', /tag_immutable/.test(reg));
 // the guard must run BEFORE the broadcast

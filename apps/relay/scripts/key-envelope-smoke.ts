@@ -240,24 +240,48 @@ scenario('two encrypts of same plaintext produce different ciphertext (fresh IV+
 // scraper for seconds-to-minutes.  This smoke catches regressions
 // that drop the finally-zero (e.g. a refactor that moves the
 // cleanup outside the try block).
+// 2026-10-29: the sync and async (off-the-event-loop) variants share one
+// AES-GCM half each — sealWithKey / finishDecrypt — and that is where the
+// derived key (and the plaintext buffer) are zeroed. Both variants must go
+// through it.
+function body(src: string, head: RegExp): string {
+	const m = src.match(new RegExp(head.source + /[\s\S]*?\n\}\n/.source));
+	if (!m) throw new Error(`${head.source} body not found`);
+	return m[0];
+}
+
 scenario('encryptEnvelope zeros scrypt-derived key in finally', () => {
 	const src = readFileSync(KEY_ENVELOPE_SRC_PATH, 'utf8');
-	const match = src.match(/export function encryptEnvelope[\s\S]*?\n\}\n/);
-	if (!match) throw new Error('encryptEnvelope body not found');
-	if (!/finally\s*\{[\s\S]*?key\.fill\(0\)[\s\S]*?\}/.test(match[0])) {
-		throw new Error('encryptEnvelope: missing finally{ key.fill(0) }');
+	const seal = body(src, /function sealWithKey/);
+	if (!/finally\s*\{[\s\S]*?key\.fill\(0\)[\s\S]*?\}/.test(seal)) {
+		throw new Error('sealWithKey: missing finally{ key.fill(0) }');
+	}
+	for (const head of [
+		/export function encryptEnvelope\(/,
+		/export async function encryptEnvelopeAsync\(/
+	]) {
+		if (!/return sealWithKey\(/.test(body(src, head))) {
+			throw new Error(`${head.source} does not go through sealWithKey`);
+		}
 	}
 });
 
 scenario('decryptEnvelope zeros scrypt-derived key + plaintext in finally', () => {
 	const src = readFileSync(KEY_ENVELOPE_SRC_PATH, 'utf8');
-	const match = src.match(/export function decryptEnvelope[\s\S]*?\n\}\n/);
-	if (!match) throw new Error('decryptEnvelope body not found');
-	if (!/finally\s*\{[\s\S]*?key\.fill\(0\)[\s\S]*?\}/.test(match[0])) {
-		throw new Error('decryptEnvelope: missing finally{ key.fill(0) }');
+	const fin = body(src, /function finishDecrypt/);
+	if (!/finally\s*\{[\s\S]*?key\.fill\(0\)[\s\S]*?\}/.test(fin)) {
+		throw new Error('finishDecrypt: missing finally{ key.fill(0) }');
 	}
-	if (!/plaintext\.fill\(0\)/.test(match[0])) {
-		throw new Error('decryptEnvelope: missing plaintext.fill(0) in finally');
+	if (!/plaintext\.fill\(0\)/.test(fin)) {
+		throw new Error('finishDecrypt: missing plaintext.fill(0) in finally');
+	}
+	for (const head of [
+		/export function decryptEnvelope\(/,
+		/export async function decryptEnvelopeAsync\(/
+	]) {
+		if (!/return finishDecrypt\(/.test(body(src, head))) {
+			throw new Error(`${head.source} does not go through finishDecrypt`);
+		}
 	}
 });
 

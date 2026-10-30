@@ -109,8 +109,35 @@ function chain(base: number): [number, Op[][]][] {
 	];
 }
 
+/**
+ * The treasury pin in force for the whole chain: a 62.5 BLURT listing-fee base
+ * (the canonical on-target value the fixtures pay) and an XMR amount. From the
+ * consensus activation time a fee is judged by the pin at its block, and an
+ * unpinned base is the federation default 125 (fee/feeRulesAtBlock.ts) — before
+ * it, by this node's live pin / env base (62.5 in the config below), so both
+ * runs judge the same amounts.
+ */
+async function pinTreasury(fx: IntegrationFixture, base: number, t0: number): Promise<void> {
+	await fx.db.query(
+		`INSERT INTO releases (version, hash_manifest, endpoints, signature, source_block_num,
+		                       source_trx_id, signer, valid, created_at, treasury)
+		 VALUES ('1.22.0', '{}'::jsonb, '{}'::jsonb, '', $1, $2, 'morphit', true, $3, $4::jsonb)`,
+		[
+			base - 1,
+			`pin-${base}-${Math.random()}`,
+			new Date(t0 - 3000),
+			JSON.stringify({
+				btc: null,
+				xmr: { address: '8'.repeat(95), piconero: '781250000' },
+				blurt: { base: 62.5 }
+			})
+		]
+	);
+}
+
 /** Apply the chain from block `base`, the first block stamped `t0`. */
 async function run(fx: IntegrationFixture, base: number, t0: number) {
+	await pinTreasury(fx, base, t0);
 	for (const [n, trxs] of chain(base)) {
 		const c: pg.PoolClient = await fx.pool.connect();
 		try {

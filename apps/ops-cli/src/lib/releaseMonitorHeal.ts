@@ -89,7 +89,7 @@ export async function healReleaseMonitor(
 		verified: true,
 		detail:
 			'Release check: turned on (checked: it ran once and succeeded). Twice a day this server looks for a newer Morphit release, ' +
-			'from the on-chain record its own indexer holds; when Matrix alerts are set up (sudo morphit-ops, option 17) you get a message when one is out.'
+			'from the on-chain record its own indexer holds; when Matrix alerts are set up (on this server: sudo morphit-ops matrix — "Matrix alerts" in the menu) you get a message when one is out.'
 	};
 }
 

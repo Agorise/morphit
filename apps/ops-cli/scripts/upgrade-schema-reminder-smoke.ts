@@ -124,7 +124,9 @@ if (/'--check-schema'/.test(doctorSrc)) ok('doctor.ts runs the indexer --check-s
 else bad('doctor.ts no longer runs --check-schema');
 if (/'no-db'/.test(doctorSrc)) ok('doctor.ts honours --no-db');
 else bad('doctor.ts --no-db flag missing');
-if (/schema:/.test(doctorSrc) && /drift: !schema\.ok/.test(doctorSrc))
+// drift only on the indexer's own DRIFT verdict: a check that could not run
+// (settings did not load, timed out) is reported as not run, never as drift.
+if (/schema:/.test(doctorSrc) && /drift: schema\.kind === 'drift'/.test(doctorSrc))
 	ok('doctor.ts emits the schema field in JSON');
 else bad('doctor.ts schema JSON field missing');
 if (/Database schema/.test(doctorSrc)) ok('doctor.ts prints a Database schema advisory line');

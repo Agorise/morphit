@@ -119,7 +119,6 @@ apps/indexer/src/config/index.ts
 apps/indexer/src/db/migrations.ts
 apps/indexer/src/db/snapshotManifest.ts
 apps/indexer/src/db/snapshotOplogVerify.ts
-apps/indexer/src/indexer/clearnetGate.ts
 apps/indexer/src/indexer/fee/moneroProofVerifier.ts
 apps/indexer/src/indexer/flowBackfill.ts
 apps/indexer/src/indexer/fx/frankfurterFetcher.ts
@@ -474,7 +473,6 @@ apps/web/scripts/txid-hash-clarity-smoke.ts
 apps/web/scripts/ui-polish-batch-smoke.ts
 apps/web/scripts/unlock-redirect-next-smoke.ts
 apps/web/scripts/untrusted-parseint-safety-smoke.ts
-apps/web/scripts/update-banner-deployed-version-poll-smoke.ts
 apps/web/scripts/user-preferences-smoke.ts
 apps/web/scripts/wallet-op-builders-smoke.ts
 apps/web/scripts/wallet-power-modal-smoke.ts
@@ -619,7 +617,6 @@ scripts/backup-script-posix-safety-smoke.ts
 scripts/blurt-noble-tx-signature-proof.ts
 scripts/build-llms-full.mjs
 scripts/build-sitemap.mjs
-scripts/build-verify-json.mjs
 scripts/canary-btc-failover-smoke.ts
 scripts/canary-serve-dir-smoke.ts
 scripts/canary-setup-smoke.ts

@@ -45,7 +45,10 @@ const matrix = blockOf('matrix');
 check('--help exits 0', run.status === 0);
 check('the AI-agent orderbook text is under `mcp`', /AI-agent orderbook/.test(mcp));
 check('the AI-agent orderbook text is NOT under `matrix`', !/AI-agent orderbook/.test(matrix));
-check('`matrix` describes the Matrix alert username', /Matrix alert username/.test(matrix));
+check(
+	'`matrix` describes the Matrix alerts (set up, change, test, turn off)',
+	/Matrix alerts/.test(matrix) && /turn alerts off/.test(matrix)
+);
 
 console.log(
 	fail === 0 ? `✓ all ${pass} help-layout checks hold` : `✗ ${fail} failed (${pass} passed)`

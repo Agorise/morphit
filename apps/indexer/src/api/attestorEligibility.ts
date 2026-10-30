@@ -12,7 +12,10 @@
  *
  * Query parameter:
  *   ?phase=launch|steady — optional phase override. Defaults
- *   to the indexer's currently-configured phase. Letting the
+ *   to the phase the next attestation will be judged by: the
+ *   indexer's configured phase before the consensus activation
+ *   time, the federation-wide one from it on
+ *   (attestorEligibility.nextAttestationPhase). Letting the
  *   frontend query either lets it show "you qualify under
  *   launch but not steady" hints during the transition
  *   window, if a future UX wants that.
@@ -39,7 +42,11 @@ import { Hono } from 'hono';
 import type { Config } from '$config';
 import type { Database } from '$db/pool';
 import { errorBody, isAccountName } from '$api/shared';
-import { checkAttestorEligibility, type AttestationPhase } from '$indexer/attestorEligibility';
+import {
+	checkAttestorEligibility,
+	nextAttestationPhase,
+	type AttestationPhase
+} from '$indexer/attestorEligibility';
 
 export function attestorEligibilityRoute(db: Database, config: Config): Hono {
 	const app = new Hono();
@@ -53,7 +60,7 @@ export function attestorEligibilityRoute(db: Database, config: Config): Hono {
 		const phaseParam = c.req.query('phase');
 		let phase: AttestationPhase;
 		if (phaseParam === undefined) {
-			phase = config.attestationPhase;
+			phase = await nextAttestationPhase(db, config.attestationPhase);
 		} else if (phaseParam === 'launch' || phaseParam === 'steady') {
 			phase = phaseParam;
 		} else {
