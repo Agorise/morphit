@@ -32,7 +32,7 @@ import { dispatch, errorClass, withTimeout } from './dispatch.ts';
 import type { DueNotice, OfflineNotifyStore } from './store.ts';
 import { render } from './text.ts';
 import { codeInTelegramText, pollTelegram, sendTelegram } from './channels/telegram.ts';
-import { MatrixRoomLeftOpen } from './channels/matrix.ts';
+import { MatrixTimeoutError } from './channels/matrix.ts';
 import { drainLeaves } from './leaves.ts';
 
 const log = logger('offline-notify');
@@ -150,7 +150,6 @@ export class OfflineNotifyWorker {
 			const now = this.now();
 			this.presence.sweep();
 			await this.store.purge(now);
-			await drainLeaves(this.store, this.cfg.matrix, this.cfg.policy, now);
 			const due = await this.store.takeDue(25, now);
 			for (const n of due) {
 				const v = await this.handle(n, now).catch((err) => {
@@ -166,6 +165,9 @@ export class OfflineNotifyWorker {
 			if (this.cfg.telegram && !this.tgPolling && (await this.store.telegramCodeWaiting(now))) {
 				void this.pollTelegramWhileWaiting();
 			}
+			// Last, and one pass at most (leaves.ts): the notices never wait
+			// for a homeserver that is slow to let the bot leave a room.
+			await drainLeaves(this.store, this.cfg.matrix, this.cfg.policy, now);
 		} catch (err) {
 			log.warn('tick_failed', { err: errorClass(err) });
 		} finally {
@@ -210,45 +212,31 @@ export class OfflineNotifyWorker {
 			const origin = linkOriginFor(this.cfg, c.linkNet) ?? this.cfg.linkOrigin;
 			const link = noticeLink(origin, locale, token);
 			const msg = { subject, text: render(locale, 'notice', { site: this.cfg.siteName, link }) };
-			const sending = dispatch(this.cfg, c.channel, c.address, c.route, msg);
+			const sending = dispatch(
+				this.cfg,
+				c.channel,
+				c.address,
+				msg,
+				c.channel === 'matrix' ? { matrixRooms: this.store.matrixRoomBook() } : {}
+			);
 			try {
-				const route = await withTimeout(sending, SEND_BUDGET_MS, 'notice delivery');
-				if (route !== null && route !== c.route)
-					await this.store.setRoute(n.account, c.channel, route, {
-						addressSealed: c.addressSealed,
-						prev: c.prev
-					});
+				await withTimeout(sending, SEND_BUDGET_MS, 'notice delivery');
 				delivered++;
 			} catch (err) {
 				log.warn('notice_channel_failed', { channel: c.channel, err: errorClass(err) });
-				// A Matrix room opened for this notice that no row holds: leave it.
-				if (err instanceof MatrixRoomLeftOpen)
-					await this.store.queueLeave(n.account, err.room).catch(() => undefined);
-				else if (err instanceof Error && err.name === 'TimeoutError') {
+				// Past this round's budget (not a server that answered "too
+				// slow"): it may still arrive.
+				if (
+					err instanceof Error &&
+					err.name === 'TimeoutError' &&
+					!(err instanceof MatrixTimeoutError)
+				)
 					late.push(
 						sending.then(
 							() => true,
 							() => false
 						)
 					);
-					void sending
-						.then(
-							// A room it opened after all: kept if that row still holds
-							// this address, else left (setRoute decides).
-							(late) =>
-								late !== null && late !== c.route
-									? this.store.setRoute(n.account, c.channel, late, {
-											addressSealed: c.addressSealed,
-											prev: c.prev
-										})
-									: undefined,
-							(e: unknown) =>
-								e instanceof MatrixRoomLeftOpen
-									? this.store.queueLeave(n.account, e.room)
-									: undefined
-						)
-						.catch(() => undefined);
-				}
 			}
 		}
 		if (delivered > 0) return 'sent';

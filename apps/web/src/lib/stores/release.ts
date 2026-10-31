@@ -89,6 +89,12 @@ export type AssetCheckState =
 	/** This tab runs another version than the signed release: there is
 	 *  nothing to compare its files with. Neutral, never an alarm. */
 	| { kind: 'not_checked'; running: string; announced: string }
+	/** Another build's service worker still answers this tab's requests (a
+	 *  new one has not taken over yet): the files it could hand out from its
+	 *  own store (index.html) are judged once this build's worker does. The
+	 *  ones it cannot (its own script, the hashed files) were checked and
+	 *  matched. Neutral, never an alarm. */
+	| { kind: 'waiting_worker'; worker: string }
 	| { kind: 'fetch_failed'; path: string; cause: string }
 	/** The signed manifest names something that is not a plain path on this
 	 *  site; nothing was fetched. */
@@ -162,6 +168,9 @@ export type IntegritySummary =
 	 *  against. */
 	| { kind: 'no_release' }
 	| { kind: 'not_checked'; running: string; announced: string }
+	/** Another build's service worker still runs this tab: checked once the
+	 *  new one takes over. */
+	| { kind: 'waiting_worker' }
 	/** The only signed release read is older than this build: the current
 	 *  release could not be confirmed, so nothing was compared. */
 	| { kind: 'unconfirmed'; running: string; announced: string }
@@ -187,6 +196,8 @@ export const integritySummary: Readable<IntegritySummary> = derived(
 				return { kind: 'checked', matched: total - $a.mismatches.length, total, version };
 			case 'not_checked':
 				return { kind: 'not_checked', running: $a.running, announced: $a.announced };
+			case 'waiting_worker':
+				return { kind: 'waiting_worker' };
 			case 'fetch_failed':
 			case 'refused':
 				return { kind: 'incomplete', version };
@@ -195,6 +206,47 @@ export const integritySummary: Readable<IntegritySummary> = derived(
 		}
 	}
 );
+
+/** This build's SvelteKit id ($app/environment `version`, what its service
+ *  worker reports), or null where there is none (a script run outside
+ *  SvelteKit). Loaded when needed: a static import of $app breaks every
+ *  script that loads this store under plain tsx. */
+async function thisBuild(): Promise<string | null> {
+	try {
+		const { version } = await import('$app/environment');
+		return typeof version === 'string' && version !== '' ? version : null;
+	} catch {
+		return null;
+	}
+}
+
+/** The build of the service worker that answers this tab's requests (its
+ *  RELEASE_INFO answer to CHECK_UPDATE, src/service-worker.ts), or null when
+ *  none does, or it does not answer within `timeoutMs`. */
+export async function controllingWorkerBuild(timeoutMs = 3_000): Promise<string | null> {
+	if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
+	const sw = navigator.serviceWorker;
+	const controller = sw.controller;
+	if (controller === null) return null;
+	return new Promise<string | null>((resolve) => {
+		const finish = (v: string | null): void => {
+			clearTimeout(timer);
+			sw.removeEventListener('message', onMessage);
+			resolve(v);
+		};
+		const onMessage = (e: MessageEvent): void => {
+			const d = e.data as { type?: unknown; installed?: unknown } | null;
+			if (d?.type === 'RELEASE_INFO' && typeof d.installed === 'string') finish(d.installed);
+		};
+		const timer = setTimeout(() => finish(null), timeoutMs);
+		sw.addEventListener('message', onMessage);
+		try {
+			controller.postMessage({ type: 'CHECK_UPDATE' });
+		} catch {
+			finish(null);
+		}
+	});
+}
 
 /** The build-integrity check for a verified release: when this tab runs the
  *  announced version, fetch each file the signed manifest lists from this
@@ -206,17 +258,52 @@ export const integritySummary: Readable<IntegritySummary> = derived(
  *  from the browser / service-worker cache, i.e. the running bundle's own
  *  bytes, and Morphit builds are not byte-reproducible across machines. A
  *  tab still running an older (or newer) build than the signed release has
- *  nothing to compare — 'not_checked', and nothing is fetched. */
+ *  nothing to compare — 'not_checked', and nothing is fetched.
+ *
+ *  While another build's service worker answers this tab (it keeps doing so
+ *  until the new one takes over) it hands out its own stored copies, and an
+ *  earlier release's index.html showed the red banner on a site serving the
+ *  signed release exactly (vigilante.trading, 2026-10-30). Then only the
+ *  files that worker cannot answer from its store are judged — its own
+ *  script (a worker never stores it) and the hashed /_app/immutable/ files
+ *  (same name, same bytes) — so a changed /service-worker.js still raises the
+ *  alarm; the rest waits ('waiting_worker') and is checked on the takeover. */
 export async function checkRunningBuild(
 	announced: { readonly version: string; readonly hash_manifest: Readonly<Record<string, string>> },
-	running: string = RUNNING_VERSION
+	running: string = RUNNING_VERSION,
+	workers: {
+		readonly own: () => Promise<string | null>;
+		readonly controlling: () => Promise<string | null>;
+	} = {
+		own: thisBuild,
+		controlling: () => controllingWorkerBuild()
+	}
 ): Promise<AssetCheckState> {
 	if (running !== announced.version) {
 		return { kind: 'not_checked', running, announced: announced.version };
 	}
+	const worker = await workers.controlling();
+	const own = worker === null ? null : await workers.own();
+	// This build's id unknown (outside SvelteKit): judged as before.
+	const foreignWorker = worker !== null && own !== null && worker !== own;
 	try {
-		const { checkManifestAgainstRunningBundle } = await import('$net/releaseHashCheck');
-		const r = await checkManifestAgainstRunningBundle(announced.hash_manifest);
+		const { checkManifestAgainstRunningBundle, manifestKeyToSameOriginPath } = await import(
+			'$net/releaseHashCheck'
+		);
+		let manifest: Readonly<Record<string, string>> = announced.hash_manifest;
+		if (foreignWorker) {
+			const sure: Record<string, string> = {};
+			for (const [key, hash] of Object.entries(manifest)) {
+				const path = manifestKeyToSameOriginPath(key);
+				// A key that is not a plain path on this site refuses the whole
+				// manifest, as below.
+				if (path === null) return { kind: 'refused', path: key };
+				if (path === '/service-worker.js' || path.startsWith('/_app/immutable/')) sure[key] = hash;
+			}
+			manifest = sure;
+		}
+		const r = await checkManifestAgainstRunningBundle(manifest);
+		if (foreignWorker && r.kind === 'ok') return { kind: 'waiting_worker', worker };
 		if (r.kind === 'ok') return { kind: 'ok' };
 		if (r.kind === 'mismatch') return { kind: 'mismatch', mismatches: r.mismatches };
 		if (r.kind === 'refused') return { kind: 'refused', path: r.path };
@@ -327,7 +414,18 @@ export async function initRelease(): Promise<void> {
 	// The release is published above, so the staleBuild banner can render
 	// while the tamper check works.
 	assetCheckStore.set({ kind: 'loading' });
-	assetCheckStore.set(await checkRunningBuild(fetchResult.value.payload));
+	const payload = fetchResult.value.payload;
+	const checked = await checkRunningBuild(payload);
+	assetCheckStore.set(checked);
+	// Checked once this build's own worker takes over (after "Load it now", or
+	// when the last tab of the old one closes).
+	if (checked.kind === 'waiting_worker' && typeof navigator !== 'undefined') {
+		navigator.serviceWorker?.addEventListener(
+			'controllerchange',
+			() => void checkRunningBuild(payload).then((r) => assetCheckStore.set(r)),
+			{ once: true }
+		);
+	}
 }
 
 /** "Try again" after a failed check, on the user's explicit request (the fee

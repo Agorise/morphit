@@ -136,6 +136,7 @@
 	import { makeExpiryFlooredUtcDay, makeOrderPermlink } from '$lib/orders/payload';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { sanitizeBarterTitle, SPECIFIC_BARTER_TITLE_MAX } from '$lib/orders/payload';
+	import { parsePostPrefill, type PostPrefill } from '$lib/orders/postPrefill';
 	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
 	import { publishOrderPost } from '$lib/syndication/publish';
 	import {
@@ -152,7 +153,7 @@
 
 	/** Session-storage key written by other pages that want to
 	 *  prefill the compose form (e.g. profile "Top up BLURT").
-	 *  Format: JSON `{ side, asset, amountMin, amountMax, reason }`.
+	 *  Format: JSON, read by parsePostPrefill ($lib/orders/postPrefill).
 	 *  Read once at mount, then cleared. */
 	const PREFILL_KEY = 'morphit.post.prefill';
 
@@ -605,6 +606,33 @@
 		daiNetwork = isDaiNetwork(d.daiNetwork) ? d.daiNetwork : null;
 		// A language tag, or keep the seeded default.
 		if (/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/.test(str(d.postLang))) postLang = str(d.postLang);
+	}
+
+	/** Apply a one-shot prefill (already checked by parsePostPrefill): each
+	 *  field it carries wins, every other field keeps its value. */
+	function applyPostPrefill(p: PostPrefill): void {
+		if (p.side !== undefined) side = p.side;
+		if (p.asset !== undefined) asset = p.asset;
+		if (p.usdtNetwork !== undefined) usdtNetwork = p.usdtNetwork;
+		if (p.usdcNetwork !== undefined) usdcNetwork = p.usdcNetwork;
+		if (p.daiNetwork !== undefined) daiNetwork = p.daiNetwork;
+		if (p.amountMin !== undefined) amountMin = p.amountMin;
+		if (p.amountMax !== undefined) amountMax = p.amountMax;
+		if (p.topupUsdMin !== undefined) topupUsdMin = p.topupUsdMin;
+		if (p.fiat !== undefined) fiatArr = p.fiat ? [p.fiat] : [];
+		if (p.priceModelKind !== undefined) priceModelKind = p.priceModelKind;
+		if (p.spreadPercent !== undefined) spreadPercent = p.spreadPercent;
+		if (p.fixedPrice !== undefined) fixedPrice = p.fixedPrice;
+		if (p.paymentMethods !== undefined) paymentMethods = p.paymentMethods;
+		// A barter listing's step 3 ("Which cryptos will you accept?") binds to
+		// this set, not to paymentMethods (its pay_<crypto> rails are derived
+		// from it at broadcast) — without it a barter re-list's step 3 was empty.
+		if (p.acceptedAssets !== undefined) acceptedAssets = p.acceptedAssets;
+		if (p.region !== undefined) region = p.region;
+		if (p.terms !== undefined) terms = p.terms;
+		if (p.specificBarterTitle !== undefined) specificBarterTitle = p.specificBarterTitle;
+		if (p.expiresDays !== undefined) expiresDays = p.expiresDays;
+		if (p.postLang !== undefined) postLang = p.postLang;
 	}
 
 	/** Heuristic: does the draft actually contain anything worth
@@ -1370,89 +1398,17 @@
 		// surprised — but the prefill wins for the specific fields it
 		// sets.  Cleared after read so navigating back to /post
 		// manually doesn't repeat.
+		// The checks live in parsePostPrefill ($lib/orders/postPrefill), next to
+		// the re-list writer, so the whole hand-off is unit-tested end to end.
 		try {
 			const raw = safeSession.get(PREFILL_KEY);
 			if (raw) {
 				safeSession.remove(PREFILL_KEY);
-				const p = JSON.parse(raw) as Partial<{
-					side: 'buy' | 'sell';
-					asset: string;
-					assetNetwork: string | null;
-					amountMin: string;
-					amountMax: string;
-					fiat: string;
-					priceModelKind: 'spread' | 'fixed';
-					spreadPercent: string;
-					fixedPrice: string;
-					paymentMethods: string[];
-					region: string;
-					terms: string;
-					specificBarterTitle: string;
-					expiresDays: number;
-					reason: string;
-					topupUsdMin: number;
-				}>;
-				if (p.side === 'buy' || p.side === 'sell') side = p.side;
-				if (isAssetTicker(p.asset)) {
-					asset = p.asset;
-				}
-				// hydrate the matching multi-network
-				// picker from the prefill payload's assetNetwork.
-				// Defensive typeguards: an unknown value lands the
-				// picker on null so the canSubmit gate forces the
-				// user to re-pick rather than silently broadcasting
-				// a stale value (same posture as the /post/edit
-				// load hydration added).
-				if (
-					asset === 'USDT' &&
-					typeof p.assetNetwork === 'string' &&
-					isUsdtNetwork(p.assetNetwork)
-				) {
-					usdtNetwork = p.assetNetwork;
-				} else if (
-					asset === 'USDC' &&
-					typeof p.assetNetwork === 'string' &&
-					isUsdcNetwork(p.assetNetwork)
-				) {
-					usdcNetwork = p.assetNetwork;
-				} else if (
-					asset === 'DAI' &&
-					typeof p.assetNetwork === 'string' &&
-					isDaiNetwork(p.assetNetwork)
-				) {
-					daiNetwork = p.assetNetwork;
-				}
-				if (typeof p.amountMin === 'string') amountMin = p.amountMin;
-				if (typeof p.amountMax === 'string') amountMax = p.amountMax;
-				if (typeof p.topupUsdMin === 'number' && Number.isFinite(p.topupUsdMin)) {
-					topupUsdMin = p.topupUsdMin;
-				}
-				if (typeof p.fiat === 'string') fiatArr = p.fiat ? [p.fiat] : [];
-				if (p.priceModelKind === 'spread' || p.priceModelKind === 'fixed') {
-					priceModelKind = p.priceModelKind;
-				}
-				if (typeof p.spreadPercent === 'string') spreadPercent = p.spreadPercent;
-				if (typeof p.fixedPrice === 'string') fixedPrice = p.fixedPrice;
-				if (Array.isArray(p.paymentMethods)) {
-					// Defensive copy — the array could contain
-					// non-strings if the source was tampered with.
-					paymentMethods = p.paymentMethods.filter((m): m is string => typeof m === 'string');
-				}
-				if (typeof p.region === 'string') region = p.region;
-				if (typeof p.terms === 'string') terms = p.terms;
-				if (typeof p.specificBarterTitle === 'string')
-					specificBarterTitle = sanitizeBarterTitle(p.specificBarterTitle);
-				if (typeof p.expiresDays === 'number' && Number.isFinite(p.expiresDays)) {
-					// Clamp to the schema-allowed range; the UI
-					// validates on submit anyway, but a hostile
-					// session-storage write shouldn't reach the
-					// form with out-of-range data.
-					expiresDays = Math.max(1, Math.min(90, Math.floor(p.expiresDays)));
-				}
+				const p = parsePostPrefill(raw);
+				if (p) applyPostPrefill(p);
 			}
 		} catch {
-			// Bad JSON in session storage — ignore, don't break the
-			// post page over a poisoned key.
+			// Storage unavailable — ignore, don't break the post page over it.
 			safeSession.remove(PREFILL_KEY);
 		}
 

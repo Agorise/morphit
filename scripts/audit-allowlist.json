@@ -189,6 +189,14 @@
       "title": "@hono/node-server: `serveStatic` decodes the request path a second time, leading to bypass of middleware on static paths",
       "lastReviewed": "2026-10-28",
       "rationale": "Only `serveStatic` (the separate `@hono/node-server/serve-static` export) is affected. Morphit imports only `serve` from @hono/node-server (apps/indexer/src/main.ts, apps/relay/src/main.ts); nothing imports serveStatic, and the MCP SDK, which also depends on the package, never references it (the MCP server is a plain node:http server). The indexer and relay serve no static files through Hono (the frontend is served prebuilt by the web server). The fix is in 2.1.3 and later, a major upgrade."
+    },
+    "GHSA-g3hv-75wg-m249": {
+      "package": "minimatch",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "minimatch has potential denial of service via globparts amplification",
+      "lastReviewed": "2026-10-30",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node. Every copy comes from apps/web's devDependencies: eslint 9.39.5 (and its @eslint/config-array and @eslint/eslintrc, minimatch 3.1.5) and @typescript-eslint/parser's typescript-estree (minimatch 10.2.6), which glob the repo's own lint configuration and file patterns, never outside input. The fix is minimatch 11.0.1, outside every one of those ranges (npm audit offers only a major eslint-plugin-svelte change)."
     }
   }
 }

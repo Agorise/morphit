@@ -3610,3 +3610,34 @@ COMMENT ON TABLE waiver_trade_transfers IS
     'Per (first-buy waiver owner, sender): the earliest transfer of at least 50.000 BLURT '
     'from the order''s block on, stamped at or after the consensus activation time — '
     'the on-chain proof a review citing a waiver order needs (v70).';
+
+-- ─── v71: offline_notify_matrix_rooms (one Matrix room per address) ───
+-- Offline notices on Matrix: the relay's bot keeps ONE direct room per Matrix
+-- address, whichever account gave it, for the operator's test note, the codes
+-- and every notice. This table maps the address to that room: the address as
+-- a keyed hash (relay key, never the address itself), the room sealed like the
+-- rooms on the rows were. No account column: nothing here ties an account to
+-- an address, or two accounts to each other. The relay claims a new room only
+-- if the mapping still holds what it read (compare-and-set), so two senders at
+-- once end up in one room. When no row of any account holds the address any
+-- more (offline_notify_channels, its address or the one kept aside during a
+-- change), released_at is set and the room is queued to leave
+-- (offline_notify_leave, address_mac set) in the same transaction; a row that
+-- takes the address again before the bot has left clears it, and the room
+-- stays. The rooms older versions kept on each row (route_sealed) are moved
+-- here by the relay — it holds the key — the first time it opens the store
+-- after the upgrade. Local only: never in a snapshot or a backup.
+CREATE TABLE IF NOT EXISTS offline_notify_matrix_rooms (
+    address_mac BYTEA PRIMARY KEY,
+    room_sealed BYTEA NOT NULL,
+    -- The room was opened so that only the bot can invite anyone into it
+    -- (rooms older versions opened let her invite others: checked each time).
+    bot_only_invites BOOLEAN NOT NULL DEFAULT FALSE,
+    released_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- A queued room that is an address's room (above): which address, so the
+-- leave round can tell whether a row took it again meanwhile.
+ALTER TABLE offline_notify_leave ADD COLUMN IF NOT EXISTS address_mac BYTEA;
+COMMENT ON TABLE offline_notify_matrix_rooms IS
+    'Offline notices: each Matrix address (keyed hash) and its one room with the bot (sealed). Local only.';

@@ -14739,7 +14739,7 @@ your personal ones:
 
 | App | What you need | Notes |
 | --- | --- | --- |
-| Matrix | an account that **already exists** on any homeserver (username + password, or an access token): the wizard signs in to it, it does not make one. On matrix.org, make it at https://app.element.io → *Create account*: it asks for an email address, emails a code to type in, and wants a password of at least 10 characters. Not with *Continue with Google/Apple/GitHub* — that account has no password to type in the wizard. | Users get its invitation the first time; the notes then arrive in that chat. A refused sign-in shows what the homeserver answered (wrong username or password, no such account yet, too many attempts, no password sign-in); for an address whose own `/.well-known` names another (matrix.org → matrix-client.matrix.org) the wizard signs in, and saves, that one. Its token does not expire (no refresh token is asked for). A homeserver that answers the sign-in with a redirect is refused: the password is never sent on. A test note comes with an invitation: accept it within about a minute and a half — the bot leaves the test chat once you have joined (or then), and after that it can no longer be joined ("the person who invited you has already left"); users' chats stay open. An `http://` homeserver address is accepted only for a homeserver on this server or an `.onion` address (the bot's password and token never cross the internet unencrypted). |
+| Matrix | an account that **already exists** on any homeserver (username + password, or an access token): the wizard signs in to it, it does not make one. On matrix.org, make it at https://app.element.io → *Create account*: it asks for an email address, emails a code to type in, and wants a password of at least 10 characters. Not with *Continue with Google/Apple/GitHub* — that account has no password to type in the wizard. | The bot keeps **one chat per address**: the first message to someone (your test note, or a user's code) comes with an invitation, and every later message to that address — codes, notes, your next test note — comes in that same chat. The bot never leaves it because a message was sent; it leaves only when nothing may use it any more (below). If she leaves the chat herself, the next note invites her back to the same chat. A new chat is opened only when the bot can no longer write to her in her chat: it is no longer in it, or she cannot be invited back (her homeserver refuses, or she is banned from it), or someone else is in a chat an older version opened (below). A homeserver that is slow, down, rate-limiting the bot or refusing it everything (a suspended bot account) never makes a new chat: the note is tried again later. Which chat belongs to which address is kept in the relay's database (a keyed hash of the address → the room, sealed; one row per address, whichever accounts saved it), so the bot finds it again after a restart, and two notes sent at once — even by two relay processes — end up in one chat (the second leaves the chat it had just opened). The chats are private: only the bot can invite anyone into them, and someone invited later would not see what was written before. Chats opened by v1.21.18 or older let her invite others too, and show them the past messages; such a chat is used only while nobody but her and the bot is in it, and is replaced by a new one otherwise. The bot keeps no list of its own chats on its homeserver (no `m.direct`): her Matrix app shows the chat as a direct chat from the invitation. A refused sign-in shows what the homeserver answered (wrong username or password, no such account yet, too many attempts, no password sign-in); for an address whose own `/.well-known` names another (matrix.org → matrix-client.matrix.org) the wizard signs in, and saves, that one. Its token does not expire (no refresh token is asked for). A homeserver that answers the sign-in with a redirect is refused: the password is never sent on. A test note to an address with no chat yet comes with an invitation: accept it to read the note; the bot stays in that chat. The address of your latest test note is kept (sealed, like users' addresses), so its chat stays — whatever users do with that address — until you turn Matrix off; a test note to another address lets the older chat go. When the relay's saved addresses cannot be opened (its key is missing, or the database does not answer) no test note is sent, so no chat is opened that nothing would keep; the wizard says so. A homeserver too slow for the test note (the wizard waits about two and a half minutes) is said plainly. An `http://` homeserver address is accepted only for a homeserver on this server or an `.onion` address (the bot's password and token never cross the internet unencrypted). |
 | Session | nothing — the wizard makes a new Session account for your site (or takes the 13 recovery words of one you have) | Sent through Tor, which a standard install runs (on by default; the relay reaches it at `MORPHIT_RELAY_TOR_SOCKS`). Users find the first note under *Message Requests*. The account's display name is your site's name. |
 | XMPP | nothing — the wizard can **make the account** on a free public server (no email address needed), or take one you have (address + password) | *Make a new one*: it asks og.im, openim.nl and jabber.de (or a server you name) live whether they take new accounts, and offers only those that do. It checks the username (2–32 of a–z, 0–9, `.` `_` `-`) and the password (12–128 characters, not containing the username, three kinds of characters or 20+ characters, plain characters — no space at either end, no quotes around it, no special or invisible spaces — typed twice) before anything is sent — or makes a strong 24-character one if you press Enter (kept only in the settings file). A server that wants a picture check shows a web page; you type what it shows, within about half a minute (the server stops waiting then; the next try brings a new picture). A refusal shows the server's own reason (name taken, password too weak, too many new accounts lately). Then it turns the account's message archive off, sends a test note and saves; with no test address it offers to save the new account untested. A new account you choose not to save stays on its server, and the wizard says so (a name taken from then on; a password made for you is kept nowhere). The server's address comes from the domain's DNS records (`_xmpp-client._tcp`, else `_xmpps-client._tcp`); on a zero-clearnet site only an `.onion` server, and no DNS is asked. STARTTLS or direct TLS; it never logs in, or registers, without encryption. |
 | Telegram | a bot: in Telegram open **@BotFather**, send `/newbot`, copy the token | Users link their Telegram by sending the bot a code (the card has a button for it). Telegram sees which users the bot writes to and when, and can read the note (it names your site and carries the link). |
@@ -14779,7 +14779,8 @@ clearnet server's certificate is always checked.
   another box — opens none of them. A relay that finds its key missing or
   replaced never makes a new one over the saved addresses: offline notices
   stay off (`offline_notify_unavailable` in its log) until the key file is
-  back, or you choose *Start over* in `sudo morphit-ops offline-notify`, which
+  back (the relay tries again by itself — after 5 s, 10 s, 20 s … then every
+  5 minutes — and logs `offline_notify_on` once they are on), or you choose *Start over* in `sudo morphit-ops offline-notify`, which
   deletes every user's saved addresses, waiting notes and links, and the key
   file, then restarts the relay (it makes the new key as it starts) and
   checks that it did. Start over is offered only when the key file is gone
@@ -14788,24 +14789,49 @@ clearnet server's certificate is always checked.
   wizard then says what to check, and the addresses are kept. Lookups use keyed hashes
   of the address, never the address. Nothing ever sends an address back to a
   browser — not even to her: once saved, the card shows only "On".
-- **Backups and snapshots leave all seven tables' rows out**
+- **Backups and snapshots leave all eight tables' rows out**
   (`offline_notify_channels`, `_code_log`, `_address_log`, `_pending`,
-  `_links`, `_leave`, `_key`): after a restore or a reinstall users set their
-  addresses up again. Moving to a new server is the same. The Matrix bot is
-  then still in the chats it had (nothing lists them any more): sign in to
-  the bot's account in a Matrix app and leave them all, or set up a new bot
-  account.
+  `_links`, `_leave`, `_key`, `_matrix_rooms`): after a restore or a
+  reinstall users set their addresses up again. Moving to a new server is the
+  same. The Matrix bot is then still in the chats it had, but nothing on the
+  new database names them: a user who sets the same address up again gets a
+  new chat, and the old ones stay with the bot. To drop them, sign in to the
+  bot's account in a Matrix app and leave them, or set up a new bot account.
+- **Right after an upgrade** the relay may start before the indexer has
+  updated the database for this version: offline notices are then off for a
+  moment (`offline_notify_unavailable`, "tries again by itself") and come on
+  without a restart once it has (`offline_notify_on`).
+- **Which Matrix chat is whose:** `offline_notify_matrix_rooms`, one row per
+  address — a keyed hash of the address (not the one the code limits use, so
+  the two cannot be matched) and its room, sealed like the addresses. No
+  account is in it. The row goes once the bot has left the chat (or its
+  leave is given up after about two days: the bot is then still in it). Upgrading
+  from v1.21.18, where each saved address kept its own room, keeps for each
+  address its newest chat and has the bot leave the others.
 - **The accounts your notes come from** must not keep a list either. The
   wizard reminds you to turn off the mail provider's copy of every sent mail
   ("Sent"), and turns the XMPP account's message archive (MAM) off itself
   (it says so when the server has no such setting) — either would list your
-  users' addresses. The Matrix bot leaves and forgets
-  every chat no saved address holds any more — when she removes or changes
-  her address, when a code is never confirmed (it expires, or is guessed wrong
-  five times), and when its first message fails. The relay queues each
+  users' addresses. The Matrix bot leaves and forgets a chat once nothing
+  may use it any more — no saved address of any account (a user's, waiting
+  for its code, confirmed or kept aside while she confirms a new one, or your
+  latest test address) is the address of that chat:
+  when she removes or changes her address, when a code is never
+  confirmed (it expires, or is guessed wrong five times), when its first
+  message fails, when you turn Matrix off. It never leaves a chat because a
+  note was sent, and a chat two accounts share (both gave the same address)
+  stays while either of them keeps it. The relay queues each
   such room (`offline_notify_leave`, in the same database transaction as
   whatever stopped holding it), and works through the queue, trying again for about two
-  days when your homeserver does not answer. Session keeps no
+  days when your homeserver does not answer — one chat at a time, and never
+  holding the database while the homeserver answers. Just before leaving it
+  checks again, so a chat whose address was set up again meanwhile is kept.
+  If her address is set up again while the bot is leaving: when the leave
+  fails and nothing was sent to her meanwhile, she keeps her chat; otherwise
+  her code or note comes in a new chat (and the old one is left). If
+  Matrix's settings are taken out of the settings file by hand, the bot cannot
+  sign in to leave: the queue waits until Matrix is set up again (or leave
+  the chats in a Matrix app). Use *Turn an app off* instead. Session keeps no
   copy of what it sends (the copy Session apps normally sync to their own
   account is not made).
 - **What the apps in between see.** Apart from Session (end-to-end
@@ -14850,13 +14876,16 @@ clearnet server's certificate is always checked.
 ### 54.3 Turning an app off, and users' own controls
 
 `sudo morphit-ops offline-notify` → *Turn an app off* first deletes every
-address users saved for that app (the Matrix bot also leaves their chats),
+address users saved for that app (the Matrix bot also leaves their chats, and the chat of your own test note),
 then deletes that account's settings and restarts the relay. Users who chose
 it stop getting notes there; their other apps keep working. If you turn the
 app back on, they set that address up again. For Matrix, if the bot cannot
-leave every chat right away (your homeserver does not answer), the wizard
-says how many are left and keeps Matrix set up, so the relay goes on trying;
-run *Turn an app off* again later. (If an app's settings go away
+leave every chat within about a minute and a half (your homeserver does not
+answer, or is slow), the wizard says how many are left and keeps Matrix set
+up, so the relay goes on trying; run *Turn an app off* again later. If it
+stops after the addresses were deleted, it never says "Nothing was changed":
+it says how many are deleted already, and that the app stays set up until
+you run *Turn an app off* again. (If an app's settings go away
 any other way — the file edited by hand — users who had it see it on the card
 as no longer offered, with a button to delete what they saved.) A user can delete every address she
 gave your site at any time (*Delete all my addresses*), which also drops her

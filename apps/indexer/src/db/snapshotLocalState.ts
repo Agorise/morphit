@@ -36,6 +36,7 @@ export const LOCAL_ONLY_TABLES: readonly string[] = [
 	'offline_notify_links',
 	'offline_notify_key',
 	'offline_notify_leave',
+	'offline_notify_matrix_rooms',
 	// Relay payout queue: THIS operator's wallet's pending transfers.
 	'relay_pending_transfers',
 	// Local view counters served by this instance's API.

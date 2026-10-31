@@ -211,9 +211,10 @@ export interface HttpHit {
 	readonly body: string;
 }
 
-/** An HTTP or HTTPS (TEST_CERT) server answering with `handler`. */
+/** An HTTP or HTTPS (TEST_CERT) server answering with `handler` (null: it
+ *  never answers that request). */
 export async function fakeHttp(
-	handler: (hit: HttpHit) => { status: number; body: unknown },
+	handler: (hit: HttpHit) => { status: number; body: unknown } | null,
 	opts: { https?: boolean; cert?: string; key?: string } = {}
 ): Promise<Listening & { hits: HttpHit[] }> {
 	const hits: HttpHit[] = [];
@@ -229,8 +230,18 @@ export async function fakeHttp(
 			};
 			hits.push(hit);
 			const r = handler(hit);
-			res.writeHead(r.status, { 'Content-Type': 'application/json' });
-			res.end(typeof r.body === 'string' ? r.body : JSON.stringify(r.body));
+			if (r === null) return;
+			const send = (x: { status: number; body: unknown }): void => {
+				res.writeHead(x.status, { 'Content-Type': 'application/json' });
+				res.end(typeof x.body === 'string' ? x.body : JSON.stringify(x.body));
+			};
+			const later = r.body as {
+				__later?: number;
+				__answer?: () => { status: number; body: unknown };
+			};
+			if (r.status === 0 && later.__answer)
+				setTimeout(() => send(later.__answer!()), later.__later ?? 0);
+			else send(r);
 		});
 	};
 	const server = opts.https
@@ -239,6 +250,234 @@ export async function fakeHttp(
 	const close = closer(server);
 	const port = await listen(server);
 	return { port, hits, close };
+}
+
+/** One room on {@link fakeHomeserver}. */
+export interface FakeMatrixRoom {
+	readonly id: string;
+	/** user id → 'join' | 'invite' | 'leave' | 'ban' */
+	readonly members: Map<string, string>;
+	/** What a member that left could still read: the memberships as they were
+	 *  when it left (Synapse lets a departed user read the state at its leave). */
+	readonly atLeave: Map<string, Map<string, string>>;
+	readonly forgotten: Set<string>;
+	readonly messages: Array<{ readonly sender: string; readonly body: string }>;
+	/** The createRoom request as asked (preset, power levels, initial state). */
+	readonly created: Record<string, unknown>;
+	/** Power level a member needs to invite, and each member's level. */
+	inviteLevel: number;
+	readonly levels: Map<string, number>;
+}
+
+const mxErr = (status: number, errcode: string) => ({ status, body: { errcode, error: errcode } });
+
+/**
+ * A Matrix homeserver for the client-server API calls the relay's bot makes,
+ * answering as Synapse does:
+ *   - createRoom: a new room, the bot joined, everyone in `invite` invited;
+ *     power levels from the preset (trusted_private_chat: invitees get the
+ *     creator's level; private_chat: 0) and power_level_content_override;
+ *   - send: only a member that has JOINED may send (else 403 M_FORBIDDEN) —
+ *     whether the other person is still there or not;
+ *   - state/m.room.member/<user>: to a joined bot, her membership now (404
+ *     M_NOT_FOUND if she was never in the room); to a bot that left and did
+ *     not forget, as it was when it left; else 403 M_FORBIDDEN;
+ *   - members: every member and membership (a joined bot only);
+ *   - joined_rooms: the rooms the bot is in;
+ *   - invite: by a joined bot, of someone not joined and not banned;
+ *   - leave (403 when not in the room) and forget (400 while joined);
+ *   - account/whoami.
+ * The people the bot writes to act through `join` / `leave` / `inviteBy`;
+ * those in `autoJoin` accept every invitation at once. `trouble` makes the
+ * bot's ACCOUNT answer an error to everything (suspended, rate-limited …).
+ * Every request is recorded in `hits`.
+ */
+export async function fakeHomeserver(
+	opts: {
+		readonly bot?: string;
+		readonly token?: string;
+		readonly autoJoin?: readonly string[];
+		/** Her homeserver refuses invitations from this one. */
+		readonly refuseInvite?: (user: string) => boolean;
+		/** A message to this room fails (500), as on a homeserver in trouble. */
+		readonly failSend?: (room: string) => boolean;
+		/** How long each answer takes (ms; null: never answered). */
+		readonly slow?: (method: string, path: string) => number | null;
+	} = {}
+) {
+	const bot = opts.bot ?? '@notices:example.org';
+	const token = opts.token ?? 'tok';
+	const server = bot.slice(bot.indexOf(':') + 1);
+	const autoJoin = new Set(opts.autoJoin ?? []);
+	const rooms = new Map<string, FakeMatrixRoom>();
+	let made = 0;
+	type Trouble = {
+		status: number;
+		errcode: string;
+		/** Only reads still work (a suspended account may read, MSC3823). */
+		writesOnly?: boolean;
+		/** Only these requests get the error. */
+		only?: (method: string, path: string) => boolean;
+	};
+	let trouble: Trouble | null = null;
+	const v3 = '/_matrix/client/v3';
+	const json = (body: string): Record<string, unknown> => {
+		try {
+			return JSON.parse(body) as Record<string, unknown>;
+		} catch {
+			return {};
+		}
+	};
+	const invite = (room: FakeMatrixRoom, user: string): void => {
+		room.members.set(user, autoJoin.has(user) ? 'join' : 'invite');
+	};
+	const setMember = (room: FakeMatrixRoom, user: string, m: string): void => {
+		if (user === bot && m === 'leave') room.atLeave.set(bot, new Map(room.members));
+		room.members.set(user, m);
+	};
+	const answer = (h: HttpHit): { status: number; body: unknown } => {
+		if (h.headers.authorization !== `Bearer ${token}`) return mxErr(401, 'M_UNKNOWN_TOKEN');
+		if (
+			trouble !== null &&
+			!(trouble.writesOnly === true && h.method === 'GET') &&
+			(trouble.only === undefined || trouble.only(h.method, h.path))
+		)
+			return mxErr(trouble.status, trouble.errcode);
+		const path = h.path.split('?')[0]!;
+		if (h.method === 'GET' && path === `${v3}/account/whoami`)
+			return { status: 200, body: { user_id: bot } };
+		if (h.method === 'GET' && path === `${v3}/joined_rooms`)
+			return {
+				status: 200,
+				body: {
+					joined_rooms: [...rooms.values()]
+						.filter((r) => r.members.get(bot) === 'join')
+						.map((r) => r.id)
+				}
+			};
+		if (h.method === 'POST' && path === `${v3}/createRoom`) {
+			const b = json(h.body);
+			const invites = Array.isArray(b.invite) ? (b.invite as string[]) : [];
+			if (invites.some((u) => opts.refuseInvite?.(u))) return mxErr(403, 'M_FORBIDDEN');
+			const id = `!r${++made}:${server}`;
+			const over = (b.power_level_content_override ?? {}) as Record<string, unknown>;
+			const trusted = b.preset === 'trusted_private_chat';
+			const room: FakeMatrixRoom = {
+				id,
+				members: new Map([[bot, 'join']]),
+				atLeave: new Map(),
+				forgotten: new Set(),
+				messages: [],
+				created: b,
+				inviteLevel: typeof over.invite === 'number' ? over.invite : 0,
+				levels: new Map([[bot, 100]])
+			};
+			for (const u of invites) room.levels.set(u, trusted ? 100 : 0);
+			rooms.set(id, room);
+			for (const u of invites) invite(room, u);
+			return { status: 200, body: { room_id: id } };
+		}
+		const m = new RegExp(`^${v3}/rooms/([^/]+)/(.+)$`).exec(path);
+		if (!m) return mxErr(404, 'M_UNRECOGNIZED');
+		const room = rooms.get(decodeURIComponent(m[1]!));
+		const rest = m[2]!;
+		const mine = room?.members.get(bot);
+		if (h.method === 'PUT' && rest.startsWith('send/m.room.message/')) {
+			if (!room || mine !== 'join') return mxErr(403, 'M_FORBIDDEN');
+			if (opts.failSend?.(room.id)) return mxErr(500, 'M_UNKNOWN');
+			room.messages.push({ sender: bot, body: String(json(h.body).body ?? '') });
+			return { status: 200, body: { event_id: `$e${room.messages.length}` } };
+		}
+		const st = /^state\/m\.room\.member\/([^/]+)$/.exec(rest);
+		if (h.method === 'GET' && st) {
+			const user = decodeURIComponent(st[1]!);
+			if (!room || room.forgotten.has(bot)) return mxErr(403, 'M_FORBIDDEN');
+			const view = mine === 'join' ? room.members : room.atLeave.get(bot);
+			if (view === undefined) return mxErr(403, 'M_FORBIDDEN');
+			const ms = view.get(user);
+			return ms === undefined
+				? mxErr(404, 'M_NOT_FOUND')
+				: { status: 200, body: { membership: ms } };
+		}
+		if (h.method === 'GET' && rest === 'members') {
+			if (!room || mine !== 'join') return mxErr(403, 'M_FORBIDDEN');
+			return {
+				status: 200,
+				body: {
+					chunk: [...room.members].map(([u, ms]) => ({
+						type: 'm.room.member',
+						state_key: u,
+						content: { membership: ms }
+					}))
+				}
+			};
+		}
+		if (h.method === 'POST' && rest === 'invite') {
+			const user = String(json(h.body).user_id ?? '');
+			if (!room || mine !== 'join') return mxErr(403, 'M_FORBIDDEN');
+			const now = room.members.get(user);
+			if (now === 'join' || now === 'ban' || opts.refuseInvite?.(user))
+				return mxErr(403, 'M_FORBIDDEN');
+			invite(room, user);
+			return { status: 200, body: {} };
+		}
+		if (h.method === 'POST' && rest === 'leave') {
+			if (!room || (mine !== 'join' && mine !== 'invite')) return mxErr(403, 'M_FORBIDDEN');
+			setMember(room, bot, 'leave');
+			return { status: 200, body: {} };
+		}
+		if (h.method === 'POST' && rest === 'forget') {
+			if (mine === 'join') return mxErr(400, 'M_UNKNOWN');
+			room?.forgotten.add(bot);
+			return { status: 200, body: {} };
+		}
+		return mxErr(404, 'M_UNRECOGNIZED');
+	};
+	const srv = await fakeHttp((h) => {
+		const after = opts.slow ? opts.slow(h.method, h.path) : 0;
+		if (after === null) return null;
+		if (after === 0) return answer(h);
+		return { status: 0, body: { __later: after, __answer: () => answer(h) } };
+	});
+	const roomOf = (id: string): FakeMatrixRoom => {
+		const r = rooms.get(id);
+		if (!r) throw new Error(`no room ${id}`);
+		return r;
+	};
+	return {
+		...srv,
+		url: `http://127.0.0.1:${srv.port}`,
+		bot,
+		token,
+		rooms,
+		/** How many rooms were opened. */
+		made: () => made,
+		/** Leave and forget requests the bot made. */
+		leavesAndForgets: () => srv.hits.filter((h) => /\/rooms\/[^/]+\/(leave|forget)$/.test(h.path)),
+		/** She accepts the invitation. */
+		join: (id: string, user: string) => setMember(roomOf(id), user, 'join'),
+		/** She leaves the room (or declines its invitation). */
+		leave: (id: string, user: string) => setMember(roomOf(id), user, 'leave'),
+		/** A member invites someone else, if the room's power levels let her. */
+		inviteBy: (id: string, from: string, to: string): boolean => {
+			const r = roomOf(id);
+			if (r.members.get(from) !== 'join' || (r.levels.get(from) ?? 0) < r.inviteLevel) return false;
+			invite(r, to);
+			return true;
+		},
+		/** The bot is put out of the room (kicked; or the room is gone for it). */
+		removeBot: (id: string) => {
+			const r = roomOf(id);
+			setMember(r, bot, 'leave');
+			r.forgotten.add(bot);
+		},
+		/** The bot's ACCOUNT answers this to everything (null: fine again) —
+		 *  or, `writesOnly`, to everything but reads (a suspended account
+		 *  may still read, MSC3823). */
+		trouble: (t: Trouble | null) => {
+			trouble = t;
+		}
+	};
 }
 
 export interface FakeXmppOptions {
@@ -384,4 +623,42 @@ export async function fakeXmpp(
 	const close = closer(server);
 	const port = await listen(server);
 	return { port, plain, secure, messages, close };
+}
+
+/**
+ * A MatrixRoomBook kept in memory, with the store's rules for a claim
+ * (compare-and-set on what was read; refused when no row holds the address:
+ * `held`), for tests of the Matrix client alone. The store's own book, on a
+ * real database, is tested in offlineNotifyMatrixOneRoom.test.ts and
+ * scripts/offline-notify-matrix-rooms-smoke.ts.
+ */
+export function memoryRoomBook(held: (userId: string) => boolean = () => true) {
+	const rooms = new Map<string, { room: string; version: Buffer; botOnly: boolean }>();
+	const queued: string[] = [];
+	let n = 0;
+	return {
+		rooms,
+		queued,
+		/** As a room an older version opened (anyone in it may invite). */
+		legacy(userId: string, room: string) {
+			rooms.set(userId, { room, version: Buffer.from(`v${++n}`), botOnly: false });
+		},
+		book: {
+			get: async (userId: string) => rooms.get(userId) ?? null,
+			claim: async (userId: string, version: Buffer | null, room: string) => {
+				if (!held(userId)) {
+					queued.push(room);
+					return null;
+				}
+				const cur = rooms.get(userId);
+				if (cur !== undefined && (version === null || !cur.version.equals(version))) {
+					queued.push(room);
+					return { room: cur.room, botOnly: cur.botOnly, won: false };
+				}
+				if (cur !== undefined) queued.push(cur.room);
+				rooms.set(userId, { room, version: Buffer.from(`v${++n}`), botOnly: true });
+				return { room, botOnly: true, won: true };
+			}
+		}
+	};
 }

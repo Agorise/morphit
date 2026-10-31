@@ -9,8 +9,9 @@
  *   tsx src/notify/adminCli.ts send <channel>         (a test note; the address on stdin as "to")
  *   tsx src/notify/adminCli.ts new-session            (a new Session identity)
  *   tsx src/notify/adminCli.ts purge-channel <channel> (the operator turned it off:
- *                                                     every user's address for it goes;
- *                                                     the Matrix bot leaves their rooms)
+ *                                                     every user's address for it goes,
+ *                                                     and the test address; the Matrix
+ *                                                     bot leaves every room it kept)
  *   tsx src/notify/adminCli.ts reset                  (start over: forget every address,
  *                                                     and which key sealed them)
  *   tsx src/notify/adminCli.ts register-form xmpp     (what a server asks of a new account)
@@ -35,25 +36,21 @@ import { createDatabase } from '../db/pool.ts';
 import { normalizeAddress, type AddressChannel, type Channel } from './addresses.ts';
 import { notifyConfigFromEnv, offeredChannels, type NotifyConfig } from './config.ts';
 import { dispatch } from './dispatch.ts';
-import {
-	leaveRoom,
-	leaveTestRoom,
-	MatrixRoomLeftOpen,
-	testNoteBudgetMs,
-	whoAmI
-} from './channels/matrix.ts';
+import { sendMatrix, testNoteBudgetMs, whoAmI } from './channels/matrix.ts';
 import { drainLeavesWithin } from './leaves.ts';
 import { newSessionIdentity } from './channels/session.ts';
 import { telegramBotName } from './channels/telegram.ts';
 import { registerXmpp, xmppArchiveOff, xmppRegistrationForm } from './channels/xmpp.ts';
 import type { NetPolicy } from './net.ts';
-import { openSealedStore, resetOfflineNotify } from './store.ts';
+import { openSealedStore, resetOfflineNotify, type OfflineNotifyStore } from './store.ts';
 import { VAULT_KEY_FILE, VaultUnavailableError } from './vault.ts';
 
 const CHANNELS: readonly Channel[] = ['matrix', 'session', 'xmpp', 'telegram', 'email'];
-/** purge-channel stops starting to leave rooms after this (morphit-ops stops
- *  waiting for this tool after 180 s; one leave may take about 30 s). */
-export const LEAVE_BUDGET_MS = 100_000;
+/** purge-channel starts no leave this long after the tool started, and has
+ *  every request done by PURGE_DONE_MS: morphit-ops stops waiting for this
+ *  tool 180 s after starting it, and starting tsx takes a few seconds. */
+export const LEAVE_BUDGET_MS = 90_000;
+export const PURGE_DONE_MS = 140_000;
 /** When this tool started: `send matrix` is done by then + testNoteBudgetMs(). */
 const STARTED = Date.now();
 
@@ -195,6 +192,45 @@ async function keyState(rc: Config): Promise<{ key: string; detail?: string }> {
 	}
 }
 
+/**
+ * The operator's Matrix test note. It goes to the bot's one direct room with
+ * that address — the one it already has, or a new one — and the bot stays in
+ * it: codes and notes to that address later come in the same room
+ * (channels/matrix.ts). The address is kept as the test address (store.ts
+ * holdTestAddress) BEFORE the note goes, so its room is held like a user's.
+ * Without the saved addresses (the database does not answer, the key file
+ * is missing or another one) nothing is sent: a room opened then could be
+ * kept nowhere, and the bot would stay in it for good. Done within
+ * testNoteBudgetMs() of the tool's start, before morphit-ops stops it.
+ */
+async function sendMatrixTest(
+	rc: Config,
+	cfg: NotifyConfig,
+	address: string,
+	text: string
+): Promise<never> {
+	let store: OfflineNotifyStore;
+	try {
+		if (rc.dataDir === null) throw new Error('the relay has no state directory');
+		store = (await openSealedStore(createDatabase(rc), rc.dataDir)).store;
+		await store.holdTestAddress(address, new Date());
+	} catch (err) {
+		return out({ ok: false, error: 'no_store', reason: reason(err) });
+	}
+	try {
+		await sendMatrix(cfg.matrix!, cfg.policy, address, text, store.matrixRoomBook(), {
+			deadline: STARTED + testNoteBudgetMs()
+		});
+		return out({ ok: true });
+	} catch (err) {
+		return out(
+			err instanceof Error && err.name === 'TimeoutError'
+				? { ok: false, error: 'slow' }
+				: { ok: false, error: 'failed', reason: reason(err) }
+		);
+	}
+}
+
 async function main(): Promise<void> {
 	const [cmd, a1] = process.argv.slice(2);
 	if (cmd === 'new-session') {
@@ -252,19 +288,30 @@ async function main(): Promise<void> {
 	if (cmd === 'purge-channel') {
 		if (rc.dataDir === null) out({ ok: false, error: 'failed', reason: 'no state directory' });
 		const db = createDatabase(rc);
+		// Once set, the addresses ARE deleted: a later failure must say so.
+		let removed: number | null = null;
 		try {
 			const { store } = await openSealedStore(db, rc.dataDir);
-			const { removed } = await store.purgeChannel(channel);
+			removed = (await store.purgeChannel(channel)).removed;
 			// Matrix: the bot leaves every room now, while it can still sign in
 			// (after this the settings are gone). What does not answer now stays
 			// queued, and is left if Matrix is ever set up again.
-			// One room at a time, and none started after LEAVE_BUDGET_MS: the
-			// answer must reach morphit-ops before it gives up on this tool
-			// (the rows are deleted already; a late answer would read as
-			// "nothing was changed").
+			// One room at a time, none started after LEAVE_BUDGET_MS and every
+			// request ended by PURGE_DONE_MS after this tool started: the answer
+			// must reach morphit-ops before it gives up on this tool (the rows
+			// are deleted already).
 			const left =
 				channel === 'matrix' && cfg.matrix !== null
-					? (await drainLeavesWithin(store, cfg.matrix, net, LEAVE_BUDGET_MS)).left
+					? (
+							await drainLeavesWithin(
+								store,
+								cfg.matrix,
+								net,
+								Math.max(0, STARTED + LEAVE_BUDGET_MS - Date.now()),
+								Date.now,
+								STARTED + PURGE_DONE_MS
+							)
+						).left
 					: 0;
 			// Rooms the bot could not leave yet: they stay queued (morphit-ops keeps
 			// Matrix set up so the relay goes on trying).
@@ -280,7 +327,12 @@ async function main(): Promise<void> {
 					: 0;
 			out({ ok: true, removed, left, waiting });
 		} catch (err) {
-			out({ ok: false, error: 'failed', reason: reason(err) });
+			out({
+				ok: false,
+				error: 'failed',
+				reason: reason(err),
+				...(removed !== null ? { removed } : {})
+			});
 		} finally {
 			await db.close().catch(() => undefined);
 		}
@@ -359,27 +411,11 @@ async function main(): Promise<void> {
 			`This is a test from ${cfg.siteName}. Offline notifications are set up: ` +
 			`when someone writes to a user who chose this app, a short note like this one tells them, ` +
 			`with a link to ${cfg.linkOrigin}.`;
+		if (channel === 'matrix' && cfg.matrix !== null) await sendMatrixTest(rc, cfg, address!, text);
 		try {
-			const route = await dispatch(cfg, channel, address, null, {
-				subject: `Test from ${cfg.siteName}`,
-				text
-			});
-			// The test's Matrix room is not kept: the bot leaves and forgets it —
-			// once the operator has joined it (or after a while), so the note can
-			// still be read (an invitation from a room everyone left cannot be accepted).
-			if (route !== null && channel === 'matrix' && cfg.matrix !== null) {
-				out({
-					ok: true,
-					joined: await leaveTestRoom(cfg.matrix, net, route, address, {
-						deadline: STARTED + testNoteBudgetMs()
-					})
-				});
-			}
+			await dispatch(cfg, channel, address, { subject: `Test from ${cfg.siteName}`, text });
 			out({ ok: true });
 		} catch (err) {
-			// A room opened for the test whose message failed: not kept either.
-			if (err instanceof MatrixRoomLeftOpen && cfg.matrix !== null)
-				await leaveRoom(cfg.matrix, net, err.room).catch(() => undefined);
 			out({ ok: false, error: 'failed', reason: reason(err) });
 		}
 	}

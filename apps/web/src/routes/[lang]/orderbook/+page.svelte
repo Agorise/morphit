@@ -87,7 +87,7 @@
 	} from '@morphit/indexer-client';
 
 	import { hiddenAccounts, hideAccount, unhideAccount } from '$lib/utils/hiddenAccounts';
-	import { orderTitleParts } from '$lib/utils/orderTitle';
+	import { formatDisjunction, orderTitleParts } from '$lib/utils/orderTitle';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { recordOrderView } from '$lib/orders/views';
 	import { checkWaiverEligibility } from '$lib/orders/listingFee';
@@ -1038,13 +1038,30 @@
 		}, 250);
 	}
 
-	/** Filter-card collapse.  Collapsed on page load, except when a saved
-	 *  language filter is applied (a filter the user can't see would hide
-	 *  orders silently); the user controls it via the header toggle
-	 *  (clicking anywhere on the title row).  There is deliberately NO
-	 *  auto-collapse on filter changes — folding the card away
-	 *  mid-adjustment was disorienting. */
+	/** Filter-card collapse.  Collapsed on every page load; only the user
+	 *  opens it, via the header toggle (clicking anywhere on the title row).
+	 *  It used to open itself whenever the language filter it started with
+	 *  was not empty — but that filter comes from storage (the one left here,
+	 *  written back on every visit, or the languages chosen in Settings), so
+	 *  once it held a language the card was open on EVERY visit though the
+	 *  user never opened it (owner's report after v1.21.18). A saved language
+	 *  filter is named on the title row instead (`langFilterSummary`), so it
+	 *  never hides orders unseen.  There is deliberately NO auto-collapse on
+	 *  filter changes — folding the card away mid-adjustment was
+	 *  disorienting. */
 	let filtersExpanded = $state(false);
+	/** The language filter in force, by each language's own name — shown on
+	 *  the Filter card's title row, open or closed ('' when none). Joined the
+	 *  page language's way ("English or Español", "English、Español或Русский"):
+	 *  an order in ANY of them shows, so it is a disjunction. */
+	const langFilterSummary = $derived(
+		formatDisjunction(
+			[...new Set(langFilter)].map(
+				(c) => SUPPORTED_LOCALES.find((l) => l.code === c)?.nativeName ?? c
+			),
+			($page.data?.lang ?? DEFAULT_LOCALE) as string
+		)
+	);
 
 	// Re-fetch when any filter changes.
 	$effect(() => {
@@ -1159,7 +1176,6 @@
 		if (!langFilterSeeded) {
 			langFilter = resolveOrderbookLangFilter(null);
 			langFilterSeeded = true;
-			if (langFilter.length > 0) filtersExpanded = true;
 		}
 		fetchFirstPage();
 		// Catch-up banner: check sync state now, then poll every 30s while behind.
@@ -1360,8 +1376,17 @@
 				class="group -mx-2 flex w-full items-center justify-between gap-3 rounded-xl px-2 py-0.5 text-start transition focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
 				data-testid="filters-toggle"
 			>
-				<span class="font-display text-base font-bold">
-					{$_('orderbook.filters.heading')}
+				<span class="flex min-w-0 items-baseline gap-3">
+					<span class="font-display text-base font-bold">
+						{$_('orderbook.filters.heading')}
+					</span>
+					{#if langFilterSummary}
+						<span class="truncate text-xs text-ink-500" data-testid="filters-lang-summary">
+							{$_('orderbook.filters.language_in_force', {
+								values: { languages: langFilterSummary }
+							})}
+						</span>
+					{/if}
 				</span>
 				<span
 					class="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-ink-100 text-ink-600 transition group-hover:bg-emerald-50 group-hover:text-morphit-emerald dark:bg-ink-800 dark:text-ink-300 dark:group-hover:bg-ink-700"

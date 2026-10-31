@@ -102,6 +102,39 @@ describe.skipIf(!INTEGRATION_ENABLED)('direct order reads', () => {
 		expect((await get('/v1/orders/alice/no-such-order')).status).toBe(404);
 	});
 
+	it('an expired order carries every choice a re-list pre-fills: accepted cryptos, network, language', async () => {
+		await fx.db.query(`
+			INSERT INTO orders (account, permlink, side, asset, asset_network, fiat_currency, price_model,
+			                    payment_methods, accepted_assets, lang, status, created_at, updated_at, fee_status)
+			VALUES ('dora', 'order-barter0000a', 'sell', 'BARTER', NULL, 'USD', '{"kind":"fixed","price":1}'::jsonb,
+			        ARRAY['pay_btc','pay_xmr'], ARRAY['BTC','XMR'], 'es', 'expired', NOW() - interval '40 days',
+			        NOW() - interval '10 days', 'verified'),
+			       ('dora', 'order-usdt00000a', 'sell', 'USDT', 'trc20', 'USD', '{"kind":"fixed","price":1}'::jsonb,
+			        ARRAY['cash'], NULL, NULL, 'expired', NOW() - interval '40 days',
+			        NOW() - interval '11 days', 'verified')`);
+		const list = await get('/v1/orders/dora');
+		const one = await get('/v1/orders/dora/order-barter0000a');
+		const usdt = await get('/v1/orders/dora/order-usdt00000a');
+		for (const barter of [
+			(list.body.items as Record<string, unknown>[]).find(
+				(o) => o.permlink === 'order-barter0000a'
+			),
+			one.body.item as Record<string, unknown>
+		]) {
+			expect(barter).toMatchObject({
+				status: 'expired',
+				accepted_assets: ['BTC', 'XMR'],
+				asset_network: null,
+				lang: 'es'
+			});
+		}
+		expect(usdt.body.item).toMatchObject({
+			asset_network: 'trc20',
+			lang: null,
+			accepted_assets: null
+		});
+	});
+
 	it('an owner this instance blocked is hidden here too', async () => {
 		await fx.db.query(
 			`INSERT INTO operator_blocks (operator, blocked, state, since_block_num, since_trx_id,

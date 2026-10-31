@@ -52,6 +52,9 @@ interface OrderRow {
 	permlink: string;
 	side: 'buy' | 'sell';
 	asset: AssetTicker;
+	/** the traded asset's network — multi-network assets (USDT/USDC/DAI)
+	 *  only; null for every other asset. */
+	asset_network: string | null;
 	fiat_currency: string;
 	amount_min: string | null;
 	amount_max: string | null;
@@ -63,6 +66,8 @@ interface OrderRow {
 	/** v1.9.0 — a BARTER order's inline goods label; null for crypto orders. */
 	specific_barter_title: string | null;
 	terms: string | null;
+	/** v1.15.0 — the language the order is written in; null when untagged. */
+	lang: string | null;
 	status: 'live' | 'cancelled' | 'expired' | 'completed';
 	fee_status:
 		| 'unverified'
@@ -139,6 +144,10 @@ function rowToWire(r: OrderRow) {
 		permlink: r.permlink,
 		side: r.side,
 		asset: r.asset,
+		// The network and language the owner picked: a re-list and an edit
+		// pre-fill them from here (they were left out, so a USDT/USDC/DAI
+		// re-list or edit came up with an empty network picker).
+		asset_network: r.asset_network ?? null,
 		fiat_currency: r.fiat_currency,
 		amount_min: r.amount_min === null ? null : Number(r.amount_min),
 		amount_max: r.amount_max === null ? null : Number(r.amount_max),
@@ -148,6 +157,7 @@ function rowToWire(r: OrderRow) {
 		accepted_assets: r.accepted_assets ?? null,
 		specific_barter_title: r.specific_barter_title ?? null,
 		terms: r.terms,
+		lang: r.lang ?? null,
 		status: r.status,
 		fee_status: r.fee_status,
 		fee_method: r.fee_method,
@@ -191,10 +201,10 @@ function rowToWire(r: OrderRow) {
 }
 
 /** The order-card SELECT … FROM … JOINs every endpoint here shares. */
-const ORDER_SELECT = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
+const ORDER_SELECT = `SELECT o.account, o.permlink, o.side, o.asset, o.asset_network, o.fiat_currency,
 			        o.amount_min::text, o.amount_max::text, o.price_model,
 			        o.location_region, o.payment_methods, o.accepted_assets,
-			        o.specific_barter_title, o.terms,
+			        o.specific_barter_title, o.terms, o.lang,
 			        o.status, o.fee_status, o.fee_method,
 			        o.completed_counterparty,
 			        -- v1.5.5: the 🌱 new-trader chip now keys off COMPLETED

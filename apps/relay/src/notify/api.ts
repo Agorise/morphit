@@ -40,12 +40,11 @@ import { CHANNELS, isChannel, normalizeAddress, type AddressChannel } from './ad
 import type { NotifyConfig } from './config.ts';
 import { offeredChannels } from './config.ts';
 import { dispatch, errorClass, withTimeout } from './dispatch.ts';
-import { MatrixRoomLeftOpen } from './channels/matrix.ts';
 import { drainLeaves } from './leaves.ts';
 import { notifyPayload, type NotifySigVerifier, type NotifyAction } from './sig.ts';
 
 export { notifyPayload };
-import { LINK_NETS, newCode, type LinkNet, type OfflineNotifyStore } from './store.ts';
+import { isLockBusy, LINK_NETS, newCode, type LinkNet, type OfflineNotifyStore } from './store.ts';
 import { render } from './text.ts';
 import type { Presence } from './worker.ts';
 
@@ -114,7 +113,7 @@ const bodies = {
 export class OfflineNotifyEndpoints {
 	constructor(
 		private readonly cfg: NotifyConfig,
-		private readonly store: OfflineNotifyStore | null,
+		private store: OfflineNotifyStore | null,
 		private readonly sig: NotifySigVerifier,
 		private readonly presence: Presence,
 		private readonly limits: NotifyLimits,
@@ -144,6 +143,11 @@ export class OfflineNotifyEndpoints {
 	private readonly codeAnswerMs: number;
 	private readonly codeSendBudgetMs: number;
 	private readonly waitUntil: (at: number) => Promise<void>;
+
+	/** The store, once it opens after the relay started (notify/opening.ts). */
+	useStore(store: OfflineNotifyStore): void {
+		this.store = store;
+	}
 
 	register(app: Hono): void {
 		app.get('/v1/notify/channels', (c) => this.channels(c));
@@ -265,6 +269,12 @@ export class OfflineNotifyEndpoints {
 				}
 			}
 		} catch (err) {
+			// The database was too busy to answer in time (store.ts LOCK_WAIT_MS):
+			// nothing changed — she can simply try again.
+			if (isLockBusy(err)) {
+				log.warn('offline_notify_busy', { action });
+				return c.json({ status: 'busy' }, 503);
+			}
 			log.error('offline_notify_request_failed', { action, err: errorClass(err) });
 			return c.json({ status: 'internal' }, 500);
 		}
@@ -311,10 +321,16 @@ export class OfflineNotifyEndpoints {
 			await this.waitUntil(answerAt);
 			return c.json({ status: 'code_sent' });
 		}
-		const raw = dispatch(this.cfg, channel, address, null, {
-			subject: render(locale, 'code_subject', { site: this.cfg.siteName, code }),
-			text: render(locale, 'code', { site: this.cfg.siteName, code })
-		});
+		const raw = dispatch(
+			this.cfg,
+			channel,
+			address,
+			{
+				subject: render(locale, 'code_subject', { site: this.cfg.siteName, code }),
+				text: render(locale, 'code', { site: this.cfg.siteName, code })
+			},
+			channel === 'matrix' ? { matrixRooms: store.matrixRoomBook() } : {}
+		);
 		const done = this.afterCodeSend(b.account, channel, begun.codeMac, raw);
 		let timer: NodeJS.Timeout | undefined;
 		const first = await Promise.race([
@@ -332,41 +348,29 @@ export class OfflineNotifyEndpoints {
 
 	/**
 	 * What happens once a code send settles — in the request, or after it was
-	 * answered. Sent: its Matrix room is kept, on the row still waiting for
-	 * THIS code only (else the bot leaves it). Failed: the address she had
-	 * before keeps working (a first address goes), and any room opened for it
-	 * is left. Never throws: true when the code went out.
+	 * answered. Failed (or past its budget): the address she had before keeps
+	 * working (a first address goes). Matrix rooms need nothing here: the room
+	 * is the address's (store.ts keeps it, and lets it go once no row holds
+	 * the address). Never throws: true when the code went out.
 	 */
 	private async afterCodeSend(
 		account: string,
 		channel: AddressChannel,
 		codeMac: Buffer,
-		raw: Promise<string | null>
+		raw: Promise<void>
 	): Promise<boolean> {
 		const store = this.store!;
 		try {
-			const route = await withTimeout(raw, this.codeSendBudgetMs, 'code delivery');
-			if (route !== null) await store.setRoute(account, channel, route, { codeMac });
+			await withTimeout(raw, this.codeSendBudgetMs, 'code delivery');
 			this.drainLeaves();
 			return true;
 		} catch (err) {
 			log.warn('offline_notify_code_failed', { channel, err: errorClass(err) });
+			// Past its budget it may still finish; whatever it does then is
+			// nobody's to wait for.
+			raw.catch(() => undefined);
 			try {
 				await store.restoreOrDrop(account, channel, codeMac);
-				if (err instanceof MatrixRoomLeftOpen) await store.queueLeave(account, err.room);
-				// Past its budget it may still finish: a room it opens then is
-				// left too (no row waits for it any more).
-				else if (err instanceof Error && err.name === 'TimeoutError')
-					void raw
-						.then(
-							(late) => (late !== null ? store.queueLeave(account, late) : undefined),
-							(e: unknown) =>
-								e instanceof MatrixRoomLeftOpen ? store.queueLeave(account, e.room) : undefined
-						)
-						.then(() => this.drainLeaves())
-						.catch((e: unknown) =>
-							log.warn('offline_notify_code_cleanup_failed', { channel, err: errorClass(e) })
-						);
 			} catch (e) {
 				log.warn('offline_notify_code_cleanup_failed', { channel, err: errorClass(e) });
 			}

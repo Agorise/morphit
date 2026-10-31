@@ -41,6 +41,7 @@
 			"check_ok": "{matched} fichiers signés sur {total} correspondent à la version {version}",
 			"check_mismatch": "Seuls {matched} fichiers signés sur {total} correspondent à la version {version} — ce site sert des fichiers modifiés",
 			"check_not_checked": "Non vérifié : ce site exécute la version {running}, la dernière version signée est la {version}",
+			"check_waiting_worker": "Pas encore vérifié : cette page passe encore par le service worker de la version précédente. Elle est vérifiée dès que la nouvelle version prend le relais (« Charger maintenant », ou quand tous les onglets de ce site sont fermés).",
 			"check_no_release": "Non vérifié : la version signée n'a pas pu être lue",
 			"check_incomplete": "Inachevé : un fichier signé n'a pas pu être lu depuis ce site",
 			"check_unconfirmed": "Non vérifié : la dernière version signée n'a pas pu être confirmée (la seule lue est la {version}, plus ancienne que la {running} de ce site). Nouvelle vérification dans l'heure."
@@ -2955,6 +2956,7 @@
 			"side_help": "Astuce : si vous voulez acheter de la crypto, cherchez des annonces voulant vendre. Si vous voulez vendre, cherchez des annonces voulant acheter.",
 			"order_details_label": "Conditions / Détails / Notes de l’ordre",
 			"language_label": "Langue",
+			"language_in_force": "Langue : {languages}",
 			"language_hint": "N’afficher que les ordres rédigés dans ces langues. Laissez vide pour tout voir. Les ordres plus anciens sans langue n’apparaissent que si le champ est vide.",
 			"language_placeholder": "Rechercher des langues…",
 			"language_remove": "Retirer",
@@ -4768,7 +4770,7 @@
 			"sending": "Envoi…",
 			"code_sent": {
 				"email": "Nous avons envoyé un code à l'adresse saisie. Regardez votre boîte de réception (et vos spams).",
-				"matrix": "Nous avons envoyé un code depuis {bot}. Acceptez son invitation dans votre application Matrix pour le lire.",
+				"matrix": "Nous avons envoyé un code depuis {bot}. Vous le trouverez dans votre application Matrix, dans votre conversation avec {bot}. Si vous voyez une invitation de sa part, acceptez-la pour lire le code.",
 				"xmpp": "Nous avons envoyé un code depuis {bot}. Vous le trouverez dans votre application XMPP.",
 				"session": "Nous avons envoyé un code depuis {site}. Dans Session, il arrive dans les demandes de message : acceptez la demande pour lire le code."
 			},
@@ -4798,6 +4800,7 @@
 				"none": "Aucun code en attente. Demandez-en un nouveau.",
 				"rate_limited": "Trop d'essais. Patientez quelques minutes.",
 				"unavailable": "Les notifications hors ligne ne sont pas disponibles sur ce site pour le moment.",
+				"busy": "Le site est occupé pour le moment. Réessayez dans un instant.",
 				"failed": "Une erreur s'est produite. Réessayez.",
 				"locked_session": "Déverrouillez d'abord votre compte."
 			}

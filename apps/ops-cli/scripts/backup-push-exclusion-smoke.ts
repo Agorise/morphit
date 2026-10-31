@@ -118,7 +118,7 @@ try {
 		!dump.includes('device-SECRET-1')
 	);
 	check('no pending push row', !dump.includes('PENDING-NOTE'));
-	check('the schema has the seven offline-notice tables', OFFLINE.length === 7, OFFLINE.join(','));
+	check('the schema has the eight offline-notice tables', OFFLINE.length === 8, OFFLINE.join(','));
 	for (const t of OFFLINE) {
 		check(
 			`${t}: in the dump with no row`,

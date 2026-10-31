@@ -41,6 +41,7 @@
 			"check_ok": "{matched} de {total} archivos firmados coinciden con la versión {version}",
 			"check_mismatch": "Solo {matched} de {total} archivos firmados coinciden con la versión {version}: este sitio sirve archivos modificados",
 			"check_not_checked": "Sin comprobar: este sitio ejecuta la versión {running} y la última versión firmada es la {version}",
+			"check_waiting_worker": "Aún sin comprobar: esta página todavía funciona con el service worker de la versión anterior. Se comprueba en cuanto la nueva versión toma el relevo («Cargar ahora», o al cerrar todas las pestañas de este sitio).",
 			"check_no_release": "Sin comprobar: no se pudo leer la versión firmada",
 			"check_incomplete": "Sin terminar: no se pudo leer de este sitio uno de los archivos firmados",
 			"check_unconfirmed": "Sin comprobar: no se pudo confirmar la última versión firmada (la única leída es la {version}, anterior a la {running} de este sitio). Se vuelve a comprobar en menos de una hora."
@@ -2955,6 +2956,7 @@
 			"side_help": "Consejo: si quieres comprar cripto, busca publicaciones que quieren vender. Si quieres vender cripto, busca publicaciones que quieren comprar.",
 			"order_details_label": "Términos / Detalles / Notas del pedido",
 			"language_label": "Idioma",
+			"language_in_force": "Idioma: {languages}",
 			"language_hint": "Mostrar solo pedidos escritos en estos idiomas. Déjalo vacío para ver todos. Los pedidos antiguos sin idioma solo aparecen si lo dejas vacío.",
 			"language_placeholder": "Buscar idiomas…",
 			"language_remove": "Quitar",
@@ -4768,7 +4770,7 @@
 			"sending": "Enviando…",
 			"code_sent": {
 				"email": "Te enviamos un código a la dirección que escribiste. Revisa tu bandeja de entrada (y la carpeta de spam).",
-				"matrix": "Te enviamos un código desde {bot}. Acepta su invitación en tu app de Matrix para leerlo.",
+				"matrix": "Te enviamos un código desde {bot}. Lo encontrarás en tu app de Matrix, en tu chat con {bot}. Si ves una invitación suya, acéptala para leer el código.",
 				"xmpp": "Te enviamos un código desde {bot}. Lo encontrarás en tu app de XMPP.",
 				"session": "Te enviamos un código desde {site}. En Session llega a Solicitudes de mensaje: acepta la solicitud para leer el código."
 			},
@@ -4798,6 +4800,7 @@
 				"none": "No hay ningún código pendiente. Envía uno nuevo.",
 				"rate_limited": "Demasiados intentos. Espera unos minutos.",
 				"unavailable": "Los avisos sin conexión no están disponibles en este sitio ahora mismo.",
+				"busy": "El sitio está ocupado ahora mismo. Inténtalo de nuevo en un momento.",
 				"failed": "Algo salió mal. Inténtalo de nuevo.",
 				"locked_session": "Primero desbloquea tu cuenta."
 			}

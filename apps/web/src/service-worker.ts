@@ -76,8 +76,10 @@ import { build, files, prerendered, version } from '$service-worker';
 import { sanitizeClickPath } from '$lib/notifications/sanitizeClickPath';
 import {
 	answerBrandRequest,
+	answerServerCopyRequest,
 	isDynamicDataPath,
-	isBrandOverridablePath
+	isBrandOverridablePath,
+	wantsServerCopy
 } from '$lib/net/dynamicPaths';
 import { DEFAULT_BRAND_NAME, sanitizeBrandName } from '$lib/brand/brandName';
 import { chatThreadFromClickPath, chatPeerMatches } from '$lib/notifications/chatThread';
@@ -276,6 +278,17 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 					fetch: (r, init) => fetch(r, init),
 					timeoutMs: BRAND_REFRESH_TIMEOUT_MS
 				});
+			}
+
+			// ── The page asked for the server's copy → NETWORK-FIRST ──────
+			// A fetch() with cache 'no-cache' / 'reload' / 'no-store' (the
+			// build-integrity check hashing index.html and this worker's own
+			// file): a stored copy may be another release's, so it is used
+			// only offline (vigilante.trading, 2026-10-30). Hashed files keep
+			// cache-first: their name changes with their bytes, so a stored
+			// copy is always right (and a reload re-downloads nothing).
+			if (wantsServerCopy(req) && !url.pathname.startsWith('/_app/immutable/')) {
+				return answerServerCopyRequest(req, { cache, fetch: (r) => fetch(r) });
 			}
 
 			// ── Everything else (hashed JS/CSS, /static/*) → CACHE-FIRST ──

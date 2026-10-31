@@ -291,7 +291,7 @@ try {
 		await store.linkTelegram(c2!, '1002', at(4000), at(5000));
 		const row = (
 			await pool.query(
-				`SELECT prev_address_sealed, prev_route_sealed, prev_verified_at, prev_link_net
+				`SELECT prev_address_sealed, prev_verified_at, prev_link_net
 				   FROM offline_notify_channels WHERE account = 'tom' AND channel = 'telegram'`
 			)
 		).rows[0];
@@ -306,76 +306,59 @@ try {
 		);
 	}
 
-	// ── The same room saved again is still her room ──────────────────────
+	// ── Her address set again (sealed anew): its room stays ──────────────
 	{
 		await pool.query(`DELETE FROM offline_notify_leave`);
-		const sealedAddr = store.vault.seal('@vera:hs.org', 'vera', 'matrix', 'address');
-		await pool.query(
-			`INSERT INTO offline_notify_channels (account, channel, address_sealed, route_sealed, verified_at, locale)
-			 VALUES ('vera', 'matrix', $1, $2, now(), 'en')`,
-			[sealedAddr, store.vault.seal('!vera:hs', 'vera', 'matrix', 'route')]
+		const b = await store.beginAddress(
+			'vera',
+			'matrix',
+			'@vera:hs.org',
+			'en',
+			'111111',
+			'clearnet',
+			t0
 		);
-		const kept = await store.setRoute('vera', 'matrix', '!vera:hs', {
-			addressSealed: sealedAddr,
-			prev: false
-		});
+		if (!b.ok) throw new Error('begin');
+		await store.verifyCode('vera', 'matrix', '111111', t0);
+		const book = store.matrixRoomBook();
+		await book.claim('@vera:hs.org', null, '!vera:hs');
+		await store.beginAddress('vera', 'matrix', '@vera:hs.org', 'en', '222222', 'clearnet', t0);
+		await store.verifyCode('vera', 'matrix', '222222', t0);
 		const queued = await count(`SELECT count(*) AS n FROM offline_notify_leave`);
 		check(
-			'her room saved again (sealed anew) is not queued to be left',
-			kept && queued === 0 && (await store.roomHeld('vera', '!vera:hs')),
-			`kept ${kept} queued ${queued}`
+			'her address set again (sealed anew) keeps its room: nothing queued to be left',
+			queued === 0 && (await book.get('@vera:hs.org'))?.room === '!vera:hs',
+			`queued ${queued}`
 		);
 	}
 
-	// ── A notice's room goes only to the row that still holds its address ─
+	// ── During a change the address kept aside keeps its room ───────────
 	{
 		await pool.query(`DELETE FROM offline_notify_leave`);
-		const oldSealed = store.vault.seal('@wes-old:hs.org', 'wes', 'matrix', 'address');
-		const newSealed = store.vault.seal('@wes-new:hs.org', 'wes', 'matrix', 'address');
-		// The worker read @wes-old; meanwhile she confirmed @wes-new.
-		await pool.query(
-			`INSERT INTO offline_notify_channels (account, channel, address_sealed, verified_at, locale)
-			 VALUES ('wes', 'matrix', $1, now(), 'en')`,
-			[newSealed]
+		const book = store.matrixRoomBook();
+		const b = await store.beginAddress(
+			'wes',
+			'matrix',
+			'@wes-old:hs.org',
+			'en',
+			'333333',
+			'clearnet',
+			t0
 		);
-		const keptForOld = await store.setRoute('wes', 'matrix', '!for-old:hs', {
-			addressSealed: oldSealed,
-			prev: false
-		});
-		// During a change, a room for the address she had goes to that one.
-		await pool.query(
-			`UPDATE offline_notify_channels SET prev_address_sealed = address_sealed, prev_verified_at = verified_at,
-			        address_sealed = $1, verified_at = NULL WHERE account = 'wes'`,
-			[oldSealed]
-		);
-		// (not for an address she no longer has kept aside)
-		const keptWrongPrev = await store.setRoute('wes', 'matrix', '!wrong-prev:hs', {
-			addressSealed: oldSealed,
-			prev: true
-		});
-		const keptPrev = await store.setRoute('wes', 'matrix', '!for-prev:hs', {
-			addressSealed: newSealed,
-			prev: true
-		});
-		const ch = (await store.verifiedChannels('wes')).channels;
+		if (!b.ok) throw new Error('begin');
+		await store.verifyCode('wes', 'matrix', '333333', t0);
+		await book.claim('@wes-old:hs.org', null, '!wes-old:hs');
+		await store.beginAddress('wes', 'matrix', '@wes-new:hs.org', 'en', '444444', 'clearnet', t0);
+		const whileChanging = await count(`SELECT count(*) AS n FROM offline_notify_leave`);
+		await book.claim('@wes-new:hs.org', null, '!wes-new:hs');
+		await store.verifyCode('wes', 'matrix', '444444', t0);
+		const after = await count(`SELECT count(*) AS n FROM offline_notify_leave`);
 		check(
-			"a notice's room is kept only for the row that still holds its address (the one kept aside during a change too)",
-			!keptForOld &&
-				!(await store.roomHeld('wes', '!for-old:hs')) &&
-				(await count(`SELECT count(*) AS n FROM offline_notify_leave WHERE account = 'wes'`)) ===
-					2 &&
-				!keptWrongPrev &&
-				keptPrev &&
-				ch.length === 1 &&
-				ch[0]!.prev &&
-				ch[0]!.route === '!for-prev:hs',
-			JSON.stringify({
-				keptForOld,
-				keptWrongPrev,
-				keptPrev,
-				queued: await count(`SELECT count(*) AS n FROM offline_notify_leave WHERE account = 'wes'`),
-				ch: ch.map((c) => [c.address, c.route, c.prev])
-			})
+			'during a change the address kept aside keeps its room; confirming the new one lets it go',
+			whileChanging === 0 &&
+				after === 1 &&
+				(await book.get('@wes-new:hs.org'))?.room === '!wes-new:hs',
+			`while changing ${whileChanging}, after ${after}`
 		);
 	}
 } catch (err) {

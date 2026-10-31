@@ -41,6 +41,7 @@
 			"check_ok": "{matched} z {total} podpisanych plików zgadza się z wydaniem {version}",
 			"check_mismatch": "Tylko {matched} z {total} podpisanych plików zgadza się z wydaniem {version} — ta strona serwuje zmienione pliki",
 			"check_not_checked": "Nie sprawdzono: ta strona działa w wersji {running}, najnowsze podpisane wydanie to {version}",
+			"check_waiting_worker": "Jeszcze nie sprawdzono: ta strona nadal działa przez service worker poprzedniej wersji. Zostanie sprawdzona, gdy przejmie ją nowa wersja („Załaduj teraz” albo po zamknięciu wszystkich kart tej strony).",
 			"check_no_release": "Nie sprawdzono: nie udało się odczytać podpisanego wydania",
 			"check_incomplete": "Nie ukończono: nie udało się odczytać z tej strony jednego z podpisanych plików",
 			"check_unconfirmed": "Nie sprawdzono: nie udało się potwierdzić najnowszego podpisanego wydania (odczytano tylko wersję {version}, starszą niż {running} tej strony). Ponowne sprawdzenie w ciągu godziny."
@@ -2955,6 +2956,7 @@
 			"side_help": "Wskazówka: jeśli chcesz kupić kryptowaluty, szukaj ogłoszeń chcących sprzedać. Jeśli chcesz sprzedać, szukaj ogłoszeń chcących kupić.",
 			"order_details_label": "Warunki / Szczegóły / Notatki zlecenia",
 			"language_label": "Język",
+			"language_in_force": "Język: {languages}",
 			"language_hint": "Pokazuj tylko oferty napisane w tych językach. Zostaw puste, aby widzieć wszystkie. Starsze oferty bez języka pojawiają się tylko, gdy pole jest puste.",
 			"language_placeholder": "Szukaj języków…",
 			"language_remove": "Usuń",
@@ -4768,7 +4770,7 @@
 			"sending": "Wysyłanie…",
 			"code_sent": {
 				"email": "Wysłaliśmy kod na wpisany adres. Sprawdź skrzynkę odbiorczą (i folder spam).",
-				"matrix": "Wysłaliśmy kod od {bot}. Przyjmij zaproszenie w swojej aplikacji Matrix, aby go przeczytać.",
+				"matrix": "Wysłaliśmy kod od {bot}. Znajdziesz go w swojej aplikacji Matrix, w czacie z {bot}. Jeśli widzisz od niego zaproszenie, przyjmij je, aby przeczytać kod.",
 				"xmpp": "Wysłaliśmy kod od {bot}. Znajdziesz go w swojej aplikacji XMPP.",
 				"session": "Wysłaliśmy kod od {site}. W Session trafia do Próśb o wiadomość: zaakceptuj prośbę, aby przeczytać kod."
 			},
@@ -4798,6 +4800,7 @@
 				"none": "Nie czeka żaden kod. Poproś o nowy.",
 				"rate_limited": "Za dużo prób. Poczekaj kilka minut.",
 				"unavailable": "Powiadomienia offline nie są teraz dostępne na tej stronie.",
+				"busy": "Strona jest teraz zajęta. Spróbuj ponownie za chwilę.",
 				"failed": "Coś poszło nie tak. Spróbuj ponownie.",
 				"locked_session": "Najpierw odblokuj swoje konto."
 			}

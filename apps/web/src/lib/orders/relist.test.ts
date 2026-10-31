@@ -93,6 +93,22 @@ describe('buildRelistPrefill', () => {
 		expect(p.paymentMethods).not.toBe(src);
 	});
 
+	it('carries a barter order’s accepted cryptos (step 3) in a NEW array', () => {
+		const src = ['BTC', 'XMR'];
+		const p = buildRelistPrefill(
+			mkOrder({ asset: 'BARTER', payment_methods: ['pay_btc', 'pay_xmr'], accepted_assets: src }),
+			'en'
+		);
+		expect(p.acceptedAssets).toEqual(['BTC', 'XMR']);
+		expect(p.acceptedAssets).not.toBe(src);
+		expect(buildRelistPrefill(mkOrder({ accepted_assets: null }), 'en').acceptedAssets).toEqual([]);
+	});
+
+	it('carries the order’s language, or null for an untagged order', () => {
+		expect(buildRelistPrefill(mkOrder({ lang: 'pl' }), 'en').postLang).toBe('pl');
+		expect(buildRelistPrefill(mkOrder({}), 'en').postLang).toBeNull();
+	});
+
 	it('exposes the /post prefill key', () => {
 		expect(RELIST_PREFILL_KEY).toBe('morphit.post.prefill');
 	});

@@ -11,7 +11,7 @@
 import type { Channel } from './addresses.ts';
 import type { NotifyConfig } from './config.ts';
 import { sendMail } from './channels/smtp.ts';
-import { sendMatrix } from './channels/matrix.ts';
+import { sendMatrix, type MatrixCtx, type MatrixRoomBook } from './channels/matrix.ts';
 import { sendXmpp } from './channels/xmpp.ts';
 import { sendTelegram } from './channels/telegram.ts';
 import { sendSession } from './channels/session.ts';
@@ -28,37 +28,45 @@ export function errorClass(err: unknown): string {
 	return typeof err;
 }
 
-/**
- * Send. Returns the route to keep for next time (Matrix: the room), or null.
- * Throws when the channel is not offered or the send failed.
- */
+/** What a Matrix send needs besides the settings. */
+export interface MatrixSendOpts {
+	/** Where each address's one room is kept (store.matrixRoomBook()). */
+	readonly matrixRooms?: MatrixRoomBook;
+	/** The time limits of the send (default: each request 30 s). */
+	readonly matrixCtx?: MatrixCtx;
+}
+
+/** Send. Throws when the channel is not offered or the send failed. */
 export async function dispatch(
 	cfg: NotifyConfig,
 	channel: Channel,
 	address: string,
-	route: string | null,
-	msg: Outgoing
-): Promise<string | null> {
+	msg: Outgoing,
+	opts: MatrixSendOpts = {}
+): Promise<void> {
 	switch (channel) {
 		case 'email':
 			if (!cfg.email) throw new Error('email not offered');
 			await sendMail(cfg.email, cfg.siteName, address, msg.subject, msg.text, cfg.policy);
-			return null;
+			return;
 		case 'matrix':
 			if (!cfg.matrix) throw new Error('matrix not offered');
-			return sendMatrix(cfg.matrix, cfg.policy, address, route, msg.text);
+			// No room is ever opened without the database to keep it in.
+			if (!opts.matrixRooms) throw new Error('matrix needs the store');
+			await sendMatrix(cfg.matrix, cfg.policy, address, msg.text, opts.matrixRooms, opts.matrixCtx);
+			return;
 		case 'xmpp':
 			if (!cfg.xmpp) throw new Error('xmpp not offered');
 			await sendXmpp(cfg.xmpp, cfg.policy, address, msg.text);
-			return null;
+			return;
 		case 'telegram':
 			if (!cfg.telegram) throw new Error('telegram not offered');
 			await sendTelegram(cfg.telegram, cfg.policy, address, msg.text);
-			return null;
+			return;
 		case 'session':
 			if (!cfg.session) throw new Error('session not offered');
 			await sendSession(cfg.session, cfg.siteName, cfg.policy, address, msg.text);
-			return null;
+			return;
 	}
 }
 

@@ -1,17 +1,15 @@
 /**
- * Offline notices: a notice send that outlives its budget, or opens a Matrix
- * room and then fails.
+ * Offline notices: a notice send that outlives its budget, or fails.
  *
  *   - it arrives after all: no second notice (its link stays, nothing put
- *     back), and the room it opened is offered to her row (kept only if the
- *     row still holds that address);
+ *     back);
  *   - it fails after all: the link goes and the notice is tried again;
- *   - a room opened for a send that then failed is left.
+ *   - a send that fails at once: tried again. (Which Matrix room is hers, and
+ *     which rooms are left, is the store's: channels/matrix.ts, store.ts.)
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { NotifyConfig } from '../src/notify/config.ts';
 import type { DueNotice, OfflineNotifyStore } from '../src/notify/store.ts';
-import { MatrixRoomLeftOpen } from '../src/notify/channels/matrix.ts';
 
 vi.mock('../src/notify/dispatch.ts', async (orig) => {
 	const real = await orig<typeof import('../src/notify/dispatch.ts')>();
@@ -26,7 +24,7 @@ vi.mock('../src/notify/dispatch.ts', async (orig) => {
 				return new Promise((_r, j) =>
 					setTimeout(() => j(new Error('gone')), SEND_BUDGET_MS + 1000)
 				);
-			return Promise.reject(new MatrixRoomLeftOpen('!orphan:hs', new Error('M_FORBIDDEN')));
+			return Promise.reject(new Error('M_FORBIDDEN'));
 		}
 	};
 });
@@ -41,12 +39,9 @@ const notice: DueNotice = {
 	eventAt: new Date('2026-10-15T12:00:00Z'),
 	attempts: 0
 };
-const SEALED = Buffer.from('sealed-address');
 
 function harness(address: string) {
 	const calls = {
-		setRoute: [] as unknown[][],
-		leave: [] as unknown[][],
 		dropLink: 0,
 		requeue: 0
 	};
@@ -65,21 +60,13 @@ function harness(address: string) {
 				{
 					channel: 'matrix',
 					address,
-					route: null,
 					linkNet: 'clearnet',
-					addressSealed: SEALED,
 					prev: false
 				}
 			],
 			locale: 'en'
 		}),
-		setRoute: async (...a: unknown[]) => {
-			calls.setRoute.push(a);
-			return true;
-		},
-		queueLeave: async (...a: unknown[]) => {
-			calls.leave.push(a);
-		},
+		matrixRoomBook: () => ({}),
 		dropLink: async () => {
 			calls.dropLink++;
 		},
@@ -107,7 +94,7 @@ afterEach(() => vi.useRealTimers());
 describe('offline notices: a send past its budget', () => {
 	it('(the budget these sends outlive)', () => expect(SEND_BUDGET_MS).toBe(120_000));
 
-	it('that arrives after all: no second notice, and its room goes to her row', async () => {
+	it('that arrives after all: no second notice', async () => {
 		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 		const { w, calls } = harness('@late-ok:hs');
 		const verdict = w.handle(notice, now);
@@ -116,9 +103,6 @@ describe('offline notices: a send past its budget', () => {
 		await vi.advanceTimersByTimeAsync(2000);
 		expect(calls.dropLink).toBe(0);
 		expect(calls.requeue).toBe(0);
-		expect(calls.setRoute).toEqual([
-			['alice', 'matrix', '!late:hs', { addressSealed: SEALED, prev: false }]
-		]);
 	});
 
 	it('that fails after all: the link goes and it is tried again', async () => {
@@ -134,11 +118,10 @@ describe('offline notices: a send past its budget', () => {
 	});
 });
 
-describe('offline notices: a room opened for a send that failed', () => {
-	it('is left', async () => {
+describe('offline notices: a send that fails at once', () => {
+	it('is tried again, its link gone', async () => {
 		const { w, calls } = harness('@fails:hs');
 		expect(await w.handle(notice, now)).toBe('retry');
-		expect(calls.leave).toEqual([['alice', '!orphan:hs']]);
 		expect(calls.dropLink).toBe(1);
 	});
 });

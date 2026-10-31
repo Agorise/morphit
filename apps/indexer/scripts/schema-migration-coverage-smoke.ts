@@ -102,7 +102,10 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // proven first-buy waiver trade) + the feedback-status index on ops, in BOTH
 // schema.sql and MIGRATIONS[] — checked; emptying the table on a re-run is a
 // MIGRATIONS[70] data step only.
-const SCHEMA_HEAD_VERSION = 70;
+// Next release: 70 → 71. v71 = offline_notify_matrix_rooms (one Matrix room per
+// address) + offline_notify_leave.address_mac, in BOTH schema.sql (banner at the
+// end) and MIGRATIONS[] — checked.
+const SCHEMA_HEAD_VERSION = 71;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  bumped 27 → 35 when
@@ -121,7 +124,8 @@ const SCHEMA_HEAD_VERSION = 70;
 // v1.21.8: 67 → 68, in lockstep with SCHEMA_HEAD_VERSION above.
 // Next release: 68 → 69, in lockstep with SCHEMA_HEAD_VERSION above.
 // Next release: 69 → 70, in lockstep with SCHEMA_HEAD_VERSION above.
-const MIGRATIONS_COVERAGE_HIGH = 70;
+// Next release: 70 → 71, in lockstep with SCHEMA_HEAD_VERSION above.
+const MIGRATIONS_COVERAGE_HIGH = 71;
 
 interface ScenarioResult {
 	readonly name: string;

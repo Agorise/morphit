@@ -25,6 +25,10 @@
  *   7. Removing a Matrix address makes the bot leave and forget its room;
  *      "Delete all" leaves nothing of hers but today's code count; the
  *      operator turning a channel off deletes every address for it.
+ *   7d. Matrix: ONE room per person — the operator's test note, his codes
+ *      (set up again, too) and every notice come in the same room, which the
+ *      bot never leaves; another account typing his address and never
+ *      confirming it does not take the room from him.
  *   8. A key file that is missing, or another one, is refused — the rows are
  *      kept, nothing is sent, no new key is made.
  */
@@ -47,9 +51,10 @@ import {
 	type NotifyAction
 } from '../src/notify/sig.ts';
 import { OfflineNotifyEndpoints } from '../src/notify/api.ts';
+import { dispatch } from '../src/notify/dispatch.ts';
 import { OfflineNotifyWorker, Presence } from '../src/notify/worker.ts';
 import { notifyConfigFromEnv, type NotifyConfig } from '../src/notify/config.ts';
-import { fakeHttp, fakeSmtp, TEST_CERT } from '../test/notifyFakes.ts';
+import { fakeHomeserver, fakeHttp, fakeSmtp, TEST_CERT } from '../test/notifyFakes.ts';
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) {
@@ -131,7 +136,9 @@ for (const a of [
 	'chloe',
 	'max',
 	'spammer',
-	'rory'
+	'rory',
+	'site-owner',
+	'other-acct'
 ])
 	keys.set(a, PrivateKey.fromSeed(`${a}-${process.pid}`));
 const chain = {
@@ -146,20 +153,22 @@ const chain = {
 // and a homeserver refuses to invite @unreachable (a failed address change).
 let refuseAll = false;
 const smtp = await fakeSmtp({ rejectRcpt: (a) => refuseAll || a.endsWith('@refused.example') });
-let room = 0;
-// @nosend gets a room whose first message fails (the room is left open).
-const hs = await fakeHttp((h) =>
-	h.path.endsWith('/createRoom')
-		? h.body.includes('@unreachable:')
-			? { status: 403, body: { errcode: 'M_FORBIDDEN' } }
-			: {
-					status: 200,
-					body: { room_id: h.body.includes('@nosend:') ? '!nosend:hs' : `!room${++room}:hs` }
-				}
-		: h.path.includes('/send/') && h.path.includes(encodeURIComponent('!nosend:hs'))
-			? { status: 500, body: { errcode: 'M_UNKNOWN' } }
-			: { status: 200, body: h.path.includes('/send/') ? { event_id: '$e' } : {} }
-);
+// A homeserver answering as Synapse does (test/notifyFakes.ts). @nosend gets a
+// room whose first message fails (the room is left open); the site's owner
+// accepts every invitation at once (7d).
+const OWNER_MXID = '@site-owner:hs.org';
+const hs = await fakeHomeserver({
+	bot: '@bot:hs.example',
+	autoJoin: [OWNER_MXID],
+	refuseInvite: (u) => u.startsWith('@unreachable:'),
+	failSend: (id) => hs.rooms.get(id)?.members.has('@nosend:hs.org') === true
+});
+/** The room the bot opened with this person (the last one, if several). */
+const roomWith = (mxid: string): string =>
+	[...hs.rooms.values()].filter((r) => r.members.has(mxid)).at(-1)?.id ?? '';
+/** The last message the bot sent (any room). */
+const lastSent = () => hs.hits.filter((h) => h.path.includes('/send/')).at(-1)!;
+const sends = (): number => hs.hits.filter((h) => h.path.includes('/send/')).length;
 interface TgUpdate {
 	update_id: number;
 	message: { chat: { id: number; type: string }; text: string; date: number };
@@ -186,8 +195,8 @@ const env = {
 	MORPHIT_NOTIFY_EMAIL_USER: 'ops@example.org',
 	MORPHIT_NOTIFY_EMAIL_PASSWORD: 'mailpass',
 	MORPHIT_NOTIFY_EMAIL_FROM: 'ops@example.org',
-	MORPHIT_NOTIFY_MATRIX_HOMESERVER: `http://127.0.0.1:${hs.port}`,
-	MORPHIT_NOTIFY_MATRIX_TOKEN: 'tok',
+	MORPHIT_NOTIFY_MATRIX_HOMESERVER: hs.url,
+	MORPHIT_NOTIFY_MATRIX_TOKEN: hs.token,
 	MORPHIT_NOTIFY_MATRIX_USER_ID: '@bot:hs.example',
 	MORPHIT_NOTIFY_TELEGRAM_TOKEN: '123:' + 'A'.repeat(30),
 	MORPHIT_NOTIFY_TELEGRAM_USERNAME: 'VigilanteBot'
@@ -405,13 +414,13 @@ try {
 		const ok = await call('verify', 'grandma', { channel: 'email', code });
 		check('the right code turns it on', ok.status === 200 && ok.body.status === 'verified', ok.raw);
 		const m = await call('set', 'grandma', { channel: 'matrix', address: MXID, locale: 'es' });
-		const mcode = codeIn(JSON.parse(hs.hits.at(-1)!.body).body as string);
+		const mcode = codeIn(JSON.parse(lastSent().body).body as string);
 		const mok = await call('verify', 'grandma', { channel: 'matrix', code: mcode });
 		check(
 			'Matrix: the code arrives in a room that invites her; confirmed',
 			m.body.status === 'code_sent' &&
 				mok.body.status === 'verified' &&
-				JSON.parse(hs.hits[0]!.body).invite[0] === MXID
+				JSON.parse(hs.hits.find((h) => h.path.endsWith('/createRoom'))!.body).invite[0] === MXID
 		);
 		// She tries a new address that cannot be reached: the one she had keeps
 		// working (a failed change must not leave her with no notes at all), and
@@ -710,7 +719,7 @@ try {
 		new Date(clock.getTime() - 86_400_000)
 	]);
 	const mailsBefore = smtp.mails.length;
-	const roomsBefore = hs.hits.length;
+	const sendsBefore = sends();
 	await pend('trader-joe', 'btc-for-mxn-42');
 	await pend('trader-joe', 'btc-for-mxn-42'); // a second message in the thread adds nothing
 	clock = new Date(clock.getTime() + 5 * 60_000);
@@ -722,8 +731,8 @@ try {
 	const decoded = notice.map((m) => decode(m.data));
 	check(
 		'one notice per thread, on each confirmed channel',
-		notice.length === 1 && hs.hits.length === roomsBefore + 1,
-		`${notice.length} mails, ${hs.hits.length - roomsBefore} matrix`
+		notice.length === 1 && sends() === sendsBefore + 1,
+		`${notice.length} mails, ${sends() - sendsBefore} matrix`
 	);
 	check(
 		'it names the site and never the sender',
@@ -1166,10 +1175,7 @@ try {
 			hs.hits
 				.filter((h) => h.path.endsWith('/forget'))
 				.map((h) => decodeURIComponent(h.path.split('/rooms/')[1]!.split('/')[0]!));
-		const roomOf = (mxid: string): string =>
-			hs.hits.findLast?.((h) => h.path.endsWith('/createRoom') && h.body.includes(mxid))
-				? `!room${room}:hs`
-				: '';
+		const roomOf = roomWith;
 		// Someone types a stranger's Matrix ID and never confirms: the code
 		// expires; the room the bot opened for it must not stay.
 		await call('set', 'race1', { channel: 'matrix', address: '@victim:hs.org', locale: 'en' });
@@ -1200,7 +1206,7 @@ try {
 				byWorker &&
 				gone.includes(victimRoom) &&
 				gone.includes(otherRoom) &&
-				gone.includes('!nosend:hs') &&
+				gone.includes(roomWith('@nosend:hs.org')) &&
 				ns.body.status === 'send_failed' &&
 				queued === 0,
 			`victim ${victimRoom} (by the worker: ${byWorker}) other ${otherRoom}; forgotten ${gone.join(',')}; queued ${queued}`
@@ -1231,54 +1237,114 @@ try {
 				!afterRetype.includes(secondRoom),
 			`${firstRoom} then ${secondRoom}; forgotten ${afterRetype.join(',')}`
 		);
-		// A room is kept only for the row still waiting for the code it was
-		// opened for. A send for an older code (she typed another address
-		// since, or cancelled) finishing late: its room is not kept — left.
-		const codeMac = (
-			await pool.query(
-				`SELECT code_mac FROM offline_notify_channels WHERE account = 'rory' AND channel = 'matrix'`
-			)
-		).rows[0].code_mac as Buffer;
-		const keptStale = await store.setRoute('rory', 'matrix', '!stale:hs', {
-			codeMac: Buffer.alloc(codeMac.length, 7)
-		});
-		const keptRight = await store.setRoute('rory', 'matrix', '!kept:hs', { codeMac });
-		const queuedRooms = (
-			await pool.query(`SELECT route_sealed, account FROM offline_notify_leave`)
-		).rows.map((r) => store.vault.open(r.route_sealed, r.account, 'matrix', 'route'));
-		const nowHeld = (await store.status('rory')).channels;
-		check(
-			"a room from another code is never kept (it is left); the right code's room replaces the old one, which is left",
-			!keptStale &&
-				keptRight &&
-				queuedRooms.includes('!stale:hs') &&
-				queuedRooms.includes(secondRoom) &&
-				!queuedRooms.includes('!kept:hs') &&
-				(await store.roomHeld('rory', '!kept:hs')) &&
-				!(await store.roomHeld('rory', '!stale:hs')) &&
-				nowHeld.length === 1,
-			`${keptStale} ${keptRight} ${queuedRooms.join(',')}`
+		// A code to the first address that comes back late (she typed
+		// another since): no row holds that address — nothing is sent, and
+		// the room opened for it is not kept.
+		const sendsBefore = sends();
+		const late = await dispatch(
+			cfg,
+			'matrix',
+			'@rory1:hs.org',
+			{ subject: 'code', text: 'code 999999' },
+			{ matrixRooms: store.matrixRoomBook() }
+		).then(
+			() => 'sent',
+			(e: unknown) => (e as Error).name
 		);
-		await pool.query(`DELETE FROM offline_notify_leave`);
+		await settle();
+		await worker.tick();
+		await settle();
+		check(
+			'a code for an address no row holds any more (it came back late): nothing sent, its room left',
+			late === 'MatrixAddressGoneError' &&
+				sends() === sendsBefore &&
+				(await count(`SELECT count(*) AS n FROM offline_notify_leave`)) === 0 &&
+				hs.rooms.get(roomWith('@rory1:hs.org'))?.members.get(hs.bot) === 'leave',
+			`${late} sends +${sends() - sendsBefore}`
+		);
 		// A saved address that can no longer be opened (damaged) is deleted
-		// when read; the room it held is queued too.
+		// when read.
 		await pool.query(
-			`INSERT INTO offline_notify_channels (account, channel, address_sealed, route_sealed, verified_at, locale)
-			 VALUES ('tilly', 'matrix', '\\x0100'::bytea, $1, now(), 'en')
+			`INSERT INTO offline_notify_channels (account, channel, address_sealed, verified_at, locale)
+			 VALUES ('tilly', 'matrix', '\\x0100'::bytea, now(), 'en')
 			 ON CONFLICT (account, channel) DO UPDATE SET address_sealed = EXCLUDED.address_sealed,
-			   route_sealed = EXCLUDED.route_sealed, verified_at = EXCLUDED.verified_at`,
-			[store.vault.seal('!damaged:hs', 'tilly', 'matrix', 'route')]
+			   verified_at = EXCLUDED.verified_at`
 		);
 		const seen = await store.verifiedChannels('tilly');
-		const queuedDamaged = (
-			await pool.query(`SELECT route_sealed, account FROM offline_notify_leave`)
-		).rows.map((r) => store.vault.open(r.route_sealed, r.account, 'matrix', 'route'));
+		const stillThere = await count(
+			`SELECT count(*) AS n FROM offline_notify_channels WHERE account = 'tilly' AND channel = 'matrix'`
+		);
 		check(
-			'a damaged saved address is dropped and its room queued to leave',
-			!seen.channels.some((c) => c.channel === 'matrix') && queuedDamaged.includes('!damaged:hs'),
-			`${JSON.stringify(seen.channels.map((c) => c.channel))} queued ${queuedDamaged.join(',')}`
+			'a damaged saved address is dropped when read',
+			!seen.channels.some((c) => c.channel === 'matrix') && stillThere === 0,
+			`${JSON.stringify(seen.channels.map((c) => c.channel))} rows ${stillThere}`
 		);
 		await pool.query(`DELETE FROM offline_notify_leave`);
+	}
+	// ── 7d. One Matrix room per person, kept (reported on v1.21.18: the test
+	// note's chat was left, and later messages opened new rooms) ───────────
+	{
+		const made = hs.made();
+		const owner = 'site-owner';
+		// The operator's test note, sent as `adminCli send matrix` sends it.
+		await store.holdTestAddress(OWNER_MXID, clock);
+		await dispatch(
+			cfg,
+			'matrix',
+			OWNER_MXID,
+			{ subject: 'Test from Vigilante Trading', text: 'This is a test from Vigilante Trading.' },
+			{ matrixRooms: store.matrixRoomBook() }
+		);
+		const room = roomWith(OWNER_MXID);
+		// He turns notices on for his own account in Settings.
+		await call('set', owner, { channel: 'matrix', address: OWNER_MXID, locale: 'en' });
+		const code = codeIn(JSON.parse(lastSent().body).body as string);
+		const on = await call('verify', owner, { channel: 'matrix', code });
+		// Two messages reach him while he is away (he has written to that
+		// trader before), in two threads: two notices.
+		await pool.query(`INSERT INTO chat_messages VALUES ($1, 'trader-joe', $2)`, [
+			owner,
+			new Date(clock.getTime() - 86_400_000)
+		]);
+		await pend('trader-joe', 'one-room-a', clock, owner);
+		await pend('trader-joe', 'one-room-b', clock, owner);
+		clock = new Date(clock.getTime() + 11 * 60_000);
+		await worker.tick();
+		// He sets it up again with the same address: the same room.
+		await call('set', owner, { channel: 'matrix', address: OWNER_MXID, locale: 'en' });
+		const code2 = codeIn(JSON.parse(lastSent().body).body as string);
+		const on2 = await call('verify', owner, { channel: 'matrix', code: code2 });
+		// Another account types his address and never confirms it: its code
+		// comes in the same room, and when it expires the room stays his.
+		await call('set', 'other-acct', { channel: 'matrix', address: OWNER_MXID, locale: 'en' });
+		clock = new Date(clock.getTime() + 16 * 60_000);
+		await worker.tick();
+		await settle();
+		// A third notice.
+		await pend('trader-joe', 'one-room-c', clock, owner);
+		clock = new Date(clock.getTime() + 11 * 60_000);
+		await worker.tick();
+		await settle();
+		const texts = hs.rooms.get(room)?.messages.map((m) => m.body) ?? [];
+		// (Rooms other accounts' rows let go in the sections above are left
+		// meanwhile: only his counts here.)
+		const hisLeaves = hs
+			.leavesAndForgets()
+			.filter((h) => h.path.includes(`/rooms/${encodeURIComponent(room)}/`)).length;
+		const notices = texts.filter((t) => t.includes('/en/chat?n=')).length;
+		check(
+			'Matrix: the test note, his codes and every notice come in ONE room, which the bot never leaves',
+			on.body.status === 'verified' &&
+				on2.body.status === 'verified' &&
+				hs.made() === made + 1 &&
+				texts.length === 7 &&
+				notices === 3 &&
+				hisLeaves === 0 &&
+				hs.rooms.get(room)?.members.get(hs.bot) === 'join' &&
+				(await store.matrixRoomBook().get(OWNER_MXID))?.room === room &&
+				(await count(`SELECT count(*) AS n FROM offline_notify_leave`)) === 0,
+			`${on.raw} ${on2.raw} rooms +${hs.made() - made}, ${texts.length} messages (${notices} notices), leave/forget of his room ${hisLeaves}`
+		);
 	}
 	// ── 8. The key ─────────────────────────────────────────────────────────
 	{

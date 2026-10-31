@@ -59,12 +59,8 @@ describe('offline notices: a stuck send', () => {
 			noticedSince: async () => false,
 			takeDailySlot: async () => true,
 			createLink: async () => 'token',
-			setRoute: async () => undefined,
-			queueLeave: async () => undefined,
 			verifiedChannels: async (account: string) => ({
-				channels: [
-					{ channel: 'email', address: `${account}@example.org`, route: null, linkNet: 'clearnet' }
-				],
+				channels: [{ channel: 'email', address: `${account}@example.org`, linkNet: 'clearnet' }],
 				locale: 'en'
 			})
 		} as unknown as OfflineNotifyStore;

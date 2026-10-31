@@ -67,6 +67,8 @@ export type OfflineError =
 	| 'none'
 	| 'rate_limited'
 	| 'unavailable'
+	/** The site was too busy to answer in time; nothing changed (try again). */
+	| 'busy'
 	| 'failed';
 
 const base = (): string => `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/notify`;
@@ -180,7 +182,7 @@ async function signed(
 function errorOf(r: { status: number; body: Record<string, unknown> }): OfflineError {
 	const s = String(r.body.status ?? '');
 	if (r.status === 429) return s === 'too_many_codes' ? 'too_many_codes' : 'rate_limited';
-	if (r.status === 503) return 'unavailable';
+	if (r.status === 503) return s === 'busy' ? 'busy' : 'unavailable';
 	if (['invalid_address', 'send_failed', 'wrong', 'expired', 'none'].includes(s))
 		return s as OfflineError;
 	return 'failed';

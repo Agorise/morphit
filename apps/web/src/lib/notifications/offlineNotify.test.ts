@@ -129,6 +129,15 @@ describe('errors she is shown', () => {
 		h.answers.set = { status: 503, body: { status: 'offline_notify_unavailable' } };
 		await expect(web.setAddress('email', 'a@b.example', 'en')).rejects.toBe('unavailable');
 	});
+
+	it('a relay too busy to answer in time: "busy" (try again), not "unavailable"', async () => {
+		h.answers.set = { status: 503, body: { status: 'busy' } };
+		await expect(web.setAddress('email', 'a@b.example', 'en')).rejects.toBe('busy');
+		h.answers.verify = { status: 503, body: { status: 'busy' } };
+		await expect(web.verifyCode('email', '123456')).rejects.toBe('busy');
+		h.answers.remove = { status: 503, body: { status: 'busy' } };
+		await expect(web.removeChannel('all')).rejects.toBe('busy');
+	});
 });
 
 describe('a site whose relay does not name itself', () => {

@@ -102,6 +102,7 @@
  */
 
 import { readNoFollow, writeNoFollow } from '../lib/noFollowFs.ts';
+import { resolveCallerPath } from '../lib/callerPath.ts';
 import {
 	tryResolveHiddenUpgrade,
 	readHiddenReleaseTarget,
@@ -538,13 +539,24 @@ export function parseTagFromTarballName(name: string): string | null {
  *  Trust is the same as online: the tarball must match the hash in @morphit's
  *  signed on-chain release record (read through this node's own indexer), or
  *  carry a good signature from a pinned release-signer key. Otherwise it is
- *  refused. */
+ *  refused.
+ *
+ *  The path is the operator's: a relative one is read from the folder they
+ *  typed the command in, and "~/" is their home (morphitlat, 2026-10-30:
+ *  `--from-file=~/Downloads/…` was looked up under /opt/morphit/apps/ops-cli). */
 export function resolveOfflineTarball(
-	flags: UpgradeFlags
+	flags: UpgradeFlags,
+	env: NodeJS.ProcessEnv = process.env,
+	cwd: string = process.cwd()
 ): { tarballPath: string; sigPath: string | null; tag: string } | null {
-	const raw = (flags['from-file'] ?? process.env.MORPHIT_UPGRADE_TARBALL ?? '').trim();
+	const raw = (flags['from-file'] ?? env.MORPHIT_UPGRADE_TARBALL ?? '').trim();
 	if (raw === '') return null;
-	const tarballPath = resolve(raw);
+	const tarballPath = resolveCallerPath(
+		raw,
+		env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR,
+		env,
+		cwd
+	);
 	if (!existsSync(tarballPath)) {
 		throw new Error(`--from-file: no such file: ${tarballPath}`);
 	}

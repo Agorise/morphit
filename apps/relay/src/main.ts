@@ -40,9 +40,7 @@ import { PushSender } from './policy/pushSender.ts';
 import { PushQueueJanitor } from './policy/pushQueueJanitor.ts';
 import { PushEndpoints } from './api/push.ts';
 import { notifyConfigFromEnv, offeredChannels } from './notify/config.ts';
-import { VaultUnavailableError } from './notify/vault.ts';
-import { openSealedStore, type OfflineNotifyStore } from './notify/store.ts';
-import { errorClass } from './notify/dispatch.ts';
+import { keepOpening, openOfflineNotify } from './notify/opening.ts';
 import { NotifySigVerifier } from './notify/sig.ts';
 import { OfflineNotifyWorker, Presence } from './notify/worker.ts';
 import { notifyLimits, OfflineNotifyEndpoints } from './notify/api.ts';
@@ -504,39 +502,15 @@ async function main(): Promise<void> {
 		torSocks: cfg.hiddenServiceProxies.torSocks,
 		hiddenOnly: cfg.hiddenOnly
 	});
-	let notifyStore: OfflineNotifyStore | null = null;
-	try {
-		let wanted = offeredChannels(notifyCfg).length > 0 || Object.keys(notifyCfg.off).length > 0;
-		if (!wanted) {
-			const r = await db.query<{ any: boolean }>(
-				`SELECT EXISTS (SELECT 1 FROM offline_notify_channels)
-				     OR EXISTS (SELECT 1 FROM offline_notify_key) AS any`
-			);
-			wanted = r.rows[0]?.any === true;
-		}
-		if (wanted) {
-			if (cfg.dataDir === null)
-				throw new VaultUnavailableError('the relay has no state directory (MORPHIT_RELAY_DATA_DIR)');
-			const { store, created } = await openSealedStore(db, cfg.dataDir);
-			notifyStore = store;
-			if (created) bootLog.info('offline_notify_key_created', { dir: cfg.dataDir });
-		}
-	} catch (err) {
-		bootLog.warn('offline_notify_unavailable', {
-			hint: `Offline notices are off: ${err instanceof VaultUnavailableError ? err.message : errorClass(err)}`
-		});
-	}
-	bootLog.info('offline_notify', {
-		channels: notifyStore === null ? [] : offeredChannels(notifyCfg),
-		off: notifyCfg.off,
-		link_origin: notifyCfg.linkOrigin ?? '(none: set MORPHIT_INSTANCE_ORIGIN or the .onion address)'
-	});
+	// The store may not open yet (the indexer's migration that makes its
+	// tables has not run, the database does not answer…): it is tried again
+	// until it opens, and offline notices then come on by themselves.
 	const notifyPresence = new Presence();
-	const notifyWorker =
-		notifyStore === null ? null : new OfflineNotifyWorker(notifyCfg, notifyStore, notifyPresence);
+	let notifyWorker: OfflineNotifyWorker | null = null;
+	let relayStarted = false;
 	const notifyEndpoints = new OfflineNotifyEndpoints(
 		notifyCfg,
-		notifyStore,
+		null,
 		// The posting key as two RPC operators agree it is: one node must not
 		// be able to name a key of its own choosing for someone else's account.
 		new NotifySigVerifier({ postingKeyAgreed: (n) => blurt.postingKeyAgreed(n) }, notifyCfg.audience),
@@ -545,6 +519,23 @@ async function main(): Promise<void> {
 		// IPs that used theirs up, and per account (see notify/api.ts).
 		notifyLimits()
 	);
+	let notifyOpen = false;
+	const notifyOpening = keepOpening(
+		() => openOfflineNotify(db, cfg.dataDir, notifyCfg, bootLog),
+		(store) => {
+			notifyOpen = true;
+			notifyEndpoints.useStore(store);
+			notifyWorker = new OfflineNotifyWorker(notifyCfg, store, notifyPresence);
+			if (relayStarted) notifyWorker.start();
+		},
+		bootLog
+	);
+	await notifyOpening.first;
+	bootLog.info('offline_notify', {
+		channels: notifyOpen ? offeredChannels(notifyCfg) : [],
+		off: notifyCfg.off,
+		link_origin: notifyCfg.linkOrigin ?? '(none: set MORPHIT_INSTANCE_ORIGIN or the .onion address)'
+	});
 
 	// Start the background BLURT-balance poll. We don't wait for it
 	// to succeed — the relay should come up even if the chain is
@@ -563,7 +554,8 @@ async function main(): Promise<void> {
 	// per-device Web Push deliveries.  Only when VAPID is set.
 	if (pushSender) pushSender.start();
 	else pushJanitor?.start();
-	notifyWorker?.start();
+	relayStarted = true;
+	(notifyWorker as OfflineNotifyWorker | null)?.start();
 
 	// Stored push data the relay will never use, removed at every boot (this is
 	// also how installed relays get it on upgrade). A hidden-only relay never
@@ -662,7 +654,8 @@ async function main(): Promise<void> {
 		healthService.close();
 		rpcDirSync.stop();
 		activeKeyGuard.stop();
-		notifyWorker?.stop();
+		notifyOpening.stop();
+		(notifyWorker as OfflineNotifyWorker | null)?.stop();
 		// Stop the queue drainer (awaits in-flight broadcasts).
 		// We don't await here because the callback pattern of
 		// server.close expects a sync handler; instead we let the

@@ -41,6 +41,7 @@
 			"check_ok": "{matched} von {total} signierten Dateien stimmen mit Version {version} überein",
 			"check_mismatch": "Nur {matched} von {total} signierten Dateien stimmen mit Version {version} überein — diese Seite liefert veränderte Dateien aus",
 			"check_not_checked": "Nicht geprüft: Diese Seite läuft in Version {running}, die neueste signierte Version ist {version}",
+			"check_waiting_worker": "Noch nicht geprüft: Diese Seite läuft noch über den Service Worker der vorigen Version. Geprüft wird, sobald die neue Version übernimmt („Jetzt laden“ oder wenn alle Tabs dieser Seite geschlossen sind).",
 			"check_no_release": "Nicht geprüft: Die signierte Version konnte nicht gelesen werden",
 			"check_incomplete": "Nicht abgeschlossen: Eine signierte Datei konnte von dieser Seite nicht gelesen werden",
 			"check_unconfirmed": "Nicht geprüft: Die neueste signierte Version ließ sich nicht bestätigen (gelesen wurde nur Version {version}, älter als die {running} dieser Seite). Erneute Prüfung innerhalb einer Stunde."
@@ -2955,6 +2956,7 @@
 			"side_help": "Tipp: Wenn du Krypto kaufen willst, suche Beiträge, die verkaufen möchten. Wenn du verkaufen willst, suche Beiträge, die kaufen möchten.",
 			"order_details_label": "Bedingungen / Details / Notizen zur Order",
 			"language_label": "Sprache",
+			"language_in_force": "Sprache: {languages}",
 			"language_hint": "Nur Angebote in diesen Sprachen anzeigen. Leer lassen, um alle zu sehen. Ältere Angebote ohne Sprache erscheinen nur, wenn das Feld leer ist.",
 			"language_placeholder": "Sprachen suchen…",
 			"language_remove": "Entfernen",
@@ -4768,7 +4770,7 @@
 			"sending": "Wird gesendet…",
 			"code_sent": {
 				"email": "Wir haben einen Code an die eingegebene Adresse geschickt. Sieh in deinem Posteingang nach (und im Spam-Ordner).",
-				"matrix": "Wir haben einen Code von {bot} geschickt. Nimm die Einladung in deiner Matrix-App an, um ihn zu lesen.",
+				"matrix": "Wir haben einen Code von {bot} geschickt. Du findest ihn in deiner Matrix-App im Chat mit {bot}. Siehst du eine Einladung davon, nimm sie an, um den Code zu lesen.",
 				"xmpp": "Wir haben einen Code von {bot} geschickt. Du findest ihn in deiner XMPP-App.",
 				"session": "Wir haben einen Code von {site} geschickt. In Session kommt er unter Nachrichtenanfragen an: Nimm die Anfrage an, um den Code zu lesen."
 			},
@@ -4798,6 +4800,7 @@
 				"none": "Es wartet kein Code. Bitte fordere einen neuen an.",
 				"rate_limited": "Zu viele Versuche. Bitte warte ein paar Minuten.",
 				"unavailable": "Offline-Benachrichtigungen sind auf dieser Website gerade nicht verfügbar.",
+				"busy": "Die Website ist gerade ausgelastet. Bitte versuch es gleich noch einmal.",
 				"failed": "Etwas ist schiefgegangen. Bitte versuch es noch einmal.",
 				"locked_session": "Entsperre zuerst dein Konto."
 			}

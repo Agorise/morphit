@@ -108,6 +108,16 @@ const ALLOW_LIST: readonly AllowEntry[] = [
 			'asset cache-first network fallback in the SW fetch handler — a blanket AbortController would prematurely 503 a slow-but-working immutable asset; the browser manages the request timeout'
 	},
 	{
+		// v1.21.19: a page request that asked for the server's copy (cache
+		// 'no-cache' / 'reload' / 'no-store'), answered from the network by
+		// answerServerCopyRequest (src/lib/net/dynamicPaths.ts). `r` is the
+		// FetchEvent's own request, whose signal follows the page's request.
+		file: 'apps/web/src/service-worker.ts',
+		snippet: 'answerServerCopyRequest(req, { cache, fetch: (r) => fetch(r) })',
+		reason:
+			"the only caller is the build-integrity check's fetchWithTimeout (releaseHashCheck.ts): the worker forwards the page's own request, whose signal aborts when that page fetch times out; a second timer here would only add a shorter, competing deadline over Tor/I2P"
+	},
+	{
 		// v1.21.8: the brand-file branch hands the worker's fetch to
 		// answerBrandRequest (src/lib/net/dynamicPaths.ts), which passes its
 		// own AbortController's signal, armed for `timeoutMs` (the

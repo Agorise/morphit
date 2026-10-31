@@ -254,6 +254,10 @@ export function plainWhy(
 			return `the relay's setup tool did not finish within ${ADMIN_TIMEOUT_MS / 60_000} minutes and was stopped`;
 		case 'no_answer':
 			return "the relay's setup tool gave no answer";
+		case 'no_store':
+			return "the relay's saved addresses cannot be opened right now (run `sudo morphit-ops offline-notify status` to see why), so no test note was sent";
+		case 'slow':
+			return `the ${app} server took too long to answer (it may be busy, or slow to reach through Tor). Please try again in a few minutes`;
 		case 'usage':
 		case 'bad_input':
 			return "the relay's setup tool did not understand the request (is the relay the same version as morphit-ops?)";
@@ -595,27 +599,16 @@ export async function runOfflineNotify(
 	};
 
 	/** Test, then save if it worked (or if the operator insists). */
-	// A Matrix test note comes in a chat the bot leaves once the operator has
-	// joined it (relay adminCli send): it can be read only if they join first.
+	// A Matrix test note comes in the bot's one chat with that address (relay
+	// adminCli send, channels/matrix.ts): the first time with an invitation.
+	// The bot stays in that chat; later notes to the address come there too.
 	const matrixTestHint = (bot: unknown): void => {
 		const from = typeof bot === 'string' && bot.startsWith('@') ? ` from ${clean(bot)}` : '';
-		print(dim(`  In your Matrix app, accept the invitation${from} that brings the test note,`));
-		print(dim('  within about a minute and a half: the bot leaves the test chat once you have'));
-		print(
-			dim('  joined (or then), and after that it can no longer be joined. Users’ chats stay open.')
-		);
+		print(dim(`  The test note comes in a chat${from}. If your Matrix app shows an`));
+		print(dim('  invitation to it, accept it to read the note. The bot stays in that chat:'));
+		print(dim('  later notes to this address come in the same chat, never in a new one.'));
 	};
-	const matrixTestOutcome = (r: AdminAnswer): void => {
-		if (r.joined === true)
-			print(dim('    You joined; the bot has left the test chat, and the note stays with you.'));
-		else if (r.joined === false)
-			print(
-				yellow(
-					'    You did not join in time, so the bot has left the test chat and its invitation can no longer be accepted: decline it.'
-				)
-			);
-	};
-	const MATRIX_SENDING = 'Sending a test note — accept the invitation in your Matrix app…';
+	const MATRIX_SENDING = 'Sending a test note to your Matrix app…';
 
 	const testAndSave = async (
 		channel: NotifyChannel,
@@ -667,7 +660,6 @@ export async function runOfflineNotify(
 							: `  ✓ The ${LABEL[channel]} settings are complete (not tested: only a test note tests them).`
 				)
 			);
-			if (test.kind === 'send' && channel === 'matrix') matrixTestOutcome(r);
 			if (channel === 'telegram' && typeof r.username === 'string') {
 				merged.MORPHIT_NOTIFY_TELEGRAM_USERNAME = r.username;
 				print(dim(`    Notes will come from @${clean(r.username)}.`));
@@ -1385,7 +1377,6 @@ export async function runOfflineNotify(
 							? green(`  ✓ Sent to ${clean(to)} — have a look.`)
 							: yellow(`  ✗ It did not work: ${plainWhy(r, { channel: ch, to })}`)
 					);
-					if (r.ok && ch === 'matrix') matrixTestOutcome(r);
 				}
 			});
 		const set = NOTIFY_CHANNELS.filter(has);
@@ -1421,11 +1412,28 @@ export async function runOfflineNotify(
 						admin(['purge-channel', ch], {})
 					);
 					if (!purged.ok) {
+						// Stopped, or failed after the delete: the addresses may be
+						// (or are) gone already — never "nothing was changed" then.
+						const mayBeDone = purged.error === 'timed_out' || typeof purged.removed === 'number';
 						print(
 							yellow(
-								`  ✗ Could not delete them: ${plainWhy(purged, { channel: ch })}. Nothing was changed.`
+								mayBeDone
+									? `  ✗ It did not finish: ${plainWhy(purged, { channel: ch })}.`
+									: `  ✗ Could not delete them: ${plainWhy(purged, { channel: ch })}. Nothing was changed.`
 							)
 						);
+						if (mayBeDone) {
+							print(
+								typeof purged.removed === 'number'
+									? `  ${count(purged.removed)} users' ${LABEL[ch]} addresses are deleted already.`
+									: `  Users' ${LABEL[ch]} addresses may be deleted already.`
+							);
+							print(
+								dim(
+									`    ${LABEL[ch]} stays set up. Run “Turn an app off” for ${LABEL[ch]} again to finish.`
+								)
+							);
+						}
 						return;
 					}
 					print(green(`  ✓ ${count(purged.removed)} users' ${LABEL[ch]} addresses deleted.`));

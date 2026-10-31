@@ -52,6 +52,8 @@ function setup(
 		spentPerSec?: number;
 		store?: boolean;
 		send?: boolean;
+		/** The database is too busy to answer in time (a lock wait ran out). */
+		busy?: boolean;
 	} = {}
 ) {
 	const clock = new ManualClock(T0);
@@ -69,6 +71,10 @@ function setup(
 	const store = {
 		async remove() {
 			calls.remove++;
+			if (opts.busy)
+				throw Object.assign(new Error('canceling statement due to lock timeout'), {
+					code: '55P03'
+				});
 		},
 		async restoreOrDrop() {
 			calls.cancel++;
@@ -82,9 +88,6 @@ function setup(
 		async beginAddress() {
 			calls.begin++;
 			return { ok: true, codeMac: Buffer.alloc(32), send: opts.send ?? false };
-		},
-		async setRoute() {
-			return true;
 		},
 		async resolveLink() {
 			calls.open++;
@@ -586,5 +589,15 @@ describe('offline notices: the signature check over time', () => {
 		const k = keyOf('ghost');
 		expect((await v.verify(signFor(k, 'ghost', Math.floor(Date.now() / 1000)))).ok).toBe(false);
 		expect(v.knowsKey('ghost')).toBe(false);
+	});
+});
+
+describe('offline notices: a database too busy to answer in time', () => {
+	it('is a 503 "busy" (the page says to try again in a moment), not an internal error', async () => {
+		const t = setup({ busy: true });
+		expect(await t.post('remove', 'alice', { channel: 'all' })).toEqual({
+			status: 503,
+			body: { status: 'busy' }
+		});
 	});
 });

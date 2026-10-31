@@ -41,6 +41,7 @@
 			"check_ok": "{matched} of {total} signed files match release {version}",
 			"check_mismatch": "Only {matched} of {total} signed files match release {version} — this site serves changed files",
 			"check_not_checked": "Not checked: this site runs version {running}, the latest signed release is {version}",
+			"check_waiting_worker": "Not checked yet: this page still runs through the previous version’s service worker. It is checked once the new version takes over (“Load it now”, or when every tab of this site is closed).",
 			"check_no_release": "Not checked: the signed release could not be read",
 			"check_incomplete": "Not completed: a signed file could not be read from this site",
 			"check_unconfirmed": "Not checked: the newest signed release could not be confirmed (the only one read is version {version}, older than this site's {running}). Checked again within the hour."
@@ -2955,6 +2956,7 @@
 			"side_help": "Tip: if you want to buy crypto, look for posts wanting to sell. If you want to sell crypto, look for posts wanting to buy.",
 			"order_details_label": "Order Terms / Details / Notes",
 			"language_label": "Language",
+			"language_in_force": "Language: {languages}",
 			"language_hint": "Only show orders written in these languages. Leave empty to see all. Older orders with no language show only when this is empty.",
 			"language_placeholder": "Search languages…",
 			"language_remove": "Remove",
@@ -4768,7 +4770,7 @@
 			"sending": "Sending…",
 			"code_sent": {
 				"email": "We sent a code to the address you typed. Check your inbox (and your spam folder).",
-				"matrix": "We sent a code from {bot}. Accept its invitation in your Matrix app to read it.",
+				"matrix": "We sent a code from {bot}. Find it in your Matrix app, in your chat with {bot}. If you see an invitation from it, accept it to read the code.",
 				"xmpp": "We sent a code from {bot}. You will find it in your XMPP app.",
 				"session": "We sent a code from {site}. In Session it arrives under Message Requests: accept it to read the code."
 			},
@@ -4798,6 +4800,7 @@
 				"none": "There is no code waiting. Please send a new one.",
 				"rate_limited": "Too many tries. Please wait a few minutes.",
 				"unavailable": "Offline notifications are not available on this site right now.",
+				"busy": "The site is busy right now. Please try again in a moment.",
 				"failed": "Something went wrong. Please try again.",
 				"locked_session": "Unlock your account first."
 			}

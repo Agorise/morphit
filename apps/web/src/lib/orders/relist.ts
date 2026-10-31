@@ -35,10 +35,18 @@ export interface RelistPrefill {
 	spreadPercent: string;
 	fixedPrice: string;
 	paymentMethods: string[];
+	/** A BARTER order's accepted-crypto set — what /post's step 3 ("Which
+	 *  cryptos will you accept?") binds to. Its `pay_<crypto>` payment methods
+	 *  are derived from this at broadcast, so they alone do not refill step 3.
+	 *  Empty for a crypto order. */
+	acceptedAssets: string[];
 	region: string;
 	terms: string;
 	/** v1.9.0 — carry a barter order's inline goods label through a re-list. */
 	specificBarterTitle: string;
+	/** The language the order was written in; null when it was untagged
+	 *  (/post then seeds its usual default). */
+	postLang: string | null;
 	expiresDays: number;
 	reason: 'relist';
 }
@@ -85,9 +93,11 @@ export function buildRelistPrefill(o: OrderRecord, locale: string): RelistPrefil
 		spreadPercent,
 		fixedPrice,
 		paymentMethods: [...o.payment_methods],
+		acceptedAssets: [...(o.accepted_assets ?? [])],
 		region: o.location_region ?? '',
 		terms: o.terms ?? '',
 		specificBarterTitle: o.specific_barter_title ?? '',
+		postLang: o.lang ?? null,
 		// Default new expiry to 30 days — the OLD expiresDays already passed,
 		// so make the user pick fresh rather than carrying a stale value.
 		expiresDays: 30,

@@ -41,6 +41,7 @@
 			"check_ok": "{total} 个签名文件中有 {matched} 个与版本 {version} 一致",
 			"check_mismatch": "{total} 个签名文件中只有 {matched} 个与版本 {version} 一致——本站提供的文件已被改动",
 			"check_not_checked": "未检查：本站运行版本 {running}，最新签名版本为 {version}",
+			"check_waiting_worker": "尚未检查：此页面仍由上一版本的 Service Worker 处理。新版本接管后即会检查（点击“立即加载”，或关闭本站的所有标签页）。",
 			"check_no_release": "未检查：无法读取签名版本",
 			"check_incomplete": "未完成：无法从本站读取某个签名文件",
 			"check_unconfirmed": "未检查：无法确认最新的签名版本（读到的唯一版本是 {version}，比本站的 {running} 旧）。一小时内会再次检查。"
@@ -2955,6 +2956,7 @@
 			"side_help": "提示：如果你想买加密货币，找想卖的订单。如果你想卖，找想买的订单。",
 			"order_details_label": "订单条款 / 详情 / 备注",
 			"language_label": "语言",
+			"language_in_force": "语言：{languages}",
 			"language_hint": "仅显示用这些语言撰写的订单。留空则显示全部。没有标注语言的旧订单只在留空时显示。",
 			"language_placeholder": "搜索语言…",
 			"language_remove": "移除",
@@ -4768,7 +4770,7 @@
 			"sending": "正在发送…",
 			"code_sent": {
 				"email": "我们已向你填写的地址发送了验证码。请查看收件箱（以及垃圾邮件文件夹）。",
-				"matrix": "我们已从 {bot} 发送了验证码。请在你的 Matrix 应用中接受它的邀请后查看。",
+				"matrix": "我们已从 {bot} 发送了验证码。它在你的 Matrix 应用中与 {bot} 的聊天里。如果看到它发来的邀请，请先接受，再查看验证码。",
 				"xmpp": "我们已从 {bot} 发送了验证码。你会在 XMPP 应用中看到它。",
 				"session": "我们已从 {site} 发送了验证码。在 Session 中它会出现在“消息请求”里：接受后即可查看验证码。"
 			},
@@ -4798,6 +4800,7 @@
 				"none": "没有待验证的验证码，请重新获取。",
 				"rate_limited": "尝试次数过多，请等几分钟。",
 				"unavailable": "本站目前无法使用离线通知。",
+				"busy": "网站现在有点忙，请稍后再试。",
 				"failed": "出了点问题，请再试一次。",
 				"locked_session": "请先解锁你的账户。"
 			}

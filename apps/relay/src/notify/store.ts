@@ -1,5 +1,6 @@
 /**
- * Offline notices — the database side (tables from indexer migration v69).
+ * Offline notices — the database side (tables from indexer migrations v69
+ * and v71).
  *
  * Every address and Matrix room goes in and out through the vault (sealed,
  * padded, bound to its account and channel). Codes are looked up by keyed
@@ -15,6 +16,50 @@ import type { Database } from '$db/pool';
 
 /** A transaction's client (what {@link Database.withTx} hands over). */
 type Tx = Parameters<Parameters<Database['withTx']>[0]>[0];
+
+/** The account the operator's Matrix test address is kept under: no Blurt
+ *  account can be called this (`~` is not allowed in one), so no user's
+ *  request can ever name it. */
+export const TEST_ACCOUNT = '~operator-test';
+
+/** What the Matrix rooms of offline_notify_matrix_rooms and the queue entries
+ *  for them are sealed under (they belong to an address, not to an account;
+ *  `~` is not allowed in a Blurt account name either). */
+export const ROOM_ACCOUNT = '~matrix-room';
+
+/** Every change to which Matrix addresses the rows hold, and every claim of a
+ *  room for one, runs under this lock (taken before any row lock): so a
+ *  release and a claim for one address, or two releases, never cross. It is
+ *  the lock of these tables, so it is named after their schema (the relay
+ *  and its admin tool use the same one; tests in other schemas of one
+ *  database do not wait for each other). */
+const MATRIX_LOCK = 'offline-notify:matrix-rooms:';
+async function lockMatrix(c: Tx): Promise<void> {
+	await c.query(`SELECT pg_advisory_xact_lock(hashtextextended($1 || current_schema(), 0))`, [
+		MATRIX_LOCK
+	]);
+}
+
+/** The longest any of this store's transactions waits for a lock ({@link
+ *  MATRIX_LOCK} or a row): past it the store throws {@link isLockBusy} — the
+ *  API answers 503 `busy` (the page says to try again in a moment), the
+ *  worker and the leave queue try again on their next round — rather than
+ *  wait without end. No transaction here waits on anything but the database
+ *  — never on a homeserver (see leaveIfUnused) — so locks are held for
+ *  milliseconds. */
+export const LOCK_WAIT_MS = 5_000;
+
+/** The database gave up waiting for a lock (lock_not_available). */
+export function isLockBusy(err: unknown): boolean {
+	return (err as { code?: unknown } | null)?.code === '55P03';
+}
+
+type AddressCols = {
+	account: string;
+	address_sealed: Buffer | null;
+	prev_address_sealed: Buffer | null;
+};
+import type { MatrixRoomBook } from './channels/matrix.ts';
 import { countingKey, type AddressChannel, type Channel } from './addresses.ts';
 import { openVault, VaultUnavailableError, type Vault } from './vault.ts';
 
@@ -41,20 +86,10 @@ export type LinkNet = (typeof LINK_NETS)[number];
 export interface VerifiedChannel {
 	readonly channel: Channel;
 	readonly address: string;
-	readonly route: string | null;
 	readonly linkNet: LinkNet;
-	/** The sealed address as read: a route found on the way is saved only to
-	 *  the row that still holds exactly this address ({@link setRoute}). */
-	readonly addressSealed: Buffer;
 	/** The confirmed address she had, kept while she changes it. */
 	readonly prev: boolean;
 }
-
-/** Which row a route found while sending belongs to: the one still waiting
- *  for this code, or the one still holding this confirmed address. */
-export type RouteOwner =
-	| { readonly codeMac: Buffer }
-	| { readonly addressSealed: Buffer; readonly prev: boolean };
 
 /** A confirmed address, or the confirmed one she had while she changes it:
  *  notices keep going to it until the new one is confirmed. */
@@ -86,6 +121,12 @@ export async function openSealedStore(
 	db: Database,
 	dataDir: string
 ): Promise<{ store: OfflineNotifyStore; created: boolean }> {
+	// Everything this store uses must be there: before the indexer's v71
+	// migration has run (an upgrade restarts the relay and the indexer in no
+	// set order) this throws before anything is made (42P01 / 42703), and the relay tries again
+	// (opening.ts) — notices never half-work on an older schema.
+	await db.query(`SELECT address_mac FROM offline_notify_matrix_rooms LIMIT 0`);
+	await db.query(`SELECT address_mac FROM offline_notify_leave LIMIT 0`);
 	const known = await db.query<{ key_check: Buffer }>(
 		`SELECT key_check FROM offline_notify_key WHERE id = 1`
 	);
@@ -108,7 +149,9 @@ export async function openSealedStore(
 			'mismatch'
 		);
 	}
-	return { store: new OfflineNotifyStore(db, vault), created };
+	const store = new OfflineNotifyStore(db, vault);
+	await store.moveOldRooms();
+	return { store, created };
 }
 
 export class OfflineNotifyStore {
@@ -117,13 +160,25 @@ export class OfflineNotifyStore {
 		readonly vault: Vault
 	) {}
 
+	/** A transaction of this store: none waits longer than {@link LOCK_WAIT_MS}
+	 *  for a lock. */
+	private tx<T>(fn: (c: Tx) => Promise<T>): Promise<T> {
+		return this.db.withTx(async (c) => {
+			await c.query(`SET LOCAL lock_timeout = ${LOCK_WAIT_MS}`);
+			return fn(c);
+		});
+	}
+
 	/**
-	 * Run `fn` (statements that may delete Matrix rows, or replace or clear
-	 * their rooms) and queue for the bot to leave every room that the rows
-	 * matching `where` held before and no row of that account holds after —
-	 * whatever the statements were. Same transaction as `fn`. This is the one
-	 * place that decides which rooms are given up; every path that changes a
-	 * room goes through it.
+	 * Run `fn` (statements that may add, change or delete rows) and keep the
+	 * Matrix room mapping in step, in the same transaction: an address that a
+	 * row matching `where` held before and that NO row of any account holds
+	 * after (as its address, or kept aside during a change; the operator's
+	 * test address too) is released — its room queued for the bot to leave;
+	 * an address a row now holds that was released is taken back — its room
+	 * stays. Decided here, in the database, under {@link MATRIX_LOCK}: this is
+	 * the one place that lets a room go; every path that changes a row's
+	 * address goes through it.
 	 */
 	private async guardRooms<T>(
 		c: Tx,
@@ -131,51 +186,252 @@ export class OfflineNotifyStore {
 		params: readonly unknown[],
 		fn: () => Promise<T>
 	): Promise<T> {
-		const before = await c.query<{
-			account: string;
-			route_sealed: Buffer | null;
-			prev_route_sealed: Buffer | null;
-		}>(
-			`SELECT account, route_sealed, prev_route_sealed FROM offline_notify_channels
+		await lockMatrix(c);
+		const cols = 'account, address_sealed, prev_address_sealed';
+		const before = await c.query<AddressCols>(
+			`SELECT ${cols} FROM offline_notify_channels
 			  WHERE channel = 'matrix' AND (${where}) FOR UPDATE`,
 			params as unknown[]
 		);
 		const result = await fn();
-		const held = before.rows.flatMap((r) =>
-			[r.route_sealed, r.prev_route_sealed]
-				.filter((x): x is Buffer => x !== null)
-				.map((room) => ({ account: r.account, room }))
+		const accounts = [...new Set(before.rows.map((r) => r.account))];
+		const after = await c.query<AddressCols>(
+			`SELECT ${cols} FROM offline_notify_channels
+			  WHERE channel = 'matrix' AND ((${where}) OR account = ANY($${params.length + 1}::text[]))`,
+			[...params, accounts]
 		);
-		if (held.length === 0) return result;
-		const after = await c.query<{
-			account: string;
-			route_sealed: Buffer | null;
-			prev_route_sealed: Buffer | null;
-		}>(
-			`SELECT account, route_sealed, prev_route_sealed FROM offline_notify_channels
-			  WHERE channel = 'matrix' AND account = ANY($1::text[])`,
-			[[...new Set(held.map((h) => h.account))]]
-		);
-		// Compared by the room each value OPENS to, not by its sealed bytes:
-		// the same room sealed again (a fresh nonce) is still her room.
-		const roomOf = (account: string, sealed: Buffer): string =>
-			this.vault.open(sealed, account, 'matrix', 'route') ?? `sealed:${sealed.toString('hex')}`;
-		const still = new Set(
-			after.rows.flatMap((r) =>
-				[r.route_sealed, r.prev_route_sealed]
-					.filter((x): x is Buffer => x !== null)
-					.map((x) => `${r.account}\n${roomOf(r.account, x)}`)
-			)
-		);
-		for (const h of held) {
-			if (still.has(`${h.account}\n${roomOf(h.account, h.room)}`)) continue;
-			await c.query(
-				`INSERT INTO offline_notify_leave (route_sealed, account) VALUES ($1, $2)
-				 ON CONFLICT (route_sealed) DO NOTHING`,
-				[h.room, h.account]
-			);
+		const had = this.addressesOf(before.rows);
+		const has = this.addressesOf(after.rows);
+		for (const a of has) if (!had.has(a)) await this.takeBack(c, a);
+		const gone = [...had].filter((a) => !has.has(a));
+		if (gone.length > 0) {
+			const held = await this.heldAddresses(c);
+			for (const a of gone) if (!held.has(a)) await this.release(c, a);
 		}
 		return result;
+	}
+
+	/** The Matrix addresses these rows hold (a value that does not open: none). */
+	private addressesOf(rows: readonly AddressCols[]): Set<string> {
+		const out = new Set<string>();
+		for (const r of rows)
+			for (const v of [r.address_sealed, r.prev_address_sealed]) {
+				const a = v === null ? null : this.vault.open(v, r.account, 'matrix', 'address');
+				if (a !== null) out.add(a);
+			}
+		return out;
+	}
+
+	/** Every Matrix address any row holds now. */
+	private async heldAddresses(c: Tx): Promise<Set<string>> {
+		const r = await c.query<AddressCols>(
+			`SELECT account, address_sealed, prev_address_sealed FROM offline_notify_channels
+			  WHERE channel = 'matrix'`
+		);
+		return this.addressesOf(r.rows);
+	}
+
+	/** The keyed hash an address's room is kept under. The same keyed hash
+	 *  of the same normalised address as the code limits use, under its own
+	 *  label: the mapping cannot be joined with offline_notify_address_log. */
+	private roomMac(address: string): Buffer {
+		return this.vault.mac('matrix-room', countingKey('matrix', address));
+	}
+
+	private openRoom(sealed: Buffer): string | null {
+		return this.vault.open(sealed, ROOM_ACCOUNT, 'matrix', 'route');
+	}
+
+	/** Queue a room to be left: an address's room (`mac`, left only if no row
+	 *  took the address back meanwhile), or one nothing uses (null). */
+	private async queueRoom(c: Tx, sealed: Buffer, mac: Buffer | null): Promise<void> {
+		await c.query(
+			`INSERT INTO offline_notify_leave (route_sealed, account, address_mac) VALUES ($1, $2, $3)
+			 ON CONFLICT (route_sealed) DO UPDATE SET address_mac = EXCLUDED.address_mac`,
+			[sealed, ROOM_ACCOUNT, mac]
+		);
+	}
+
+	/** No row holds this address any more: its room goes to the leave queue. */
+	private async release(c: Tx, address: string): Promise<void> {
+		const mac = this.roomMac(address);
+		const r = await c.query<{ room_sealed: Buffer }>(
+			`UPDATE offline_notify_matrix_rooms SET released_at = now(), updated_at = now()
+			  WHERE address_mac = $1 AND released_at IS NULL RETURNING room_sealed`,
+			[mac]
+		);
+		const room = r.rows[0]?.room_sealed;
+		if (room !== undefined) await this.queueRoom(c, room, mac);
+	}
+
+	/** A row holds this address again: its room, if not left yet, stays. */
+	private async takeBack(c: Tx, address: string): Promise<void> {
+		await c.query(
+			`UPDATE offline_notify_matrix_rooms SET released_at = NULL, updated_at = now()
+			  WHERE address_mac = $1 AND released_at IS NOT NULL`,
+			[this.roomMac(address)]
+		);
+	}
+
+	/**
+	 * Where each Matrix address's one room is kept (channels/matrix.ts sends
+	 * with it). A room is claimed for an address only if the mapping still
+	 * holds what the sender read, and only while a row holds the address.
+	 */
+	matrixRoomBook(): MatrixRoomBook {
+		return {
+			get: async (userId) => {
+				const r = await this.db.query<{ room_sealed: Buffer; bot_only_invites: boolean }>(
+					`SELECT room_sealed, bot_only_invites FROM offline_notify_matrix_rooms
+					  WHERE address_mac = $1`,
+					[this.roomMac(userId)]
+				);
+				const row = r.rows[0];
+				const room = row ? this.openRoom(row.room_sealed) : null;
+				return row && room !== null
+					? { room, version: row.room_sealed, botOnly: row.bot_only_invites }
+					: null;
+			},
+			claim: (userId, version, room) =>
+				this.tx(async (c) => {
+					await lockMatrix(c);
+					const mac = this.roomMac(userId);
+					const sealed = this.vault.seal(room, ROOM_ACCOUNT, 'matrix', 'route');
+					// A send that came too late (no row holds the address any
+					// more): its room is not kept.
+					if (!(await this.heldAddresses(c)).has(userId)) {
+						await this.queueRoom(c, sealed, null);
+						return null;
+					}
+					const cur = await c.query<{ room_sealed: Buffer; bot_only_invites: boolean }>(
+						`SELECT room_sealed, bot_only_invites FROM offline_notify_matrix_rooms
+						  WHERE address_mac = $1 FOR UPDATE`,
+						[mac]
+					);
+					const row = cur.rows[0];
+					const curRoom = row ? this.openRoom(row.room_sealed) : null;
+					const stillWhatWasRead =
+						row === undefined ||
+						curRoom === null ||
+						(version !== null && row.room_sealed.equals(version));
+					if (!stillWhatWasRead) {
+						// Another sender claimed one first: theirs is hers; the
+						// one just opened goes.
+						await this.queueRoom(c, sealed, null);
+						return { room: curRoom!, botOnly: row!.bot_only_invites, won: false };
+					}
+					if (row === undefined)
+						await c.query(
+							`INSERT INTO offline_notify_matrix_rooms (address_mac, room_sealed, bot_only_invites)
+							 VALUES ($1, $2, TRUE)`,
+							[mac, sealed]
+						);
+					else {
+						await c.query(
+							`UPDATE offline_notify_matrix_rooms
+							    SET room_sealed = $2, bot_only_invites = TRUE, released_at = NULL, updated_at = now()
+							  WHERE address_mac = $1`,
+							[mac, sealed]
+						);
+						// The room it replaces could not be used any more: left.
+						if (curRoom !== null) await this.queueRoom(c, row.room_sealed, null);
+					}
+					return { room, botOnly: true, won: true };
+				})
+		};
+	}
+
+	/**
+	 * Rooms older versions kept on each row (route_sealed): moved into the
+	 * mapping, one room per address — the one of the row confirmed last, or a
+	 * room the mapping has already — and the rest queued to leave; the rows
+	 * keep none. A queue entry for a room that is now an address's room is
+	 * dropped. Runs whenever the store opens; does nothing once done.
+	 */
+	async moveOldRooms(): Promise<{ moved: number; queued: number }> {
+		return this.tx(async (c) => {
+			await lockMatrix(c);
+			const r = await c.query<{
+				account: string;
+				address_sealed: Buffer | null;
+				route_sealed: Buffer | null;
+				at: Date;
+				prev_address_sealed: Buffer | null;
+				prev_route_sealed: Buffer | null;
+				prev_at: Date;
+			}>(
+				`SELECT account, address_sealed, route_sealed, COALESCE(verified_at, created_at) AS at,
+				        prev_address_sealed, prev_route_sealed, COALESCE(prev_verified_at, created_at) AS prev_at
+				   FROM offline_notify_channels
+				  WHERE channel = 'matrix' AND (route_sealed IS NOT NULL OR prev_route_sealed IS NOT NULL)
+				  FOR UPDATE`
+			);
+			if (r.rows.length === 0) return { moved: 0, queued: 0 };
+			const byAddress = new Map<string, Array<{ room: string; at: number }>>();
+			const strays: Array<{ room: string }> = [];
+			for (const x of r.rows)
+				for (const [a, rt, at] of [
+					[x.address_sealed, x.route_sealed, x.at],
+					[x.prev_address_sealed, x.prev_route_sealed, x.prev_at]
+				] as const) {
+					if (rt === null) continue;
+					const room = this.vault.open(rt, x.account, 'matrix', 'route');
+					if (room === null) continue;
+					const address = a === null ? null : this.vault.open(a, x.account, 'matrix', 'address');
+					if (address === null) strays.push({ room });
+					else
+						byAddress.set(address, [...(byAddress.get(address) ?? []), { room, at: at.getTime() }]);
+				}
+			let moved = 0;
+			let queued = 0;
+			const kept = new Set<string>();
+			for (const [address, rooms] of byAddress) {
+				const mac = this.roomMac(address);
+				const cur = await c.query<{ room_sealed: Buffer }>(
+					`SELECT room_sealed FROM offline_notify_matrix_rooms WHERE address_mac = $1`,
+					[mac]
+				);
+				let keep = cur.rows[0] ? this.openRoom(cur.rows[0].room_sealed) : null;
+				if (keep === null) {
+					keep = [...rooms].sort((p, q) => q.at - p.at)[0]!.room;
+					await c.query(
+						`INSERT INTO offline_notify_matrix_rooms (address_mac, room_sealed, bot_only_invites)
+						 VALUES ($1, $2, FALSE)
+						 ON CONFLICT (address_mac) DO UPDATE SET room_sealed = EXCLUDED.room_sealed,
+						   bot_only_invites = FALSE, released_at = NULL, updated_at = now()`,
+						[mac, this.vault.seal(keep, ROOM_ACCOUNT, 'matrix', 'route')]
+					);
+					moved++;
+				}
+				kept.add(keep);
+				for (const { room } of rooms)
+					if (room !== keep && !kept.has(room)) {
+						await this.queueRoom(c, this.vault.seal(room, ROOM_ACCOUNT, 'matrix', 'route'), null);
+						queued++;
+					}
+			}
+			for (const { room } of strays)
+				if (!kept.has(room)) {
+					await this.queueRoom(c, this.vault.seal(room, ROOM_ACCOUNT, 'matrix', 'route'), null);
+					queued++;
+				}
+			await c.query(
+				`UPDATE offline_notify_channels SET route_sealed = NULL, prev_route_sealed = NULL
+				  WHERE channel = 'matrix' AND (route_sealed IS NOT NULL OR prev_route_sealed IS NOT NULL)`
+			);
+			// An older queue entry for a room that is an address's room now.
+			const q = await c.query<{ route_sealed: Buffer; account: string }>(
+				`SELECT route_sealed, account FROM offline_notify_leave WHERE address_mac IS NULL`
+			);
+			for (const e of q.rows) {
+				const room = this.vault.open(e.route_sealed, e.account, 'matrix', 'route');
+				if (room !== null && kept.has(room))
+					await c.query(`DELETE FROM offline_notify_leave WHERE route_sealed = $1`, [
+						e.route_sealed
+					]);
+			}
+			return { moved, queued };
+		});
 	}
 
 	async status(account: string): Promise<{
@@ -220,7 +476,7 @@ export class OfflineNotifyStore {
 		// hash: no account is written next to an address.
 		const pairMac = this.vault.mac('address-by', account, channel, key);
 		const today = day(now);
-		return this.db.withTx(async (c) => {
+		return this.tx(async (c) => {
 			await c.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
 				`offline-notify:account:${account}`
 			]);
@@ -328,7 +584,7 @@ export class OfflineNotifyStore {
 				);
 				return (gone.rowCount ?? 0) > 0 ? 'dropped' : 'none';
 			});
-		return tx !== null ? run(tx) : this.db.withTx(run);
+		return tx !== null ? run(tx) : this.tx(run);
 	}
 
 	/**
@@ -342,7 +598,7 @@ export class OfflineNotifyStore {
 		now: Date
 	): Promise<string | null> {
 		const today = day(now);
-		return this.db.withTx(async (c) => {
+		return this.tx(async (c) => {
 			await c.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
 				`offline-notify:account:${account}`
 			]);
@@ -441,7 +697,10 @@ export class OfflineNotifyStore {
 		code: string,
 		now: Date
 	): Promise<'verified' | 'wrong' | 'expired' | 'none'> {
-		return this.db.withTx(async (c) => {
+		return this.tx(async (c) => {
+			// Before the row lock below, as every path that may change which
+			// Matrix addresses rows hold (guardRooms) takes it: no deadlock.
+			await lockMatrix(c);
 			const r = await c.query<{
 				code_mac: Buffer | null;
 				code_expires_at: Date | null;
@@ -496,7 +755,7 @@ export class OfflineNotifyStore {
 	 * to the leave queue ({@link guardRooms}, for every deleted row).
 	 */
 	async remove(account: string, channel: Channel | 'all'): Promise<void> {
-		await this.db.withTx(async (c) => {
+		await this.tx(async (c) => {
 			const where = channel === 'all' ? 'account = $1' : 'account = $1 AND channel = $2';
 			const params = channel === 'all' ? [account] : [account, channel];
 			await this.guardRooms(c, where, params, () =>
@@ -516,62 +775,191 @@ export class OfflineNotifyStore {
 		});
 	}
 
-	/** A Matrix room the bot opened but that no row holds (its first message
-	 *  failed, or it arrived after the caller gave up): queue it to leave. */
-	async queueLeave(account: string, room: string): Promise<void> {
-		await this.db.query(
-			`INSERT INTO offline_notify_leave (route_sealed, account) VALUES ($1, $2)
-			 ON CONFLICT (route_sealed) DO NOTHING`,
-			[this.vault.seal(room, account, 'matrix', 'route'), account]
-		);
-	}
-
 	/**
 	 * Matrix rooms due to be left, claimed for ten minutes (two relays never
 	 * leave the same room at once). A room that does not open (damaged, or
 	 * another key) comes back as null: nothing can be done with it.
+	 * `addressMac`: the address whose room it is (null: a room nothing uses).
 	 */
 	async claimLeaves(
 		limit: number,
 		now: Date
-	): Promise<Array<{ key: Buffer; tries: number; account: string; room: string | null }>> {
-		const r = await this.db.query<{ route_sealed: Buffer; account: string; tries: number }>(
+	): Promise<
+		Array<{
+			key: Buffer;
+			tries: number;
+			account: string;
+			room: string | null;
+			addressMac: Buffer | null;
+		}>
+	> {
+		const r = await this.db.query<{
+			route_sealed: Buffer;
+			account: string;
+			tries: number;
+			address_mac: Buffer | null;
+		}>(
 			`UPDATE offline_notify_leave SET next_at = $2
 			  WHERE route_sealed IN (
 			          SELECT route_sealed FROM offline_notify_leave WHERE next_at <= $1
 			           ORDER BY next_at LIMIT $3 FOR UPDATE SKIP LOCKED)
-			 RETURNING route_sealed, account, tries`,
+			 RETURNING route_sealed, account, tries, address_mac`,
 			[now, new Date(now.getTime() + 10 * 60_000), limit]
 		);
 		return r.rows.map((x) => ({
 			key: x.route_sealed,
 			tries: x.tries,
 			account: x.account,
-			room: this.vault.open(x.route_sealed, x.account, 'matrix', 'route')
+			room: this.vault.open(x.route_sealed, x.account, 'matrix', 'route'),
+			addressMac: x.address_mac
 		}));
 	}
 
-	/** Does a row of hers still hold this room (as hers, or kept aside during
-	 *  a change)? Checked again just before the bot leaves a room. */
-	async roomHeld(account: string, room: string): Promise<boolean> {
-		const r = await this.db.query<{
-			route_sealed: Buffer | null;
-			prev_route_sealed: Buffer | null;
-		}>(
-			`SELECT route_sealed, prev_route_sealed FROM offline_notify_channels
-			  WHERE account = $1 AND channel = 'matrix'`,
-			[account]
-		);
-		return r.rows.some((x) =>
-			[x.route_sealed, x.prev_route_sealed].some(
-				(v) => v !== null && this.vault.open(v, account, 'matrix', 'route') === room
-			)
-		);
+	/**
+	 * Leave a claimed room if nothing uses it. No transaction (and no lock) is
+	 * held while the homeserver answers — that may take minutes, and the
+	 * relay has a handful of database connections:
+	 *   1. a short transaction decides: an address's room that a row took back
+	 *      meanwhile is kept (off the queue, the bot stays); otherwise the room
+	 *      is taken OUT of the mapping, so from then on no row can take it back
+	 *      (a row that sets the address again gets a new room);
+	 *   2. `leave` runs;
+	 *   3. left: off the queue. Not left (`leave` threw): the room goes back
+	 *      into the mapping (unless a newer room was claimed meanwhile) — kept,
+	 *      off the queue, if a row holds the address again by now, else still
+	 *      released, and the error goes to the caller (tried again later).
+	 */
+	async leaveIfUnused(
+		item: {
+			readonly key: Buffer;
+			readonly room: string | null;
+			readonly addressMac: Buffer | null;
+		},
+		leave: (room: string) => Promise<void>
+	): Promise<'left' | 'kept'> {
+		const room = item.room;
+		const drop = `DELETE FROM offline_notify_leave WHERE route_sealed = $1`;
+		const dropEntry = (c: Tx) => c.query(drop, [item.key]);
+		if (room === null) {
+			await this.db.query(drop, [item.key]);
+			return 'kept';
+		}
+		const mac = item.addressMac;
+		const taken = await this.tx(async (c) => {
+			if (mac === null) return { kept: false, mapping: null };
+			const m = await c.query<{
+				room_sealed: Buffer;
+				released: boolean;
+				bot_only_invites: boolean;
+			}>(
+				`SELECT room_sealed, released_at IS NOT NULL AS released, bot_only_invites
+				   FROM offline_notify_matrix_rooms WHERE address_mac = $1 FOR UPDATE`,
+				[mac]
+			);
+			const row = m.rows[0];
+			if (row === undefined || this.openRoom(row.room_sealed) !== room)
+				return { kept: false, mapping: null };
+			if (!row.released) {
+				await dropEntry(c);
+				return { kept: true, mapping: null };
+			}
+			await c.query(`DELETE FROM offline_notify_matrix_rooms WHERE address_mac = $1`, [mac]);
+			return { kept: false, mapping: row };
+		});
+		if (taken.kept) return 'kept';
+		try {
+			await leave(room);
+		} catch (err) {
+			const mapping = taken.mapping;
+			if (mac === null || mapping === null) throw err;
+			const kept = await this.tx(async (c) => {
+				await lockMatrix(c);
+				const held = [...(await this.heldAddresses(c))].some((a) => this.roomMac(a).equals(mac));
+				const back = await c.query(
+					`INSERT INTO offline_notify_matrix_rooms (address_mac, room_sealed, bot_only_invites, released_at)
+					 VALUES ($1, $2, $3, CASE WHEN $4 THEN NULL ELSE now() END)
+					 ON CONFLICT (address_mac) DO NOTHING`,
+					[mac, mapping.room_sealed, mapping.bot_only_invites, held]
+				);
+				if (held && (back.rowCount ?? 0) > 0) {
+					await dropEntry(c);
+					return true;
+				}
+				return false;
+			});
+			if (kept) return 'kept';
+			throw err;
+		}
+		await this.db.query(drop, [item.key]);
+		return 'left';
 	}
 
-	/** The room was left (or cannot ever be): off the queue. */
-	async leaveDone(key: Buffer): Promise<void> {
-		await this.db.query(`DELETE FROM offline_notify_leave WHERE route_sealed = $1`, [key]);
+	/** The rooms the mapping keeps (for tests and the operator's counts). */
+	async matrixRoomCount(): Promise<{ rooms: number; released: number }> {
+		const r = await this.db.query<{ rooms: number; released: number }>(
+			`SELECT count(*)::int AS rooms, count(released_at)::int AS released
+			   FROM offline_notify_matrix_rooms`
+		);
+		return r.rows[0] ?? { rooms: 0, released: 0 };
+	}
+
+	/**
+	 * The operator's Matrix test note (`sudo morphit-ops offline-notify`): the
+	 * address it goes to is kept as a row of {@link TEST_ACCOUNT} (sealed, like
+	 * a user's), so its room is held like a user's — the next test note comes
+	 * in the same chat, and nothing users do with that address makes the bot
+	 * leave it. Only the latest test address is kept (an earlier one is let
+	 * go, like any address no row holds); turning Matrix off deletes it with
+	 * the rest. Call it BEFORE sending the test note.
+	 */
+	async holdTestAddress(address: string, now: Date): Promise<void> {
+		await this.tx(async (c) => {
+			await lockMatrix(c);
+			const cur = await c.query<{ address_sealed: Buffer | null }>(
+				`SELECT address_sealed FROM offline_notify_channels
+				  WHERE account = $1 AND channel = 'matrix' FOR UPDATE`,
+				[TEST_ACCOUNT]
+			);
+			const a = cur.rows[0]?.address_sealed;
+			if (a != null && this.vault.open(a, TEST_ACCOUNT, 'matrix', 'address') === address) return;
+			await this.guardRooms(c, 'account = $1', [TEST_ACCOUNT], () =>
+				c.query(
+					`INSERT INTO offline_notify_channels (account, channel, address_sealed, verified_at)
+					 VALUES ($1, 'matrix', $2, $3)
+					 ON CONFLICT (account, channel) DO UPDATE SET
+					   address_sealed = EXCLUDED.address_sealed, route_sealed = NULL,
+					   verified_at = EXCLUDED.verified_at, code_mac = NULL, code_expires_at = NULL,
+					   prev_address_sealed = NULL, prev_route_sealed = NULL,
+					   prev_verified_at = NULL, prev_link_net = NULL`,
+					[TEST_ACCOUNT, this.vault.seal(address, TEST_ACCOUNT, 'matrix', 'address'), now]
+				)
+			);
+		});
+	}
+
+	/** The leave was given up: off the queue, and an address's room that no
+	 *  row took back is no longer kept with that address either (the bot is
+	 *  still in it on its homeserver; nothing here names it any more). */
+	async leaveDone(item: {
+		readonly key: Buffer;
+		readonly room: string | null;
+		readonly addressMac: Buffer | null;
+	}): Promise<void> {
+		await this.tx(async (c) => {
+			if (item.addressMac !== null && item.room !== null) {
+				const m = await c.query<{ room_sealed: Buffer }>(
+					`SELECT room_sealed FROM offline_notify_matrix_rooms
+					  WHERE address_mac = $1 AND released_at IS NOT NULL FOR UPDATE`,
+					[item.addressMac]
+				);
+				const row = m.rows[0];
+				if (row !== undefined && this.openRoom(row.room_sealed) === item.room)
+					await c.query(`DELETE FROM offline_notify_matrix_rooms WHERE address_mac = $1`, [
+						item.addressMac
+					]);
+			}
+			await c.query(`DELETE FROM offline_notify_leave WHERE route_sealed = $1`, [item.key]);
+		});
 	}
 
 	/** The homeserver did not answer: try again later. */
@@ -601,15 +989,13 @@ export class OfflineNotifyStore {
 			channel: Channel;
 			verified: boolean;
 			address_sealed: Buffer | null;
-			route_sealed: Buffer | null;
 			link_net: LinkNet;
 			prev_address_sealed: Buffer | null;
-			prev_route_sealed: Buffer | null;
 			prev_link_net: LinkNet | null;
 			locale: string;
 		}>(
-			`SELECT channel, verified_at IS NOT NULL AS verified, address_sealed, route_sealed, link_net,
-			        prev_address_sealed, prev_route_sealed, prev_link_net, locale
+			`SELECT channel, verified_at IS NOT NULL AS verified, address_sealed, link_net,
+			        prev_address_sealed, prev_link_net, locale
 			   FROM offline_notify_channels
 			  WHERE account = $1 AND ${CONFIRMED} ORDER BY channel`,
 			[account]
@@ -623,7 +1009,7 @@ export class OfflineNotifyStore {
 				// A damaged confirmed address goes; a damaged one kept aside
 				// during a change is simply not used.
 				if (!prev)
-					await this.db.withTx((c) =>
+					await this.tx((c) =>
 						this.guardRooms(c, 'account = $1 AND channel = $2', [account, row.channel], () =>
 							c.query(`DELETE FROM offline_notify_channels WHERE account = $1 AND channel = $2`, [
 								account,
@@ -633,63 +1019,14 @@ export class OfflineNotifyStore {
 					);
 				continue;
 			}
-			const routeSealed = prev ? row.prev_route_sealed : row.route_sealed;
-			const route = routeSealed
-				? this.vault.open(routeSealed, account, row.channel, 'route')
-				: null;
 			out.push({
 				channel: row.channel,
 				address,
-				route,
 				linkNet: (prev ? row.prev_link_net : row.link_net) ?? row.link_net,
-				addressSealed: sealed,
 				prev
 			});
 		}
 		return { channels: out, locale: r.rows[0]?.locale ?? 'en' };
-	}
-
-	/**
-	 * Keep the Matrix room a send opened — only on the row it was opened for:
-	 * the one still waiting for that code, or the one still holding that
-	 * confirmed address. A send that finishes after she cancelled, typed
-	 * another address or confirmed a new one must not give that row a room
-	 * with someone else in it. True when it was kept; when not, the room is
-	 * queued for the bot to leave.
-	 */
-	async setRoute(
-		account: string,
-		channel: Channel,
-		route: string,
-		owner: RouteOwner
-	): Promise<boolean> {
-		const sealed = this.vault.seal(route, account, channel, 'route');
-		const kept = await this.db.withTx((c) =>
-			this.guardRooms(c, 'account = $1 AND channel = $2', [account, channel], () =>
-				'codeMac' in owner
-					? c.query(
-							`UPDATE offline_notify_channels SET route_sealed = $3
-							  WHERE account = $1 AND channel = $2 AND verified_at IS NULL AND code_mac = $4`,
-							[account, channel, sealed, owner.codeMac]
-						)
-					: owner.prev
-						? c.query(
-								`UPDATE offline_notify_channels SET prev_route_sealed = $3
-								  WHERE account = $1 AND channel = $2 AND verified_at IS NULL
-								    AND prev_verified_at IS NOT NULL AND prev_address_sealed = $4`,
-								[account, channel, sealed, owner.addressSealed]
-							)
-						: c.query(
-								`UPDATE offline_notify_channels SET route_sealed = $3
-								  WHERE account = $1 AND channel = $2 AND verified_at IS NOT NULL
-								    AND address_sealed = $4`,
-								[account, channel, sealed, owner.addressSealed]
-							)
-			)
-		);
-		if ((kept.rowCount ?? 0) > 0) return true;
-		await this.queueLeave(account, route);
-		return false;
 	}
 
 	/** Count one notice against today's cap; false when the cap is reached. */
@@ -911,7 +1248,7 @@ export class OfflineNotifyStore {
 		// Codes nobody typed: a change gives back the address she had; a new
 		// address goes (with what it held).
 		const expired = 'verified_at IS NULL AND (code_expires_at IS NULL OR code_expires_at < $1)';
-		await this.db.withTx((c) =>
+		await this.tx((c) =>
 			this.guardRooms(c, expired, [now], async () => {
 				await c.query(
 					`UPDATE offline_notify_channels
@@ -931,12 +1268,17 @@ export class OfflineNotifyStore {
 
 	/**
 	 * The operator turned a channel off: every address users gave for it goes
-	 * (Matrix rooms to the leave queue, as for any deleted row).
+	 * (and the operator's test address): with Matrix, every room of the
+	 * mapping goes to the leave queue, as for any address no row holds.
+	 * `removed` counts users' addresses.
 	 */
 	async purgeChannel(channel: Channel): Promise<{ removed: number }> {
-		const gone = await this.db.withTx((c) =>
+		const gone = await this.tx((c) =>
 			this.guardRooms(c, 'channel = $1', [channel], () =>
-				c.query(`DELETE FROM offline_notify_channels WHERE channel = $1`, [channel])
+				c.query<{ account: string }>(
+					`DELETE FROM offline_notify_channels WHERE channel = $1 RETURNING account`,
+					[channel]
+				)
 			)
 		);
 		// Accounts left with nothing: their queue and links go too.
@@ -948,7 +1290,8 @@ export class OfflineNotifyStore {
 			`DELETE FROM offline_notify_links l WHERE NOT EXISTS (
 			   SELECT 1 FROM offline_notify_channels c WHERE c.account = l.account)`
 		);
-		return { removed: gone.rowCount ?? 0 };
+		// Users' addresses: the operator's own test address is not one.
+		return { removed: gone.rows.filter((r) => r.account !== TEST_ACCOUNT).length };
 	}
 }
 
@@ -966,6 +1309,7 @@ export async function resetOfflineNotify(db: Database): Promise<void> {
 			'offline_notify_pending',
 			'offline_notify_links',
 			'offline_notify_leave',
+			'offline_notify_matrix_rooms',
 			'offline_notify_key'
 		])
 			await c.query(`DELETE FROM ${t}`);

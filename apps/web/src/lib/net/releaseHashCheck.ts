@@ -32,6 +32,12 @@
 
 import { fetchWithTimeout } from './fetchWithTimeout';
 
+/** A content-addressed build file: its name changes with its bytes, so any
+ *  copy the browser or the service worker stored is this build's own. */
+function isContentAddressed(sameOriginPath: string): boolean {
+	return sameOriginPath.startsWith('/_app/immutable/');
+}
+
 /** A manifest key the check will fetch: a plain path on this site. */
 const MANIFEST_PATH_RE = /^\/(?!\/)[A-Za-z0-9._~/-]{1,200}$/;
 
@@ -112,10 +118,21 @@ export function manifestKeyToSameOriginPath(key: string): string | null {
  *
  *  An attacker who controls the cache layer specifically (not
  *  just the origin) is outside our threat model — we can't
- *  protect against the user's own browser being compromised. */
+ *  protect against the user's own browser being compromised.
+ *
+ *  The exception is a file whose name does NOT change with its bytes
+ *  (index.html, the service worker): it is asked for with
+ *  `cache: 'no-cache'`, which the service worker answers from the network
+ *  (wantsServerCopy in $lib/net/dynamicPaths) — the server revalidates and
+ *  sends what it serves now. A stored copy of such a file can be another
+ *  release's: one showed the red banner on a site serving the signed release
+ *  exactly (vigilante.trading, 2026-10-30). The running page itself came from
+ *  the network too (navigations are network-first with cache 'reload'), so
+ *  this still hashes what runs. Not 'no-store': the reasoning above holds. */
 async function fetchAndHash(sameOriginPath: string): Promise<string> {
 	const res = await fetchWithTimeout(sameOriginPath, {
-		credentials: 'omit'
+		credentials: 'omit',
+		...(isContentAddressed(sameOriginPath) ? {} : { cache: 'no-cache' as RequestCache })
 	});
 	if (!res.ok) {
 		throw new Error(`HTTP ${res.status} for ${sameOriginPath}`);

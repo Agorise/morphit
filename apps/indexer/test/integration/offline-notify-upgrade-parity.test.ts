@@ -7,7 +7,9 @@
  * was at v68 runs only the v69 migration's own SQL in migrations.ts. The two
  * texts are kept identical by hand, and nothing else compares them — so here
  * both paths are built and every column, default, index, constraint and
- * comment of the seven tables is compared. Neither path may create database
+ * comment of the seven tables is compared — and of the one v71 adds
+ * (offline_notify_matrix_rooms, and offline_notify_leave.address_mac): a node
+ * at v68 upgrades through both. Neither path may create database
  * code (a function or trigger): the snapshot checks refuse it, and the older
  * indexer's rollback heal drops it and holds payouts.
  *
@@ -61,14 +63,14 @@ describe.skipIf(!INTEGRATION_ENABLED)('offline notifications: upgraded = fresh (
 				[upgraded.schema, TABLES]
 			)
 		).rows.map((r) => `"${upgraded.schema}"."${r.table_name as string}"`);
-		expect(t).toHaveLength(7);
+		expect(t).toHaveLength(8);
 		await upgraded.pool.query(`DROP TABLE ${t.join(', ')} CASCADE`);
 		await upgraded.pool.query(
-			`DELETE FROM "${upgraded.schema}".schema_migrations WHERE version = 69`
+			`DELETE FROM "${upgraded.schema}".schema_migrations WHERE version IN (69, 71)`
 		);
 		const { runMigrations } = await import('../../src/db/migrations');
 		const r = await runMigrations(upgraded.db);
-		expect(r.applied).toEqual([69]);
+		expect(r.applied).toEqual([69, 71]);
 	}, 120_000);
 
 	afterAll(async () => {
@@ -76,10 +78,10 @@ describe.skipIf(!INTEGRATION_ENABLED)('offline notifications: upgraded = fresh (
 		await upgraded?.teardown();
 	});
 
-	it('the same seven tables, columns, defaults, indexes, constraints and comments', async () => {
+	it('the same eight tables, columns, defaults, indexes, constraints and comments', async () => {
 		const a = await shape(fresh);
 		const b = await shape(upgraded);
-		expect((a.tables as unknown[]).length).toBe(7);
+		expect((a.tables as unknown[]).length).toBe(8);
 		expect(b).toEqual(a);
 	});
 

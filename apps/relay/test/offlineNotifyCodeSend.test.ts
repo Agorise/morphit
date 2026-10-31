@@ -5,31 +5,29 @@
  * asked for codes to that address today. A send still running then finishes
  * in the background, and only on the row that still waits for THAT code:
  *
- *   - sent: its Matrix room is kept for that code's row (never another one);
+ *   - sent: nothing more to do (a Matrix room is the address's, kept by the
+ *     store — channels/matrix.ts);
  *   - failed: that code's row gives back the address she had (or goes);
- *   - past its budget: a room it opens later is left, and a database error
- *     on the way never takes the relay down.
+ *   - past its budget: the same, and a database error on the way never takes
+ *     the relay down.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrivateKey } from '@beblurt/dblurt';
 
-type Plan = { after: number; route?: string | null; fail?: boolean; never?: boolean };
+type Plan = { after: number; fail?: boolean; never?: boolean };
 const plans = new Map<string, Plan>();
-const late: Array<(route: string | null) => void> = [];
+const late: Array<() => void> = [];
 vi.mock('../src/notify/dispatch.ts', async (orig) => {
 	const real = await orig<typeof import('../src/notify/dispatch.ts')>();
 	return {
 		...real,
 		dispatch: (_cfg: unknown, _channel: string, address: string) => {
 			const p = plans.get(address)!;
-			if (p.never) return new Promise<string | null>((r) => late.push(r));
+			if (p.never) return new Promise<void>((r) => late.push(() => r()));
 			return new Promise((resolve, reject) =>
-				setTimeout(
-					() => (p.fail ? reject(new Error('refused')) : resolve(p.route ?? null)),
-					p.after
-				)
+				setTimeout(() => (p.fail ? reject(new Error('refused')) : resolve(undefined)), p.after)
 			);
 		}
 	};
@@ -46,27 +44,19 @@ const key = PrivateKey.fromSeed('code-send-alice');
 const MAC = Buffer.from('this-code');
 const ANSWER_MS = 80;
 
-function setup(opts: { send?: boolean; leaveFails?: boolean; budgetMs?: number } = {}) {
+function setup(opts: { send?: boolean; restoreFails?: boolean; budgetMs?: number } = {}) {
 	const calls = {
-		setRoute: [] as unknown[][],
-		restore: [] as unknown[][],
-		leave: [] as unknown[][]
+		restore: [] as unknown[][]
 	};
 	const store = {
 		async beginAddress() {
 			return { ok: true, codeMac: MAC, send: opts.send ?? true };
 		},
-		async setRoute(...a: unknown[]) {
-			calls.setRoute.push(a);
-			return true;
-		},
 		async restoreOrDrop(...a: unknown[]) {
 			calls.restore.push(a);
+			if (opts.restoreFails) throw new Error('connect ECONNREFUSED 127.0.0.1:5432');
 		},
-		async queueLeave(...a: unknown[]) {
-			calls.leave.push(a);
-			if (opts.leaveFails) throw new Error('connect ECONNREFUSED 127.0.0.1:5432');
-		},
+		matrixRoomBook: () => ({}),
 		async claimLeaves() {
 			return [];
 		}
@@ -151,9 +141,9 @@ afterEach(() => {
 
 describe('offline notices: "send me a code" answers at one moment', () => {
 	it('sent fast, failed fast, none sent, still on its way: all answered after the same wait', async () => {
-		plans.set('fast@x.org', { after: 5, route: null });
+		plans.set('fast@x.org', { after: 5 });
 		plans.set('fails@x.org', { after: 5, fail: true });
-		plans.set('slow@x.org', { after: 400, route: null });
+		plans.set('slow@x.org', { after: 400 });
 		const t = setup();
 		const quiet = setup({ send: false });
 		const answers = [
@@ -172,13 +162,12 @@ describe('offline notices: "send me a code" answers at one moment', () => {
 		expect(answers.map((a) => a.ms)).toEqual([ANSWER_MS, ANSWER_MS, ANSWER_MS, ANSWER_MS]);
 	});
 
-	it('a send that succeeds after the answer keeps its room — for THAT code only', async () => {
-		plans.set('slow@x.org', { after: 300, route: '!room:hs' });
+	it('a send that succeeds after the answer: what she typed stays, waiting for its code', async () => {
+		plans.set('slow@x.org', { after: 300 });
 		const t = setup();
 		expect((await drive(t.set('slow@x.org'))).status).toBe('code_sent');
-		expect(t.calls.setRoute).toEqual([]);
 		await wait(400);
-		expect(t.calls.setRoute).toEqual([['alice', 'email', '!room:hs', { codeMac: MAC }]]);
+		expect(t.calls.restore).toEqual([]);
 	});
 
 	it('a send that fails, now or after the answer, gives back what she had — for THAT code only', async () => {
@@ -195,9 +184,9 @@ describe('offline notices: "send me a code" answers at one moment', () => {
 		]);
 	});
 
-	it('past its budget: the room it opens later is left, and a database error does not take the relay down', async () => {
+	it('past its budget: what she had comes back, the send finishing later changes nothing, and a database error does not take the relay down', async () => {
 		plans.set('hang@x.org', { after: 0, never: true });
-		const t = setup({ leaveFails: true, budgetMs: 200 });
+		const t = setup({ restoreFails: true, budgetMs: 200 });
 		const unhandled: unknown[] = [];
 		const onUnhandled = (e: unknown) => unhandled.push(e);
 		process.on('unhandledRejection', onUnhandled);
@@ -205,10 +194,10 @@ describe('offline notices: "send me a code" answers at one moment', () => {
 			expect((await drive(t.set('hang@x.org'))).status).toBe('code_sent');
 			await wait(250);
 			expect(t.calls.restore).toEqual([['alice', 'email', MAC]]);
-			// The send finishes after all, with a room nobody waits for.
-			late[0]!('!late:hs');
+			// The send finishes after all: nobody waits for it.
+			late[0]!();
 			await wait(50);
-			expect(t.calls.leave).toEqual([['alice', '!late:hs']]);
+			expect(t.calls.restore).toEqual([['alice', 'email', MAC]]);
 			expect(unhandled).toEqual([]);
 		} finally {
 			process.off('unhandledRejection', onUnhandled);

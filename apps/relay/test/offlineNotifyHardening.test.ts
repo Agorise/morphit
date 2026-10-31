@@ -22,12 +22,14 @@ import net from 'node:net';
 import { NetRefusedError, httpRequest, openSocket } from '../src/notify/net.ts';
 import { MAX_REPLY_CHARS, sendMail } from '../src/notify/channels/smtp.ts';
 import { MAX_STREAM_CHARS, sendXmpp } from '../src/notify/channels/xmpp.ts';
-import { MatrixRoomLeftOpen, errcodeOf, sendMatrix } from '../src/notify/channels/matrix.ts';
+import { errcodeOf, sendMatrix } from '../src/notify/channels/matrix.ts';
 import { newSessionIdentity, sendSession } from '../src/notify/channels/session.ts';
 import { normalizeAddress, countingKey } from '../src/notify/addresses.ts';
 import {
 	TEST_CERT,
+	fakeHomeserver,
 	fakeHttp,
+	memoryRoomBook,
 	fakeSmtp,
 	fakeSocks,
 	fakeXmpp,
@@ -476,23 +478,25 @@ describe('XMPP', () => {
 });
 
 describe('Matrix', () => {
-	it('a room opened for a send that then failed is named, so it can be left', async () => {
-		const hs = keep(
-			await fakeHttp((h) =>
-				h.path.endsWith('/createRoom')
-					? { status: 200, body: { room_id: '!new:hs' } }
-					: { status: 500, body: { errcode: 'M_UNKNOWN' } }
-			)
-		);
-		const err = await sendMatrix(
-			{ homeserver: `http://127.0.0.1:${hs.port}`, accessToken: 't', userId: '@bot:hs' },
+	it('a new room whose first message fails stays her room: the next send uses it', async () => {
+		let fail = true;
+		const hs = keep(await fakeHomeserver({ bot: '@bot:hs', failSend: () => fail }));
+		const cfg = { homeserver: hs.url, accessToken: hs.token, userId: hs.bot };
+		const b = memoryRoomBook();
+		await expect(
+			sendMatrix(cfg, { torSocks: '', hiddenOnly: false }, '@grandma:hs.org', 'hi', b.book)
+		).rejects.toThrow();
+		fail = false;
+		const room = await sendMatrix(
+			cfg,
 			{ torSocks: '', hiddenOnly: false },
 			'@grandma:hs.org',
-			null,
-			'hi'
-		).catch((e: unknown) => e);
-		expect(err).toBeInstanceOf(MatrixRoomLeftOpen);
-		expect((err as MatrixRoomLeftOpen).room).toBe('!new:hs');
+			'hi again',
+			b.book
+		);
+		expect(hs.made()).toBe(1);
+		expect(hs.rooms.get(room)!.messages.map((m) => m.body)).toEqual(['hi again']);
+		expect(b.queued).toEqual([]);
 	});
 
 	it("a server's free text never becomes the error code", () => {

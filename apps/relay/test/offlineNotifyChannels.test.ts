@@ -8,14 +8,21 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import net from 'node:net';
 import { displayName, sendMail, quotedPrintable } from '../src/notify/channels/smtp.ts';
-import { leaveTestRoom, sendMatrix } from '../src/notify/channels/matrix.ts';
+import {
+	DEFAULT_CALL_MS,
+	leaveRoom,
+	MatrixTimeoutError,
+	sendMatrix
+} from '../src/notify/channels/matrix.ts';
 import { codeInTelegramText, pollTelegram, sendTelegram } from '../src/notify/channels/telegram.ts';
 import { sendXmpp } from '../src/notify/channels/xmpp.ts';
 import { newSessionIdentity, sendSession, sessionIdOf } from '../src/notify/channels/session.ts';
 import {
 	OTHER_CERT,
 	TEST_CERT,
+	fakeHomeserver,
 	fakeHttp,
+	memoryRoomBook,
 	fakeSmtp,
 	fakeSocks,
 	type Listening
@@ -144,113 +151,148 @@ describe('email', () => {
 });
 
 describe('Matrix', () => {
-	it('opens a direct room that invites her, then reuses it; a room she left is replaced', async () => {
-		let room = 0;
-		const gone = new Set<string>();
-		const hs = keep(
-			await fakeHttp((h) => {
-				if (h.path === '/_matrix/client/v3/createRoom')
-					return { status: 200, body: { room_id: `!r${++room}:hs` } };
-				const m = /\/rooms\/([^/]+)\/send\//.exec(h.path);
-				if (m && gone.has(decodeURIComponent(m[1]!)))
-					return { status: 403, body: { errcode: 'M_FORBIDDEN' } };
-				if (m) return { status: 200, body: { event_id: '$e' } };
-				return { status: 404, body: { errcode: 'M_UNRECOGNIZED' } };
-			})
-		);
-		const cfg = {
-			homeserver: `http://127.0.0.1:${hs.port}`,
-			accessToken: 'tok',
-			userId: '@bot:hs'
-		};
-		const r1 = await sendMatrix(cfg, direct, '@grandma:hs.org', null, 'code 123456');
-		const create = JSON.parse(hs.hits[0]!.body) as { invite: string[]; is_direct: boolean };
-		expect(create.invite).toEqual(['@grandma:hs.org']);
-		expect(create.is_direct).toBe(true);
-		expect(hs.hits[0]!.headers.authorization).toBe('Bearer tok');
-		const r2 = await sendMatrix(cfg, direct, '@grandma:hs.org', r1, 'note');
-		expect(r2).toBe(r1);
-		expect(hs.hits.filter((h) => h.path.endsWith('createRoom'))).toHaveLength(1);
-		gone.add(r1);
-		const r3 = await sendMatrix(cfg, direct, '@grandma:hs.org', r1, 'note 2');
-		expect(r3).not.toBe(r1);
-		expect(JSON.parse(hs.hits.at(-1)!.body)).toEqual({ msgtype: 'm.text', body: 'note 2' });
-	});
-});
-
-describe('Matrix: the operator’s test chat', () => {
-	// A homeserver where she joins after `joinAfter` membership checks (never: -1).
-	async function homeserver(joinAfter: number, failChecks = 0) {
-		let checks = 0;
-		let left = false;
-		const hs = keep(
-			await fakeHttp((h) => {
-				if (h.method === 'GET' && h.path === '/_matrix/client/v3/rooms/!t%3Ahs/joined_members') {
-					checks++;
-					if (checks <= failChecks) return { status: 502, body: { errcode: 'M_UNKNOWN' } };
-					const joined: Record<string, unknown> = { '@bot:hs': {} };
-					if (!left && joinAfter >= 0 && checks > joinAfter) joined['@operator:hs.org'] = {};
-					return { status: 200, body: { joined } };
-				}
-				if (h.path === '/_matrix/client/v3/rooms/!t%3Ahs/leave') {
-					left = true;
-					return { status: 200, body: {} };
-				}
-				if (h.path === '/_matrix/client/v3/rooms/!t%3Ahs/forget') return { status: 200, body: {} };
-				return { status: 404, body: { errcode: 'M_UNRECOGNIZED' } };
-			})
-		);
-		const cfg = {
-			homeserver: `http://127.0.0.1:${hs.port}`,
-			accessToken: 'tok',
-			userId: '@bot:hs'
-		};
-		return { hs, cfg, checks: () => checks };
-	}
-	const clock = () => {
-		let t = 0;
-		return { now: () => t, sleep: async (ms: number) => void (t += ms) };
+	const mx = async (o: Parameters<typeof fakeHomeserver>[0] = {}) => {
+		const hs = keep(await fakeHomeserver({ bot: '@bot:hs', ...o }));
+		return { hs, cfg: { homeserver: hs.url, accessToken: hs.token, userId: hs.bot } };
 	};
+	const G = '@grandma:hs.org';
 
-	it('the bot leaves only once she has joined — so the note can still be read', async () => {
-		const { hs, cfg, checks } = await homeserver(2);
-		const c = clock();
-		expect(
-			await leaveTestRoom(cfg, direct, '!t:hs', '@operator:hs.org', { ...c, pollMs: 3000 })
-		).toBe(true);
-		expect(checks()).toBe(3);
-		const paths = hs.hits.map((h) => h.path.replace(/^.*\/rooms\/[^/]+\//, ''));
-		// Every check comes before the leave, and the leave is followed by forget.
-		expect(paths).toEqual([
-			'joined_members',
-			'joined_members',
-			'joined_members',
+	it('opens a direct room only the bot may invite into, then reuses it; a room the bot is no longer in is replaced', async () => {
+		const { hs, cfg } = await mx();
+		const b = memoryRoomBook();
+		const r1 = await sendMatrix(cfg, direct, G, 'code 123456', b.book);
+		const asked = hs.rooms.get(r1)!.created as {
+			invite: string[];
+			is_direct: boolean;
+			preset: string;
+			power_level_content_override: { invite: number };
+		};
+		expect(asked).toMatchObject({ invite: [G], is_direct: true, preset: 'private_chat' });
+		expect(asked.power_level_content_override.invite).toBe(100);
+		expect(hs.hits.every((h) => h.headers.authorization === 'Bearer tok')).toBe(true);
+		expect(await sendMatrix(cfg, direct, G, 'note', b.book)).toBe(r1);
+		expect(hs.made()).toBe(1);
+		hs.removeBot(r1);
+		const r3 = await sendMatrix(cfg, direct, G, 'note 2', b.book);
+		expect(r3).not.toBe(r1);
+		expect(hs.rooms.get(r3)!.messages).toEqual([{ sender: '@bot:hs', body: 'note 2' }]);
+		// The room it replaced is queued to be left.
+		expect(b.queued).toEqual([r1]);
+	});
+
+	it.each([
+		['403 M_FORBIDDEN to everything (a suspended bot)', 403, 'M_FORBIDDEN'],
+		['403 M_USER_SUSPENDED', 403, 'M_USER_SUSPENDED'],
+		['429 M_LIMIT_EXCEEDED', 429, 'M_LIMIT_EXCEEDED'],
+		['403 M_RESOURCE_LIMIT_EXCEEDED', 403, 'M_RESOURCE_LIMIT_EXCEEDED']
+	])(
+		'an error about the bot’s account (%s) never counts as her room being gone',
+		async (_w, status, errcode) => {
+			const { hs, cfg } = await mx();
+			const b = memoryRoomBook();
+			const room = await sendMatrix(cfg, direct, G, 'one', b.book);
+			hs.trouble({ status, errcode });
+			await expect(sendMatrix(cfg, direct, G, 'two', b.book)).rejects.toThrow();
+			hs.trouble(null);
+			expect(hs.hits.filter((h) => h.path.endsWith('/createRoom'))).toHaveLength(1);
+			expect(b.queued).toEqual([]);
+			expect(await sendMatrix(cfg, direct, G, 'three', b.book)).toBe(room);
+		}
+	);
+
+	it('she left and her homeserver refuses to invite her back: a new room', async () => {
+		let refuse = false;
+		const { hs, cfg } = await mx({ refuseInvite: () => refuse });
+		const b = memoryRoomBook();
+		const room = await sendMatrix(cfg, direct, G, 'one', b.book);
+		hs.leave(room, G);
+		refuse = true;
+		await expect(sendMatrix(cfg, direct, G, 'two', b.book)).rejects.toThrow(); // createRoom refused too
+		refuse = false;
+		const again = await sendMatrix(cfg, direct, G, 'three', b.book);
+		expect(again).toBe(room); // invited back once her homeserver lets it
+	});
+
+	it('a room an older version opened: used while only she is in it; replaced once someone else is', async () => {
+		const { hs, cfg } = await mx({ autoJoin: [G, '@friend:hs.org'] });
+		const b = memoryRoomBook();
+		const r = await fetch(`${hs.url}/_matrix/client/v3/createRoom`, {
+			method: 'POST',
+			headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ preset: 'trusted_private_chat', is_direct: true, invite: [G] })
+		});
+		const old = ((await r.json()) as { room_id: string }).room_id;
+		b.legacy(G, old);
+		expect(await sendMatrix(cfg, direct, G, 'one', b.book)).toBe(old);
+		// In that room she may invite others: she did.
+		expect(hs.inviteBy(old, G, '@friend:hs.org')).toBe(true);
+		const fresh = await sendMatrix(cfg, direct, G, 'code 123456', b.book);
+		expect(fresh).not.toBe(old);
+		expect(hs.rooms.get(fresh)!.messages.map((m) => m.body)).toEqual(['code 123456']);
+		expect(b.queued).toEqual([old]);
+		expect(hs.inviteBy(fresh, G, '@friend:hs.org')).toBe(false);
+	});
+
+	it('a room an older version opened, someone else only invited (not joined yet): replaced too', async () => {
+		const { hs, cfg } = await mx({ autoJoin: [G] });
+		const b = memoryRoomBook();
+		const r = await fetch(`${hs.url}/_matrix/client/v3/createRoom`, {
+			method: 'POST',
+			headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ preset: 'trusted_private_chat', is_direct: true, invite: [G] })
+		});
+		const old = ((await r.json()) as { room_id: string }).room_id;
+		b.legacy(G, old);
+		// She invited someone, who has not accepted (yet): they could, and
+		// read every later message.
+		expect(hs.inviteBy(old, G, '@later:hs.org')).toBe(true);
+		expect(hs.rooms.get(old)!.members.get('@later:hs.org')).toBe('invite');
+		const fresh = await sendMatrix(cfg, direct, G, 'code 123456', b.book);
+		expect(fresh).not.toBe(old);
+		expect(hs.rooms.get(old)!.messages).toEqual([]);
+		expect(b.queued).toEqual([old]);
+	});
+
+	it('a note to an address no row holds any more (it came too late): nothing sent, its room queued', async () => {
+		const { hs, cfg } = await mx();
+		const b = memoryRoomBook(() => false);
+		await expect(sendMatrix(cfg, direct, G, 'late code', b.book)).rejects.toThrow(
+			/no saved address holds/
+		);
+		expect(b.queued).toHaveLength(1);
+		expect(hs.rooms.get(b.queued[0]!)!.messages).toEqual([]);
+	});
+
+	it('leaving: leave and forget; a room already left and forgotten is fine; an account in trouble is retried', async () => {
+		const { hs, cfg } = await mx();
+		const room = await sendMatrix(cfg, direct, G, 'code', memoryRoomBook().book);
+		await leaveRoom(cfg, direct, room);
+		expect(hs.leavesAndForgets().map((h) => h.path.replace(/^.*\//, ''))).toEqual([
 			'leave',
 			'forget'
 		]);
+		expect(hs.rooms.get(room)!.forgotten.has('@bot:hs')).toBe(true);
+		await leaveRoom(cfg, direct, room);
+		hs.trouble({ status: 403, errcode: 'M_FORBIDDEN' });
+		await expect(leaveRoom(cfg, direct, room)).rejects.toThrow();
 	});
 
-	it('she never joins: the bot leaves when the wait is over, and says so', async () => {
-		const { hs, cfg } = await homeserver(-1);
-		const c = clock();
-		expect(
-			await leaveTestRoom(cfg, direct, '!t:hs', '@operator:hs.org', {
-				...c,
-				waitMs: 9000,
-				pollMs: 3000
-			})
-		).toBe(false);
-		expect(c.now()).toBe(9000);
-		expect(hs.hits.at(-2)?.path).toMatch(/\/leave$/);
-	});
-
-	it('a homeserver hiccup while checking does not end the wait', async () => {
-		const { cfg } = await homeserver(0, 2);
-		const c = clock();
-		expect(
-			await leaveTestRoom(cfg, direct, '!t:hs', '@operator:hs.org', { ...c, pollMs: 3000 })
-		).toBe(true);
-	});
+	it(
+		'a homeserver that stops answering: "took too long" after the real per-request limit',
+		async () => {
+			const { cfg } = await mx({ slow: () => null });
+			const t0 = Date.now();
+			const err = await sendMatrix(cfg, direct, G, 'x', memoryRoomBook().book).catch(
+				(e: unknown) => e
+			);
+			const took = Date.now() - t0;
+			expect(err).toBeInstanceOf(MatrixTimeoutError);
+			expect((err as Error).name).toBe('TimeoutError');
+			expect(took).toBeGreaterThanOrEqual(DEFAULT_CALL_MS - 200);
+			expect(took).toBeLessThan(DEFAULT_CALL_MS + 5_000);
+		},
+		DEFAULT_CALL_MS + 15_000
+	);
 });
 
 describe('Telegram', () => {

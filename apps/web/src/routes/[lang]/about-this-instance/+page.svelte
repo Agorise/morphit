@@ -386,6 +386,8 @@
 									version: $integritySummary.announced
 								}
 							})}
+						{:else if $integritySummary.kind === 'waiting_worker'}
+							{$_('about_this_instance.integrity.check_waiting_worker')}
 						{:else if $integritySummary.kind === 'no_release'}
 							{$_('about_this_instance.integrity.check_no_release')}
 						{:else if $integritySummary.kind === 'incomplete'}

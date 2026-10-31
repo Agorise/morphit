@@ -342,6 +342,39 @@ describe('morphit-ops offline-notify', () => {
 		expect(r.printed).toMatch(/Nothing was changed/);
 	});
 
+	// Review R19b MEDIUM 2: the relay may stop after deleting some addresses;
+	// then "Nothing was changed" would be untrue.
+	it('if it stops after deleting addresses: says how many are gone, never "Nothing was changed"', async () => {
+		const file = { MORPHIT_NOTIFY_TELEGRAM_TOKEN: 't', MORPHIT_NOTIFY_TELEGRAM_USERNAME: 'Bot_1' };
+		const r = await wizard(['#label Turn an app off', '#label Telegram', 'y', '#last'], {
+			file,
+			admin: (args) =>
+				args[0] === 'purge-channel'
+					? { ok: false, error: 'failed', reason: 'db down', removed: 2 }
+					: { ok: true }
+		});
+		expect(r.saved).toHaveLength(0);
+		expect(r.printed).toMatch(/It did not finish: /);
+		expect(r.printed).toMatch(/2 users' Telegram addresses are deleted already\./);
+		expect(r.printed).toMatch(
+			/Telegram stays set up\. Run “Turn an app off” for Telegram again to finish\./
+		);
+		expect(r.printed).not.toMatch(/Nothing was changed/);
+	});
+
+	it('if the tool was stopped: the addresses may be gone already, never "Nothing was changed"', async () => {
+		const file = { MORPHIT_NOTIFY_TELEGRAM_TOKEN: 't', MORPHIT_NOTIFY_TELEGRAM_USERNAME: 'Bot_1' };
+		const r = await wizard(['#label Turn an app off', '#label Telegram', 'y', '#last'], {
+			file,
+			admin: (args) =>
+				args[0] === 'purge-channel' ? { ok: false, error: 'timed_out' } : { ok: true }
+		});
+		expect(r.saved).toHaveLength(0);
+		expect(r.printed).toMatch(/It did not finish: the relay's setup tool did not finish within/);
+		expect(r.printed).toMatch(/Users' Telegram addresses may be deleted already\./);
+		expect(r.printed).not.toMatch(/Nothing was changed/);
+	});
+
 	const START_OVER = 'Start over (forget every user’s saved address)';
 
 	it('a key that is missing or another one: says so, and offers to start over', async () => {
@@ -761,7 +794,7 @@ describe('morphit-ops offline-notify', () => {
 		});
 	});
 
-	describe('Matrix test note: the operator is told to accept the invitation', () => {
+	describe('Matrix test note: the operator is told where it comes, and that the chat stays', () => {
 		const SEND = [
 			'#label Set up Matrix',
 			'https://matrix.org',
@@ -770,51 +803,71 @@ describe('morphit-ops offline-notify', () => {
 			'pw',
 			'@operator:matrix.org'
 		];
-		const relay =
-			(joined: boolean) =>
-			(args: readonly string[]): AdminAnswer =>
-				args[0] === 'check'
-					? { ok: true, userId: '@morphitio:matrix.org' }
-					: args[0] === 'send'
-						? { ok: true, joined }
-						: { ok: true };
+		const relay = (args: readonly string[]): AdminAnswer =>
+			args[0] === 'check' ? { ok: true, userId: '@morphitio:matrix.org' } : { ok: true };
 
-		it('before the send: accept the invitation from the bot; after: you joined', async () => {
-			const r = await wizard([...SEND, '#last'], { admin: relay(true) });
-			const hint = r.printed.indexOf(
-				'accept the invitation from @morphitio:matrix.org that brings the test note'
-			);
+		it('before the send: the chat it comes in, the invitation, and that the bot stays', async () => {
+			const r = await wizard([...SEND, '#last'], { admin: relay });
+			const hint = r.printed.indexOf('The test note comes in a chat from @morphitio:matrix.org.');
 			const sent = r.printed.indexOf('Test note sent to @operator:matrix.org');
 			expect(hint).toBeGreaterThan(-1);
 			expect(sent).toBeGreaterThan(hint);
-			expect(r.printed).toMatch(/You joined; the bot has left the test chat/);
-			expect(r.printed).not.toMatch(/did not join in time/);
+			expect(r.printed).toMatch(/invitation to it, accept it to read the note/);
+			expect(r.printed).toMatch(
+				/The bot stays in that chat:\s+later notes to this address come in the same chat, never in a new one\./
+			);
+			// Nothing says the bot leaves, or that the invitation must be hurried.
+			expect(r.printed).not.toMatch(
+				/leaves the test chat|has left|within about|in time|decline it/
+			);
 			expect(r.saved).toHaveLength(1);
-		});
-
-		it('not joined in time: told the invitation can no longer be accepted', async () => {
-			const r = await wizard([...SEND, '#last'], { admin: relay(false) });
-			expect(r.printed).toMatch(/did not join in time[\s\S]*can no longer be accepted: decline it/);
-			expect(r.printed).not.toMatch(/You joined/);
 		});
 
 		it('the hint is not shown for other apps, nor for a Matrix check without a test note', async () => {
 			const email = await wizard([...EMAIL, '#last']);
-			expect(email.printed).not.toMatch(/accept the invitation/);
+			expect(email.printed).not.toMatch(/accept it to read the note/);
 			const check = await wizard(
 				['#label Set up Matrix', 'https://matrix.org', '#0', 'morphitio', 'pw', '', '#last'],
-				{ admin: relay(true) }
+				{ admin: relay }
 			);
-			expect(check.printed).not.toMatch(/accept the invitation/);
+			expect(check.printed).not.toMatch(/accept it to read the note/);
+		});
+
+		it('a homeserver too slow for the test note: said plainly, never as an error code', async () => {
+			const r = await wizard(['#label Send a test note', '#0', '@operator:matrix.org', '#last'], {
+				status: { offered: ['matrix'], matrix: '@notices:vigilante.trading' },
+				admin: (args) => (args[0] === 'send' ? { ok: false, error: 'slow' } : { ok: true })
+			});
+			expect(r.printed).toMatch(
+				/It did not work: the Matrix server took too long to answer \(it may be busy, or slow to reach through Tor\)\. Please try again in a few minutes/
+			);
+			expect(r.printed).not.toMatch(/TimeoutError|took too long$|slow\b(?! to reach)/m);
+		});
+
+		// Review R19b LOW 12: without the saved addresses the relay cannot keep
+		// the test address, so it sends nothing (no chat is left behind).
+		it('saved addresses that cannot be opened: no test note, said plainly', async () => {
+			const r = await wizard(['#label Send a test note', '#0', '@operator:matrix.org', '#last'], {
+				status: { offered: ['matrix'], matrix: '@notices:vigilante.trading' },
+				admin: (args) =>
+					args[0] === 'send'
+						? { ok: false, error: 'no_store', reason: 'key missing' }
+						: { ok: true }
+			});
+			expect(r.printed).toMatch(
+				/It did not work: the relay's saved addresses cannot be opened right now \(run `sudo morphit-ops offline-notify status` to see why\), so no test note was sent/
+			);
+			expect(r.printed).not.toMatch(/no_store|key missing/);
 		});
 
 		it('“Send a test note” from the menu says the same, naming the bot the relay uses', async () => {
 			const r = await wizard(['#label Send a test note', '#0', '@operator:matrix.org', '#last'], {
 				status: { offered: ['matrix'], matrix: '@notices:vigilante.trading' },
-				admin: (args) => (args[0] === 'send' ? { ok: true, joined: false } : { ok: true })
+				admin: () => ({ ok: true })
 			});
-			expect(r.printed).toMatch(/accept the invitation from @notices:vigilante\.trading/);
-			expect(r.printed).toMatch(/did not join in time/);
+			expect(r.printed).toMatch(/The test note comes in a chat from @notices:vigilante\.trading\./);
+			expect(r.printed).toMatch(/The bot stays in that chat/);
+			expect(r.printed).not.toMatch(/leaves the test chat|has left|in time/);
 		});
 	});
 

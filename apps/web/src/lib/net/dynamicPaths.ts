@@ -242,3 +242,53 @@ export async function answerBrandRequest(
 		headers: { 'Content-Type': 'text/plain; charset=utf-8' }
 	});
 }
+
+/**
+ * A request that asks for the server's current copy: a fetch() made with
+ * `cache: 'no-cache'`, `'reload'` or `'no-store'`. The service worker then
+ * answers it from the network, never from its own stored copy, so the
+ * caller's `cache:` directive means what it says on a cached path too.
+ *
+ * The build-integrity check asks this way for the files it hashes whose name
+ * does not change with their bytes (index.html, the service worker): a copy a
+ * worker stored earlier can belong to another release, and showed visitors the
+ * red "Build integrity check failed" on a site that served the signed release
+ * exactly (vigilante.trading, 2026-10-30).
+ */
+export function wantsServerCopy(req: { readonly cache: RequestCache }): boolean {
+	return req.cache === 'no-cache' || req.cache === 'reload' || req.cache === 'no-store';
+}
+
+/**
+ * The service worker's answer to a {@link wantsServerCopy} request: the
+ * server's copy (stored for offline, unless the caller said no-store); the
+ * stored copy only when the server cannot be reached. Never throws; a 503
+ * when there is nothing to answer with.
+ */
+export async function answerServerCopyRequest(
+	req: Request,
+	deps: {
+		readonly cache: {
+			match(r: Request, o?: CacheQueryOptions): Promise<Response | undefined>;
+			put(r: Request, res: Response): Promise<void>;
+		};
+		readonly fetch: (r: Request) => Promise<Response>;
+	}
+): Promise<Response> {
+	try {
+		const fresh = await deps.fetch(req);
+		if (fresh.ok && fresh.status === 200 && req.cache !== 'no-store') {
+			await deps.cache.put(req, fresh.clone()).catch(() => {});
+		}
+		return fresh;
+	} catch {
+		const stored = await deps.cache.match(req, { ignoreSearch: true }).catch(() => undefined);
+		return (
+			stored ??
+			new Response('Offline — resource unavailable.', {
+				status: 503,
+				headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+			})
+		);
+	}
+}

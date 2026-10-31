@@ -164,6 +164,7 @@ SMOKES=(
 	"apps/relay:offline-notify-flow-smoke"
 	"apps/relay:offline-notify-admin-smoke"
 	"apps/relay:offline-notify-store-smoke"
+	"apps/relay:offline-notify-matrix-rooms-smoke"
 	"apps/relay:vapid-key-validation-smoke"
 	"apps/ops-cli:hidden-upgrade-fetch-smoke"
 	"apps/ops-cli:hidden-upgrade-detection-smoke"

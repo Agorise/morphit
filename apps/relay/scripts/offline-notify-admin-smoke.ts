@@ -10,8 +10,11 @@
  *   - `reset` deletes the saved addresses AND the key file, so the relay's
  *     next start really makes a new key;
  *   - `purge-channel matrix` says how many rooms the bot could not leave yet;
- *   - `send matrix` (the operator's test note) leaves its chat only once they
- *     have joined it — before that, the invitation could no longer be accepted;
+ *   - `send matrix` (the operator's test note) comes in the bot's ONE direct
+ *     room with that address, which the bot keeps (a second note comes there
+ *     too) and keeps that address as the test address; `purge-channel
+ *     matrix` with Matrix set up leaves every room (the test note's too) and
+ *     leaves nothing in its mapping or its queue;
  *   - `register xmpp` makes the site's XMPP account: a picture check is asked on
  *     stdout and answered on stdin, in the same stream; `archive-off xmpp`
  *     turns the account's message archive off.
@@ -20,7 +23,6 @@
  * root and setpriv (skipped otherwise).
  */
 import { spawn, spawnSync } from 'node:child_process';
-import http from 'node:http';
 import {
 	chmodSync,
 	chownSync,
@@ -37,7 +39,8 @@ import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { PrivateKey } from '@beblurt/dblurt';
 import { openSealedStore } from '../src/notify/store.ts';
-import { TEST_CERT, fakeXmpp } from '../test/notifyFakes.ts';
+import { sendMatrix } from '../src/notify/channels/matrix.ts';
+import { TEST_CERT, fakeHomeserver, fakeXmpp } from '../test/notifyFakes.ts';
 import { VAULT_KEY_FILE } from '../src/notify/vault.ts';
 
 let n = 0;
@@ -235,6 +238,8 @@ try {
 	}
 
 	// Matrix rooms the bot could not leave (Matrix not set up here): waiting.
+	// The row as v1.21.18 left it (its room on the row): moved into the
+	// address's room mapping when the tool opens the store, then let go.
 	await pool.query(
 		`INSERT INTO offline_notify_channels (account, channel, address_sealed, route_sealed, verified_at)
 		 VALUES ('grandma', 'matrix', $1, $2, now())`,
@@ -250,52 +255,75 @@ try {
 		JSON.stringify(purged)
 	);
 
-	// The operator's Matrix test note: the bot stays in the test chat until they
-	// have joined it, then leaves (and forgets it).
-	const order: string[] = [];
-	let checks = 0;
-	const hs = http.createServer((req, res) => {
-		const path = req.url ?? '';
-		let body: unknown = { errcode: 'M_UNRECOGNIZED' };
-		let status = 404;
-		if (path === '/_matrix/client/v3/createRoom') {
-			order.push('createRoom');
-			[status, body] = [200, { room_id: '!test:hs' }];
-		} else if (/\/rooms\/!test%3Ahs\/send\//.test(path)) {
-			order.push('send');
-			[status, body] = [200, { event_id: '$e' }];
-		} else if (path === '/_matrix/client/v3/rooms/!test%3Ahs/joined_members') {
-			checks++;
-			order.push('check');
-			const joined: Record<string, unknown> = { '@notices:hs': {} };
-			if (checks >= 2) joined['@operator:hs.org'] = {};
-			[status, body] = [200, { joined }];
-		} else if (/\/rooms\/!test%3Ahs\/(leave|forget)$/.test(path)) {
-			order.push(path.endsWith('leave') ? 'leave' : 'forget');
-			[status, body] = [200, {}];
-		}
-		req.resume();
-		req.on('end', () => {
-			res.writeHead(status, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify(body));
-		});
-	});
-	await new Promise<void>((r) => hs.listen(0, '127.0.0.1', () => r()));
-	const hsPort = (hs.address() as { port: number }).port;
-	const sent = await runAsync(['send', 'matrix'], {
-		MORPHIT_NOTIFY_MATRIX_HOMESERVER: `http://127.0.0.1:${hsPort}`,
-		MORPHIT_NOTIFY_MATRIX_TOKEN: 'tok',
-		MORPHIT_NOTIFY_MATRIX_USER_ID: '@notices:hs',
-		to: '@operator:hs.org'
-	});
-	hs.close();
+	// The operator's Matrix test note: it comes in the bot's one room with
+	// that address (kept in the relay's database), and the bot stays in it —
+	// a second test note comes in the same room; the address is kept as the
+	// test address (so nothing users do takes that room). Turning Matrix off
+	// leaves every room, users' and the test note's.
+	const hs = await fakeHomeserver({ bot: '@notices:hs', autoJoin: ['@operator:hs.org'] });
+	const mx = {
+		MORPHIT_NOTIFY_MATRIX_HOMESERVER: hs.url,
+		MORPHIT_NOTIFY_MATRIX_TOKEN: hs.token,
+		MORPHIT_NOTIFY_MATRIX_USER_ID: hs.bot
+	};
+	const sent = await runAsync(['send', 'matrix'], { ...mx, to: '@operator:hs.org' });
+	const again = await runAsync(['send', 'matrix'], { ...mx, to: '@operator:hs.org' });
+	const testRoom = [...hs.rooms.keys()][0] ?? '';
 	check(
-		'Matrix test note: the bot leaves its chat only after the operator joined it',
+		'Matrix test notes: one room, the bot stays in it, kept for that address',
 		sent.ok === true &&
-			sent.joined === true &&
-			order.join(' ') === 'createRoom send check check leave forget',
-		`${JSON.stringify(sent)} ${order.join(' ')}`
+			again.ok === true &&
+			hs.made() === 1 &&
+			hs.rooms.get(testRoom)?.messages.length === 2 &&
+			hs.leavesAndForgets().length === 0 &&
+			(await store.matrixRoomBook().get('@operator:hs.org'))?.room === testRoom,
+		`${JSON.stringify(sent)} ${JSON.stringify(again)} rooms ${hs.made()} ${hs
+			.leavesAndForgets()
+			.map((h) => h.path)
+			.join(' ')}`
 	);
+	const cfgMx = { homeserver: hs.url, accessToken: hs.token, userId: hs.bot };
+	const b = await store.beginAddress(
+		'grandma',
+		'matrix',
+		'@grandma:hs.org',
+		'en',
+		'123456',
+		'clearnet',
+		new Date()
+	);
+	if (!b.ok) throw new Error('begin');
+	await store.verifyCode('grandma', 'matrix', '123456', new Date());
+	const herRoom = await sendMatrix(
+		cfgMx,
+		{ torSocks: '', hiddenOnly: false },
+		'@grandma:hs.org',
+		'code 123456',
+		store.matrixRoomBook()
+	);
+	const testRows = Number(
+		(
+			await pool.query(
+				`SELECT count(*)::int AS n FROM offline_notify_channels WHERE account = '~operator-test'`
+			)
+		).rows[0].n
+	);
+	const off = await runAsync(['purge-channel', 'matrix'], mx);
+	check(
+		'turning Matrix off (set up): the bot leaves and forgets her room and the test note’s; only users’ addresses are counted',
+		testRows === 1 &&
+			off.ok === true &&
+			off.removed === 1 &&
+			off.waiting === 0 &&
+			[herRoom, testRoom].every(
+				(r) =>
+					hs.rooms.get(r)?.members.get(hs.bot) === 'leave' &&
+					hs.rooms.get(r)?.forgotten.has(hs.bot) === true
+			) &&
+			(await store.matrixRoomCount()).rooms === 0,
+		`test rows ${testRows} ${JSON.stringify(off)} ${JSON.stringify(await store.matrixRoomCount())}`
+	);
+	await hs.close();
 
 	// The site's XMPP account, made from morphit-ops: a server that wants a
 	// picture check (its form as ejabberd 23.10 sends it).
