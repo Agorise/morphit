@@ -29,7 +29,15 @@
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { connect as netConnect, type Socket } from 'node:net';
-import { existsSync, readFileSync, readdirSync, lstatSync, mkdirSync, copyFileSync } from 'node:fs';
+import {
+	existsSync,
+	readFileSync,
+	readdirSync,
+	lstatSync,
+	mkdirSync,
+	copyFileSync,
+	writeFileSync
+} from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import {
 	socks5Greeting,
@@ -242,6 +250,11 @@ export interface TorBridge {
 	readonly port: number;
 	/** Every CONNECT target asked for, allowed or not. */
 	readonly asked: string[];
+	/** Bytes relayed from the registry to npm so far. */
+	received(): number;
+	/** When a tunnel last opened or a byte last moved either way (ms, the
+	 *  bridge's clock); the stall watch reads it. */
+	lastActivity(): number;
 	close(): Promise<void>;
 }
 
@@ -265,6 +278,11 @@ function socksOpen(
 		};
 		s.setTimeout(30_000, () => fail(new Error('Tor did not answer in time')));
 		s.once('error', (e) => fail(new Error(`Tor SOCKS ${socksHost}:${socksPort}: ${e.message}`)));
+		// Tor may close a SOCKS request without a reply. A closed socket never
+		// times out, so without this npm's CONNECT waited for ever (morphitlat,
+		// 2026-10-31: a tunnel open 5 h 21 min, nothing received, while Tor sat
+		// at 30% bootstrapped).
+		s.once('close', () => fail(new Error('Tor closed the connection without answering')));
 		s.once('connect', () => s.write(socks5Greeting()));
 		s.on('data', (chunk: Buffer) => {
 			if (done) return;
@@ -308,9 +326,14 @@ export async function startTorRegistryBridge(opts: {
 	readonly socksHost: string;
 	readonly socksPort: number;
 	readonly allow?: readonly string[];
+	/** The clock lastActivity() reads (tests). */
+	readonly now?: () => number;
 }): Promise<TorBridge> {
 	const allow = new Set((opts.allow ?? [NPM_REGISTRY_AUTHORITY]).map((a) => a.toLowerCase()));
 	const asked: string[] = [];
+	const now = opts.now ?? Date.now;
+	let received = 0;
+	let last = now();
 	const server: Server = createServer((_req, res) => {
 		res.writeHead(403, { 'content-type': 'text/plain' });
 		res.end('only CONNECT to the npm registry is relayed\n');
@@ -327,9 +350,18 @@ export async function startTorRegistryBridge(opts: {
 			client.end('HTTP/1.1 403 Forbidden\r\n\r\n');
 			return;
 		}
+		last = now();
 		socksOpen(opts.socksHost, opts.socksPort, m[1]!, Number(m[2]))
 			.then((upstream) => {
+				last = now();
 				sockets.add(upstream);
+				upstream.on('data', (d: Buffer) => {
+					received += d.length;
+					last = now();
+				});
+				client.on('data', () => {
+					last = now();
+				});
 				upstream.on('close', () => sockets.delete(upstream));
 				upstream.on('error', () => client.destroy());
 				client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
@@ -345,6 +377,8 @@ export async function startTorRegistryBridge(opts: {
 	return {
 		port,
 		asked,
+		received: () => received,
+		lastActivity: () => last,
 		close: () =>
 			new Promise<void>((r) => {
 				for (const s of sockets) s.destroy();
@@ -375,25 +409,65 @@ export async function socksAnswers(
 export type HiddenDepsOutcome =
 	| {
 			readonly ok: true;
-			readonly strategy: 'carried-forward' | 'npm-over-tor';
+			readonly strategy: 'carried-forward' | 'updated-over-tor' | 'npm-over-tor';
 			readonly detail: string;
 	  }
 	| { readonly ok: false; readonly reason: string };
 
+/** No byte through Tor for this long while npm runs: npm is stopped. npm's own
+ *  request limit is 5 minutes with retries; this is past that, and a download
+ *  that is slow but moving never trips it. */
+export const TOR_NPM_STALL_MS = 10 * 60_000;
+
+/** What runNpm is given besides its arguments and environment. */
+export interface TorNpmRun {
+	/** The spinner's text, read on every frame (what is fetched, MB so far). */
+	readonly label: () => string;
+	/** Aborted when the stall watch gives up: the step stops npm. */
+	readonly signal: AbortSignal;
+}
+
+/** Plain-words megabytes for the spinner. PURE. */
+export function megabytes(bytes: number): string {
+	return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
+}
+
 /**
  * Steps 2–4 of the header, for a hidden-only node whose release has no
  * prebuilt node_modules. `runNpm` runs `npm <args>` in installDir with `env`
- * and resolves to its exit code; `copyTree` copies a directory with its links.
- * Nothing here opens a connection except through `socks`.
+ * and resolves to its exit code, and stops npm when `run.signal` aborts;
+ * `copyTree` copies a directory with its links. Nothing here opens a
+ * connection except through `socks`.
+ *
+ * Step 3 first tries the UPDATE: the previous node_modules are copied in and
+ * `npm install` (no scripts, no lockfile writes) fetches only the packages the
+ * lockfile changed — v1.21.19 changed 5 of 821 packages, and the full `npm ci`
+ * it ran instead fetched all of them through Tor (morphitlat, 2026-10-31: still
+ * downloading after two hours). The result is checked like any other: the
+ * lockfile untouched, the tree matching it. Only then the full `npm ci`.
+ * While npm runs, a watch stops it once nothing has come through Tor for
+ * `stallMs` (TOR_NPM_STALL_MS), so a dead route ends in a rollback with a
+ * reason, never a spinner without end.
  */
 export async function installDepsForHiddenNode(deps: {
 	readonly installDir: string;
 	readonly previousDir: string;
 	readonly socks: { readonly host: string; readonly port: number };
-	readonly runNpm: (args: readonly string[], env: NodeJS.ProcessEnv) => Promise<number>;
+	readonly runNpm: (
+		args: readonly string[],
+		env: NodeJS.ProcessEnv,
+		run: TorNpmRun
+	) => Promise<number>;
 	readonly copyTree: (from: string, to: string) => Promise<boolean>;
 	readonly info: (m: string) => void;
 	readonly env?: NodeJS.ProcessEnv;
+	/** The stall watch's limits and clock (tests drive them). */
+	readonly watch?: {
+		readonly stallMs?: number;
+		readonly everyMs?: number;
+		readonly now?: () => number;
+		readonly every?: (fn: () => void, ms: number) => () => void;
+	};
 }): Promise<HiddenDepsOutcome> {
 	const read = (d: string): string | null => {
 		try {
@@ -443,38 +517,123 @@ export async function installDepsForHiddenNode(deps: {
 				'so they cannot be fetched privately. Nothing was fetched over the clearnet'
 		};
 	}
+	const stallMs = deps.watch?.stallMs ?? TOR_NPM_STALL_MS;
+	const now = deps.watch?.now ?? Date.now;
+	const every =
+		deps.watch?.every ??
+		((fn: () => void, ms: number): (() => void) => {
+			const t = setInterval(fn, ms);
+			return () => clearInterval(t);
+		});
 	const bridge = await startTorRegistryBridge({
 		socksHost: deps.socks.host,
-		socksPort: deps.socks.port
+		socksPort: deps.socks.port,
+		now
 	});
-	let code = 1;
+	const env = torNpmEnv(deps.env ?? process.env, bridge.port);
+	const stallWords = `nothing came through Tor for ${Math.round(stallMs / 60_000)} minutes, so npm was stopped`;
+	/** One npm run under the stall watch: its exit code, and whether the
+	 *  watch stopped it. */
+	const watched = async (
+		args: readonly string[],
+		what: string
+	): Promise<{ code: number; stalled: boolean }> => {
+		const ctl = new AbortController();
+		let stalled = false;
+		const startBytes = bridge.received();
+		const stop = every(() => {
+			if (!stalled && now() - bridge.lastActivity() >= stallMs) {
+				stalled = true;
+				ctl.abort();
+			}
+		}, deps.watch?.everyMs ?? 5_000);
+		try {
+			const code = await deps.runNpm(args, env, {
+				label: () => `${what} — ${megabytes(bridge.received() - startBytes)} received so far…`,
+				signal: ctl.signal
+			});
+			// npm that finished as the watch fired is done: its tree is checked.
+			return { code, stalled: stalled && code !== 0 };
+		} finally {
+			stop();
+		}
+	};
+	const lockUntouched = (): boolean => read(deps.installDir) === newLock;
+	const natives = (): string => {
+		const n = carryNativeAddons(deps.previousDir, deps.installDir, newLock);
+		return n.length > 0 ? `; native add-ons reused for ${n.join(', ')}` : '';
+	};
 	try {
 		deps.info(
 			'This release changes dependencies; fetching them from the npm registry through Tor (no clearnet).'
 		);
-		code = await deps.runNpm(
-			['ci', '--ignore-scripts', '--no-audit', '--no-fund'],
-			torNpmEnv(deps.env ?? process.env, bridge.port)
+		// 3a. The update: the previous tree, plus only what the lockfile changed.
+		const previous = nodeModulesDirs(newLock).filter((rel) =>
+			existsSync(join(deps.previousDir, rel))
 		);
+		if (previous.length > 0) {
+			let copied = true;
+			for (const rel of previous) {
+				// Step 2 may have copied it already (and found it did not match):
+				// `cp -a` onto an existing folder would nest a second one inside.
+				const to = join(deps.installDir, rel);
+				if (existsSync(to)) continue;
+				if (!(await deps.copyTree(join(deps.previousDir, rel), to))) copied = false;
+			}
+			if (copied) {
+				const r = await watched(
+					['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-save'],
+					'Fetching only the changed dependencies through Tor'
+				);
+				if (r.stalled) return { ok: false, reason: stallWords };
+				const problems = r.code === 0 ? lockedTreeProblems(deps.installDir, newLock) : [];
+				if (r.code === 0 && problems.length === 0 && lockUntouched()) {
+					return {
+						ok: true,
+						strategy: 'updated-over-tor',
+						detail:
+							'the unchanged dependencies reused, only the changed ones fetched through Tor from registry.npmjs.org' +
+							natives()
+					};
+				}
+				deps.info(
+					r.code !== 0
+						? `Fetching only the changed dependencies did not finish (npm exit ${r.code}); fetching all of them instead.`
+						: !lockUntouched()
+							? 'npm changed the lockfile while updating; fetching all the dependencies instead.'
+							: `The updated dependencies do not match this release's lockfile (${problems.slice(0, 3).join('; ')}); fetching all of them instead.`
+				);
+				if (!lockUntouched()) {
+					try {
+						writeFileSync(join(deps.installDir, 'package-lock.json'), newLock);
+					} catch {
+						return { ok: false, reason: "the release's package-lock.json could not be put back" };
+					}
+				}
+			}
+		}
+		// 3b. Everything, from the lockfile.
+		const r = await watched(
+			['ci', '--ignore-scripts', '--no-audit', '--no-fund'],
+			'Installing dependencies through Tor'
+		);
+		if (r.stalled) return { ok: false, reason: stallWords };
+		const problems = lockedTreeProblems(deps.installDir, newLock);
+		if (r.code === 0 && problems.length === 0) {
+			return {
+				ok: true,
+				strategy: 'npm-over-tor',
+				detail: 'fetched through Tor from registry.npmjs.org' + natives()
+			};
+		}
+		return {
+			ok: false,
+			reason:
+				r.code !== 0
+					? `fetching the changed dependencies through Tor did not finish (npm exit ${r.code})`
+					: `the dependencies fetched through Tor do not match the lockfile (${problems.slice(0, 3).join('; ')})`
+		};
 	} finally {
 		await bridge.close();
 	}
-	const problems = lockedTreeProblems(deps.installDir, newLock);
-	if (code === 0 && problems.length === 0) {
-		const natives = carryNativeAddons(deps.previousDir, deps.installDir, newLock);
-		return {
-			ok: true,
-			strategy: 'npm-over-tor',
-			detail:
-				'fetched through Tor from registry.npmjs.org' +
-				(natives.length > 0 ? `; native add-ons reused for ${natives.join(', ')}` : '')
-		};
-	}
-	return {
-		ok: false,
-		reason:
-			code !== 0
-				? `fetching the changed dependencies through Tor did not finish (npm exit ${code})`
-				: `the dependencies fetched through Tor do not match the lockfile (${problems.slice(0, 3).join('; ')})`
-	};
 }

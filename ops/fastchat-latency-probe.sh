@@ -139,13 +139,13 @@ I2P_HTTP="$(bare_hostport "$(setting MORPHIT_INDEXER_I2P_HTTP_PROXY 127.0.0.1:44
 case "$network" in
 	tor)
 		[ -n "$TOR_SOCKS" ] || { echo "Tor is switched off in this box's indexer settings." >&2; exit 2; }
-		CURL_PROXY=(--socks5-hostname "$TOR_SOCKS") ;;
+		CURL_PROXY=(--noproxy '' --socks5-hostname "$TOR_SOCKS") ;;
 	i2p)
 		[ -n "$I2P_HTTP" ] || { echo "I2P is switched off in this box's indexer settings." >&2; exit 2; }
 		# --proxytunnel: a CONNECT tunnel, exactly what the indexer opens. A
 		# plain proxied GET is a different path, and a proxy that REFUSES the
 		# tunnel then shows up as a failure here, as it does for the indexer.
-		CURL_PROXY=(--proxy "http://$I2P_HTTP" --proxytunnel) ;;
+		CURL_PROXY=(--noproxy '' --proxy "http://$I2P_HTTP" --proxytunnel) ;;
 	loki)
 		echo "NOTE: .loki is reached through lokinet's own resolver; this box must run lokinet." >&2
 		CURL_PROXY=() ;;

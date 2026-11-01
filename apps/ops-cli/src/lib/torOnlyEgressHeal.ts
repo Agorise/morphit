@@ -313,6 +313,9 @@ function realRuntime(): EgressRuntime {
 						'40',
 						'-w',
 						'%{http_code}',
+						// curl applies no_proxy even to a SOCKS proxy: never let it skip Tor.
+						'--noproxy',
+						'',
 						'--socks5-hostname',
 						socks,
 						`${u}/`

@@ -432,7 +432,7 @@ if [ -n "${_onion:-}" ]; then
 	_terr=""
 	_tef=$(mktemp 2>/dev/null || echo "/tmp/morphit-seed-tor.$$")
 	for _try in 1 2 3; do
-		_t=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 90 --socks5-hostname "127.0.0.1:${_sp}" \
+		_t=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 90 --noproxy '' --socks5-hostname "127.0.0.1:${_sp}" \
 			"http://${_onion}${PROBE_PATH}" 2>"$_tef") || true
 		[ "$_t" = "200" ] && break
 		_terr=$(head -n 1 "$_tef" 2>/dev/null)
@@ -449,7 +449,7 @@ if [ -n "${_onion:-}" ]; then
 	fi
 fi
 if [ -n "${_i2p:-}" ]; then
-	_i=$(_code "http://${_i2p}${PROBE_PATH}" 240 -x "http://127.0.0.1:4444")
+	_i=$(_code "http://${_i2p}${PROBE_PATH}" 240 --noproxy '' -x "http://127.0.0.1:4444")
 	if [ "$_i" = "200" ]; then
 		step "✓ I2P: the .b32.i2p serves the release — hidden-only peers can upgrade from this box."
 		passed "over I2P"

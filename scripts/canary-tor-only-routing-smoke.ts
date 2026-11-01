@@ -85,9 +85,10 @@ check('generate.sh honors an explicit MORPHIT_CANARY_TOR_ONLY', /MORPHIT_CANARY_
 check('generate.sh exports MORPHIT_CANARY_TOR_ONLY for the Node helpers', /export MORPHIT_CANARY_TOR_ONLY=/.test(gen));
 check('generate.sh exports MORPHIT_CANARY_TOR_SOCKS for the Node helpers', /export MORPHIT_CANARY_TOR_SOCKS=/.test(gen));
 check('news curl uses the (possibly empty) proxy args array', /curl -fsSL "\$\{CURL_PROXY_ARGS\[@\]\}"/.test(gen));
+check("the tor-only args make curl ignore no_proxy (--noproxy '', so no host goes around Tor)", /CURL_PROXY_ARGS=\(--noproxy '' --proxy "socks5h:/.test(gen));
 check('tor-only proxy uses socks5h:// (proxy-side DNS, no DNS leak)', /--proxy "socks5h:\/\/\$CANARY_TOR_SOCKS"/.test(gen));
 check('CURL_PROXY_ARGS is empty on clearnet (byte-identical there)', /CURL_PROXY_ARGS=\(\)/.test(gen));
-check('proxy args are only populated inside the tor-only branch', /if \[ "\$CANARY_TOR_ONLY" = 1 \]; then\n\tCURL_PROXY_ARGS=\(--proxy/.test(gen));
+check('proxy args are only populated inside the tor-only branch', /if \[ "\$CANARY_TOR_ONLY" = 1 \]; then\n(?:\t#[^\n]*\n)*\tCURL_PROXY_ARGS=\(--noproxy '' --proxy/.test(gen));
 
 // ── Node helpers install the dispatcher before fetching ───────────
 const blurt = read('scripts/canary/fetch-blurt-head.ts');

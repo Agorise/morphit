@@ -57,6 +57,10 @@ const POST = B_ACT + 1_000;
 /** The first pin, long before; the re-pin, after both order blocks. */
 const PIN_1 = 10_000;
 const RE_PIN = B_ACT + 5_000;
+/** The re-verifier's "now" in these scenarios, a day after the activation: its
+ *  age windows (365-day orders) end here, not at the real clock, which a year
+ *  on would leave every order of the scenario too old to re-check. */
+const SCENARIO_NOW = new Date(ACT + 24 * 3_600_000);
 
 /** Node settings that must not matter from the activation time. */
 interface Node {
@@ -743,7 +747,8 @@ d('the BLURT re-verifier reaches the intake verdict', () => {
 		const rv = new BlurtFeeReverifier({
 			db: late.db,
 			blurt: mockBlurt({ getBlock: async (n: number) => chain.get(n) ?? null }),
-			config: lateCfg
+			config: lateCfg,
+			windowEnd: () => SCENARIO_NOW
 		});
 		const s = await rv.runOnce();
 		expect(s.orders.checked).toBe(2);
@@ -776,7 +781,8 @@ d('the BLURT re-verifier reaches the intake verdict', () => {
 		const rv = new BlurtFeeReverifier({
 			db: late.db,
 			blurt: mockBlurt({ getBlock: async (n: number) => chain.get(n) ?? null }),
-			config: cfg
+			config: cfg,
+			windowEnd: () => SCENARIO_NOW
 		});
 		await rv.runOnce();
 		// Intake could not know c-fees, so the re-check must not use it…

@@ -4,8 +4,8 @@
  * Operator-facing CLI that prompts for the values that go into
  * a `morphit_release_v1` op, validates them against the same
  * rules the on-chain handler enforces, and emits canonical JSON
- * ready to paste into a Blurt signing tool (Vessel, beempy,
- * blurt-cli, dblurt-script).
+ * for scripts/release-broadcast.ts (ELI5 Block 4) to sign and
+ * broadcast.
  *
  * Why a builder script:
  *   1. Validation parity — the on-chain handler is strict; the
@@ -328,9 +328,17 @@ interface Inputs {
 
 async function gatherInputs(): Promise<Inputs> {
 	process.stderr.write('\n── Morphit release-op payload builder ────────────────────\n');
-	process.stderr.write('Enter values for the morphit_release_v1 op.  Leave a\n');
-	process.stderr.write('field empty to omit — endpoints and treasury are all\n');
-	process.stderr.write('optional; only version + hash_manifest are required.\n\n');
+	if (isInteractive()) {
+		process.stderr.write('Enter values for the morphit_release_v1 op.  Leave a\n');
+		process.stderr.write('field empty to omit — endpoints and treasury are all\n');
+		process.stderr.write('optional; only version + hash_manifest are required.\n\n');
+	} else {
+		// The ceremony runs it with `< /dev/null`: nothing is asked, so do not
+		// tell the owner to enter anything (seen in the v1.21.19 Block 3 output).
+		process.stderr.write('Asks nothing: the input is not a terminal, so every value\n');
+		process.stderr.write('comes from the MORPHIT_BUILD_* settings, the anchor file\n');
+		process.stderr.write('or the built-in defaults.\n\n');
+	}
 
 	const version = await ask(
 		'Release version (semver, e.g. 1.0.0)',
@@ -356,8 +364,10 @@ async function gatherInputs(): Promise<Inputs> {
 	const endpoints = endpointsPath ? readJsonFile(endpointsPath, 'endpoints') : undefined;
 
 	process.stderr.write('\n── Treasury ─────────────────────────────────────────\n');
-	process.stderr.write('Leave any treasury field empty to omit that chain.\n');
-	process.stderr.write('Both BTC and XMR fields independently optional.\n');
+	if (isInteractive()) {
+		process.stderr.write('Leave any treasury field empty to omit that chain.\n');
+		process.stderr.write('Both BTC and XMR fields independently optional.\n');
+	}
 	process.stderr.write('NOTE: this builder does NOT ask for the XMR view key.\n');
 	process.stderr.write('No indexer needs one (XMR fees are checked from\n');
 	process.stderr.write('per-payment proofs) and it is never broadcast on chain.\n\n');
@@ -417,12 +427,13 @@ async function gatherInputs(): Promise<Inputs> {
 	// buildDistribution().  Leave all empty to omit the block (a release cut
 	// before the anchor was available).
 	process.stderr.write('\n── Distribution anchor ─────────────────────────────────\n');
-	process.stderr.write('Verifiable pointer to the published source tarball\n');
-	process.stderr.write(
-		'(auto-mirrored to Codeberg / GitHub / SourceForge / SourceHut).  Leave ALL empty to omit.\n'
-	);
-	process.stderr.write('source_sha256 + gpg_fingerprint go together; both come from\n');
-	process.stderr.write('the release-attached distribution-anchor.env.\n\n');
+	process.stderr.write('Verifiable pointer to the published source tarball.  Every\n');
+	process.stderr.write('mirror in the pinned list gets the commits and the signed tag\n');
+	process.stderr.write('by git push; codeberg.org and gitea.com also get the release\n');
+	process.stderr.write('page.  source_sha256 + gpg_fingerprint go together; both come\n');
+	process.stderr.write('from the release-attached distribution-anchor.env.\n');
+	if (isInteractive()) process.stderr.write('Leave ALL empty to omit.\n');
+	process.stderr.write('\n');
 
 	const sourceSha256 = await ask(
 		'Source tarball SHA-256 (64 hex; empty to omit distribution)',
@@ -801,13 +812,12 @@ async function main(): Promise<void> {
 	process.stdout.write(JSON.stringify(payload, null, 2));
 
 	process.stderr.write('\n\n── ✓ Payload validated ───────────────────────────────────\n');
-	process.stderr.write('Payload printed to stdout.  Pipe it to your Blurt\n');
-	process.stderr.write('signing tool to broadcast as a custom_json op:\n\n');
-	process.stderr.write('    required_posting_auths: ["morphit"]\n');
-	process.stderr.write('    id: "morphit_release_v1"\n\n');
-	process.stderr.write('Sign with the @morphit PRIVATE posting key (the WIF —\n');
-	process.stderr.write('starts "5...", NOT the public posting key).  See\n');
-	process.stderr.write('docs/OPERATIONS.md §40.5 for the full ceremony.\n\n');
+	process.stderr.write('Payload printed to stdout.  Broadcast it with\n');
+	process.stderr.write('apps/indexer/scripts/release-broadcast.ts (ELI5 Block 4):\n');
+	process.stderr.write('a custom_json op, id "morphit_release_v1", posting\n');
+	process.stderr.write('authority @morphit.  It asks for the @morphit PRIVATE\n');
+	process.stderr.write('posting key (the WIF — starts "5...", NOT the public\n');
+	process.stderr.write('posting key).  Add --dry-run to only show it.\n\n');
 	// previous versions of this script printed a
 	// reminder to run `verify-xmr-viewkey.ts` before broadcasting,
 	// because the view key was operator-private and a typo would

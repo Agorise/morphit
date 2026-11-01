@@ -239,7 +239,16 @@ Steps the command takes, in order:
    install dir (no dependency's install script runs; the Matrix bot's
    native add-ons are reused or rebuilt only where the bot runs; an
    offline bundle's prebuilt `node_modules` is used as is; a
-   zero-clearnet node installs over Tor only or refuses).
+   zero-clearnet node installs over Tor only or refuses). On a
+   zero-clearnet node: when the release uses exactly the same
+   packages, the installed ones are reused and nothing is downloaded;
+   when it changes some, the installed ones are reused and only the
+   changed ones are fetched through Tor (`npm install --no-save`,
+   checked against the lockfile afterwards; a full `npm ci` through
+   Tor only if that fails). The spinner shows how much has come
+   through Tor. If nothing comes through Tor for 10 minutes, npm is
+   stopped, the previous install is put back, and the upgrade says
+   how to finish with the offline bundle.
 9b. **Rebuilds and republishes the web frontend.** The indexer, relay,
     and matrix-bot run straight from TypeScript source via `tsx`, so
     `npm ci` is all they need — but the website is a static SvelteKit

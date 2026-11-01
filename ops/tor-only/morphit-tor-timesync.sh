@@ -139,7 +139,7 @@ for url in $SOURCES; do
 		# The server wrote its Date between those two moments, so the circuit
 		# setup — which can take a minute on a cold Tor — never skews the result.
 		tm="$(curl -sS -I -o "$WORK/h.$i" -w '%{time_pretransfer} %{time_starttransfer}' \
-			--max-time "$TIMEOUT" --socks5-hostname "$SOCKS" \
+			--max-time "$TIMEOUT" --noproxy '' --socks5-hostname "$SOCKS" \
 			--proxy-user "morphit-time-$i:x" -H 'Cache-Control: no-cache' "$url" 2>/dev/null)"
 		# No answer at all (Tor down, circuit refused): nothing to read, and no
 		# "cannot open" noise in the log for each source.

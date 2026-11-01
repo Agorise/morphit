@@ -111,22 +111,27 @@ function mockClientWithCount(count: number): Queryable {
 
 // ─── /v1/listing-fee body ───────────────────────────────────────
 
-await scenario('rpc_endpoints_healthy counts only endpoints with a real success (not just out of cooldown)', () => {
-	const src = _readFileSync(
-		_fileURLToPath(new URL('../src/api/health.ts', import.meta.url)),
-		'utf8'
-	);
-	// Honesty guard: a freshly-started / offline pool has no endpoint in cooldown
-	// yet, so counting merely "not in cooldown" falsely reports RPC connectivity.
-	// The count must ALSO require lastSuccessAt > 0.
-	const ok =
-		/rpcEndpointsHealthy\s*=\s*rpcSnap\.filter\(/.test(src) &&
-		/cooldownUntil <= nowMs/.test(src) &&
-		/lastSuccessAt > 0/.test(src);
-	if (!ok) {
-		throw new Error('rpcEndpointsHealthy must filter on cooldownUntil <= nowMs && lastSuccessAt > 0');
+await scenario(
+	'rpc_endpoints_healthy counts only endpoints with a real success (not just out of cooldown)',
+	() => {
+		const src = _readFileSync(
+			_fileURLToPath(new URL('../src/api/health.ts', import.meta.url)),
+			'utf8'
+		);
+		// Honesty guard: a freshly-started / offline pool has no endpoint in cooldown
+		// yet, so counting merely "not in cooldown" falsely reports RPC connectivity.
+		// The count must ALSO require lastSuccessAt > 0.
+		const ok =
+			/rpcEndpointsHealthy\s*=\s*rpcSnap\.filter\(/.test(src) &&
+			/cooldownUntil <= nowMs/.test(src) &&
+			/lastSuccessAt > 0/.test(src);
+		if (!ok) {
+			throw new Error(
+				'rpcEndpointsHealthy must filter on cooldownUntil <= nowMs && lastSuccessAt > 0'
+			);
+		}
 	}
-});
+);
 
 await scenario('listing-fee body: returns base + feature-fee + ttl', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, featureFeeBlurtPerHour: 50 });
@@ -138,7 +143,7 @@ await scenario('listing-fee body: returns base + feature-fee + ttl', () => {
 
 await scenario('listing-fee body: omits fiat echo when priceSource is null', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60 });
-	const body = buildListingFeeBody(cfg, null);
+	const body = buildListingFeeBody(cfg, null, null, null, AFTER_ACTIVATION);
 	assertAbsent(body, 'base_fee_fiat');
 	assertAbsent(body, 'blurt_price_fiat');
 	assertAbsent(body, 'denomination_fiat');
@@ -147,7 +152,7 @@ await scenario('listing-fee body: omits fiat echo when priceSource is null', () 
 await scenario('listing-fee body: includes fiat echo when price is non-stale and positive', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0.002, stale: false });
-	const body = buildListingFeeBody(cfg, ps);
+	const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
 	assertContains(body, 'base_fee_fiat');
 	assertContains(body, 'blurt_price_fiat');
 	assertContains(body, 'denomination_fiat');
@@ -165,7 +170,7 @@ await scenario('listing-fee body: includes fiat echo when price is non-stale and
 await scenario('listing-fee body: omits fiat echo when price is stale', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0.002, stale: true });
-	const body = buildListingFeeBody(cfg, ps);
+	const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
 	assertAbsent(body, 'base_fee_fiat');
 	assertAbsent(body, 'blurt_price_fiat');
 	assertAbsent(body, 'denomination_fiat');
@@ -174,7 +179,7 @@ await scenario('listing-fee body: omits fiat echo when price is stale', () => {
 await scenario('listing-fee body: omits fiat echo when price is zero', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0, stale: false });
-	const body = buildListingFeeBody(cfg, ps);
+	const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
 	assertAbsent(body, 'base_fee_fiat');
 	assertAbsent(body, 'blurt_price_fiat');
 	assertAbsent(body, 'denomination_fiat');
@@ -183,7 +188,7 @@ await scenario('listing-fee body: omits fiat echo when price is zero', () => {
 await scenario('listing-fee body: omits fiat echo when price is negative', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: -1, stale: false });
-	const body = buildListingFeeBody(cfg, ps);
+	const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
 	assertAbsent(body, 'base_fee_fiat');
 	assertAbsent(body, 'blurt_price_fiat');
 	assertAbsent(body, 'denomination_fiat');
@@ -198,59 +203,71 @@ await scenario('listing-fee body: tracks operator-tunable feeBaseBlurt', () => {
 	assertEqual(body.base_fee_blurt, 80, 'base_fee_blurt');
 });
 
-await scenario('listing-fee body: from the activation time the no-price fallback and the featured-slot price are the federation’s', () => {
-	// The order handler judges an unpinned order by the shipped default (125)
-	// from then on, whatever this node's feeBaseBlurt; quoting 60 or 80 would
-	// make the user underpay. Same for a stale price and a non-USD operator.
-	for (const feeBaseBlurt of [60, 80, 200]) {
-		const none = buildListingFeeBody(fakeConfig({ feeBaseBlurt }), null, null, null, AFTER_ACTIVATION);
-		assertEqual(none.base_fee_blurt, 125, `no price, feeBaseBlurt ${feeBaseBlurt}`);
-		assertEqual(none.base_fee_blurt_live, false, 'base_fee_blurt_live false');
-		const stale = buildListingFeeBody(
-			fakeConfig({ feeBaseBlurt, priceFeedEnabled: true }),
-			makePriceSource({ price: 0.002, stale: true }),
+await scenario(
+	'listing-fee body: from the activation time the no-price fallback and the featured-slot price are the federation’s',
+	() => {
+		// The order handler judges an unpinned order by the shipped default (125)
+		// from then on, whatever this node's feeBaseBlurt; quoting 60 or 80 would
+		// make the user underpay. Same for a stale price and a non-USD operator.
+		for (const feeBaseBlurt of [60, 80, 200]) {
+			const none = buildListingFeeBody(
+				fakeConfig({ feeBaseBlurt }),
+				null,
+				null,
+				null,
+				AFTER_ACTIVATION
+			);
+			assertEqual(none.base_fee_blurt, 125, `no price, feeBaseBlurt ${feeBaseBlurt}`);
+			assertEqual(none.base_fee_blurt_live, false, 'base_fee_blurt_live false');
+			const stale = buildListingFeeBody(
+				fakeConfig({ feeBaseBlurt, priceFeedEnabled: true }),
+				makePriceSource({ price: 0.002, stale: true }),
+				null,
+				null,
+				AFTER_ACTIVATION
+			);
+			assertEqual(stale.base_fee_blurt, 125, `stale price, feeBaseBlurt ${feeBaseBlurt}`);
+		}
+		// The featured-slot price is the federation's too (50 BLURT/hour), and the
+		// node's own until then.
+		const cfg80 = fakeConfig({ featureFeeBlurtPerHour: 80 });
+		assertEqual(
+			buildListingFeeBody(cfg80, null, null, null, AFTER_ACTIVATION).feature_fee_blurt_per_hour,
+			50,
+			'feature price after'
+		);
+		assertEqual(
+			buildListingFeeBody(cfg80, null, null, null, BEFORE_ACTIVATION).feature_fee_blurt_per_hour,
+			80,
+			'feature price before'
+		);
+		// A live USD price still quotes the canonical target.
+		const live = buildListingFeeBody(
+			fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true }),
+			makePriceSource({ price: 0.002, stale: false }),
 			null,
 			null,
 			AFTER_ACTIVATION
 		);
-		assertEqual(stale.base_fee_blurt, 125, `stale price, feeBaseBlurt ${feeBaseBlurt}`);
+		assertEqual(live.base_fee_blurt, 62.5, 'live quote unchanged');
 	}
-	// The featured-slot price is the federation's too (50 BLURT/hour), and the
-	// node's own until then.
-	const cfg80 = fakeConfig({ featureFeeBlurtPerHour: 80 });
-	assertEqual(
-		buildListingFeeBody(cfg80, null, null, null, AFTER_ACTIVATION).feature_fee_blurt_per_hour,
-		50,
-		'feature price after'
-	);
-	assertEqual(
-		buildListingFeeBody(cfg80, null, null, null, BEFORE_ACTIVATION).feature_fee_blurt_per_hour,
-		80,
-		'feature price before'
-	);
-	// A live USD price still quotes the canonical target.
-	const live = buildListingFeeBody(
-		fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true }),
-		makePriceSource({ price: 0.002, stale: false }),
-		null,
-		null,
-		AFTER_ACTIVATION
-	);
-	assertEqual(live.base_fee_blurt, 62.5, 'live quote unchanged');
-});
+);
 
-await scenario('listing-fee body: canonical display ignores feeBaseBlurt for the live amount', () => {
-	// Previously, the displayed fee was feeBaseBlurt-driven (80 × $0.002
-	// = $0.16).  Under canonical Model A the DISPLAY tracks the
-	// canonical target (~$0.125) regardless of the operator's
-	// feeBaseBlurt — that value is now the enforcement floor, not the
-	// quote.  (No-price fallback still reports feeBaseBlurt; see below.)
-	const cfg = fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true });
-	const ps = makePriceSource({ price: 0.002, stale: false });
-	const body = buildListingFeeBody(cfg, ps);
-	assertEqual(body.base_fee_fiat, 0.125, 'base_fee_fiat is canonical, not 80×price');
-	assertEqual(body.base_fee_blurt, 62.5, 'base_fee_blurt is canonical 62.5, not 80');
-});
+await scenario(
+	'listing-fee body: canonical display ignores feeBaseBlurt for the live amount',
+	() => {
+		// Previously, the displayed fee was feeBaseBlurt-driven (80 × $0.002
+		// = $0.16).  Under canonical Model A the DISPLAY tracks the
+		// canonical target (~$0.125) regardless of the operator's
+		// feeBaseBlurt — that value is now the enforcement floor, not the
+		// quote.  (No-price fallback still reports feeBaseBlurt; see below.)
+		const cfg = fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true });
+		const ps = makePriceSource({ price: 0.002, stale: false });
+		const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
+		assertEqual(body.base_fee_fiat, 0.125, 'base_fee_fiat is canonical, not 80×price');
+		assertEqual(body.base_fee_blurt, 62.5, 'base_fee_blurt is canonical 62.5, not 80');
+	}
+);
 
 // ── Model A: displayed base tracks the operator's USD fee ──
 const approxEq = (actual: unknown, expected: number, label: string, eps = 1e-9): void => {
@@ -259,43 +276,64 @@ const approxEq = (actual: unknown, expected: number, label: string, eps = 1e-9):
 	}
 };
 
-await scenario('listing-fee body (Model A): USD base is canonical 62.5 at the reference price', () => {
-	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
-	const ps = makePriceSource({ price: 0.002, stale: false }); // == reference
-	const body = buildListingFeeBody(cfg, ps);
-	approxEq(body.base_fee_blurt, 62.5, 'base_fee_blurt canonical at reference (not feeBaseBlurt)');
-	assertEqual(body.base_fee_blurt_live, true, 'base_fee_blurt_live');
-});
+await scenario(
+	'listing-fee body (Model A): USD base is canonical 62.5 at the reference price',
+	() => {
+		const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
+		const ps = makePriceSource({ price: 0.002, stale: false }); // == reference
+		const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
+		approxEq(body.base_fee_blurt, 62.5, 'base_fee_blurt canonical at reference (not feeBaseBlurt)');
+		assertEqual(body.base_fee_blurt_live, true, 'base_fee_blurt_live');
+	}
+);
 
-await scenario('listing-fee body (Model A): BLURT appreciated → fewer BLURT, USD value held', () => {
-	// Price doubled to $0.004: canonical amount halves to 31.25 BLURT,
-	// USD value stays the canonical target ($0.125).
-	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
-	const ps = makePriceSource({ price: 0.004, stale: false });
-	const body = buildListingFeeBody(cfg, ps);
-	approxEq(body.base_fee_blurt, 31.25, 'base_fee_blurt halves on 2× price');
-	approxEq(body.base_fee_fiat, 0.125, 'base_fee_fiat held at canonical target');
-	assertEqual(body.base_fee_blurt_live, true, 'base_fee_blurt_live');
-});
+await scenario(
+	'listing-fee body (Model A): BLURT appreciated → fewer BLURT, USD value held',
+	() => {
+		// Price doubled to $0.004: canonical amount halves to 31.25 BLURT,
+		// USD value stays the canonical target ($0.125).
+		const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
+		const ps = makePriceSource({ price: 0.004, stale: false });
+		const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
+		approxEq(body.base_fee_blurt, 31.25, 'base_fee_blurt halves on 2× price');
+		approxEq(body.base_fee_fiat, 0.125, 'base_fee_fiat held at canonical target');
+		assertEqual(body.base_fee_blurt_live, true, 'base_fee_blurt_live');
+	}
+);
 
 await scenario('listing-fee body (Model A): BLURT depreciated → more BLURT, USD value held', () => {
 	// Price halved to $0.001: canonical amount doubles to 125 BLURT.
 	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true });
 	const ps = makePriceSource({ price: 0.001, stale: false });
-	const body = buildListingFeeBody(cfg, ps);
+	const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
 	approxEq(body.base_fee_blurt, 125, 'base_fee_blurt doubles on ½ price');
 	approxEq(body.base_fee_fiat, 0.125, 'base_fee_fiat held at canonical target');
 });
 
-await scenario('listing-fee body (Model A): canonical display is independent of feeBaseBlurt', () => {
-	// Two operators with different floors (60 vs 80) quote the SAME
-	// canonical amount — the floor never leaks into the quote.
-	const ps = makePriceSource({ price: 0.004, stale: false });
-	const a = buildListingFeeBody(fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true }), ps);
-	const b = buildListingFeeBody(fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true }), ps);
-	approxEq(a.base_fee_blurt, 31.25, 'operator A canonical');
-	approxEq(b.base_fee_blurt, 31.25, 'operator B canonical (same, ignores 80)');
-});
+await scenario(
+	'listing-fee body (Model A): canonical display is independent of feeBaseBlurt',
+	() => {
+		// Two operators with different floors (60 vs 80) quote the SAME
+		// canonical amount — the floor never leaks into the quote.
+		const ps = makePriceSource({ price: 0.004, stale: false });
+		const a = buildListingFeeBody(
+			fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true }),
+			ps,
+			null,
+			null,
+			AFTER_ACTIVATION
+		);
+		const b = buildListingFeeBody(
+			fakeConfig({ feeBaseBlurt: 80, priceFeedEnabled: true }),
+			ps,
+			null,
+			null,
+			AFTER_ACTIVATION
+		);
+		approxEq(a.base_fee_blurt, 31.25, 'operator A canonical');
+		approxEq(b.base_fee_blurt, 31.25, 'operator B canonical (same, ignores 80)');
+	}
+);
 
 await scenario('listing-fee body (Model A): base_fee_blurt_live false when no price', () => {
 	const cfg = fakeConfig({ feeBaseBlurt: 60 });
@@ -312,85 +350,117 @@ await scenario('listing-fee body (Model A): base_fee_blurt_live false when price
 	assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false');
 });
 
-await scenario('listing-fee body (Model A): non-USD denomination keeps pinned base (no USD scaling)', () => {
-	// EUR operator: live USD figure isn't available in this route, so
-	// the base stays the operator's pinned feeBaseBlurt (graceful).
-	const cfg = fakeConfig({ feeBaseBlurt: 60, priceFeedEnabled: true, priceFeedDenominationFiat: 'EUR' });
-	const ps = makePriceSource({ price: 0.0018, stale: false });
-	const body = buildListingFeeBody(cfg, ps, null, null, BEFORE_ACTIVATION);
-	assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt unscaled for non-USD');
-	assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false for non-USD');
-});
+await scenario(
+	'listing-fee body (Model A): non-USD denomination keeps pinned base (no USD scaling)',
+	() => {
+		// EUR operator: live USD figure isn't available in this route, so
+		// the base stays the operator's pinned feeBaseBlurt (graceful).
+		const cfg = fakeConfig({
+			feeBaseBlurt: 60,
+			priceFeedEnabled: true,
+			priceFeedDenominationFiat: 'EUR'
+		});
+		const ps = makePriceSource({ price: 0.0018, stale: false });
+		const body = buildListingFeeBody(cfg, ps, null, null, BEFORE_ACTIVATION);
+		assertEqual(body.base_fee_blurt, 60, 'base_fee_blurt unscaled for non-USD');
+		assertEqual(body.base_fee_blurt_live, false, 'base_fee_blurt_live false for non-USD');
+	}
+);
 
-await scenario('listing-fee body (cp128): EUR-denominated operator returns EUR in denomination_fiat', () => {
-	const cfg = fakeConfig({
-		feeBaseBlurt: 60,
-		priceFeedEnabled: true,
-		priceFeedDenominationFiat: 'EUR'
-	});
-	const ps = makePriceSource({ price: 0.0018, stale: false });
-	const body = buildListingFeeBody(cfg, ps);
-	assertEqual(body.denomination_fiat, 'EUR', 'denomination_fiat');
-	assertEqual(body.blurt_price_fiat, 0.0018, 'blurt_price_fiat');
-	assertEqual(body.base_fee_fiat, 0.108, 'base_fee_fiat'); // 60 * 0.0018
-});
+await scenario(
+	'listing-fee body (cp128): EUR-denominated operator returns EUR in denomination_fiat',
+	() => {
+		const cfg = fakeConfig({
+			feeBaseBlurt: 60,
+			priceFeedEnabled: true,
+			priceFeedDenominationFiat: 'EUR'
+		});
+		const ps = makePriceSource({ price: 0.0018, stale: false });
+		// Before the 2026-11-01 consensus activation the quote used this node's
+		// own base (60); from it, the federation's shipped base (125). Each side at
+		// a fixed date: with "now" this scenario flipped at midnight UTC on
+		// 2026-11-01 (seen in the battery that ran across it).
+		const before = buildListingFeeBody(cfg, ps, null, null, BEFORE_ACTIVATION);
+		assertEqual(before.denomination_fiat, 'EUR', 'denomination_fiat');
+		assertEqual(before.blurt_price_fiat, 0.0018, 'blurt_price_fiat');
+		assertEqual(before.base_fee_fiat, 0.108, 'base_fee_fiat before activation'); // 60 * 0.0018
+		const after = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
+		assertEqual(after.denomination_fiat, 'EUR', 'denomination_fiat after activation');
+		assertEqual(after.base_fee_fiat, 0.225, 'base_fee_fiat after activation'); // 125 * 0.0018
+	}
+);
 
-await scenario('listing-fee body (cp128): XAU-denominated operator returns XAU in denomination_fiat', () => {
-	// Gold-denominated instance — pricing in fractional ounces.
-	const cfg = fakeConfig({
-		feeBaseBlurt: 60,
-		priceFeedEnabled: true,
-		priceFeedDenominationFiat: 'XAU'
-	});
-	const ps = makePriceSource({ price: 0.00000037, stale: false }); // ~$0.002 at $5500/oz
-	const body = buildListingFeeBody(cfg, ps);
-	assertEqual(body.denomination_fiat, 'XAU', 'denomination_fiat');
-	assertEqual(body.blurt_price_fiat, 0.00000037, 'blurt_price_fiat');
-});
+await scenario(
+	'listing-fee body (cp128): XAU-denominated operator returns XAU in denomination_fiat',
+	() => {
+		// Gold-denominated instance — pricing in fractional ounces.
+		const cfg = fakeConfig({
+			feeBaseBlurt: 60,
+			priceFeedEnabled: true,
+			priceFeedDenominationFiat: 'XAU'
+		});
+		const ps = makePriceSource({ price: 0.00000037, stale: false }); // ~$0.002 at $5500/oz
+		const body = buildListingFeeBody(cfg, ps, null, null, AFTER_ACTIVATION);
+		assertEqual(body.denomination_fiat, 'XAU', 'denomination_fiat');
+		assertEqual(body.blurt_price_fiat, 0.00000037, 'blurt_price_fiat');
+	}
+);
 
 // ── Model A: live BTC/XMR fee amounts (USD-denominated) ──
 
-await scenario('listing-fee body (Model A): BTC live amount equals pinned at the reference price', () => {
-	const cfg = fakeConfig({ priceFeedEnabled: true }); // btcFeeSatoshis defaults to 417
-	const btc = makePriceSource({ price: 60_000, stale: false });
-	const body = buildListingFeeBody(cfg, null, btc, null);
-	assertEqual(body.btc_fee_satoshis, 417, 'btc_fee_satoshis at reference');
-	approxEq(body.btc_fee_fiat, 0.2502, 'btc_fee_fiat ≈ $0.25', 1e-6);
-	assertEqual(body.btc_fee_live, true, 'btc_fee_live');
-	assertEqual(body.btc_price_fiat, 60_000, 'btc_price_fiat');
-});
+await scenario(
+	'listing-fee body (Model A): BTC live amount equals pinned at the reference price',
+	() => {
+		const cfg = fakeConfig({ priceFeedEnabled: true }); // btcFeeSatoshis defaults to 417
+		const btc = makePriceSource({ price: 60_000, stale: false });
+		const body = buildListingFeeBody(cfg, null, btc, null, AFTER_ACTIVATION);
+		assertEqual(body.btc_fee_satoshis, 417, 'btc_fee_satoshis at reference');
+		approxEq(body.btc_fee_fiat, 0.2502, 'btc_fee_fiat ≈ $0.25', 1e-6);
+		assertEqual(body.btc_fee_live, true, 'btc_fee_live');
+		assertEqual(body.btc_price_fiat, 60_000, 'btc_price_fiat');
+	}
+);
 
-await scenario('listing-fee body (Model A): BTC depreciated → more satoshis, USD value held', () => {
-	// BTC halved to $30k: canonical $0.25 ÷ $30k = 833 sats (rounded).
-	const cfg = fakeConfig({ priceFeedEnabled: true });
-	const btc = makePriceSource({ price: 30_000, stale: false });
-	const body = buildListingFeeBody(cfg, null, btc, null);
-	assertEqual(body.btc_fee_satoshis, 833, 'btc_fee_satoshis ≈ canonical $0.25 worth at $30k');
-	approxEq(body.btc_fee_fiat, 0.25, 'btc_fee_fiat held at canonical target', 1e-3);
-});
+await scenario(
+	'listing-fee body (Model A): BTC depreciated → more satoshis, USD value held',
+	() => {
+		// BTC halved to $30k: canonical $0.25 ÷ $30k = 833 sats (rounded).
+		const cfg = fakeConfig({ priceFeedEnabled: true });
+		const btc = makePriceSource({ price: 30_000, stale: false });
+		const body = buildListingFeeBody(cfg, null, btc, null, AFTER_ACTIVATION);
+		assertEqual(body.btc_fee_satoshis, 833, 'btc_fee_satoshis ≈ canonical $0.25 worth at $30k');
+		approxEq(body.btc_fee_fiat, 0.25, 'btc_fee_fiat held at canonical target', 1e-3);
+	}
+);
 
-await scenario('listing-fee body (Model A): XMR live amount equals pinned at the reference price', () => {
-	const cfg = fakeConfig({ priceFeedEnabled: true }); // xmrFeePiconero defaults to 781250000
-	const xmr = makePriceSource({ price: 320, stale: false });
-	const body = buildListingFeeBody(cfg, null, null, xmr);
-	assertEqual(body.xmr_fee_piconero, '781250000', 'xmr_fee_piconero at reference');
-	approxEq(body.xmr_fee_fiat, 0.25, 'xmr_fee_fiat ≈ $0.25', 1e-6);
-	assertEqual(body.xmr_fee_live, true, 'xmr_fee_live');
-	assertEqual(body.xmr_price_fiat, 320, 'xmr_price_fiat');
-});
+await scenario(
+	'listing-fee body (Model A): XMR live amount equals pinned at the reference price',
+	() => {
+		const cfg = fakeConfig({ priceFeedEnabled: true }); // xmrFeePiconero defaults to 781250000
+		const xmr = makePriceSource({ price: 320, stale: false });
+		const body = buildListingFeeBody(cfg, null, null, xmr, AFTER_ACTIVATION);
+		assertEqual(body.xmr_fee_piconero, '781250000', 'xmr_fee_piconero at reference');
+		approxEq(body.xmr_fee_fiat, 0.25, 'xmr_fee_fiat ≈ $0.25', 1e-6);
+		assertEqual(body.xmr_fee_live, true, 'xmr_fee_live');
+		assertEqual(body.xmr_price_fiat, 320, 'xmr_price_fiat');
+	}
+);
 
-await scenario('listing-fee body (Model A): XMR depreciated → more piconero, USD value held', () => {
-	// XMR halved to $160: the quoted piconero doubles.
-	const cfg = fakeConfig({ priceFeedEnabled: true });
-	const xmr = makePriceSource({ price: 160, stale: false });
-	const body = buildListingFeeBody(cfg, null, null, xmr);
-	assertEqual(body.xmr_fee_piconero, '1562500000', 'xmr_fee_piconero doubles on ½ price');
-	approxEq(body.xmr_fee_fiat, 0.25, 'xmr_fee_fiat held at target', 1e-6);
-});
+await scenario(
+	'listing-fee body (Model A): XMR depreciated → more piconero, USD value held',
+	() => {
+		// XMR halved to $160: the quoted piconero doubles.
+		const cfg = fakeConfig({ priceFeedEnabled: true });
+		const xmr = makePriceSource({ price: 160, stale: false });
+		const body = buildListingFeeBody(cfg, null, null, xmr, AFTER_ACTIVATION);
+		assertEqual(body.xmr_fee_piconero, '1562500000', 'xmr_fee_piconero doubles on ½ price');
+		approxEq(body.xmr_fee_fiat, 0.25, 'xmr_fee_fiat held at target', 1e-6);
+	}
+);
 
 await scenario('listing-fee body (Model A): no BTC/XMR fields when sources absent', () => {
 	const cfg = fakeConfig({ priceFeedEnabled: true });
-	const body = buildListingFeeBody(cfg, null, null, null);
+	const body = buildListingFeeBody(cfg, null, null, null, AFTER_ACTIVATION);
 	assertAbsent(body, 'btc_fee_satoshis');
 	assertAbsent(body, 'xmr_fee_piconero');
 });
@@ -398,28 +468,34 @@ await scenario('listing-fee body (Model A): no BTC/XMR fields when sources absen
 await scenario('listing-fee body (Model A): no BTC fields when BTC price stale', () => {
 	const cfg = fakeConfig({ priceFeedEnabled: true });
 	const btc = makePriceSource({ price: 60_000, stale: true });
-	const body = buildListingFeeBody(cfg, null, btc, null);
+	const body = buildListingFeeBody(cfg, null, btc, null, AFTER_ACTIVATION);
 	assertAbsent(body, 'btc_fee_satoshis');
 });
 
-await scenario('listing-fee body (Model A): no BTC fields when btcFeeSatoshis is 0 (asset not accepted)', () => {
-	const cfg = fakeConfig({ priceFeedEnabled: true, btcFeeSatoshis: 0 });
-	const btc = makePriceSource({ price: 60_000, stale: false });
-	const body = buildListingFeeBody(cfg, null, btc, null);
-	assertAbsent(body, 'btc_fee_satoshis');
-});
+await scenario(
+	'listing-fee body (Model A): no BTC fields when btcFeeSatoshis is 0 (asset not accepted)',
+	() => {
+		const cfg = fakeConfig({ priceFeedEnabled: true, btcFeeSatoshis: 0 });
+		const btc = makePriceSource({ price: 60_000, stale: false });
+		const body = buildListingFeeBody(cfg, null, btc, null, AFTER_ACTIVATION);
+		assertAbsent(body, 'btc_fee_satoshis');
+	}
+);
 
-await scenario('listing-fee body (Model A): non-USD denomination omits BTC/XMR live amounts', () => {
-	// No FX in this route → a non-USD operator can't express the USD
-	// target here; the UI falls back to the chain-pinned /v1/release
-	// amount instead.
-	const cfg = fakeConfig({ priceFeedEnabled: true, priceFeedDenominationFiat: 'EUR' });
-	const btc = makePriceSource({ price: 55_000, stale: false });
-	const xmr = makePriceSource({ price: 290, stale: false });
-	const body = buildListingFeeBody(cfg, null, btc, xmr);
-	assertAbsent(body, 'btc_fee_satoshis');
-	assertAbsent(body, 'xmr_fee_piconero');
-});
+await scenario(
+	'listing-fee body (Model A): non-USD denomination omits BTC/XMR live amounts',
+	() => {
+		// No FX in this route → a non-USD operator can't express the USD
+		// target here; the UI falls back to the chain-pinned /v1/release
+		// amount instead.
+		const cfg = fakeConfig({ priceFeedEnabled: true, priceFeedDenominationFiat: 'EUR' });
+		const btc = makePriceSource({ price: 55_000, stale: false });
+		const xmr = makePriceSource({ price: 290, stale: false });
+		const body = buildListingFeeBody(cfg, null, btc, xmr, AFTER_ACTIVATION);
+		assertAbsent(body, 'btc_fee_satoshis');
+		assertAbsent(body, 'xmr_fee_piconero');
+	}
+);
 
 // ─── /v1/stranger-fee-quote body ────────────────────────────────
 
@@ -606,7 +682,12 @@ await scenario('stats: garbage / negative counts coerce to 0', () => {
 // ─── /v1/rpc-endpoints (RpcHealthProber.snapshot) ────────────────
 const NOW = 1_700_000_000_000;
 const CANON = ['https://a.example', 'https://b.example', 'https://c.example'];
-const ok = (latencyMs: number): ProbeResult => ({ ok: true, latencyMs, reason: null, httpStatus: null });
+const ok = (latencyMs: number): ProbeResult => ({
+	ok: true,
+	latencyMs,
+	reason: null,
+	httpStatus: null
+});
 const down = (reason: ProbeResult['reason'], httpStatus: number | null = null): ProbeResult => ({
 	ok: false,
 	latencyMs: null,
@@ -614,7 +695,10 @@ const down = (reason: ProbeResult['reason'], httpStatus: number | null = null): 
 	httpStatus
 });
 /** A prober whose probe answers from `answers` (per URL), measured at NOW. */
-async function measured(answers: Record<string, ProbeResult>, urls = CANON): Promise<RpcHealthProber> {
+async function measured(
+	answers: Record<string, ProbeResult>,
+	urls = CANON
+): Promise<RpcHealthProber> {
 	const p = new RpcHealthProber(() => urls, {
 		now: () => NOW,
 		probe: async (u) => answers[u] ?? down('network')
@@ -625,48 +709,79 @@ async function measured(answers: Record<string, ProbeResult>, urls = CANON): Pro
 	return p;
 }
 
-await scenario('rpc-endpoints: PRIVACY — only the listed (published) URLs are measured and shown', async () => {
-	const probed: string[] = [];
-	const p = new RpcHealthProber(() => ['https://a.example'], {
-		now: () => NOW,
-		probe: async (u) => {
-			probed.push(u);
-			return ok(120);
-		}
-	});
-	p.noteViewer();
-	await p.tick();
-	const r = p.snapshot(['https://a.example'], NOW);
-	assertEqual(probed, ['https://a.example'], 'nothing outside the published list is probed');
-	assertEqual(r.endpoints.map((e) => e.url), ['https://a.example'], 'only the published URL is shown');
-});
+await scenario(
+	'rpc-endpoints: PRIVACY — only the listed (published) URLs are measured and shown',
+	async () => {
+		const probed: string[] = [];
+		const p = new RpcHealthProber(() => ['https://a.example'], {
+			now: () => NOW,
+			probe: async (u) => {
+				probed.push(u);
+				return ok(120);
+			}
+		});
+		p.noteViewer();
+		await p.tick();
+		const r = p.snapshot(['https://a.example'], NOW);
+		assertEqual(probed, ['https://a.example'], 'nothing outside the published list is probed');
+		assertEqual(
+			r.endpoints.map((e) => e.url),
+			['https://a.example'],
+			'only the published URL is shown'
+		);
+	}
+);
 
-await scenario('rpc-endpoints: order follows the list; a node not measured yet is "checking", not down', async () => {
-	const p = new RpcHealthProber(() => CANON, { now: () => NOW, probe: () => new Promise(() => {}) });
-	p.noteViewer();
-	await p.tick(); // probes never answer
-	const r = p.snapshot(CANON, NOW);
-	assertEqual(r.endpoints.map((e) => e.url), CANON, 'list order');
-	const e = r.endpoints[0]!;
-	assertEqual([e.healthy, e.latency_ms, e.consecutive_failures, e.checked_at], [false, null, 0, null], 'unmeasured');
-});
+await scenario(
+	'rpc-endpoints: order follows the list; a node not measured yet is "checking", not down',
+	async () => {
+		const p = new RpcHealthProber(() => CANON, {
+			now: () => NOW,
+			probe: () => new Promise(() => {})
+		});
+		p.noteViewer();
+		await p.tick(); // probes never answer
+		const r = p.snapshot(CANON, NOW);
+		assertEqual(
+			r.endpoints.map((e) => e.url),
+			CANON,
+			'list order'
+		);
+		const e = r.endpoints[0]!;
+		assertEqual(
+			[e.healthy, e.latency_ms, e.consecutive_failures, e.checked_at],
+			[false, null, 0, null],
+			'unmeasured'
+		);
+	}
+);
 
-await scenario('rpc-endpoints: a node that answered is healthy with its measured latency and checked_at', async () => {
-	const r = (await measured({ 'https://a.example': ok(140) })).snapshot(CANON, NOW);
-	const e = r.endpoints[0]!;
-	assertEqual(e.healthy, true, 'healthy');
-	assertEqual(e.latency_ms, 140, 'measured latency');
-	assertEqual(e.cooldown_ms, 0, 'no cooldown');
-	assertEqual(e.checked_at, new Date(NOW).toISOString(), 'checked_at');
-});
+await scenario(
+	'rpc-endpoints: a node that answered is healthy with its measured latency and checked_at',
+	async () => {
+		const r = (await measured({ 'https://a.example': ok(140) })).snapshot(CANON, NOW);
+		const e = r.endpoints[0]!;
+		assertEqual(e.healthy, true, 'healthy');
+		assertEqual(e.latency_ms, 140, 'measured latency');
+		assertEqual(e.cooldown_ms, 0, 'no cooldown');
+		assertEqual(e.checked_at, new Date(NOW).toISOString(), 'checked_at');
+	}
+);
 
-await scenario('rpc-endpoints: a failed round is two misses, with its reason and no stale latency', async () => {
-	const r = (await measured({ 'https://a.example': down('http', 403) })).snapshot(CANON, NOW);
-	const e = r.endpoints[0]!;
-	assertEqual(e.healthy, false, 'down');
-	assertEqual(e.consecutive_failures, 2, 'two misses');
-	assertEqual([e.failure_reason, e.http_status, e.latency_ms], ['http', 403, null], 'reason, status, no latency');
-});
+await scenario(
+	'rpc-endpoints: a failed round is two misses, with its reason and no stale latency',
+	async () => {
+		const r = (await measured({ 'https://a.example': down('http', 403) })).snapshot(CANON, NOW);
+		const e = r.endpoints[0]!;
+		assertEqual(e.healthy, false, 'down');
+		assertEqual(e.consecutive_failures, 2, 'two misses');
+		assertEqual(
+			[e.failure_reason, e.http_status, e.latency_ms],
+			['http', 403, null],
+			'reason, status, no latency'
+		);
+	}
+);
 
 // ─── Final report ───────────────────────────────────────────────
 

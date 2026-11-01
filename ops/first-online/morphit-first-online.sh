@@ -124,8 +124,8 @@ check_online_hidden() {
 	for ep in $(indexer_env_value MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS | tr ',' ' '); do
 		_host="$(printf '%s' "${ep}" | sed -e 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##' -e 's#[/:?].*$##')"
 		case "${_host}" in
-			*.onion) set -- --socks5-hostname "${_socks}" ;;
-			*.i2p) set -- -x "http://${_i2p}" ;;
+			*.onion) set -- --noproxy '' --socks5-hostname "${_socks}" ;;
+			*.i2p) set -- --noproxy '' -x "http://${_i2p}" ;;
 			*) continue ;; # not a hidden name: never dialled from a hidden-only node
 		esac
 		if curl -fsS --max-time 30 -o /dev/null "$@" \

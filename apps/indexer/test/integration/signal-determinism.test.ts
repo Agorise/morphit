@@ -14,8 +14,10 @@
  * its row) between them, one without, and one whose blocks are a month old.
  */
 import type pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { CONSENSUS_V2_ACTIVATION_TIME } from '../../src/indexer/consensusActivation';
 import { applyBlock } from '../../src/indexer/dispatcher';
+import { FEDERATION_BLURT_BASE } from '../../src/indexer/fee/feeRulesAtBlock';
 import { detectSuspiciousReciprocityInTx } from '../../src/indexer/signals';
 import { INTEGRATION_ENABLED, setupWithMigrations, type IntegrationFixture } from './harness';
 import { fakeConfig, mockBlurt } from '../testutils/context';
@@ -49,8 +51,12 @@ const order = (p: string) => ({
 	price_model: { kind: 'spread', percent: 1 },
 	payment_methods: ['cash_in_person']
 });
-const paid = (who: string, p: string): Op[] => [
-	xfer(who, 'morphit-fees', '62.500 BLURT', `morphit-fee:${p}`),
+/** The listing fee a block at `base` requires: the configured 62.5 BLURT
+ *  before the stricter rules, the federation base from their activation. */
+const ACTIVATION = Date.parse(CONSENSUS_V2_ACTIVATION_TIME);
+const feeAt = (base: number): number => (base >= ACTIVATION ? FEDERATION_BLURT_BASE : 62.5);
+const paid = (who: string, p: string, fee: number): Op[] => [
+	xfer(who, 'morphit-fees', `${fee.toFixed(3)} BLURT`, `morphit-fee:${p}`),
 	cj(who, 'morphit_order_v1', order(p), true)
 ];
 const chat = (from: string, to: string, extra: Record<string, unknown> = {}): Op =>
@@ -67,10 +73,31 @@ const fb = (from: string, to: string, p?: string): Op =>
 function chain(base: number): [number, unknown][] {
 	const ts = (min: number) => new Date(base + min * 60_000);
 	return [
-		[60, block([paid('bob', 'o1'), paid('bob', 'o2'), paid('bob', 'o3')], ts(0), 'a')],
+		[
+			60,
+			block(
+				[
+					paid('bob', 'o1', feeAt(base)),
+					paid('bob', 'o2', feeAt(base)),
+					paid('bob', 'o3', feeAt(base))
+				],
+				ts(0),
+				'a'
+			)
+		],
 		[
 			61,
-			block([[chat('alice', 'bob', { order_permlink: 'o1' })], [chat('bob', 'alice')]], ts(1), 'b')
+			block(
+				[
+					[chat('alice', 'bob', { order_permlink: 'o1' })],
+					[chat('bob', 'alice')],
+					// The pair discussed o2 as well: from the consensus activation a
+					// review may cite only an order its two parties traded on.
+					[chat('alice', 'bob', { order_permlink: 'o2' })]
+				],
+				ts(1),
+				'b'
+			)
 		],
 		[
 			62,
@@ -144,8 +171,11 @@ async function runNode(
 	const blocks = chain(base);
 	for (const [n, b] of blocks.slice(0, 4)) await apply(fx, n, b);
 	if (between === 'hourly-detector') {
-		// What the old hourly run did, at this node's wall clock.
-		await fx.db.withTx((c) => detectSuspiciousReciprocityInTx(c, { asOf: new Date() }));
+		// What the old hourly run did, at this node's wall clock (here: a few
+		// minutes after the reviews were indexed).
+		await fx.db.withTx((c) =>
+			detectSuspiciousReciprocityInTx(c, { asOf: new Date(base + 35 * 60_000) })
+		);
 	}
 	if (between === 'operator-clearance') {
 		// An operator clears the pair locally. That is moderation of what this
@@ -177,40 +207,51 @@ describe.skipIf(!INTEGRATION_ENABLED)('signals and the verified-chat bar run on 
 	let b: IntegrationFixture;
 	let c: IntegrationFixture;
 	let d: IntegrationFixture;
-	beforeAll(async () => {
+	// Four fresh nodes for each era.
+	beforeEach(async () => {
 		a = await setupWithMigrations();
 		b = await setupWithMigrations();
 		c = await setupWithMigrations();
 		d = await setupWithMigrations();
 	});
-	afterAll(async () => {
+	afterEach(async () => {
 		for (const fx of [a, b, c, d]) await fx?.teardown();
 	});
 
-	it('the same chain gives the same verdicts on every node, whenever and however it is indexed', async () => {
-		const recent = Date.now() - 3 * 3_600_000;
-		const nodeA = await runNode(a, recent, 'hourly-detector');
-		const nodeB = await runNode(b, recent, 'nothing');
-		const nodeC = await runNode(c, recent - 30 * 86_400_000, 'nothing');
-		const nodeD = await runNode(d, recent, 'operator-clearance');
-		for (const other of [nodeA, nodeD]) {
-			expect(other.ops).toEqual(nodeB.ops);
-			expect(other.o3).toEqual(nodeB.o3);
-			expect(other.feedback).toBe(nodeB.feedback);
+	// Fixed block times, both copies of the chain on the same side of the
+	// consensus activation: the rules are judged by block time, so a chain
+	// whose blocks straddle it may rightly get other verdicts. (This test read
+	// Date.now() until 1 November 2026, when "a month earlier" fell before the
+	// activation and the scenario's 62.5 BLURT fee no longer matched.)
+	it.each([
+		['before the stricter rules', ACTIVATION - 3 * 3_600_000],
+		['under the stricter rules', ACTIVATION + 40 * 86_400_000]
+	])(
+		'the same chain gives the same verdicts on every node, whenever and however it is indexed (%s)',
+		async (_era, recent) => {
+			const nodeA = await runNode(a, recent, 'hourly-detector');
+			const nodeB = await runNode(b, recent, 'nothing');
+			const nodeC = await runNode(c, recent - 30 * 86_400_000, 'nothing');
+			const nodeD = await runNode(d, recent, 'operator-clearance');
+			for (const other of [nodeA, nodeD]) {
+				expect(other.ops).toEqual(nodeB.ops);
+				expect(other.o3).toEqual(nodeB.o3);
+				expect(other.feedback).toBe(nodeB.feedback);
+			}
+			// A month-old copy of the chain reaches the same verdicts and raises the
+			// same flag (before: a late node never raised it).
+			expect(nodeC.ops).toEqual(nodeB.ops);
+			expect(nodeC.o3).toEqual(nodeB.o3);
+			expect(nodeC.flags).toEqual(nodeB.flags);
+			expect(nodeB.flags.length, 'the reciprocity pattern was not flagged at its block').toBe(1);
+			// And the verdict is the one the chain dictates: the pair reviewed each
+			// other 3× at 5★ with no third party, so the review is refused and the
+			// counterparty gets no credit.
+			expect(nodeB.ops).toEqual([
+				'morphit_order_complete_v1:applied:',
+				'morphit_feedback_v1:rejected:no_verified_counterparty'
+			]);
+			expect(nodeB.o3).toEqual([{ status: 'completed', completed_counterparty: null }]);
 		}
-		// A month-old copy of the chain reaches the same verdicts and raises the
-		// same flag (before: a late node never raised it).
-		expect(nodeC.ops).toEqual(nodeB.ops);
-		expect(nodeC.o3).toEqual(nodeB.o3);
-		expect(nodeC.flags).toEqual(nodeB.flags);
-		expect(nodeB.flags.length, 'the reciprocity pattern was not flagged at its block').toBe(1);
-		// And the verdict is the one the chain dictates: the pair reviewed each
-		// other 3× at 5★ with no third party, so the review is refused and the
-		// counterparty gets no credit.
-		expect(nodeB.ops).toEqual([
-			'morphit_order_complete_v1:applied:',
-			'morphit_feedback_v1:rejected:no_verified_counterparty'
-		]);
-		expect(nodeB.o3).toEqual([{ status: 'completed', completed_counterparty: null }]);
-	});
+	);
 });

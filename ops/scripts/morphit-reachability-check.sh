@@ -51,7 +51,7 @@ say "  ✓ This box is listening on 80/443."
 # yields "000000", which is != "000" and then falsely reads as a success.
 probe() { # $1 = url — always through Tor, never from this box's own address
 	local c
-	c="$(curl --socks5-hostname "$SOCKS" -sk --max-time 30 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null)"
+	c="$(curl --noproxy '' --socks5-hostname "$SOCKS" -sk --max-time 30 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null)"
 	case "$c" in ''|000) printf '000' ;; *) printf '%s' "$c" ;; esac
 }
 

@@ -411,7 +411,7 @@
           ansible.builtin.shell:
             cmd: |
               for u in {{ (morphit_hidden_rpc_seed | select('search', '\\.onion:') | list)[:3] | join(' ') }}; do
-                c=$(curl -s -o /dev/null -m 40 -w '%{http_code}' --socks5-hostname 127.0.0.1:{{ morphit_tor_socks_port | default(9050) }} "$u/")
+                c=$(curl -s -o /dev/null -m 40 -w '%{http_code}' --noproxy '' --socks5-hostname 127.0.0.1:{{ morphit_tor_socks_port | default(9050) }} "$u/")
                 case "$c" in [1-5][0-9][0-9]) echo up; exit 0 ;; esac
               done
               echo down
@@ -450,7 +450,7 @@
           ansible.builtin.shell:
             cmd: |
               for u in {{ (morphit_hidden_rpc_seed | select('search', '\\.onion:') | list)[:3] | join(' ') }}; do
-                c=$(curl -s -o /dev/null -m 40 -w '%{http_code}' --socks5-hostname 127.0.0.1:{{ morphit_tor_socks_port | default(9050) }} "$u/")
+                c=$(curl -s -o /dev/null -m 40 -w '%{http_code}' --noproxy '' --socks5-hostname 127.0.0.1:{{ morphit_tor_socks_port | default(9050) }} "$u/")
                 case "$c" in [1-5][0-9][0-9]) echo up; exit 0 ;; esac
               done
               echo down

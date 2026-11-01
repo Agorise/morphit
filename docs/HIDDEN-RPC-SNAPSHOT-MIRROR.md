@@ -144,11 +144,11 @@ if [ "$offline_ipfs" = yes ] \
 	tmp=$(mktemp)
 	trap 'rm -f "$tmp"' EXIT
 	if printf '%s' "$onion" | grep -Eq '^[a-z2-7]{56}\.onion$' \
-		&& curl -fsS --max-time 900 --max-filesize 67108864 --socks5-hostname "$TOR_SOCKS" \
+		&& curl -fsS --max-time 900 --max-filesize 67108864 --noproxy '' --socks5-hostname "$TOR_SOCKS" \
 			-o "$tmp" "http://$onion/ipfs/$cid?format=car"; then
 		:
 	elif printf '%s' "$b32" | grep -Eq '^[a-z2-7]{52}\.b32\.i2p$' \
-		&& curl -fsS --max-time 1200 --max-filesize 67108864 -x "$I2P_PROXY" \
+		&& curl -fsS --max-time 1200 --max-filesize 67108864 --noproxy '' -x "$I2P_PROXY" \
 			-o "$tmp" "http://$b32/ipfs/$cid?format=car"; then
 		:
 	else

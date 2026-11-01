@@ -156,7 +156,8 @@ export MORPHIT_CANARY_TOR_SOCKS="$CANARY_TOR_SOCKS"
 # would leak the DNS lookup of the news host off the box).
 CURL_PROXY_ARGS=()
 if [ "$CANARY_TOR_ONLY" = 1 ]; then
-	CURL_PROXY_ARGS=(--proxy "socks5h://$CANARY_TOR_SOCKS")
+	# --noproxy '': curl applies no_proxy even to this proxy; nothing may skip Tor.
+	CURL_PROXY_ARGS=(--noproxy '' --proxy "socks5h://$CANARY_TOR_SOCKS")
 	echo "canary: tor-only — routing freshness-proof fetches over Tor SOCKS $CANARY_TOR_SOCKS" >&2
 	# On a tor-only node the DEFAULT clearnet Blurt RPCs fail when pushed through a
 	# Tor exit (their WAFs answer HTTP 400/403). If the operator hasn't pinned a
@@ -369,7 +370,7 @@ news_from_onion_feeds() {
 			# often never reaps; v1.21.15).
 			_curl=''
 			trap 'if [ -n "$_curl" ]; then kill "$_curl" 2>/dev/null; wait "$_curl" 2>/dev/null; fi; exit 0' TERM
-			curl -fsSL --socks5-hostname "$CANARY_TOR_SOCKS" --proxy-user "morphit-news-$_n:x" \
+			curl -fsSL --noproxy '' --socks5-hostname "$CANARY_TOR_SOCKS" --proxy-user "morphit-news-$_n:x" \
 				--max-time "$ONION_NEWS_WAIT" -A "$NEWS_UA" "$feed" >"$_dir/$_n.xml" 2>/dev/null &
 			_curl=$!
 			wait "$_curl" || true

@@ -512,9 +512,9 @@ async function download(
 		dest
 	];
 	if (transport === 'tor') {
-		args.push('--socks5-hostname', TOR_SOCKS, '--max-time', '600');
+		args.push('--noproxy', '', '--socks5-hostname', TOR_SOCKS, '--max-time', '600');
 	} else if (transport === 'i2p') {
-		args.push('-x', I2P_HTTP_PROXY, '--max-time', '900');
+		args.push('--noproxy', '', '-x', I2P_HTTP_PROXY, '--max-time', '900');
 	} else {
 		args.push('--max-time', '600');
 	}

@@ -17,6 +17,7 @@ import { dirname } from 'node:path';
 import { BASE_FETCH_TIMEOUT_MS } from './frontendBaseFetch.ts';
 import { EGRESS_HEAL_MAX_MS } from './torOnlyEgressHeal.ts';
 import { TOR_BRIDGES_HEAL_MAX_MS } from './torBridgesHeal.ts';
+import { TOR_VERSION_HEAL_MAX_MS } from './torVersionHeal.ts';
 import { localIndexerBases } from './hiddenOnly.ts';
 import {
 	configuredIndexerBase,
@@ -42,7 +43,7 @@ export const EARLY_HEALS_MAX_MS = 15 * 60_000;
 export const UNIT_END_RESERVE_MS = 2 * 60_000;
 /** The unit's time limit (systemd RuntimeMaxSec), from the steps' own limits
  *  in the order the unit runs them: the restarts, the services answering, the early heals, the Tor
- *  bridges heal, the egress
+ *  version heal, the Tor bridges heal, the egress
  *  heal (after the web heal is idle), the frontend base fetch through Tor and
  *  the wait for the web heal before the rebuild onto it. The fetch fits its
  *  pull into what is left (fetchFrontendBaseNow), so the unit is never killed
@@ -51,6 +52,7 @@ export const UNIT_MAX_S = Math.ceil(
 	(AFTER_RESTART_WAIT_MS +
 		AFTER_RESTART_ANSWER_MS +
 		EARLY_HEALS_MAX_MS +
+		TOR_VERSION_HEAL_MAX_MS +
 		TOR_BRIDGES_HEAL_MAX_MS +
 		WEB_HEAL_IDLE_MAX_MS +
 		EGRESS_HEAL_MAX_MS +

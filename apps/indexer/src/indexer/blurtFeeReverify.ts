@@ -129,7 +129,14 @@ export interface ReverifyDeps {
 	readonly config: Config;
 	/** Called (after commit) for every order flipped to verified. */
 	readonly onOrderVerified?: (orderId: string) => void;
+	/** Scheduling clock (maybeRun's intervals). */
 	readonly now?: () => number;
+	/** Where the age windows end (orders: not expired and at most 365 days old;
+	 *  stranger fees: the last STRANGER_FEE_WINDOW_DAYS). Unset: the database's
+	 *  NOW(), as a node runs. A test sets it to replay a dated scenario, since a
+	 *  scenario with block times relative to the real clock eventually crosses
+	 *  a consensus activation and is judged by other rules. */
+	readonly windowEnd?: () => Date;
 }
 
 export interface ReverifySummary {
@@ -228,6 +235,7 @@ export class BlurtFeeReverifier {
 		// Only ops of operators that registered a fees account can flip: below
 		// E (first registration block + 1) by LEGACY GRACE, from E on by the
 		// strict as-of-block rule (the rollout window).
+		const windowEnd = this.deps.windowEnd?.().toISOString() ?? null;
 		const orderRows = await this.deps.db.query<OrderCandidate>(
 			`SELECT o.account, o.permlink, t.account AS operator_account, acc.estar::text AS estar,
 			        op.block_num::text AS block_num, op.trx_in_block, op.op_in_trx, op.trx_id, op.block_time
@@ -242,8 +250,8 @@ export class BlurtFeeReverifier {
 			         ORDER BY ops.block_num ASC, trx_in_block ASC, op_in_trx ASC
 			         LIMIT 1) op ON TRUE
 			  WHERE o.status = 'live' AND o.fee_method = 'blurt' AND o.fee_status = 'underpaid'
-			    AND (o.expires_at IS NULL OR o.expires_at > NOW())
-			    AND o.created_at > NOW() - INTERVAL '365 days'
+			    AND (o.expires_at IS NULL OR o.expires_at > COALESCE($4::timestamptz, NOW()))
+			    AND o.created_at > COALESCE($4::timestamptz, NOW()) - INTERVAL '365 days'
 			    AND (op.block_num < acc.estar
 			         OR EXISTS (SELECT 1 FROM operator_fee_recipients f
 			                     WHERE f.account = t.account AND f.effective_block < op.block_num
@@ -253,7 +261,7 @@ export class BlurtFeeReverifier {
 			                       AND dn.op_in_trx = op.op_in_trx)
 			  ORDER BY o.created_at DESC
 			  LIMIT $3`,
-			[ORDER_OP_ID, own, MAX_FETCHES_PER_PASS * 2]
+			[ORDER_OP_ID, own, MAX_FETCHES_PER_PASS * 2, windowEnd]
 		);
 		let budgetExhausted = false;
 		for (const row of orderRows.rows) {
@@ -282,7 +290,7 @@ export class BlurtFeeReverifier {
 				   JOIN (${ACCEPTED_SQL}) acc ON acc.account = t.account
 				  WHERE ops.op_id = $1 AND ops.status = 'rejected' AND ops.reject_reason = 'fee_underpaid'
 				    AND jsonb_typeof(ops.payload) = 'object' AND ops.payload ? 'operator_tag'
-				    AND ops.block_time > NOW() - make_interval(days => $2::int)
+				    AND ops.block_time > COALESCE($5::timestamptz, NOW()) - make_interval(days => $2::int)
 				    AND (ops.block_num < acc.estar
 				         OR EXISTS (SELECT 1 FROM operator_fee_recipients f
 				                     WHERE f.account = t.account AND f.effective_block < ops.block_num
@@ -292,7 +300,7 @@ export class BlurtFeeReverifier {
 				                       AND dn.op_in_trx = ops.op_in_trx)
 				  ORDER BY ops.block_num DESC
 				  LIMIT $4`,
-				[STRANGER_FEE_OP_ID, STRANGER_FEE_WINDOW_DAYS, own, budget * 2]
+				[STRANGER_FEE_OP_ID, STRANGER_FEE_WINDOW_DAYS, own, budget * 2, windowEnd]
 			);
 			for (const row of sfRows.rows) {
 				if (budget <= 0) {

@@ -15,6 +15,8 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { CONSENSUS_V2_ACTIVATION_TIME } from '../../src/indexer/consensusActivation';
+
 import orderHandler from '../../src/indexer/handlers/order';
 import strangerFeeHandler from '../../src/indexer/handlers/strangerFee';
 import type { Handler, OpContext } from '../../src/indexer/handler-contract';
@@ -40,8 +42,14 @@ import { makeCtx, fakeConfig, mockBlurt, unusedBlurt } from '../testutils/contex
 const AGE = 201_600;
 const REG = 1_000_000;
 const LATER = REG + AGE + 1_000;
-/** Recent enough for the 30-day stranger-fee window and the 365-day order window. */
-const BASE_TIME = Date.now() - 2 * 24 * 3600 * 1000;
+/** The rollout this test replays happened before the stricter consensus rules
+ *  (the 62.5 BLURT configured base, legacy grace), so its blocks are dated
+ *  before their activation: fixed, not relative to the real clock, which since
+ *  1 November 2026 put "two days ago" under the new rules. */
+const BASE_TIME = Date.parse(CONSENSUS_V2_ACTIVATION_TIME) - 3 * 24 * 3600 * 1000;
+/** The scenario's "now", two days after it: where the reverifier's age windows
+ *  (30-day stranger fees, 365-day orders) end. */
+const SCENARIO_NOW = new Date(BASE_TIME + 2 * 24 * 3600 * 1000);
 const timeOf = (block: number): Date => new Date(BASE_TIME + (block - LATER) * 3_000);
 const HERE = fakeConfig({ feeRecipient: 'morphit-fees' });
 
@@ -191,7 +199,7 @@ d('G1 — re-verification of fee ops judged before the fee account was known', (
 		['morphit-fees', '6.250 BLURT']
 	];
 
-	const reverifier = () =>
+	const reverifier = (windowEnd: Date = SCENARIO_NOW) =>
 		new BlurtFeeReverifier({
 			db: fx.db,
 			blurt: mockBlurt({
@@ -200,7 +208,8 @@ d('G1 — re-verification of fee ops judged before the fee account was known', (
 					return chain.get(n) ?? null;
 				}
 			}),
-			config: HERE
+			config: HERE,
+			windowEnd: () => windowEnd
 		});
 
 	const bootReconcile = () =>
@@ -245,6 +254,7 @@ d('G1 — re-verification of fee ops judged before the fee account was known', (
 				}
 			}),
 			config: HERE,
+			windowEnd: () => SCENARIO_NOW,
 			onOrderVerified: (id) => verified.push(id)
 		});
 		const s = await rv.runOnce();
@@ -688,7 +698,8 @@ d('G1 — re-verification of fee ops judged before the fee account was known', (
 			);
 		}
 		await fx.db.query(
-			`UPDATE orders SET expires_at = NOW() - INTERVAL '1 hour' WHERE permlink = 'expired'`
+			`UPDATE orders SET expires_at = $1::timestamptz - INTERVAL '1 hour' WHERE permlink = 'expired'`,
+			[SCENARIO_NOW]
 		);
 		await fx.db.query(`UPDATE orders SET status = 'cancelled' WHERE permlink = 'closed'`);
 		await bRegisters('fresh', REG, 'b-fees', 'bbbb000000000000000000000000000000000001');
@@ -734,6 +745,51 @@ d('G1 — re-verification of fee ops judged before the fee account was known', (
 		expect(paid.rows).toEqual([{ sender: 'sam' }]);
 	});
 
+	it('the age windows end at the reverifier’s clock: a stranger fee past 30 days and an order past 365 are left alone', async () => {
+		await operatorB();
+		const legs: ReadonlyArray<[string, string]> = [
+			['b-fees', '4.500 BLURT'],
+			['morphit-fees', '0.500 BLURT']
+		];
+		await indexOp(
+			strangerFeeHandler,
+			'morphit_stranger_fee_v1',
+			'sam',
+			LEGACY,
+			{ v: 1, recipient: 'rita', amount_blurt: 5, operator_tag: 'b-node' },
+			legs,
+			'morphit-stranger:rita'
+		);
+		await indexOp(
+			orderHandler,
+			'morphit_order_v1',
+			'olga',
+			LEGACY - 1,
+			orderPayload('aged'),
+			VIA_B,
+			'morphit-fee:aged'
+		);
+		await fx.db.query(`UPDATE orders SET expires_at = NULL WHERE permlink = 'aged'`);
+		await bRegisters('fresh', REG, 'b-fees', 'bbbb000000000000000000000000000000000001');
+		const day = 24 * 3600 * 1000;
+		const at = (ms: number) => new Date(timeOf(LEGACY).getTime() + ms);
+		// 31 days on: the stranger fee is out of its window, the order is not.
+		let s = await reverifier(at(31 * day)).runOnce();
+		expect(s.strangerFees.checked).toBe(0);
+		expect(s.orders.checked).toBe(1);
+		// The order is done; a new reverifier a year on finds nothing left.
+		expect(await feeStatus('olga', 'aged')).toBe('verified');
+		await fx.db.query(`UPDATE orders SET fee_status = 'underpaid' WHERE permlink = 'aged'`);
+		await fx.db.query('DELETE FROM fee_reverify_done');
+		s = await reverifier(at(367 * day)).runOnce();
+		expect(s.orders.checked).toBe(0);
+		expect(s.strangerFees.checked).toBe(0);
+		// And at the scenario's own time both are candidates.
+		s = await reverifier(SCENARIO_NOW).runOnce();
+		expect(s.orders.checked).toBe(1);
+		expect(s.strangerFees).toEqual({ checked: 1, applied: 1 });
+	});
+
 	it('LEGACY GRACE is prompt: a pass runs AT ONCE when B’s registration lands, and a backlog beyond one pass drains every BACKLOG_INTERVAL_MS, not every INTERVAL_MS', async () => {
 		await operatorB();
 		const N = MAX_FETCHES_PER_PASS + 5;
@@ -758,7 +814,8 @@ d('G1 — re-verification of fee ops judged before the fee account was known', (
 				}
 			}),
 			config: HERE,
-			now: () => clock
+			now: () => clock,
+			windowEnd: () => SCENARIO_NOW
 		});
 		const verifiedCount = async () =>
 			Number(

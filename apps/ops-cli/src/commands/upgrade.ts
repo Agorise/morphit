@@ -195,6 +195,7 @@ import { heal as healIndexerEnvShadow } from '../lib/indexerEnvShadowHeal.ts';
 import { heal as healDisplayShadow } from '../lib/displayShadowHeal.ts';
 import { heal as healTorPow } from '../lib/torPowHeal.ts';
 import { heal as healTorBridges } from '../lib/torBridgesHeal.ts';
+import { healTorVersion } from '../lib/torVersionHeal.ts';
 import { heal as healEtcPerms } from '../lib/etcPermHeal.ts';
 import { heal as healMailRelay } from '../lib/mailRelayHeal.ts';
 import { heal as healVapid } from '../lib/vapidHeal.ts';
@@ -1792,12 +1793,15 @@ export interface StepEnd {
 	readonly timedOutAfterMs: number | null;
 	/** Why it could not be started at all. */
 	readonly error: string | null;
+	/** It was stopped through `opts.signal` (a watch that gave up on it). */
+	readonly stoppedByCaller?: boolean;
 }
 
 /** PURE. A step that did not end well, in plain words: a time limit or a
  *  signal is named as such (not "exited 1", not "ETIMEDOUT"). */
 export function describeStepEnd(name: string, end: StepEnd): string {
 	if (end.error !== null) return `${name} could not be started (${end.error})`;
+	if (end.stoppedByCaller === true) return `${name} was stopped: it had stopped making progress`;
 	if (end.timedOutAfterMs !== null) {
 		const s = Math.round(end.timedOutAfterMs / 1000);
 		return `${name} was stopped: it was still running after ${s >= 120 && s % 60 === 0 ? `${s / 60} minutes` : `${s} s`}, its time limit`;
@@ -1847,12 +1851,16 @@ function keepStepLog(from: string, name: string): string | null {
  * hang gets a spinner, so an admin always knows work is happening.
  */
 export async function runStepWithSpinner(
-	label: string,
+	/** A function is read on every frame (text that changes as it runs). */
+	label: string | (() => string),
 	cmd: string,
 	args: readonly string[],
 	opts: {
 		cwd?: string;
 		timeoutMs?: number;
+		/** Aborting it stops the step (SIGKILL), reported as stopped, not failed
+		 *  with an exit code (the Tor npm stall watch). */
+		signal?: AbortSignal;
 		env?: NodeJS.ProcessEnv;
 		/** Show the command's output only when it fails (its last 40 lines);
 		 *  on success only its warnings (stepWarnings). */
@@ -1921,17 +1929,32 @@ export async function runStepWithSpinner(
 					}
 				}, limit);
 			}
+			let stoppedByCaller = false;
+			const onAbort = (): void => {
+				stoppedByCaller = true;
+				try {
+					child.kill('SIGKILL');
+				} catch {
+					/* already gone */
+				}
+			};
+			if (opts.signal !== undefined) {
+				if (opts.signal.aborted) onAbort();
+				else opts.signal.addEventListener('abort', onAbort, { once: true });
+			}
 			child.on('error', (e) =>
 				settle({ code: null, signal: null, timedOutAfterMs: null, error: e.message })
 			);
-			child.on('close', (code, signal) =>
+			child.on('close', (code, signal) => {
+				opts.signal?.removeEventListener('abort', onAbort);
 				settle({
 					code,
 					signal,
 					timedOutAfterMs: timedOut ? (opts.timeoutMs ?? null) : null,
-					error: null
-				})
-			);
+					error: null,
+					...(stoppedByCaller ? { stoppedByCaller: true } : {})
+				});
+			});
 		});
 		closeSync(fd);
 		fd = null;
@@ -3913,16 +3936,13 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				installDir,
 				previousDir: backupDir,
 				socks,
-				runNpm: (args, env) =>
-					runStepWithSpinner(
-						'Installing dependencies through Tor — this can take several minutes…',
-						'npm',
-						args,
-						{
-							cwd: installDir,
-							env
-						}
-					),
+				runNpm: (args, env, run) =>
+					runStepWithSpinner(run.label, 'npm', args, {
+						cwd: installDir,
+						env,
+						signal: run.signal,
+						name: `npm ${args[0] ?? ''}`.trim()
+					}),
 				copyTree: (from, to) =>
 					runStepWithSpinner('Reusing the installed dependencies…', 'cp', [
 						'-a',
@@ -5878,12 +5898,17 @@ async function runQuestions(): Promise<number> {
 /** `morphit-ops upgrade --tor-bridges`: the Tor bridges check and repair on
  *  its own (the timer's run). Exit 0 when Tor works afterwards. */
 export async function runTorBridgesCheck(
-	run: (ctx: HealCtx, installDir: string) => Promise<HealResult> = healTorBridges
+	run: (ctx: HealCtx, installDir: string) => Promise<HealResult> = healTorBridges,
+	version: (ctx: HealCtx) => Promise<HealResult> = healTorVersion
 ): Promise<number> {
 	if (process.getuid?.() !== 0) {
 		info('The Tor bridges check edits /etc/tor/torrc: run it with sudo.');
 		return 1;
 	}
+	// A Tor too old for the Tor network first (between upgrades too: this is
+	// the timer's run): no bridge helps a Tor the network refuses.
+	const v = await version(healCtx());
+	if (v.routine !== true) (v.verified ? info : warn)(v.detail);
 	const r = await run(healCtx(), selfHealInstallDir());
 	(r.verified ? info : warn)(r.detail);
 	return r.verified ? 0 : 1;
@@ -6388,6 +6413,12 @@ export function afterRestartHealSteps(): Array<[string, () => Promise<void>]> {
 		// (morphitir: torproject.org sinkholed, circuits starved), Tor moves onto
 		// the release's built-in bridges, proven by its .onion loading, else put
 		// back. Before the tor-only egress heal, whose checks go through Tor.
+		// 2026-11-01 (lib/torVersionHeal.ts): Tor 0.4.8 connects to nothing since
+		// the Tor network's 28 October change (morphitlat was cut off for two
+		// days); Ubuntu's 0.4.9 is installed — over Tor on a zero-clearnet node.
+		// Before the bridges heal: whether bridges are needed is only known once
+		// this Tor can connect at all.
+		['the Tor version heal', () => reportHeal(healTorVersion(healCtx()))],
 		['the Tor bridges heal', () => reportHeal(healTorBridges(healCtx(), selfHealInstallDir()))],
 		// last — up to about four minutes of Tor checks, which the
 		// self-heal child (killed at 300 s) cannot always afford after the

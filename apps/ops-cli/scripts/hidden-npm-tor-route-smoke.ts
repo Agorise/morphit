@@ -12,6 +12,14 @@
  * finish, the package must be installed, and the SOCKS port must have been
  * asked for the registry by NAME.
  *
+ * Then the UPDATE the upgrade tries first since morphitlat's v1.21.19 upgrade
+ * (a full `npm ci` through Tor for 5 changed packages of 821, still running
+ * after two hours): the release's lockfile changes one package of two, and the
+ * REAL `npm install --ignore-scripts --no-save` runs over the installed tree
+ * through the same chain. It must finish, fetch ONLY the changed package (the
+ * unchanged one is never asked for again), install it, and leave the lockfile
+ * byte for byte as the release shipped it.
+ *
  * Needs openssl. Where network namespaces are not allowed (a CI container
  * without CAP_SYS_ADMIN), it runs the same install in the host's network
  * instead and says so: npm then trusts ONLY the stand-in registry's
@@ -91,17 +99,26 @@ try {
 		check('the namespace cannot resolve registry.npmjs.org itself', dns.status !== 0);
 	}
 
-	// 1. A package, as the registry would serve it.
-	const pkgDir = join(work, 'pkgsrc', 'package');
-	mkdirSync(pkgDir, { recursive: true });
-	writeFileSync(
-		join(pkgDir, 'package.json'),
-		JSON.stringify({ name: 'left-pad', version: '1.3.0', main: 'index.js' })
-	);
-	writeFileSync(join(pkgDir, 'index.js'), 'module.exports = (s) => s;\n');
-	const tgz = join(work, 'left-pad-1.3.0.tgz');
-	spawnSync('tar', ['-czf', tgz, '-C', join(work, 'pkgsrc'), 'package']);
-	const integrity = `sha512-${createHash('sha512').update(readFileSync(tgz)).digest('base64')}`;
+	// 1. Packages, as the registry would serve them.
+	const tarballs = new Map<string, string>();
+	const pack = (name: string, version: string): string => {
+		const src = join(work, `pkgsrc-${name}-${version}`);
+		const pkgDir = join(src, 'package');
+		mkdirSync(pkgDir, { recursive: true });
+		writeFileSync(
+			join(pkgDir, 'package.json'),
+			JSON.stringify({ name, version, main: 'index.js' })
+		);
+		writeFileSync(join(pkgDir, 'index.js'), `module.exports = '${name}@${version}';\n`);
+		const tgz = join(work, `${name}-${version}.tgz`);
+		spawnSync('tar', ['-czf', tgz, '-C', src, 'package']);
+		tarballs.set(`/${name}/-/${name}-${version}.tgz`, tgz);
+		return `sha512-${createHash('sha512').update(readFileSync(tgz)).digest('base64')}`;
+	};
+	const integrity = pack('left-pad', '1.3.0');
+	const rightIntegrity = pack('right-pad', '2.0.0');
+	const nextIntegrity = pack('left-pad', '1.3.1');
+	const served: string[] = [];
 
 	// 2. The registry, with a certificate for its real name.
 	const cert = join(work, 'c.pem');
@@ -130,7 +147,9 @@ try {
 	const registry = createHttpsServer(
 		{ key: readFileSync(key), cert: readFileSync(cert) },
 		(req, res) => {
-			if (req.url === '/left-pad/-/left-pad-1.3.0.tgz') {
+			served.push(req.url ?? '');
+			const tgz = tarballs.get(req.url ?? '');
+			if (tgz !== undefined) {
 				res.writeHead(200, { 'content-type': 'application/octet-stream' });
 				res.end(readFileSync(tgz));
 				return;
@@ -183,27 +202,40 @@ try {
 	// 4. A project locked to the package, installed the way the upgrade does it.
 	const proj = join(work, 'proj');
 	mkdirSync(proj);
-	writeFileSync(
-		join(proj, 'package.json'),
-		JSON.stringify({ name: 'p', version: '1.0.0', dependencies: { 'left-pad': '1.3.0' } })
-	);
-	writeFileSync(
-		join(proj, 'package-lock.json'),
-		JSON.stringify({
-			name: 'p',
-			version: '1.0.0',
-			lockfileVersion: 3,
-			requires: true,
-			packages: {
-				'': { name: 'p', version: '1.0.0', dependencies: { 'left-pad': '1.3.0' } },
-				'node_modules/left-pad': {
-					version: '1.3.0',
-					resolved: 'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz',
-					integrity
-				}
-			}
-		})
-	);
+	const project = (left: string, leftIntegrity: string): void => {
+		const deps = { 'left-pad': left, 'right-pad': '2.0.0' };
+		writeFileSync(
+			join(proj, 'package.json'),
+			JSON.stringify({ name: 'p', version: '1.0.0', dependencies: deps })
+		);
+		writeFileSync(
+			join(proj, 'package-lock.json'),
+			JSON.stringify(
+				{
+					name: 'p',
+					version: '1.0.0',
+					lockfileVersion: 3,
+					requires: true,
+					packages: {
+						'': { name: 'p', version: '1.0.0', dependencies: deps },
+						'node_modules/left-pad': {
+							version: left,
+							resolved: `https://registry.npmjs.org/left-pad/-/left-pad-${left}.tgz`,
+							integrity: leftIntegrity
+						},
+						'node_modules/right-pad': {
+							version: '2.0.0',
+							resolved: 'https://registry.npmjs.org/right-pad/-/right-pad-2.0.0.tgz',
+							integrity: rightIntegrity
+						}
+					}
+				},
+				null,
+				2
+			) + '\n'
+		);
+	};
+	project('1.3.0', integrity);
 	const bridge = await startTorRegistryBridge({ socksHost: '127.0.0.1', socksPort });
 	const env = {
 		...torNpmEnv(process.env, bridge.port),
@@ -213,20 +245,22 @@ try {
 		npm_config_userconfig: join(work, 'npmrc-none'),
 		npm_config_globalconfig: join(work, 'npmrc-none-g')
 	};
-	const code = await new Promise<number>((r) => {
-		const c = spawn('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], {
-			cwd: proj,
-			env,
-			stdio: ['ignore', 'pipe', 'pipe']
+	const npm = (args: readonly string[]): Promise<number> =>
+		new Promise<number>((r) => {
+			const c = spawn('npm', [...args], {
+				cwd: proj,
+				env,
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
+			let out = '';
+			c.stdout.on('data', (d) => (out += d));
+			c.stderr.on('data', (d) => (out += d));
+			c.on('close', (n) => {
+				if (n !== 0) console.log(out.split('\n').slice(-15).join('\n'));
+				r(n ?? 1);
+			});
 		});
-		let out = '';
-		c.stdout.on('data', (d) => (out += d));
-		c.stderr.on('data', (d) => (out += d));
-		c.on('close', (n) => {
-			if (n !== 0) console.log(out.split('\n').slice(-15).join('\n'));
-			r(n ?? 1);
-		});
-	});
+	const code = await npm(['ci', '--ignore-scripts', '--no-audit', '--no-fund']);
 	check(
 		isolated
 			? 'real npm ci finished inside the loopback-only namespace'
@@ -250,6 +284,51 @@ try {
 		bridge.asked.every((a) => a === 'registry.npmjs.org:443'),
 		bridge.asked.join(', ')
 	);
+
+	// 5. The update: the release changes left-pad only; the installed tree stays.
+	project('1.3.1', nextIntegrity);
+	const releaseLock = readFileSync(join(proj, 'package-lock.json'), 'utf8');
+	// An empty download cache, as on a node whose last install came from the
+	// offline bundle: whatever is not in node_modules must be fetched.
+	rmSync(join(work, 'cache'), { recursive: true, force: true });
+	served.length = 0;
+	asked.length = 0;
+	const upd = await npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-save']);
+	const version = (n: string): string => {
+		try {
+			return JSON.parse(readFileSync(join(proj, 'node_modules', n, 'package.json'), 'utf8'))
+				.version;
+		} catch {
+			return '';
+		}
+	};
+	check(
+		isolated
+			? 'real npm install (the update) finished inside the loopback-only namespace'
+			: 'real npm install (the update) finished through the SOCKS chain (host network)',
+		upd === 0,
+		`exit ${upd}`
+	);
+	check(
+		'the update fetched ONLY the changed package',
+		served.length === 1 && served[0] === '/left-pad/-/left-pad-1.3.1.tgz',
+		served.join(', ')
+	);
+	check(
+		'the changed package is updated and the unchanged one kept',
+		version('left-pad') === '1.3.1' && version('right-pad') === '2.0.0',
+		`left-pad ${version('left-pad')}, right-pad ${version('right-pad')}`
+	);
+	check(
+		"the release's lockfile is left byte for byte as shipped",
+		readFileSync(join(proj, 'package-lock.json'), 'utf8') === releaseLock
+	);
+	check(
+		'during the update, Tor was asked for the registry by name and nothing else',
+		asked.length > 0 && asked.every((a) => a === 'registry.npmjs.org:443'),
+		asked.join(', ')
+	);
+
 	await bridge.close();
 	registry.close();
 	socks.close();

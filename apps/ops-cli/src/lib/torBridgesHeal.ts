@@ -809,6 +809,9 @@ async function curlStatus(socks: string, url: string, timeoutMs: number): Promis
 			'=http,https',
 			'-m',
 			String(Math.max(1, Math.ceil(timeoutMs / 1000))),
+			// curl applies no_proxy even to a SOCKS proxy: never let it skip Tor.
+			'--noproxy',
+			'',
 			'--socks5-hostname',
 			socks,
 			'-w',

@@ -7,6 +7,29 @@
     cache_valid_time: 3600
   notify: Restart tor
 
+# Since 2026-10-28 the Tor network refuses Tor older than 0.4.9 (it stalls at
+# "Bootstrapped 30%"). `state: present` keeps an older Tor already installed,
+# so a re-run upgrades it (Ubuntu 24.04: 0.4.9.11 in noble-updates); a Tor
+# already new enough is left as it is. Installed boxes get the same from
+# `morphit-ops upgrade` (apps/ops-cli/src/lib/torVersionHeal.ts).
+- name: Read the installed Tor version
+  ansible.builtin.command: tor --version
+  register: morphit_tor_version
+  changed_when: false
+  failed_when: false
+
+- name: Upgrade Tor older than 0.4.9 (the Tor network refuses it)
+  ansible.builtin.apt:
+    name: tor
+    state: latest
+    only_upgrade: true
+    update_cache: true
+    cache_valid_time: 3600
+  when: >-
+    (morphit_tor_version.stdout | default('') | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+') | default('0', true))
+    is version('0.4.9', '<')
+  notify: Restart tor
+
 - name: Ensure the hidden-service directory exists (Tor-owned, 0700)
   ansible.builtin.file:
     path: "{{ morphit_tor_hs_dir }}"

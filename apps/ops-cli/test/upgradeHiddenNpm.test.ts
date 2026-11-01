@@ -17,7 +17,8 @@ import { createHash } from 'node:crypto';
 import {
 	createServer as createNetServer,
 	connect as netConnect,
-	type Server as NetServer
+	type Server as NetServer,
+	type Socket as NetSocket
 } from 'node:net';
 import {
 	chmodSync,
@@ -39,7 +40,9 @@ vi.mock('../src/init/hiddenUpgradeTransport.js', () => ({
 }));
 
 const { runUpgrade } = await import('../src/commands/upgrade.ts');
-const { startTorRegistryBridge, dependencyFingerprint } = await import('../src/lib/depsInstall.ts');
+const { startTorRegistryBridge, dependencyFingerprint, installDepsForHiddenNode } = await import(
+	'../src/lib/depsInstall.ts'
+);
 
 const scratch = mkdtempSync(join(tmpdir(), 'morphit-hidden-npm-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -48,7 +51,8 @@ const CID = `bafy${'a'.repeat(55)}`;
 const peers = { instances: [{ alt_networks: { tor: `${'p'.repeat(56)}.onion` } }] };
 const sha = (b: Buffer): string => createHash('sha256').update(b).digest('hex');
 
-/** A lockfile whose workspace version is `wsVersion` and with `leftPad` installed. */
+/** A lockfile whose workspace version is `wsVersion` and with `leftPad` installed
+ *  (and `right-pad` 2.0.0, which no release here changes). */
 function lock(wsVersion: string, leftPad: string): string {
 	return JSON.stringify({
 		name: 'morphit',
@@ -66,6 +70,11 @@ function lock(wsVersion: string, leftPad: string): string {
 				version: leftPad,
 				resolved: `https://registry.npmjs.org/left-pad/-/left-pad-${leftPad}.tgz`,
 				integrity: `sha512-${leftPad}`
+			},
+			'node_modules/right-pad': {
+				version: '2.0.0',
+				resolved: 'https://registry.npmjs.org/right-pad/-/right-pad-2.0.0.tgz',
+				integrity: 'sha512-r'
 			}
 		}
 	});
@@ -105,6 +114,11 @@ beforeEach(() => {
 		join(installDir, 'node_modules', 'left-pad', 'package.json'),
 		JSON.stringify({ name: 'left-pad', version: '1.3.0' })
 	);
+	mkdirSync(join(installDir, 'node_modules', 'right-pad'), { recursive: true });
+	writeFileSync(
+		join(installDir, 'node_modules', 'right-pad', 'package.json'),
+		JSON.stringify({ name: 'right-pad', version: '2.0.0' })
+	);
 	spawnSync('ln', ['-s', '../apps/ops-cli', join(installDir, 'node_modules', 'morphit-ops')]);
 	writeFileSync(join(installDir, 'package-lock.json'), lock('1.17.15', '1.3.0'));
 	writeFileSync(
@@ -114,10 +128,17 @@ beforeEach(() => {
 	const bin = join(work, 'bin');
 	mkdirSync(bin);
 	npmLog = join(work, 'npm.log');
-	// `npm` that records its arguments and every proxy setting it was given.
+	// `npm` that records its arguments and every proxy setting it was given,
+	// and fails — unless STUB_INSTALL says what `npm install` does: 'update'
+	// writes left-pad 1.3.1 (the one package the new lockfile changed) and
+	// exits 0; 'update-and-relock' also rewrites package-lock.json.
 	writeFileSync(
 		join(bin, 'npm'),
-		`#!/bin/sh\n{ echo "ARGS $*"; env | grep -iE '^[^=]*proxy[^=]*=' | sort; echo END; } >> '${npmLog}'\nexit 1\n`
+		`#!/bin/sh\n{ echo "ARGS $*"; env | grep -iE '^[^=]*proxy[^=]*=' | sort; echo END; } >> '${npmLog}'\n` +
+			`if [ "$1" = install ] && [ -n "$STUB_INSTALL" ]; then\n` +
+			`  mkdir -p node_modules/left-pad && echo '{"name":"left-pad","version":"1.3.1"}' > node_modules/left-pad/package.json\n` +
+			`  [ "$STUB_INSTALL" = update-and-relock ] && echo '{"rewritten":true}' > package-lock.json\n` +
+			`  exit 0\nfi\nexit 1\n`
 	);
 	chmodSync(join(bin, 'npm'), 0o755);
 	process.env.PATH = `${bin}:${saved.PATH ?? '/usr/bin:/bin'}`;
@@ -238,16 +259,198 @@ describe('a hidden-only upgrade of a slim release', () => {
 			hiddenNode(socks.addr);
 			await upgradeTo(slimRelease(lock('1.18.0', '1.3.1')));
 			const calls = installCalls();
-			expect(calls.length).toBe(1);
-			const call = calls[0]!;
-			expect(call).toMatch(/^ARGS ci .*--ignore-scripts/);
-			const proxies = call.split('\n').filter((l) => /=/.test(l));
-			expect(proxies.length).toBeGreaterThan(0);
-			for (const l of proxies) {
-				const v = l.slice(l.indexOf('=') + 1);
-				expect(v === '' || /^http:\/\/127\.0\.0\.1:\d+$/.test(v), l).toBe(true);
+			// The update first (it fails here: the stub exits 1), then everything.
+			expect(calls.length).toBe(2);
+			expect(calls[0]).toMatch(/^ARGS install .*--ignore-scripts.*--no-save/);
+			expect(calls[1]).toMatch(/^ARGS ci .*--ignore-scripts/);
+			for (const call of calls) {
+				const proxies = call.split('\n').filter((l) => /=/.test(l));
+				expect(proxies.length).toBeGreaterThan(0);
+				for (const l of proxies) {
+					const v = l.slice(l.indexOf('=') + 1);
+					expect(v === '' || /^http:\/\/127\.0\.0\.1:\d+$/.test(v), l).toBe(true);
+				}
+				expect(call).not.toMatch(/inherited-proxy/);
 			}
-			expect(call).not.toMatch(/inherited-proxy/);
+		} finally {
+			await socks.close();
+		}
+	});
+
+	// morphitlat, 2026-10-31: v1.21.19 changed 5 of 821 packages, and the upgrade
+	// ran a full `npm ci` through Tor — still downloading after two hours.
+	it('with a few changed dependencies, keeps the unchanged ones and fetches only the change (no npm ci)', async () => {
+		const socks = await fakeSocks();
+		try {
+			hiddenNode(socks.addr);
+			process.env.STUB_INSTALL = 'update';
+			const releaseLock = lock('1.18.0', '1.3.1');
+			await upgradeTo(slimRelease(releaseLock));
+			const calls = installCalls();
+			expect(calls.length, calls.join('|')).toBe(1);
+			expect(calls[0]).toMatch(/^ARGS install .*--ignore-scripts.*--no-save/);
+			const pkg = (n: string): string =>
+				JSON.parse(readFileSync(join(installDir, 'node_modules', n, 'package.json'), 'utf8'))
+					.version;
+			expect(pkg('left-pad')).toBe('1.3.1');
+			expect(pkg('right-pad'), 'the unchanged package was carried over').toBe('2.0.0');
+			expect(readFileSync(join(installDir, 'package-lock.json'), 'utf8')).toBe(releaseLock);
+		} finally {
+			await socks.close();
+		}
+	});
+
+	it('when npm rewrites the lockfile while updating, puts the release lockfile back and runs npm ci', async () => {
+		const socks = await fakeSocks();
+		try {
+			hiddenNode(socks.addr);
+			process.env.STUB_INSTALL = 'update-and-relock';
+			const releaseLock = lock('1.18.0', '1.3.1');
+			await upgradeTo(slimRelease(releaseLock));
+			const calls = installCalls();
+			expect(calls.map((c) => c.split(' ')[1])).toEqual(['install', 'ci']);
+		} finally {
+			await socks.close();
+		}
+	});
+});
+
+describe('the stall watch', () => {
+	/** A previous install with node_modules, and a release whose lockfile
+	 *  changed a package. */
+	function trees(): { prev: string; next: string } {
+		const prev = mkdtempSync(join(scratch, 'prev-'));
+		const next = mkdtempSync(join(scratch, 'next-'));
+		writeFileSync(join(prev, 'package-lock.json'), lock('1.17.15', '1.3.0'));
+		mkdirSync(join(prev, 'node_modules', 'left-pad'), { recursive: true });
+		writeFileSync(join(prev, 'node_modules', 'left-pad', 'package.json'), '{"version":"1.3.0"}');
+		writeFileSync(join(next, 'package-lock.json'), lock('1.18.0', '1.3.1'));
+		return { prev, next };
+	}
+
+	it('stops npm once nothing has come through Tor for the limit, and does not start npm ci after', async () => {
+		const socks = await greetingSocks();
+		const { prev, next } = trees();
+		let clock = 1_000_000;
+		let tick: (() => void) | null = null;
+		const runs: string[] = [];
+		const labels: string[] = [];
+		try {
+			const out = await installDepsForHiddenNode({
+				installDir: next,
+				previousDir: prev,
+				socks: { host: '127.0.0.1', port: socks.port },
+				copyTree: async (from, to) => spawnSync('cp', ['-a', '--', from, to]).status === 0,
+				info: () => undefined,
+				runNpm: (args, _env, run) => {
+					runs.push(args[0]!);
+					labels.push(run.label());
+					return new Promise<number>((r) => {
+						// npm hangs; the watch is the only way out.
+						run.signal.addEventListener('abort', () => r(137));
+						clock += 9 * 60_000;
+						tick!();
+						expect(run.signal.aborted, 'stopped before the limit').toBe(false);
+						clock += 60_000;
+						tick!();
+					});
+				},
+				watch: {
+					now: () => clock,
+					every: (fn) => {
+						tick = fn;
+						return () => {
+							tick = null;
+						};
+					}
+				}
+			});
+			expect(out.ok).toBe(false);
+			expect(!out.ok && out.reason).toMatch(/nothing came through Tor for 10 minutes/);
+			expect(runs, 'npm ci ran after a stall').toEqual(['install']);
+			expect(labels[0]).toMatch(
+				/^Fetching only the changed dependencies through Tor — 0\.0 MB received so far…$/
+			);
+			expect(tick, 'the watch was left running').toBeNull();
+		} finally {
+			await socks.close();
+		}
+	});
+});
+
+/** A stand-in for Tor's SOCKS port that grants every CONNECT and then sends
+ *  `payload` from the "registry". */
+async function greetingSocks(
+	payload: Buffer = Buffer.alloc(0)
+): Promise<{ port: number; close(): Promise<void> }> {
+	const open = new Set<NetSocket>();
+	const server: NetServer = createNetServer((s) => {
+		open.add(s);
+		s.on('close', () => open.delete(s));
+		let acc = Buffer.alloc(0);
+		let stage = 0;
+		s.on('data', (d: Buffer) => {
+			acc = Buffer.concat([acc, d]);
+			if (stage === 0 && acc.length >= 3) {
+				stage = 1;
+				acc = acc.subarray(3);
+				s.write(Buffer.from([0x05, 0x00]));
+			}
+			if (stage === 1 && acc.length >= 5 && acc.length >= 7 + acc[4]!) {
+				stage = 2;
+				s.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+				if (payload.length > 0) s.write(payload);
+			}
+		});
+		s.on('error', () => undefined);
+	});
+	await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+	const { port } = server.address() as AddressInfo;
+	return {
+		port,
+		close: () =>
+			new Promise<void>((r) => {
+				for (const s of open) s.destroy();
+				server.close(() => r());
+			})
+	};
+}
+
+describe('the update over Tor', () => {
+	it('after the same-dependencies reuse found a broken copy, updates that copy in place (no second node_modules inside it)', async () => {
+		const socks = await greetingSocks();
+		const prev = mkdtempSync(join(scratch, 'prev-'));
+		const next = mkdtempSync(join(scratch, 'next-'));
+		const same = lock('1.18.0', '1.3.0');
+		writeFileSync(join(prev, 'package-lock.json'), same);
+		writeFileSync(join(next, 'package-lock.json'), same);
+		// The previous tree does not match its own lockfile (left-pad 1.2.9).
+		mkdirSync(join(prev, 'node_modules', 'left-pad'), { recursive: true });
+		writeFileSync(join(prev, 'node_modules', 'left-pad', 'package.json'), '{"version":"1.2.9"}');
+		mkdirSync(join(prev, 'node_modules', 'right-pad'), { recursive: true });
+		writeFileSync(join(prev, 'node_modules', 'right-pad', 'package.json'), '{"version":"2.0.0"}');
+		spawnSync('ln', ['-s', '../apps/ops-cli', join(prev, 'node_modules', 'morphit-ops')]);
+		const runs: string[] = [];
+		try {
+			const out = await installDepsForHiddenNode({
+				installDir: next,
+				previousDir: prev,
+				socks: { host: '127.0.0.1', port: socks.port },
+				copyTree: async (from, to) => spawnSync('cp', ['-a', '--', from, to]).status === 0,
+				info: () => undefined,
+				runNpm: async (args) => {
+					runs.push(args[0]!);
+					writeFileSync(
+						join(next, 'node_modules', 'left-pad', 'package.json'),
+						'{"version":"1.3.0"}'
+					);
+					return 0;
+				},
+				watch: { every: () => () => undefined }
+			});
+			expect(out.ok && out.strategy).toBe('updated-over-tor');
+			expect(runs).toEqual(['install']);
+			expect(existsSync(join(next, 'node_modules', 'node_modules'))).toBe(false);
 		} finally {
 			await socks.close();
 		}
@@ -279,6 +482,65 @@ describe('the Tor registry bridge', () => {
 			expect(socks.asked).toContain('registry.npmjs.org:443');
 		} finally {
 			await b.close();
+		}
+	});
+
+	it('counts the bytes the registry sends and when data last moved', async () => {
+		const up = await greetingSocks(Buffer.alloc(3_000, 1));
+		let clock = 5;
+		const b = await startTorRegistryBridge({
+			socksHost: '127.0.0.1',
+			socksPort: up.port,
+			now: () => clock
+		});
+		try {
+			expect(b.received()).toBe(0);
+			clock = 77;
+			const got = await new Promise<number>((r) => {
+				const c = netConnect({ host: '127.0.0.1', port: b.port });
+				let n = 0;
+				c.on('connect', () =>
+					c.write('CONNECT registry.npmjs.org:443 HTTP/1.1\r\nHost: registry.npmjs.org:443\r\n\r\n')
+				);
+				c.on('data', (d) => {
+					n += d.length;
+					if (b.received() >= 3_000) {
+						c.destroy();
+						r(n);
+					}
+				});
+			});
+			expect(got).toBeGreaterThanOrEqual(3_000);
+			expect(b.received()).toBe(3_000);
+			expect(b.lastActivity()).toBe(77);
+		} finally {
+			await b.close();
+			await up.close();
+		}
+	});
+
+	// morphitlat, 2026-10-31 (Tor stuck at 30% bootstrapped): a SOCKS request
+	// closed without a reply left npm's CONNECT unanswered for 5 h 21 min.
+	it('answers npm at once when Tor closes the request without a reply', async () => {
+		const closing = createNetServer((s) => {
+			let n = 0;
+			s.on('data', () => {
+				n++;
+				if (n === 1) s.write(Buffer.from([0x05, 0x00]));
+				else s.end();
+			});
+			s.on('error', () => undefined);
+		});
+		await new Promise<void>((r) => closing.listen(0, '127.0.0.1', r));
+		const b = await startTorRegistryBridge({
+			socksHost: '127.0.0.1',
+			socksPort: (closing.address() as AddressInfo).port
+		});
+		try {
+			expect(await connectVia(b.port, 'registry.npmjs.org:443')).toMatch(/^HTTP\/1\.1 502/);
+		} finally {
+			await b.close();
+			await new Promise<void>((r) => closing.close(() => r()));
 		}
 	});
 

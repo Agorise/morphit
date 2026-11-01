@@ -6,7 +6,6 @@
 # "prettier" key of package.json covers every workspace), then delete its line here.
 apps/indexer/scripts/ansible-env-template-required-vars-smoke.ts
 apps/indexer/scripts/anti-snipe-extension-smoke.ts
-apps/indexer/scripts/api-response-shape-smoke.ts
 apps/indexer/scripts/asset-network-set-registry-parity-smoke.ts
 apps/indexer/scripts/asset-registry-smoke.ts
 apps/indexer/scripts/balance-math-smoke.ts

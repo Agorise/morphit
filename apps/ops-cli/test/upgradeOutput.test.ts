@@ -614,6 +614,38 @@ describe('a step whose output only matters when it fails (the frontend rebuild)'
 		expect(out).toMatch(/before-kill/);
 		expect(out).toMatch(/sh was stopped by a signal \(SIGKILL\)/);
 	});
+	// morphitlat, 2026-10-31: npm through Tor ran on for two hours with nothing
+	// to stop it. The Tor stall watch stops a step through `signal`.
+	it('a step stopped by its caller (the stall watch) ends at once, is not a success, and says why', async () => {
+		const ctl = new AbortController();
+		let code = 0;
+		const out = await captured(async () => {
+			const run = runStepWithSpinner(
+				() => 'Fetching through Tor — 0.0 MB received so far…',
+				'sh',
+				['-c', 'sleep 30'],
+				{ signal: ctl.signal, name: 'npm install' }
+			);
+			await new Promise((r) => setImmediate(r));
+			ctl.abort();
+			code = await run;
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/^ {2}Fetching through Tor — 0\.0 MB received so far…\n/);
+		expect(out).toMatch(
+			/npm install was stopped: it had stopped making progress\. Its full output is kept/
+		);
+		expect(out).not.toMatch(/SIGKILL|exit code/);
+	});
+	it('a step whose caller had already given up is not run on', async () => {
+		const ctl = new AbortController();
+		ctl.abort();
+		let code = 0;
+		await captured(async () => {
+			code = await runStepWithSpinner('x', 'sh', ['-c', 'sleep 30'], { signal: ctl.signal });
+		});
+		expect(code).not.toBe(0);
+	});
 	it('a command that cannot be started is named as such', async () => {
 		const out = await captured(() =>
 			runShowingOutputOnFailure('Rebuilding…', 'no-such-binary-xyz', [], 60_000)
