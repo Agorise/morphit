@@ -70,7 +70,6 @@ apps/indexer/scripts/price-input-block-enforcement-smoke.ts
 apps/indexer/scripts/price-primary-fallback-smoke.ts
 apps/indexer/scripts/price-source-hardening-smoke.ts
 apps/indexer/scripts/profile-handler-smoke.ts
-apps/indexer/scripts/profiles-batch-accounts-anchored-smoke.ts
 apps/indexer/scripts/push-clickpath-locale-smoke.ts
 apps/indexer/scripts/reconcile-registrations-smoke.ts
 apps/indexer/scripts/relay-probe-gateway-smoke.ts
@@ -162,7 +161,6 @@ apps/indexer/test/indexer/signals.test.ts
 apps/indexer/test/integration/feedback-suppression.test.ts
 apps/indexer/test/lib/feeAmountCalc.test.ts
 apps/indexer/test/log.test.ts
-apps/matrix-bot/scripts/api-response-shape-smoke.ts
 apps/matrix-bot/scripts/classifier-smoke.ts
 apps/matrix-bot/scripts/deps-pin-check.ts
 apps/matrix-bot/scripts/dm-room-persistence-smoke.ts
@@ -383,7 +381,6 @@ apps/web/scripts/i18n-dead-key-gate-smoke.ts
 apps/web/scripts/i18n-path-helpers-smoke.ts
 apps/web/scripts/i18n-translation-completeness-smoke.ts
 apps/web/scripts/i18n-translator-diff.ts
-apps/web/scripts/identicon-data-uri-smoke.ts
 apps/web/scripts/identity-label-policy-smoke.ts
 apps/web/scripts/identity-label-truncation-smoke.ts
 apps/web/scripts/identity-no-swap-smoke.ts
@@ -488,7 +485,6 @@ apps/web/src/lib/assets/networks.ts
 apps/web/src/lib/assets/registry.ts
 apps/web/src/lib/auth/recommendedAuthenticatorApps.ts
 apps/web/src/lib/auth/totp.test.ts
-apps/web/src/lib/avatar/index.ts
 apps/web/src/lib/blurt/accountBalance.test.ts
 apps/web/src/lib/blurt/accountBalance.ts
 apps/web/src/lib/blurt/accountHistory.ts

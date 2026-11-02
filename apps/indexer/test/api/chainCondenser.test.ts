@@ -251,11 +251,49 @@ describe('POST /v1/chain/key-references (chain + indexer-DB union)', () => {
 		expect(((await res.json()) as { accounts: string[] }).accounts).toEqual(['testowner']);
 	});
 
-	it('502s only when BOTH the chain AND the DB fail', async () => {
+	it('502s when the chain AND the DB fail', async () => {
 		const { app } = mount(
 			async () => {
 				throw new Error('all endpoints failed');
 			},
+			mockDb(() => {
+				throw new Error('db down');
+			})
+		);
+		const res = await keyRefPost(app, { keys: [KEY] });
+		expect(res.status).toBe(502);
+	});
+
+	it('chain down and nothing in the DB is NOT "no account" (502, so the browser asks again)', async () => {
+		// The chain could not be asked and the indexer's own table has no row:
+		// nobody knows yet whether an account has this key. A 200 with [] told
+		// the sign-in page "no account has this key", which it showed as "we
+		// couldn't detect your account" and a username box.
+		const { app } = mount(async () => {
+			throw new Error('all endpoints failed');
+		});
+		const res = await keyRefPost(app, { keys: [KEY] });
+		expect(res.status).toBe(502);
+	});
+
+	it('chain answers, DB down: the chain\'s accounts are the answer (200)', async () => {
+		const { app } = mount(
+			async () => [['alice']],
+			mockDb(() => {
+				throw new Error('db down');
+			})
+		);
+		const res = await keyRefPost(app, { keys: [KEY] });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { accounts: string[] }).accounts).toEqual(['alice']);
+	});
+
+	it('chain says none, DB down: NOT "no account" either (502) — a pre-fork account is only in the DB', async () => {
+		// get_key_references does not cover an account that never re-set its key
+		// after the Steem fork; the indexer's table is where those are found. With
+		// the table unreadable, an empty chain answer is not "no account".
+		const { app } = mount(
+			async () => [[]],
 			mockDb(() => {
 				throw new Error('db down');
 			})

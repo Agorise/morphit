@@ -2661,15 +2661,21 @@
 						"active": "Quella è la tua chiave ACTIVE. A {brand} serve solo la chiave POSTING — incolla quella.",
 						"owner": "Quella è la tua chiave OWNER. A {brand} serve solo la chiave POSTING — incolla quella. (Le chiavi owner danno il controllo totale dell'account; non incollarle da nessuna parte.)",
 						"memo": "Quella è la tua chiave MEMO. A {brand} serve solo la chiave POSTING — incolla quella."
-					},
-					"could_not_resolve": "Non siamo riusciti a rilevare il tuo account da questa chiave. Verifica di aver copiato correttamente la tua Posting Private Key, oppure importa con la tua frase seed di 12 parole o il tuo Keyfile."
+					}
 				},
 				"account_bad": "non valido",
 				"manual_account_label": "Il tuo nome utente Blurt",
 				"manual_account_placeholder": "es. alice",
 				"manual_account_hint": "Non siamo riusciti a rilevare il tuo account da questa chiave — potrebbe risalire a prima di Blurt. Inserisci il tuo nome utente Blurt così confermiamo che la chiave gli appartiene.",
+				"manual_account_hint_slow": "La rete Blurt ci mette un po' a dirci a quale account appartiene questa chiave. Se conosci il tuo nome utente Blurt, puoi scriverlo qui, oppure aspetta: continuiamo a chiedere.",
 				"manual_account_invalid": "Questo nome utente non corrisponde a questa chiave. Controlla l'ortografia, o di aver incollato la Chiave Privata di Pubblicazione corretta.",
-				"detected_account": "Riconosciuta: questa chiave appartiene a @{account}. Nessun nome utente necessario."
+				"detected_account": "Riconosciuta: questa chiave appartiene a @{account}. Nessun nome utente necessario.",
+				"checking_key": "Verifica della tua chiave sulla rete Blurt…",
+				"checking_key_slow": "La rete Blurt sta rispondendo lentamente. Continuiamo a riprovare da soli: non devi fare nulla.",
+				"checking_key_button": "Verifica della chiave…",
+				"waiting_title": "Stiamo ancora verificando la tua chiave",
+				"waiting_body": "La rete Blurt sta rispondendo lentamente, quindi richiediamo in automatico. Non dipende da qualcosa che hai fatto e non devi fare nulla. Tieni aperta questa pagina: continuiamo appena risponde.",
+				"waiting_stop": "Interrompi"
 			},
 			"error": {
 				"seed_word_count": "Una frase seed di Blurt ha esattamente 12 parole — ne hai inserite {count}. Assicurati che ci siano tutte e 12, separate da un solo spazio.",
@@ -4424,7 +4430,7 @@
 			"guidance_dimensions": "Ideale: un'immagine quadrata di almeno 96×96 pixel. Qualcosa di più grande verrà ridimensionato a 96×96; più piccolo apparirà sgranato.",
 			"guidance_filesize": "Dimensione file: fino a 5 MB. Le immagini più grandi vengono ridimensionate automaticamente a 96×96, quindi anche una foto presa direttamente dal telefono va benissimo.",
 			"guidance_size": "Le immagini raster vengono ri-codificate automaticamente in WebP ad alta qualità. Gli SVG vengono minificati senza perdita. Il payload finale deve stare sotto i 6 KB.",
-			"guidance_svg_tips": "Consiglio SVG: un viewBox quadrato (es. 0 0 100 100) resa al meglio. Script, riferimenti esterni e HTML-in-SVG vengono rimossi automaticamente per sicurezza.",
+			"guidance_svg_tips": "Consiglio SVG: un viewBox quadrato (es. 0 0 100 100) resa al meglio. Script, riferimenti esterni e HTML-in-SVG vengono rimossi automaticamente per sicurezza. L'animazione dentro l'SVG viene mantenuta, quindi un SVG animato si muove; una GIF diventa un'immagine fissa.",
 			"permanence_heading": "Questo va on-chain in modo permanente.",
 			"permanence_body": "Una volta trasmesso, il tuo avatar è pubblico sulla blockchain per sempre. Non può essere eliminato, solo sostituito. Non caricare mai un'immagine che non vorresti associata pubblicamente al tuo account per il resto della vita — le foto di volti, in particolare, sono una considerazione di privacy visti gli strumenti moderni di riconoscimento facciale.",
 			"file_input_label": "Scegli un file immagine per l'avatar",

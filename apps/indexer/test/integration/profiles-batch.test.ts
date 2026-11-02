@@ -1,19 +1,21 @@
 /**
- * Integration test — /v1/profiles batch endpoint SQL.
+ * Integration test — the /v1/profiles batch endpoint, driven through the real
+ * route (profilesRoute) against a real Postgres.
  *
- * Exercises the SELECT pattern the batch handler uses. Mirrors the
- * SQL in src/api/profiles.ts (batch branch); if that changes, this
- * test should change too.
- *
- * We test the SQL directly rather than spinning up the HTTP server
- * for the same reason orderbook-join.test.ts does: the meaningful
- * logic lives in the SQL, and the HTTP layer is a thin validator
- * that's simple enough to cover by human review. Integration here
- * catches the one thing unit tests can't: PG behavior on
- * `ANY($1::text[])` with various inputs.
+ * It used to run a COPY of the batch SELECT. The copy stayed the old
+ * profiles-only query while the handler moved to one anchored on `accounts`
+ * (v1.5.5), so nothing noticed that the batch had stopped returning an account
+ * with a profile but no `accounts` row. `accounts` is written only for account
+ * creations this indexer saw and for a first-buy waiver or first-trade bonus
+ * claim, so an older account this indexer never recorded (@classx, 2026-11-01)
+ * got the identicon in the header, the orderbook and chat while its own
+ * profile page — the single route, profiles-anchored — showed its avatar.
+ * Driving the route keeps the test on the SQL that actually runs.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { profilesRoute } from '$api/profiles';
 
 import {
 	INTEGRATION_ENABLED,
@@ -22,134 +24,160 @@ import {
 	type IntegrationFixture
 } from './harness';
 
-/** Mirror of the SELECT in src/api/profiles.ts batch handler. */
-const BATCH_SELECT = `
-	SELECT account, display_name, json_metadata,
-	       source_block_num::text, updated_at
-	FROM profiles WHERE account = ANY($1::text[])
-`;
+const KEY = 'BLT6LLegbAgLAy28EHrffBVuANFWcFgmqRMW13wBmTExqFE9SCkg4';
 
-/** Insert a profiles row. Values that aren't parameterized here
- *  (metadata, block_num) default to sensible empties. */
 async function insertProfile(
 	fx: IntegrationFixture,
 	account: string,
-	display_name: string
+	display_name: string,
+	json_metadata: Record<string, unknown> = {}
 ): Promise<void> {
 	await fx.db.query(
 		`INSERT INTO profiles (
 			account, display_name, json_metadata,
 			source_block_num, source_trx_id, updated_at
 		) VALUES ($1, $2, $3, $4, $5, NOW())`,
-		[account, display_name, {}, 1, `0000000000000000000000000000000000000000`]
+		[account, display_name, json_metadata, 1, '0000000000000000000000000000000000000000']
 	);
 }
 
-describe.skipIf(!INTEGRATION_ENABLED)('batch profiles endpoint — SQL integration', () => {
-	let fx: IntegrationFixture;
+/** An `accounts` row (the indexer saw the account created, or it ordered / reviewed). */
+async function insertAccount(
+	fx: IntegrationFixture,
+	name: string,
+	postingPubkey: string | null
+): Promise<void> {
+	await fx.db.query(
+		`INSERT INTO accounts (name, creator, created_block_num, created_block_time, created_trx_id, posting_pubkey)
+		 VALUES ($1, 'blurt', 1, NOW(), '0000000000000000000000000000000000000000', $2)`,
+		[name, postingPubkey]
+	);
+}
 
-	beforeAll(async () => {
-		fx = await setupWithMigrations();
-	});
-
-	afterAll(async () => {
-		if (fx) await fx.teardown();
-	});
-
-	beforeEach(async () => {
-		await truncateAll(fx);
-	});
-
-	it('returns zero rows for empty table', async () => {
-		const result = await fx.db.query(BATCH_SELECT, [['alice', 'bob']]);
-		expect(result.rowCount).toBe(0);
-	});
-
-	it('returns a single profile when one account matches', async () => {
-		await insertProfile(fx, 'alice', 'Alice');
-		const result = await fx.db.query<{ account: string; display_name: string }>(BATCH_SELECT, [
-			['alice']
-		]);
-		expect(result.rowCount).toBe(1);
-		expect(result.rows[0]!.account).toBe('alice');
-		expect(result.rows[0]!.display_name).toBe('Alice');
-	});
-
-	it('returns all matching profiles when many accounts match', async () => {
-		await insertProfile(fx, 'alice', 'Alice');
-		await insertProfile(fx, 'bob', 'Bob');
-		await insertProfile(fx, 'carol', 'Carol');
-		const result = await fx.db.query<{ account: string }>(BATCH_SELECT, [
-			['alice', 'bob', 'carol']
-		]);
-		expect(result.rowCount).toBe(3);
-		const accounts = result.rows.map((r) => r.account).sort();
-		expect(accounts).toEqual(['alice', 'bob', 'carol']);
-	});
-
-	it('returns only the known accounts on a mixed batch', async () => {
-		// The HTTP handler silently drops unknown accounts. Verified
-		// at the SQL level: the WHERE clause simply yields no row
-		// for an account that doesn't exist, so the result set
-		// contains only the knowns.
-		await insertProfile(fx, 'alice', 'Alice');
-		await insertProfile(fx, 'bob', 'Bob');
-		const result = await fx.db.query<{ account: string }>(BATCH_SELECT, [
-			['alice', 'nonexistent', 'bob', 'another-missing']
-		]);
-		expect(result.rowCount).toBe(2);
-		const accounts = result.rows.map((r) => r.account).sort();
-		expect(accounts).toEqual(['alice', 'bob']);
-	});
-
-	it('deduplicates at the application layer — SQL handles duplicates fine too', async () => {
-		// The HTTP handler dedupes before querying. But even if it
-		// didn't, ANY($1) with a duplicated array returns one row
-		// per matching account — the array deduplication is
-		// semantically transparent to the query. This test locks
-		// that behavior in.
-		await insertProfile(fx, 'alice', 'Alice');
-		const result = await fx.db.query<{ account: string }>(BATCH_SELECT, [
-			['alice', 'alice', 'alice']
-		]);
-		expect(result.rowCount).toBe(1);
-		expect(result.rows[0]!.account).toBe('alice');
-	});
-
-	it('returns the correct columns for serialization', async () => {
-		// The handler does parseInt on source_block_num::text (to
-		// dodge BIGINT becoming a string in pg's default serde),
-		// and calls .toISOString() on updated_at. Verify both
-		// column types as the query casts them.
-		await insertProfile(fx, 'alice', 'Alice');
-		const result = await fx.db.query<{
-			account: string;
-			display_name: string;
-			json_metadata: unknown;
-			source_block_num: string;
-			updated_at: Date;
-		}>(BATCH_SELECT, [['alice']]);
-		const row = result.rows[0]!;
-		expect(typeof row.source_block_num).toBe('string');
-		expect(row.updated_at).toBeInstanceOf(Date);
-		// json_metadata returns as a parsed object, not a string
-		// (pg's default JSONB decoder).
-		expect(typeof row.json_metadata).toBe('object');
-	});
-
-	it('handles a large batch at the max-size boundary (100)', async () => {
-		// Insert 100 accounts — fewer than we'd want if we were
-		// really testing load, but enough to prove the parameterized
-		// array handles the cap without pathological planning.
-		// Account names must pass the ACCOUNT_NAME_RE regex
-		// (lowercase, 3..16 chars, letter-start). Use "user001" etc.
-		const accounts: string[] = [];
-		for (let i = 0; i < 100; i++) {
-			const name = `user${String(i).padStart(3, '0')}`;
-			accounts.push(name);
-			await insertProfile(fx, name, `User ${i}`);
+interface BatchBody {
+	readonly profiles: Record<
+		string,
+		{
+			readonly account: string;
+			readonly display_name: string | null;
+			readonly json_metadata: Record<string, unknown> | null;
+			readonly posting_pubkey: string | null;
 		}
-		const result = await fx.db.query<{ account: string }>(BATCH_SELECT, [accounts]);
-		expect(result.rowCount).toBe(100);
-	});
-});
+	>;
+}
+
+async function batch(
+	fx: IntegrationFixture,
+	accounts: readonly string[]
+): Promise<{ body: BatchBody; cache: string | null }> {
+	const app = profilesRoute(fx.db);
+	const res = await app.request(`/?accounts=${accounts.join(',')}`);
+	expect(res.status).toBe(200);
+	return { body: (await res.json()) as BatchBody, cache: res.headers.get('cache-control') };
+}
+
+describe.skipIf(!INTEGRATION_ENABLED)(
+	'batch profiles endpoint — the real route on Postgres',
+	() => {
+		let fx: IntegrationFixture;
+
+		beforeAll(async () => {
+			fx = await setupWithMigrations();
+		});
+
+		afterAll(async () => {
+			if (fx) await fx.teardown();
+		});
+
+		beforeEach(async () => {
+			await truncateAll(fx);
+		});
+
+		it('an account with a profile and no accounts row is returned, avatar and all', async () => {
+			const svg =
+				'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><circle cx="40" cy="40" r="9"/></svg>';
+			await insertProfile(fx, 'classx', 'ClassX', { avatar_svg: svg });
+			const { body, cache } = await batch(fx, ['classx']);
+			expect(Object.keys(body.profiles)).toEqual(['classx']);
+			expect(body.profiles.classx!.display_name).toBe('ClassX');
+			expect(body.profiles.classx!.json_metadata?.avatar_svg).toBe(svg);
+			expect(body.profiles.classx!.posting_pubkey).toBeNull();
+			// Every requested account has a profile: the answer may be kept.
+			expect(cache).toMatch(/max-age=90/);
+		});
+
+		it('an account with a key and no profile is still returned, for its key (v1.5.5)', async () => {
+			await insertAccount(fx, 'keyonly', KEY);
+			const { body, cache } = await batch(fx, ['keyonly']);
+			expect(body.profiles.keyonly!.posting_pubkey).toBe(KEY);
+			expect(body.profiles.keyonly!.display_name).toBeNull();
+			expect(body.profiles.keyonly!.json_metadata).toBeNull();
+			// No profile yet is never pinned in a browser cache.
+			expect(cache).toBe('no-store');
+		});
+
+		it('an account with both carries its profile and its key', async () => {
+			await insertAccount(fx, 'alice', KEY);
+			await insertProfile(fx, 'alice', 'Alice');
+			const { body } = await batch(fx, ['alice']);
+			expect(body.profiles.alice!.display_name).toBe('Alice');
+			expect(body.profiles.alice!.posting_pubkey).toBe(KEY);
+		});
+
+		it('a mixed batch returns exactly the accounts known to either table', async () => {
+			await insertProfile(fx, 'classx', 'ClassX');
+			await insertAccount(fx, 'keyonly', KEY);
+			await insertAccount(fx, 'alice', KEY);
+			await insertProfile(fx, 'alice', 'Alice');
+			const { body, cache } = await batch(fx, ['classx', 'nobody', 'keyonly', 'alice', 'ghost']);
+			expect(Object.keys(body.profiles).sort()).toEqual(['alice', 'classx', 'keyonly']);
+			expect(cache).toBe('no-store');
+		});
+
+		it('nothing known: an empty answer, never stored; a known row carries every field', async () => {
+			const empty = await batch(fx, ['nobody', 'ghost']);
+			expect(empty.body.profiles).toEqual({});
+			expect(empty.cache).toBe('no-store');
+
+			await insertAccount(fx, 'alice', KEY);
+			await insertProfile(fx, 'alice', 'Alice', { about: 'hi' });
+			const { body } = await batch(fx, ['alice']);
+			expect(Object.keys(body.profiles.alice!).sort()).toEqual(
+				[
+					'account',
+					'display_name',
+					'json_metadata',
+					'posting_pubkey',
+					'source_block_num',
+					'updated_at'
+				].sort()
+			);
+			expect(body.profiles.alice!).toMatchObject({
+				account: 'alice',
+				display_name: 'Alice',
+				json_metadata: { about: 'hi' },
+				posting_pubkey: KEY,
+				source_block_num: 1
+			});
+		});
+
+		it('duplicates in the request come back once', async () => {
+			await insertProfile(fx, 'alice', 'Alice');
+			const { body } = await batch(fx, ['alice', 'alice', 'alice']);
+			expect(Object.keys(body.profiles)).toEqual(['alice']);
+		});
+
+		it('handles a batch at the max size (100), profile-only accounts included', async () => {
+			const accounts: string[] = [];
+			for (let i = 0; i < 100; i++) {
+				const name = `user${String(i).padStart(3, '0')}`;
+				accounts.push(name);
+				await insertProfile(fx, name, `User ${i}`);
+				if (i % 2 === 0) await insertAccount(fx, name, KEY);
+			}
+			const { body, cache } = await batch(fx, accounts);
+			expect(Object.keys(body.profiles)).toHaveLength(100);
+			expect(cache).toMatch(/max-age=90/);
+		});
+	}
+);

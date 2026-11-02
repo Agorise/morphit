@@ -522,7 +522,8 @@ export interface SybilTierResponse {
 export interface ProfileResponse {
 	readonly account: string;
 	/** v1.5.5: NULL when the account is known on-chain but has never set a
-	 *  Morphit profile. The batch endpoint is anchored on `accounts` so such an
+	 *  Morphit profile. The batch endpoint returns every requested account the
+	 *  indexer knows from either its profiles or its accounts, so such an
 	 *  account still resolves — that's how a review card can show its truncated
 	 *  posting key without the person having set a display name. */
 	readonly display_name: string | null;
@@ -662,8 +663,10 @@ export interface AccountKeysResponse {
 
 /** Response shape for `GET /v1/profiles?accounts=alice,bob,...`.
  *  Keyed by account so callers can do `response.profiles[account]`
- *  directly. Accounts that don't have a profile row are silently
- *  absent — the caller uses `in` / optional chaining to distinguish.
+ *  directly. An account the indexer does not know at all is absent — the
+ *  caller uses `in` / optional chaining to distinguish; a known account that
+ *  has not set a profile is present with `display_name` / `json_metadata`
+ *  null (and its `posting_pubkey`, when indexed).
  *
  *  Max batch size is enforced server-side at 100 accounts per call
  *  (see apps/indexer/src/api/profiles.ts and

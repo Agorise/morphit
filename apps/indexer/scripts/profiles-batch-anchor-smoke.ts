@@ -1,38 +1,33 @@
 #!/usr/bin/env tsx
 /*
- * profiles-batch-accounts-anchored — v1.5.5 (t155) guard.
+ * profiles-batch-anchor — what the /v1/profiles batch starts from.
  *
- * Requirement: on the profile's review cards, the truncated posting key was missing
- * under @tester2 while every other card showed theirs.
+ * The batch must return an account when EITHER table knows it: `profiles`
+ * (display name, avatar) or `accounts` (the posting key). It has been wrong
+ * both ways:
  *
- * ROOT CAUSE. `posting_pubkey` lives on `accounts`, but the batch query STARTED
- * at `profiles`:
+ *   - v1.5.5 (t155): anchored on `profiles`, it returned nothing for an account
+ *     that never set a display name, so its truncated key was missing under
+ *     @tester2 on the review cards. The fix moved the anchor to `accounts`.
+ *   - v1.21.21: anchored on `accounts`, it returned nothing for an account with
+ *     a profile and no `accounts` row. That table is written only for account
+ *     creations this indexer saw and for a first-buy waiver or first-trade
+ *     bonus claim, so an older account this indexer never recorded (@classx)
+ *     had the identicon in the header, the orderbook and chat while its own
+ *     profile page (the single route) showed its avatar.
  *
- *     FROM profiles p LEFT JOIN accounts a ON a.name = p.account
- *     WHERE p.account = ANY($1)
+ * Now the query starts from the REQUESTED names and joins both tables. The
+ * behaviour is proven on Postgres through the real route in
+ * test/integration/profiles-batch.test.ts; this smoke keeps the two traps that
+ * ride with a batch that can return profile-less rows:
  *
- * An account that never set a display name or avatar has no `profiles` row, so
- * the batch returned NOTHING for them — key included. Every account WITH a
- * profile showed its key, which is exactly why this looked like a per-card bug
- * and wasn't. (The obvious suspect, `reviewerProfileMap`, was innocent: it
- * already adds subjects, and the card already passes the key through.)
- *
- * THE FIX IS NOT A ONE-LINE ANCHOR SWAP. Two traps ride with it, and this smoke
- * exists because both are silent:
- *
- *   1. rowToProfile CRASHES on a profile-less row. It called
- *      `updated_at.toISOString()` and `parseInt(source_block_num)`, safe only
- *      while the query could never return such a row. Now it can, on an
- *      endpoint shared by FeaturedOrders, the profile page and the orderbook.
- *
- *   2. NEGATIVE CACHING breaks silently. The endpoint serves partial batches
- *      `no-store` because "negative results must not be pinned" (soft-null
- *      policy). Once every known account returns a row, a row-COUNT test calls
- *      such a batch complete and pins it for 90s — so a user who sets their
- *      first profile stays invisible for a minute and a half. The completeness
- *      test must key off `has_profile`, not row presence.
+ *   1. rowToProfile must not crash on a profile-less row (NULL updated_at /
+ *      source_block_num), on an endpoint shared by FeaturedOrders, the profile
+ *      page and the orderbook.
+ *   2. NEGATIVE CACHING. A partial batch is served `no-store`; completeness
+ *      must count rows that HAVE a profile (has_profile), not row presence, or
+ *      a profile-less batch is pinned for 90s and hides a fresh profile.
  */
-
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,19 +51,21 @@ function check(name: string, ok: boolean, why = ''): void {
 
 // ── 1. the anchor ───────────────────────────────────────────────────
 check(
-	'the batch is anchored on accounts, not profiles',
-	/FROM accounts a LEFT JOIN profiles p ON p\.account = a\.name/.test(flat),
-	'posting_pubkey lives on `accounts`; anchoring on `profiles` returns NOTHING for an account that never set a display name — key included (no truncated key under @tester2)'
+	'the batch starts from the requested names',
+	/FROM unnest\(\$1::text\[\]\) AS q\(name\)/.test(flat),
+	'starting from either table drops the accounts only the other one knows'
 );
 check(
-	'the batch filters on the accounts table',
-	/WHERE a\.name = ANY\(\$1::text\[\]\)/.test(flat),
-	'filtering on p.account would re-impose the profiles anchor through the back door'
+	'it joins accounts and profiles on the requested name',
+	/LEFT JOIN accounts a ON a\.name = q\.name LEFT JOIN profiles p ON p\.account = q\.name/.test(
+		flat
+	),
+	'both joins must hang off the requested name, not off each other'
 );
 check(
-	'the old profiles-anchored BATCH shape is gone',
-	!/FROM profiles p LEFT JOIN accounts a ON a\.name = p\.account WHERE p\.account = ANY/.test(flat),
-	'the regressed batch query is still present'
+	'it keeps a row that either table has',
+	/WHERE a\.name IS NOT NULL OR p\.account IS NOT NULL/.test(flat),
+	'requiring one table re-imposes that table as the anchor'
 );
 check(
 	'the single-account route stays profiles-anchored (deliberately)',
@@ -91,9 +88,7 @@ check(
 // ── 3. TRAP TWO: negative caching ───────────────────────────────────
 check(
 	'batch completeness keys off has_profile (cp606 cache-aware: servedFromCache + queriedWithProfile), not row count',
-	/const complete = servedFromCache \+ queriedWithProfile === accounts\.length/.test(
-		flat
-	),
+	/const complete = servedFromCache \+ queriedWithProfile === accounts\.length/.test(flat),
 	'row presence stopped meaning "has a profile" the moment the anchor moved; completeness must count positives (cached positives + freshly-queried has_profile rows), never a raw row count, or a profile-less batch is called complete and pinned for 90s, hiding a freshly-created profile (cp428 soft-null policy; cp606 made completeness cache-aware)'
 );
 check(
@@ -109,7 +104,7 @@ check(
 
 console.log('\n' + '─'.repeat(58));
 if (fail === 0) {
-	console.log(`✓ all ${pass} profiles-batch-accounts-anchored scenarios passed`);
+	console.log(`✓ all ${pass} profiles-batch-anchor scenarios passed`);
 	process.exit(0);
 } else {
 	console.log(`✗ ${fail} of ${pass + fail} scenarios FAILED`);

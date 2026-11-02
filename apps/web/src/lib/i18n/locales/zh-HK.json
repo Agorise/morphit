@@ -2661,15 +2661,21 @@
 						"active": "嗰個係你嘅 ACTIVE 密鑰。{brand} 只需要 POSTING — 黐嗰個。",
 						"owner": "嗰個係你嘅 OWNER 密鑰。{brand} 只需要 POSTING — 黐嗰個。(Owner 密鑰俾你完全控制帳戶;唔好黐到任何網站。)",
 						"memo": "嗰個係你嘅 MEMO 密鑰。{brand} 需要 POSTING — 黐嗰個。"
-					},
-					"could_not_resolve": "我們無法從此密鑰偵測到你的帳戶。請核對你是否正確複製了 Posting Private Key，或改用你的 12 個單詞種子短語或 Keyfile 匯入。"
+					}
 				},
 				"account_bad": "無效",
 				"manual_account_label": "你的 Blurt 用戶名",
 				"manual_account_placeholder": "例如 alice",
 				"manual_account_hint": "我們無法透過此密鑰偵測到你的帳戶——它可能是喺 Blurt 出現之前建立嘅。請輸入你嘅 Blurt 用戶名，以便確認此密鑰屬於該帳戶。",
+				"manual_account_hint_slow": "Blurt 網絡遲遲未話畀我哋知呢個密鑰屬於邊個帳戶。如果你知道自己嘅 Blurt 用戶名，可以喺呢度輸入——或者等一陣，我哋會繼續問。",
 				"manual_account_invalid": "該用戶名與此密鑰不符。請檢查拼寫，或確認你貼上嘅係正確嘅發文私鑰。",
-				"detected_account": "已識別——此密鑰屬於 @{account}。無需填寫用戶名。"
+				"detected_account": "已識別——此密鑰屬於 @{account}。無需填寫用戶名。",
+				"checking_key": "正喺 Blurt 網絡核對緊你嘅密鑰…",
+				"checking_key_slow": "Blurt 網絡而家回應得比較慢。我哋會自己再試——你唔使做任何嘢。",
+				"checking_key_button": "核對緊密鑰…",
+				"waiting_title": "仲喺度核對緊你嘅密鑰",
+				"waiting_body": "Blurt 網絡而家回應得比較慢，所以我哋會自動再問。呢個唔係因為你做錯咗咩，你唔使做任何嘢。請保持呢個頁面開住——網絡一有回應我哋就會繼續。",
+				"waiting_stop": "停止"
 			},
 			"error": {
 				"seed_word_count": "Blurt 助記詞剛好是 12 個單詞——你輸入了 {count} 個。請確保 12 個單詞齊全，每個之間用一個空格分隔。",
@@ -4424,7 +4430,7 @@
 			"guidance_dimensions": "理想：至少 96×96 像素的方形圖像。更大的會為你縮放到 96×96；更小的會看起來顆粒感。",
 			"guidance_filesize": "源檔大小：最大 5 MB。較大的圖像會自動縮小至 96×96，所以即使是手機直接拍攝的照片也可以正常使用。",
 			"guidance_size": "點陣圖像會自動重新編碼為高品質 WebP。SVG 無損壓縮。最終負載必須小於 6 KB。",
-			"guidance_svg_tips": "SVG 提示：方形 viewBox（例如 0 0 100 100）渲染效果最佳。指令碼、外部引用和 SVG 中的 HTML 出於安全原因會自動被剝離。",
+			"guidance_svg_tips": "SVG 提示：方形 viewBox（例如 0 0 100 100）渲染效果最佳。指令碼、外部引用和 SVG 中的 HTML 出於安全原因會自動被剝離。SVG 內嘅動畫會保留，所以動畫 SVG 會郁；GIF 就會變成靜態圖片。",
 			"permanence_heading": "這會永久上鏈。",
 			"permanence_body": "一旦廣播，你的頭像將永遠在區塊鏈上公開。無法刪除，只能替換。永遠不要上傳你不希望終身公開與你帳戶關聯的圖像——人臉照片尤其需要考慮私隱問題，因為有現代人臉識別工具。",
 			"file_input_label": "選擇一個頭像圖像檔案",

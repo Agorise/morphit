@@ -66,7 +66,7 @@
 		mergePendingReplies
 	} from '$lib/stores/pendingFeedbackReplies';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
-	import { identiconDataUri } from '$crypto/identicon';
+	import { identiconDataUriFromString } from '$crypto/identicon';
 	import {
 		getProfile,
 		getFeedback,
@@ -564,17 +564,12 @@
 	const avatarSvg = $derived(labelProps.avatarSvg);
 	const avatarDataUri = $derived(labelProps.avatarDataUri);
 
-	/** Hero avatar data URI, seeded from the account name bytes.
-	 *  Same identicon IdentityLabel would render at smaller size —
-	 *  visually consistent across the app. */
-	const heroAvatar = $derived.by(() => {
-		if (!account) return '';
-		// Seed from UTF-8 bytes of the account name. Same seeding
-		// strategy as IdentityLabel when it only has an account
-		// (no pubkey).
-		const seed = new TextEncoder().encode(account);
-		return identiconDataUri(seed, 96);
-	});
+	/** Hero avatar data URI: the account's identicon, the same heart as the
+	 *  header menu and every IdentityLabel show for this account, on every
+	 *  instance. It used to seed from the name's raw UTF-8 bytes, which the
+	 *  v1.16.5 switch to the hashed seed (identiconDataUriFromString) missed,
+	 *  so this page showed a different heart than the rest of the app. */
+	const heroAvatar = $derived(account ? identiconDataUriFromString(account, 96) : '');
 
 	/** Rating histogram: max count across 1-5 so bars scale relative
 	 *  to the highest bucket (not the total). Gives a more readable

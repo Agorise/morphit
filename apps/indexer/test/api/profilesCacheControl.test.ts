@@ -21,8 +21,8 @@ import type { Database } from '$db/pool';
 
 interface Row {
 	account: string;
-	// v1.5.5: nullable — the batch is anchored on `accounts`, so an account
-	// with a posting key but no profile op resolves with these NULL.
+	// v1.5.5: nullable — the batch returns an account with a posting key but
+	// no profile op, with these NULL.
 	display_name: string | null;
 	json_metadata: unknown;
 	source_block_num: string | null;

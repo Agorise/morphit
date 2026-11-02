@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
 	import { page } from '$app/stores';
@@ -33,13 +34,19 @@
 		newPasswordProblem
 	} from '$lib/auth/passwordStrength';
 	import { wifToRawPrivateKey, WifDecodeError, type WifError } from '$crypto/wif';
-	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { normalizeSeedPhrase, seedWordCount } from '$crypto/seedNormalize';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { bootFromEnvelope, liveIdentity, noteEphemeralSessionPassword } from '$stores/identity';
 	import { setUserBlurtAccount } from '$blurt/ops/profile';
-	import { resolveAccountsByPublicKeys } from '$blurt/accountByKey';
+	import { lookupAccountsByPublicKeys } from '$blurt/accountByKey';
+	import {
+		accountToSignIn,
+		checkPostingKeyPatiently,
+		lookupAccountsPatiently,
+		type PostingKeyCheck,
+		type PostingKeyCheckDeps
+	} from '$lib/auth/postingKeyCheck';
 	import * as secp256k1 from '@noble/secp256k1';
 	import { get } from 'svelte/store';
 	import sodium from 'libsodium-wrappers-sumo';
@@ -168,6 +175,10 @@
 	const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/; // blurt-account-regex-parity sentinel
 	let detectedAccount = $state<string | null>(null);
 	let accountFieldNeeded = $state(false);
+	/** Why the Username field shows: the chain names no single account for
+	 *  the key (a Steem-era account, typically), or the lookup is only slow to
+	 *  answer — its hint says which, and the second says nothing is wrong. */
+	let accountFieldSlow = $state(false);
 	let manualAccount = $state('');
 	let manualAccountStatus = $state<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
 	/** The account the pasted posting key belongs to, once known: the user name
@@ -176,10 +187,9 @@
 		detectedAccount ?? (manualAccountStatus === 'valid' ? manualAccount.trim().toLowerCase() : null)
 	);
 	let derivedPubCache = $state<string | null>(null);
-	// Monotonic guards so a slow reply for an OLD wif/name can't clobber the
-	// current one.
+	// Monotonic guard so a slow key derivation for an OLD wif can't clobber
+	// the current one. (The chain check itself is one run per key — below.)
 	let detectSeq = 0;
-	let validateSeq = 0;
 	let manualDebounce: ReturnType<typeof setTimeout> | null = null;
 	// v1.1.5 — debounce for eager account detection on WIF input (so the
 	// username field appears as soon as a complete WIF is pasted, without
@@ -206,14 +216,156 @@
 	 *  stale username can't linger against a different key. */
 	function resetAccountDetection(): void {
 		detectSeq++;
-		validateSeq++;
 		if (manualDebounce) clearTimeout(manualDebounce);
 		if (wifDetectDebounce) clearTimeout(wifDetectDebounce);
+		stopKeyCheck();
 		detectedAccount = null;
 		accountFieldNeeded = false;
+		accountFieldSlow = false;
 		manualAccount = '';
 		manualAccountStatus = 'idle';
 		derivedPubCache = null;
+		keyRole = null;
+	}
+
+	// ── The chain check of the pasted key, in the background ────────────
+	//
+	// v1.21.21 — a key is checked against the chain (which account it belongs
+	// to, and that it IS that account's posting key) as soon as it is pasted,
+	// while the person types their new password, and a moment when the
+	// network side does not answer is retried by itself (postingKeyCheck.ts).
+	// The "Unlock my account" button joins the same check. Before, the check
+	// ran only on submit, once, and any failure on the server side — a 502
+	// when the indexer's RPC operators did not agree in time — ended in a red
+	// "Something unexpected went wrong… it wasn't your key or password"
+	// (@classx on vigilante). Red is now only for what the person can fix: a
+	// mistyped key, an Active/Owner/Memo key, a name that does not hold it.
+	interface KeyCheckRun {
+		readonly pub: string;
+		/** The typed name, or null when the account comes from the key. */
+		readonly account: string | null;
+		readonly ctrl: AbortController;
+		readonly result: Promise<PostingKeyCheck>;
+	}
+	const keyCheckDeps: PostingKeyCheckDeps = {
+		lookup: lookupAccountsByPublicKeys,
+		fetchKeys: (account) => fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account)
+	};
+	let keyCheck: KeyCheckRun | null = null;
+	/** Failed tries of the account lookup before the Username field is offered
+	 *  as well: the third, about 5.5 s in (a 502 is usually gone on the next try,
+	 *  and a field that flashes up and away again only confuses). */
+	const LOOKUP_FAILURES_BEFORE_USERNAME_FIELD = 3;
+	/** A check is running (drives the quiet "checking your key" line). */
+	let keyCheckPending = $state(false);
+	/** Times the network side did not answer in the running check: from the
+	 *  first one on, the page says it is retrying by itself. */
+	let keyCheckFailures = $state(0);
+	/** The button was pressed and is waiting on the check. */
+	let waitingForKeyCheck = $state(false);
+	/** The pasted key is this account's Active/Owner/Memo key: said under the
+	 *  field right away, before anyone types a password for it. */
+	let keyRole = $state<'active' | 'owner' | 'memo' | null>(null);
+
+	function stopKeyCheck(): void {
+		keyCheck?.ctrl.abort(new DOMException('key check stopped', 'AbortError'));
+		keyCheck = null;
+		keyCheckPending = false;
+		keyCheckFailures = 0;
+	}
+
+	/** Start the check of this key (and typed name), or join the one already
+	 *  running for exactly that. */
+	function startKeyCheck(pub: string, account: string | null): KeyCheckRun {
+		if (keyCheck && keyCheck.pub === pub && keyCheck.account === account) return keyCheck;
+		stopKeyCheck();
+		const ctrl = new AbortController();
+		const result = checkPostingKeyPatiently(pub, account, {
+			deps: keyCheckDeps,
+			signal: ctrl.signal,
+			onWaiting: (failures, step) => {
+				if (keyCheck !== run) return;
+				keyCheckFailures = failures;
+				// The lookup of WHICH account holds this key keeps not answering:
+				// offer the Username field too, as before this check retried. A
+				// typed name is checked without that lookup. The check goes on
+				// meanwhile; typing a name replaces it.
+				if (
+					run.account === null &&
+					step === 'lookup' &&
+					failures >= LOOKUP_FAILURES_BEFORE_USERNAME_FIELD &&
+					!accountFieldNeeded
+				) {
+					accountFieldNeeded = true;
+					accountFieldSlow = true;
+				}
+			}
+		});
+		const run: KeyCheckRun = { pub, account, ctrl, result };
+		keyCheck = run;
+		keyCheckPending = true;
+		result.then(
+			(r) => {
+				if (keyCheck !== run) return;
+				keyCheckPending = false;
+				applyKeyCheck(run, r);
+			},
+			() => {
+				if (keyCheck !== run) return;
+				// Not stopped, and not an answer either (a bug, never a network
+				// moment — those are retried inside): the next Unlock starts afresh
+				// instead of joining this run.
+				keyCheck = null;
+				keyCheckPending = false;
+				keyCheckFailures = 0;
+			}
+		);
+		return run;
+	}
+
+	/** Show what the background check found, where it belongs on the form. */
+	function applyKeyCheck(run: KeyCheckRun, r: PostingKeyCheck): void {
+		if (run.account !== null) {
+			// The typed-name check — for the name still in the field. (A run for
+			// a name since changed is stopped on input; this is the backstop.)
+			if (!accountFieldNeeded || run.account !== manualAccount.trim().toLowerCase()) return;
+			manualAccountStatus = r.kind === 'ok' ? 'valid' : 'invalid';
+			return;
+		}
+		switch (r.kind) {
+			case 'ok':
+				detectedAccount = r.account;
+				accountFieldNeeded = false;
+				accountFieldSlow = false;
+				keyRole = null;
+				break;
+			case 'wrong-role':
+				detectedAccount = null;
+				accountFieldNeeded = false;
+				accountFieldSlow = false;
+				keyRole = r.foundIn;
+				wifKeyInvalid = true;
+				break;
+			default:
+				// No single account for this key (a Steem-era account the chain's
+				// index does not cover): the name is typed below.
+				detectedAccount = null;
+				accountFieldNeeded = true;
+				accountFieldSlow = false;
+				keyRole = null;
+		}
+	}
+
+	// Leaving the page ends the check.
+	$effect(() => () => stopKeyCheck());
+	// So does leaving the posting-key tab (its Stop is only shown there).
+	$effect(() => {
+		if (mode !== 'posting-only') untrack(stopKeyCheck);
+	});
+
+	/** A check against a typed name that is no longer in the field. */
+	function stopTypedNameCheck(): void {
+		if (keyCheck !== null && keyCheck.account !== null) stopKeyCheck();
 	}
 
 	/** On WIF blur: if the key looks valid, derive its pubkey and try to
@@ -232,24 +384,13 @@
 		if (!pub) {
 			detectedAccount = null;
 			accountFieldNeeded = false;
+			accountFieldSlow = false;
 			return;
 		}
-		let matches: string[] = [];
-		try {
-			matches = await resolveAccountsByPublicKeys([pub]);
-		} catch {
-			matches = [];
-		}
-		if (seq !== detectSeq) return;
-		if (matches.length === 1) {
-			detectedAccount = matches[0] ?? null;
-			accountFieldNeeded = false;
-			manualAccount = '';
-			manualAccountStatus = 'idle';
-		} else {
-			detectedAccount = null;
-			accountFieldNeeded = true;
-		}
+		// Already checking (or checked) this key — from the paste, or against a
+		// typed name: blurring the field must not start it over.
+		if (keyCheck?.pub === pub) return;
+		startKeyCheck(pub, null);
 	}
 
 	/** Validate the typed username against the pasted key: it must EXIST and
@@ -257,33 +398,26 @@
 	async function validateManualAccount(): Promise<void> {
 		const name = manualAccount.trim().toLowerCase();
 		if (!accountFieldNeeded || name.length === 0) {
+			stopTypedNameCheck();
 			manualAccountStatus = 'idle';
 			return;
 		}
 		if (!BLURT_ACCOUNT_RE.test(name) || !derivedPubCache) {
+			stopTypedNameCheck();
 			manualAccountStatus = 'invalid';
 			return;
 		}
-		const seq = ++validateSeq;
 		manualAccountStatus = 'checking';
-		let fetched;
-		try {
-			fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), name);
-		} catch {
-			fetched = null;
-		}
-		if (seq !== validateSeq) return;
-		if (!fetched) {
-			manualAccountStatus = 'invalid'; // no such account
-			return;
-		}
-		const verdict = verifyPostingKey(fetched, derivedPubCache);
-		if (seq !== validateSeq) return;
-		manualAccountStatus = verdict.kind === 'ok' ? 'valid' : 'invalid';
+		// 'valid' / 'invalid' once the chain answers (applyKeyCheck). A moment
+		// when it does not is retried — never shown as "that name does not
+		// match this key".
+		startKeyCheck(derivedPubCache, name);
 	}
 
 	/** Debounced entry point for the Username input. */
 	function onManualAccountInput(): void {
+		// The name changed: a check for the old one says nothing about it.
+		if (keyCheck?.account !== manualAccount.trim().toLowerCase()) stopTypedNameCheck();
 		manualAccountStatus = manualAccount.trim().length === 0 ? 'idle' : 'checking';
 		if (manualDebounce) clearTimeout(manualDebounce);
 		manualDebounce = setTimeout(() => void validateManualAccount(), 450);
@@ -588,10 +722,35 @@
 	 *  it never blocks the screen, and an ambiguous / no-match / RPC-error result
 	 *  leaves the identicon for the existing /settings capture. Guarded on
 	 *  pendingNeedsAccountName so it no-ops if the commit handler already resolved. */
+	/** v1.21.21 — the lookup is asked until the chain answers
+	 *  (lookupAccountsPatiently): one moment of the network not answering
+	 *  used to send the person to type their name on /settings. One run per
+	 *  import, shared with the continue button; leaving the page ends it. */
+	let nameLookup: { readonly ctrl: AbortController; readonly result: Promise<string[]> } | null =
+		null;
+	/** How long "continue" waits on a name lookup still retrying before it
+	 *  falls back to the /settings capture. */
+	const NAME_LOOKUP_WAIT_AT_CONTINUE_MS = 15_000;
+	function startNameLookup(): typeof nameLookup {
+		if (nameLookup || pendingPubKeysBLT.length === 0) return nameLookup;
+		const ctrl = new AbortController();
+		nameLookup = {
+			ctrl,
+			result: lookupAccountsPatiently(pendingPubKeysBLT, {
+				lookup: lookupAccountsByPublicKeys,
+				signal: ctrl.signal
+			})
+		};
+		return nameLookup;
+	}
+	$effect(() => () => nameLookup?.ctrl.abort(new DOMException('left the page', 'AbortError')));
+
 	async function resolveSelfAccountEagerly(): Promise<void> {
 		if (!pendingNeedsAccountName || pendingPubKeysBLT.length === 0) return;
+		const run = startNameLookup();
+		if (!run) return;
 		try {
-			const accounts = await resolveAccountsByPublicKeys(pendingPubKeysBLT);
+			const accounts = await run.result;
 			const resolved = accounts.length === 1 ? accounts[0] : undefined;
 			// Re-check the guard: the user may have clicked "Remember me and continue"
 			// while this was in flight, in which case the commit handler already set
@@ -602,8 +761,8 @@
 				pendingDestination = '/';
 			}
 		} catch {
-			// Reverse lookup unavailable (offline / RPC down) — the identicon stays and
-			// the /settings account-name capture on continue covers it.
+			// Stopped (the page was left) — the /settings account-name capture
+			// on continue covers it.
 		}
 	}
 
@@ -624,8 +783,23 @@
 			// accounts), no match, or any RPC error falls through to the
 			// existing manual /settings capture below.
 			if (pendingNeedsAccountName && pendingPubKeysBLT.length > 0) {
-				const accounts = await resolveAccountsByPublicKeys(pendingPubKeysBLT);
-				const resolved = accounts.length === 1 ? accounts[0] : undefined;
+				// Joins the background lookup (still retrying, at most
+				// NAME_LOOKUP_WAIT_AT_CONTINUE_MS more, the button busy meanwhile).
+				const run = startNameLookup();
+				const wasWorking = working;
+				working = true;
+				let accounts: string[] | null = null;
+				try {
+					accounts = run
+						? await Promise.race([
+								run.result.catch(() => null),
+								new Promise<null>((r) => setTimeout(() => r(null), NAME_LOOKUP_WAIT_AT_CONTINUE_MS))
+							])
+						: null;
+				} finally {
+					working = wasWorking;
+				}
+				const resolved = accounts && accounts.length === 1 ? accounts[0] : undefined;
 				if (resolved) {
 					setUserBlurtAccount(resolved);
 					pendingNeedsAccountName = false;
@@ -752,6 +926,10 @@
 					: $_('onboarding.import.posting_only.error.passwords_mismatch');
 			return;
 		}
+		// The password checked above is the one the key is kept under — not
+		// whatever is in the field when a slow network finally answers (the
+		// fields are also locked while the button waits).
+		const password = postingNewPassword;
 
 		let scalar: Uint8Array | null = null;
 		let full: FullIdentity | null = null;
@@ -782,35 +960,45 @@
 			// 3. Format the derived posting public key for chain comparison.
 			const derivedPub = await formatPublicKeyBLT(full.keys.posting.publicKey);
 
-			// 3b. Resolve the account name. Prefer the manually-entered +
-			//     validated username (prefork accounts the reverse lookup can't
-			//     find); otherwise reverse-resolve from the derived public key via
-			//     the same same-origin get_key_references lookup the seed/keyfile
-			//     imports use — a UNIQUE match IS the account (the key is in exactly
-			//     that account's posting authority, so it's inherently verified).
-			//     Either way, step 4 re-fetches + re-verifies the key on-chain.
-			let account: string | undefined;
-			if (accountFieldNeeded && manualAccountStatus === 'valid') {
-				account = manualAccount.trim().toLowerCase();
-			} else {
-				const matches = await resolveAccountsByPublicKeys([derivedPub]);
-				account = matches.length === 1 ? matches[0] : undefined;
+			// 3b + 4. Which account, and is this its POSTING key — the background
+			//     check started when the key was pasted (joined here when it is
+			//     for this key and name, started otherwise). It retries a network
+			//     moment by itself; while it does, the page says so calmly above
+			//     the button, with a Stop. Only real answers come back.
+			const typedName = manualAccount.trim().toLowerCase();
+			const typedAccount =
+				accountFieldNeeded && manualAccountStatus === 'valid' && BLURT_ACCOUNT_RE.test(typedName)
+					? typedName
+					: null;
+			// A Username field offered while this waits checks a typed name
+			// against this key.
+			derivedPubCache = derivedPub;
+			const run = startKeyCheck(derivedPub, typedAccount);
+			waitingForKeyCheck = true;
+			let verdict: PostingKeyCheck;
+			try {
+				verdict = await run.result;
+			} catch (err) {
+				// Stopped (the Stop button, a new key, leaving the page): nothing
+				// went wrong, so nothing is said. The form stays as it is.
+				if (run.ctrl.signal.aborted) return;
+				throw err;
+			} finally {
+				waitingForKeyCheck = false;
 			}
-			if (!account) {
-				// couldn't auto-detect and no valid manual name (e.g. the
-				// user hit submit before blurring the key). Reveal the Username
-				// field so they can supply it, rather than dead-ending.
+			// Stopped or replaced while the answer was on its way: not acted on.
+			if (run.ctrl.signal.aborted || keyCheck !== run) return;
+			if (verdict.kind === 'needs-account-name') {
+				// The key does not name one account: the Username field (with its
+				// own hint) appears, nothing red.
 				accountFieldNeeded = true;
+				accountFieldSlow = false;
 				derivedPubCache = derivedPub;
-				errorMsg = $_('onboarding.import.posting_only.error.could_not_resolve');
 				return;
 			}
-
-			// 4. Fetch the account from chain and classify the key.
-			const fetched = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
-			if (!fetched) {
+			if (verdict.kind === 'account-not-found') {
 				errorMsg = $_('onboarding.import.posting_only.error.account_not_found', {
-					values: { account }
+					values: { account: verdict.account }
 				});
 				// Sally finding H1: account-not-found is a
 				// user-input error, NOT a credential failure.  Keep
@@ -820,7 +1008,6 @@
 				// that pushed users toward weaker passwords.
 				return;
 			}
-			const verdict = verifyPostingKey(fetched, derivedPub);
 			if (verdict.kind === 'wrong-role') {
 				const key = `onboarding.import.posting_only.error.wrong_role.${verdict.foundIn}`;
 				errorMsg = $_(key);
@@ -832,11 +1019,12 @@
 				// problem.  Forcing password re-entry on each WIF fix
 				// trains users to pick weaker passwords.
 				postingWif = '';
+				resetAccountDetection();
 				return;
 			}
-			if (verdict.kind === 'not-found') {
+			if (verdict.kind === 'not-on-account') {
 				errorMsg = $_('onboarding.import.posting_only.error.key_not_on_account', {
-					values: { account }
+					values: { account: verdict.account }
 				});
 				wifKeyInvalid = true;
 				// Same rationale as wrong-role: clear the WIF, keep
@@ -844,12 +1032,19 @@
 				// that doesn't belong to this account; they fix the
 				// WIF or the account name and try again.
 				postingWif = '';
+				resetAccountDetection();
 				return;
 			}
+			// The one gate: only an 'ok' for exactly this key (and typed name).
+			const account = accountToSignIn(verdict, run, {
+				pub: derivedPub,
+				account: typedAccount
+			});
+			if (account === null) return;
 
 			// 5. Encrypt to the chosen password and boot.
-			const env = await encryptIdentity(full, postingNewPassword);
-			await bootFromEnvelope(env, postingNewPassword);
+			const env = await encryptIdentity(full, password);
+			await bootFromEnvelope(env, password);
 
 			// 6. Persist the account name so the rest of the app
 			//    (chat, post creation, my-orders, profile, etc — 72
@@ -952,6 +1147,7 @@
 					// from the key, so there's no account field to gate the button.
 					!postingWif.trim() ||
 					wifLooksInvalid ||
+					keyRole !== null ||
 					(accountFieldNeeded && manualAccountStatus !== 'valid') ||
 					postingNewPassword.length < 8 ||
 					postingNewPassword !== postingNewPasswordConfirm
@@ -1219,6 +1415,13 @@
 					<span class="mt-1 block text-xs text-ink-500 dark:text-ink-400">
 						{$_('onboarding.import.posting_only.wif_hint')}
 					</span>
+					{#if keyRole}
+						<!-- An Active/Owner/Memo key, said as soon as the chain has
+						     answered — before a password is typed for it. -->
+						<span class="mt-2 block text-sm text-red-600 dark:text-red-400" role="alert">
+							{$_(`onboarding.import.posting_only.error.wrong_role.${keyRole}`)}
+						</span>
+					{/if}
 				</label>
 
 				{#if detectedAccount}
@@ -1330,9 +1533,36 @@
 						>
 							{manualAccountStatus === 'invalid'
 								? $_('onboarding.import.posting_only.manual_account_invalid')
-								: $_('onboarding.import.posting_only.manual_account_hint')}
+								: accountFieldSlow
+									? $_('onboarding.import.posting_only.manual_account_hint_slow')
+									: $_('onboarding.import.posting_only.manual_account_hint')}
 						</span>
 					</label>
+				{/if}
+
+				{#if keyCheckPending && !waitingForKeyCheck}
+					<!-- The chain check of the pasted key, running while the
+					     passwords are typed. Quiet: nothing for the person to do. -->
+					<p
+						class="mt-3 flex items-center gap-2 text-sm text-ink-500 dark:text-ink-400"
+						role="status"
+						aria-live="polite"
+					>
+						<svg
+							class="h-4 w-4 flex-none animate-spin"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg
+						>
+						<span
+							>{keyCheckFailures > 0
+								? $_('onboarding.import.posting_only.checking_key_slow')
+								: $_('onboarding.import.posting_only.checking_key')}</span
+						>
+					</p>
 				{/if}
 
 				<div class="my-4 border-t border-ink-200 dark:border-ink-800"></div>
@@ -1349,6 +1579,7 @@
 							type="password"
 							maxlength="64"
 							bind:value={postingNewPassword}
+							disabled={working}
 							autocomplete="new-password"
 							class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
 						/>
@@ -1365,6 +1596,7 @@
 							type="password"
 							maxlength="64"
 							bind:value={postingNewPasswordConfirm}
+							disabled={working}
 							onblur={() => (postingConfirmBlurred = true)}
 							autocomplete="new-password"
 							aria-invalid={postingConfirmMismatch}
@@ -1381,13 +1613,45 @@
 				</PasswordScope>
 			{/if}
 
+			{#if mode === 'posting-only' && waitingForKeyCheck && keyCheckFailures > 0}
+				<!-- The button is waiting on a check the network side has not
+				     answered yet. Calm, not red: nothing is wrong, nothing to do,
+				     it carries on by itself. Stop leaves the form as it is. -->
+				<div
+					class="mt-6 flex items-start gap-3 rounded-2xl border border-ink-200 bg-ink-50 p-4 text-ink-700 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200"
+					role="status"
+					aria-live="polite"
+				>
+					<svg
+						class="mt-0.5 h-5 w-5 flex-none animate-spin text-morphit-emerald"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg
+					>
+					<div class="min-w-0 flex-1">
+						<p class="font-semibold">{$_('onboarding.import.posting_only.waiting_title')}</p>
+						<p class="mt-1 text-sm">{$_('onboarding.import.posting_only.waiting_body')}</p>
+						<button
+							type="button"
+							class="mt-3 text-sm font-semibold text-ink-600 underline underline-offset-2 hover:text-ink-900 dark:text-ink-300 dark:hover:text-white"
+							onclick={stopKeyCheck}>{$_('onboarding.import.posting_only.waiting_stop')}</button
+						>
+					</div>
+				</div>
+			{/if}
+
 			<div class="mt-6">
 				<BusyButton
 					variant="primary"
 					busy={working}
 					disabled={submitDisabled}
 					onclick={unlock}
-					busyLabel={$_('onboarding.import.submit_pending')}
+					busyLabel={waitingForKeyCheck
+						? $_('onboarding.import.posting_only.checking_key_button')
+						: $_('onboarding.import.submit_pending')}
 					fullWidth
 				>
 					{$_('onboarding.import.submit')}

@@ -6,9 +6,12 @@
  *                                   404 if the account has never
  *                                   broadcast a morphit_profile_v1 op.
  *   GET /v1/profiles?accounts=a,b — batch lookup, up to 100 accounts.
- *                                   Accounts without a profile row
- *                                   are silently dropped from the
- *                                   response.
+ *                                   Every requested account this
+ *                                   indexer knows (a profile, or an
+ *                                   `accounts` row) comes back; one
+ *                                   with no profile yet has its
+ *                                   profile fields null. Names
+ *                                   neither table knows are absent.
  *
  * Rationale for the batch form: pages that render many usernames
  * (orderbook rows, feedback lists) used to have two bad options —
@@ -24,7 +27,7 @@ import { errorBody, isAccountName } from '$api/shared';
 interface ProfileRow {
 	account: string;
 	/** v1.5.5: NULL when the account exists on-chain but has never set a
-	 *  Morphit profile. See the batch query's accounts-anchored join. */
+	 *  Morphit profile (the batch returns such an account for its key). */
 	display_name: string | null;
 	json_metadata: unknown;
 	/** v1.5.5: NULL for a profile-less account (no profile op to source). */
@@ -32,9 +35,8 @@ interface ProfileRow {
 	/** v1.5.5: NULL for a profile-less account. */
 	updated_at: Date | null;
 	/** v1.5.5: does a `profiles` row actually exist for this account? Drives
-	 *  the negative-caching decision, which must NOT key off row presence any
-	 *  more — an accounts-anchored batch returns a row for every known
-	 *  account. */
+	 *  the negative-caching decision, which must NOT key off row presence: the
+	 *  batch returns a row for every account either table knows. */
 	has_profile: boolean;
 	/** (D7/E): the account's posting public key (base58 TEXT),
 	 *  joined from `accounts`, so profile cards can show the truncated
@@ -48,8 +50,8 @@ interface ProfileRow {
  *  docs/BATCH-PROFILES-DESIGN.md for the derivation. */
 const MAX_BATCH_SIZE = 100;
 
-/** Cache header for batch responses. 90 seconds matches ~90 Blurt
- *  blocks; a profile update propagates to orderbook-row avatars
+/** Cache header for batch responses. 90 seconds is 30 Blurt blocks
+ *  (3 s each); a profile update propagates to orderbook-row avatars
  *  within 90s, which is acceptable for a nice-to-have surface.
  *  stale-while-revalidate lets the CDN serve slightly stale responses
  *  while refreshing in the background. Mounted under /v1, the security
@@ -202,13 +204,12 @@ export function profilesRoute(db: Database, opts: { readonly maxCached?: number 
 			}
 		}
 
-		// Parameterized ANY($1::text[]) is the idiomatic PG pattern for "where X
-		// is in this list." Single placeholder regardless of list size; safe
-		// against SQL injection — the array is a bound parameter, not
-		// interpolated. v1.5.5 (t155) — anchored on ACCOUNTS, not profiles, so a
-		// key-only account (no display name / avatar) still returns a row with
-		// the profile columns NULL and its posting key present; an account we've
-		// never indexed still returns nothing, which is correct.
+		// The list is one bound array parameter (unnest($1::text[])), never
+		// interpolated: one placeholder regardless of list size, safe against SQL
+		// injection. A key-only account (no display name / avatar) returns a row
+		// with the profile columns NULL and its posting key present (v1.5.5,
+		// t155); a profile-only account returns its profile with a NULL key; an
+		// account neither table has returns nothing, which is correct.
 		//
 		// Warm avatars/names come from the in-memory cache and skip the DB
 		// entirely (the fix for the maintainer's "up to 7 seconds"): serve cached positives,
@@ -229,17 +230,26 @@ export function profilesRoute(db: Database, opts: { readonly maxCached?: number 
 
 		let queriedWithProfile = 0;
 		if (toQuery.length > 0) {
+			// Anchored on the REQUESTED names, joined to both tables: a row comes
+			// back when either has the account. Anchored on `accounts` alone
+			// (v1.5.5 to v1.21.20), an account with a profile but no `accounts`
+			// row was dropped — and `accounts` is written only for account
+			// creations this indexer saw and for a first-buy waiver or
+			// first-trade bonus claim, so an older account this indexer never
+			// recorded (@classx, 2026-11-01) showed its identicon everywhere but
+			// its own profile page.
 			const result = await db.query<ProfileRow>(
-				`SELECT a.name AS account, p.display_name, p.json_metadata,
+				`SELECT q.name AS account, p.display_name, p.json_metadata,
 				        p.source_block_num::text, p.updated_at, a.posting_pubkey,
 				        (p.account IS NOT NULL) AS has_profile
-				 FROM accounts a
-				 LEFT JOIN profiles p ON p.account = a.name
-				 WHERE a.name = ANY($1::text[])`,
+				 FROM unnest($1::text[]) AS q(name)
+				 LEFT JOIN accounts a ON a.name = q.name
+				 LEFT JOIN profiles p ON p.account = q.name
+				 WHERE a.name IS NOT NULL OR p.account IS NOT NULL`,
 				[toQuery]
 			);
-			// Missing accounts (no row) are silently absent — graceful degrade
-			// when a batch contains accounts that haven't set a profile yet.
+			// Names neither table knows are absent (graceful degrade); a known
+			// account without a profile comes back with null profile fields.
 			for (const row of result.rows) {
 				const p = rowToProfile(row);
 				profiles[row.account] = p;
@@ -257,7 +267,7 @@ export function profilesRoute(db: Database, opts: { readonly maxCached?: number 
 		// cache for the full 90s) only when EVERY requested account actually has
 		// a profile: those served warm from cache (all positive) plus those the
 		// query found with has_profile. This MUST key off has_profile, not row
-		// presence — an accounts-anchored query returns a row for a profile-less
+		// presence — the query returns a row for a profile-less
 		// account too, and pinning that negative would keep a fresh profile
 		// invisible across refreshes for 90s. Partial → no-store.
 		const servedFromCache = accounts.length - toQuery.length;

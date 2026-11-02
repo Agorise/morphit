@@ -42,7 +42,7 @@
 		morphitExplorerBlockUrl,
 		blurtWalletExplorerFallbackUrl
 	} from '$lib/explorer/urls';
-	import { identiconDataUri } from '$crypto/identicon';
+	import { identiconDataUriFromString } from '$crypto/identicon';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import Head from '$components/Head.svelte';
@@ -557,18 +557,14 @@
 					decoding="async"
 				/>
 			{:else}
-				<!-- Fallback identicon. Sally finding L9 was investigated and
-				     reverted: the profile page (`/@account`) also seeds the
-				     hero identicon from account-name bytes, not the posting
-				     pubkey.  Switching the explorer to pubkey-seeding would
-				     make the explorer's identicon differ from the profile's
-				     instead of matching it.  The deeper inconsistency is
-				     between IdentityLabel (pubkey-seeded for bytes-when-known)
-				     and the public surfaces (always name-seeded) — that's a
-				     systemic ratification for a future pass, not a fix.
-				     Documented in the project backlog. -->
+				<!-- Fallback identicon: the account's heart, seeded from the
+				     hashed name (identiconDataUriFromString) like the header
+				     menu, every IdentityLabel and the profile page, so an
+				     account looks the same everywhere and on every instance.
+				     (This page and the profile hero used the raw name bytes
+				     until v1.21.21 and showed a different heart.) -->
 				<img
-					src={identiconDataUri(new TextEncoder().encode(account))}
+					src={identiconDataUriFromString(account)}
 					alt=""
 					class="h-16 w-16 rounded-xl"
 					loading="lazy"

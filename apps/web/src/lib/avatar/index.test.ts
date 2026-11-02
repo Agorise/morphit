@@ -15,6 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { sanitizeSvg, processAvatarFile, minifySvg, MAX_AVATAR_BYTES } from './index';
+import DUSK_BIRD from './fixtures/animated-dusk-bird.svg?raw';
 
 // ─── SVG sanitizer — threat-model coverage ──────────────────────
 
@@ -149,7 +150,77 @@ describe('sanitizeSvg — dangerous elements', () => {
 		expect(result.value).not.toContain('tracker.example.com');
 	});
 
-	it('strips <animate> and <set> (SMIL event handlers)', () => {
+	it('strips <feImage> (it can load a picture from elsewhere)', () => {
+		const input = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+			<filter id="x"><feImage href="https://evil.example.com/t.png"/><feGaussianBlur stdDeviation="2"/></filter>
+			<circle cx="16" cy="16" r="10" filter="url(#x)"/>
+		</svg>`;
+		const result = sanitizeSvg(input);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value).not.toMatch(/feImage/i);
+		expect(result.value).not.toContain('evil');
+		expect(result.value).toContain('<feGaussianBlur stdDeviation="2"');
+	});
+});
+
+// ─── Animated avatars (SMIL) and filters ────────────────────────
+//
+// An animated SVG avatar used to lose every <animate>/<animateTransform> and
+// its <filter> at upload, so the chain got one still frame. Animation is now
+// kept when it can only change how the picture LOOKS: what it animates is a
+// presentation or geometry attribute, and what it animates to carries no
+// protocol and no outside url(). Anything else drops the whole animation.
+
+function signature(svg: string): string[] {
+	const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+	const out: string[] = [];
+	const walk = (el: Element, depth: number): void => {
+		const attrs = Array.from(el.attributes)
+			.map((a) => a.name)
+			.filter((n) => n !== 'xmlns')
+			.sort();
+		const target = el.getAttribute('attributeName');
+		out.push(`${depth}:${el.nodeName}[${attrs.join(',')}]${target ? `→${target}` : ''}`);
+		for (const c of Array.from(el.children)) walk(c, depth + 1);
+	};
+	walk(doc.documentElement, 0);
+	return out;
+}
+
+describe('sanitizeSvg — animated avatars keep their animation', () => {
+	it('a real animated avatar comes through whole: every element, attribute and animation target', () => {
+		const result = sanitizeSvg(DUSK_BIRD);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(signature(result.value)).toEqual(signature(DUSK_BIRD));
+		expect(result.byteLength).toBeLessThanOrEqual(MAX_AVATAR_BYTES);
+		// The pieces that make it move, counted.
+		expect(result.value.match(/<animate /g)?.length).toBe(DUSK_BIRD.match(/<animate /g)?.length);
+		expect(result.value.match(/<animateTransform /g)?.length).toBe(
+			DUSK_BIRD.match(/<animateTransform /g)?.length
+		);
+		expect(result.value).toContain('<filter id="a"');
+		expect(result.value).toContain('<feGaussianBlur stdDeviation=".7"');
+	});
+
+	it('keeps each kind of animation that only changes the look', () => {
+		const input = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+			<defs><path id="p" d="M0 0h10"/></defs>
+			<circle cx="16" cy="16" r="10" fill="#0a0">
+				<animate attributeName="r" values="10;14;10" dur="2s" repeatCount="indefinite" calcMode="spline" keyTimes="0;.5;1" keySplines=".4 0 .6 1;.4 0 .6 1"/>
+				<set attributeName="fill" to="#f00" begin="1s"/>
+				<animateMotion dur="3s" repeatCount="indefinite"><mpath href="#p"/></animateMotion>
+			</circle>
+			<g><animateTransform attributeName="transform" type="rotate" values="0 16 16;360 16 16" dur="4s" repeatCount="indefinite"/></g>
+		</svg>`;
+		const result = sanitizeSvg(input);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(signature(result.value)).toEqual(signature(input));
+	});
+
+	it('an animation is still stripped of its event handlers', () => {
 		const input = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
 			<circle cx="16" cy="16" r="10">
 				<animate attributeName="r" values="10;20;10" dur="2s" onbegin="evil()"/>
@@ -159,22 +230,90 @@ describe('sanitizeSvg — dangerous elements', () => {
 		const result = sanitizeSvg(input);
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.value).not.toContain('<animate');
-		expect(result.value).not.toContain('<set');
+		expect(result.value).toContain('<animate attributeName="r"');
 		expect(result.value).not.toContain('evil');
 		expect(result.value).not.toContain('pwn');
 	});
 
-	it('strips <filter> element (we only allow filter= attribute, not <filter>)', () => {
-		const input = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
-			<filter id="x"><feGaussianBlur stdDeviation="2"/></filter>
-			<circle cx="16" cy="16" r="10"/>
-		</svg>`;
+	it.each([
+		['a link', `<set attributeName="href" to="javascript:alert(1)"/>`],
+		[
+			'an xlink link',
+			`<animate attributeName="xlink:href" values="#a;javascript:alert(1)" dur="1s"/>`
+		],
+		[
+			'a link, lower-case name (an HTML parser restores the case)',
+			`<set attributename="href" to="#x"/>`
+		],
+		['a link, upper-case value', `<set attributeName="HREF" to="javascript:alert(1)"/>`],
+		['an event handler', `<set attributeName="onclick" to="alert(1)"/>`],
+		['the style', `<set attributeName="style" to="position:fixed;inset:0"/>`],
+		['the class', `<set attributeName="class" to="fixed inset-0 z-50"/>`],
+		['the id', `<set attributeName="id" to="chat-composer"/>`],
+		['nothing named', `<animate values="1;2" dur="1s"/>`],
+		[
+			'two targets at once',
+			`<animate attributeName="r" attributename="href" values="1;2" dur="1s"/>`
+		],
+		[
+			'a transform with a link target',
+			`<animateTransform attributeName="href" type="scale" values="1;2" dur="1s"/>`
+		]
+	])('drops an animation that targets %s', (_label, frag) => {
+		const input = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle r="5">${frag}</circle></svg>`;
 		const result = sanitizeSvg(input);
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.value).not.toContain('<filter');
-		expect(result.value).not.toContain('feGaussianBlur');
+		expect(result.value).not.toMatch(/<(set|animate|animateTransform)\b/);
+		expect(result.value).toContain('<circle');
+	});
+
+	it.each([
+		['a protocol', `<set attributeName="fill" to="javascript:alert(1)"/>`],
+		[
+			'an outside paint',
+			`<animate attributeName="fill" values="#000;url(https://evil.example.com/p.svg#g)" dur="1s"/>`
+		],
+		[
+			'an outside paint, spaced',
+			`<set attributeName="stroke" to="url( //evil.example.com/p.svg#g)"/>`
+		],
+		[
+			'a data URI',
+			`<animate attributeName="fill" from="#000" to="url(data:image/svg+xml,x)" dur="1s"/>`
+		],
+		[
+			'a CSS escape spelling url( with no colon',
+			`<set attributeName="fill" to="u\\72l(//evil.example.com/p.svg#g)"/>`
+		],
+		['markup', `<animate attributeName="fill" by="&lt;b&gt;" dur="1s"/>`],
+		[
+			'a motion path to elsewhere',
+			`<animateMotion path="M0 0" dur="1s"><mpath href="https://evil.example.com/p.svg#p"/></animateMotion>`
+		]
+	])('drops an animation whose value carries %s', (_label, frag) => {
+		const input = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle r="5">${frag}</circle></svg>`;
+		const result = sanitizeSvg(input);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value).not.toMatch(/evil|javascript|data:|&lt;b/);
+		expect(result.value).toContain('<circle');
+	});
+
+	it('an inside paint server is fine to animate to', () => {
+		const input = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><defs><linearGradient id="g"><stop offset="0" stop-color="#000"/></linearGradient></defs><circle r="5"><set attributeName="fill" to="url(#g)" begin="1s"/></circle></svg>`;
+		const result = sanitizeSvg(input);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value).toContain('<set attributeName="fill" to="url(#g)"');
+	});
+
+	it('a clock value in dur/begin is kept (02:30 is a time, not a protocol)', () => {
+		const input = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle r="5"><animate attributeName="r" values="5;9;5" dur="00:00:02" begin="0:01"/></circle></svg>`;
+		const result = sanitizeSvg(input);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value).toContain('dur="00:00:02"');
 	});
 });
 

@@ -2661,15 +2661,21 @@
 						"active": "那是你的 ACTIVE 密钥。{brand} 只需要 POSTING — 请粘贴那个。",
 						"owner": "那是你的 OWNER 密钥。{brand} 只需要 POSTING — 请粘贴那个。(Owner 密钥授予对账户的完全控制权;不要粘贴到任何网站。)",
 						"memo": "那是你的 MEMO 密钥。{brand} 需要 POSTING — 请粘贴那个。"
-					},
-					"could_not_resolve": "我们无法从此密钥检测到你的账户。请核对你是否正确复制了 Posting Private Key，或改用你的 12 个单词种子短语或 Keyfile 导入。"
+					}
 				},
 				"account_bad": "无效",
 				"manual_account_label": "你的 Blurt 用户名",
 				"manual_account_placeholder": "例如 alice",
 				"manual_account_hint": "我们无法通过此密钥检测到你的账户——它可能是在 Blurt 出现之前创建的。请输入你的 Blurt 用户名，以便确认此密钥属于该账户。",
+				"manual_account_hint_slow": "Blurt 网络迟迟没有告诉我们此密钥属于哪个账户。如果你知道自己的 Blurt 用户名，可以在这里输入——或者稍等，我们会继续询问。",
 				"manual_account_invalid": "该用户名与此密钥不匹配。请检查拼写，或确认你粘贴的是正确的发帖私钥。",
-				"detected_account": "已识别——此密钥属于 @{account}。无需填写用户名。"
+				"detected_account": "已识别——此密钥属于 @{account}。无需填写用户名。",
+				"checking_key": "正在通过 Blurt 网络核对你的密钥…",
+				"checking_key_slow": "Blurt 网络现在响应较慢。我们会自动重试——你什么都不用做。",
+				"checking_key_button": "正在核对密钥…",
+				"waiting_title": "仍在核对你的密钥",
+				"waiting_body": "Blurt 网络现在响应较慢，所以我们正在自动重新询问。这不是你的操作造成的，你什么都不用做。请保持此页面打开——网络一有回应我们就会继续。",
+				"waiting_stop": "停止"
 			},
 			"error": {
 				"seed_word_count": "Blurt 助记词恰好是 12 个单词——你输入了 {count} 个。请确保 12 个单词齐全，每个之间用一个空格分隔。",
@@ -4424,7 +4430,7 @@
 			"guidance_dimensions": "理想：至少 96×96 像素的方形图像。更大的会被为你缩放到 96×96；更小的会显得颗粒感。",
 			"guidance_filesize": "源文件大小：最多 5 MB。更大的图像会自动缩小到 96×96，所以即使是手机直接拍摄的照片也能正常使用。",
 			"guidance_size": "光栅图像会自动重新编码为高质量 WebP。SVG 无损压缩。最终负载必须小于 6 KB。",
-			"guidance_svg_tips": "SVG 提示：方形 viewBox（例如 0 0 100 100）渲染效果最佳。脚本、外部引用和 SVG 中的 HTML 出于安全原因会自动被剥离。",
+			"guidance_svg_tips": "SVG 提示：方形 viewBox（例如 0 0 100 100）渲染效果最佳。脚本、外部引用和 SVG 中的 HTML 出于安全原因会自动被剥离。SVG 内的动画会被保留，因此动画 SVG 会动起来；GIF 则会变成静态图片。",
 			"permanence_heading": "这会永久上链。",
 			"permanence_body": "一旦广播，你的头像将永远在区块链上公开。无法删除，只能替换。永远不要上传你不希望终身公开与你账户相关联的图像——人脸照片尤其需要考虑隐私问题，因为有现代人脸识别工具。",
 			"file_input_label": "选择一个头像图像文件",

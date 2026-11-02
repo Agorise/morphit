@@ -9,10 +9,9 @@
  * whole — truncating wouldn't shorten them, and that's the shape of the
  * short sync placeholder shown before the ~53-char base58 key resolves.
  *
- * The result is MEMOIZED per full-key string, mirroring how avatars /
- * identicons are cached per account (crypto/identicon.ts, selfProfile):
- * a list of order cards or a long chat that repeats the same trader
- * doesn't recompute the slice every render. The cache is bounded with
+ * The result is MEMOIZED per full-key string (as the avatar is per account
+ * in selfProfile): a list of order cards or a long chat that repeats the same
+ * trader doesn't recompute the slice every render. The cache is bounded with
  * oldest-first eviction so it can't grow without limit.
  *
  * NOTE: this is the PUBLIC-key display helper. It is deliberately

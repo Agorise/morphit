@@ -26,13 +26,15 @@
  * the account-keys proxy. Public keys are already on-chain, so the
  * lookup reveals nothing new — it only moves WHO asks the chain.
  *
- * DELIBERATELY no direct-RPC fallback. Unlike a broadcast (which must
- * succeed), this is pure convenience: if the same-origin proxy is
- * unreachable, the right answer is to fall back to MANUAL account-name
- * entry (what the caller already does on an empty result), never to leak
- * the IP to a third-party node. Any failure — unreachable proxy, non-OK
- * status, bad shape, or a single key mapping to multiple accounts — returns
- * empty / unresolved, and the caller asks the user.
+ * DELIBERATELY no direct-RPC fallback: when the same-origin proxy is
+ * unreachable, the IP is never leaked to a third-party node instead.
+ * lookupAccountsByPublicKeys says so — `unavailable` (unreachable proxy,
+ * non-OK status such as the indexer's 502 when the chain could not be asked,
+ * bad shape) is not "no account has this key" —, and the sign-in pages ask
+ * again by themselves (postingKeyCheck.ts) instead of telling the person their
+ * account could not be found. resolveAccountsByPublicKeys keeps the old
+ * contract (empty on any failure) for callers that only use the answer as a
+ * hint and check the key against the chain anyway (accountBinding).
  */
 import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
@@ -43,14 +45,30 @@ function indexerUrl(path: string): URL {
 	return new URL(path, resolveOrigin(MORPHIT_INDEXER_ORIGIN));
 }
 
+/** The reverse lookup's answer: the accounts found (possibly none), or
+ *  `unavailable` when the indexer could not ask the chain (or could not be
+ *  reached) — which is NOT "no account has this key" and must never be shown
+ *  to someone as if it were. */
+export type AccountsByKeyLookup =
+	| { readonly kind: 'found'; readonly accounts: string[] }
+	| { readonly kind: 'unavailable' };
+
 /**
  * Resolve the set of account names that reference ANY of the given
  * BLT-format public keys. Returns a de-duplicated list (empty on no match
  * or any error — callers treat empty as "couldn't auto-resolve").
  */
 export async function resolveAccountsByPublicKeys(pubKeysBLT: string[]): Promise<string[]> {
+	const r = await lookupAccountsByPublicKeys(pubKeysBLT);
+	return r.kind === 'found' ? r.accounts : [];
+}
+
+/** Like resolveAccountsByPublicKeys, but says when it could not find out. */
+export async function lookupAccountsByPublicKeys(
+	pubKeysBLT: string[]
+): Promise<AccountsByKeyLookup> {
 	const keys = pubKeysBLT.filter((k): k is string => typeof k === 'string' && k.length > 0);
-	if (keys.length === 0) return [];
+	if (keys.length === 0) return { kind: 'found', accounts: [] };
 	try {
 		const res = await fetchWithTimeout(
 			indexerUrl('/v1/chain/key-references'),
@@ -63,16 +81,16 @@ export async function resolveAccountsByPublicKeys(pubKeysBLT: string[]): Promise
 			chainCallTimeoutMs(15_000)
 		);
 		if (!res.ok) {
-			return []; // proxy unreachable / error ⇒ manual entry
+			return { kind: 'unavailable' }; // proxy unreachable / chain not answering
 		}
 		const body = (await res.json()) as { accounts?: unknown };
-		if (!Array.isArray(body.accounts)) return [];
+		if (!Array.isArray(body.accounts)) return { kind: 'unavailable' };
 		const accounts = new Set<string>();
 		for (const name of body.accounts) {
 			if (typeof name === 'string' && name.length > 0) accounts.add(name);
 		}
-		return [...accounts];
+		return { kind: 'found', accounts: [...accounts] };
 	} catch {
-		return [];
+		return { kind: 'unavailable' };
 	}
 }

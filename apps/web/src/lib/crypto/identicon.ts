@@ -244,21 +244,6 @@ export function identiconDataUri(bytes: Uint8Array, size = 64): string {
 }
 
 /**
- * Convenience: identicon data URI seeded by a string instead of raw
- * bytes.  Hashes the UTF-8 bytes of the string and feeds the result
- * to identiconDataUri.  Used for paired-readonly sessions (ADR-0022
- * QR-pair, Option A) where the desktop has no posting pubkey to seed
- * the avatar from — the account name is the next-best deterministic
- * seed for a consistent visual identity across reloads.
- *
- * Note: the resulting identicon is NOT the same as the identicon a
- * fully-unlocked session would render for the same account, because
- * the seeds differ (posting pubkey bytes vs UTF-8 account name).
- * That's a known property: the AvatarMenu chooses paired-vs-unlocked
- * deliberately, and the visual mismatch IS a useful signal that the
- * session shape changed.
- */
-/**
  * Expand a low-entropy STRING seed (e.g. a Blurt account name) into well-mixed
  * bytes. v1.16.4 fix: raw UTF-8 bytes collide on shared prefixes — the identicon
  * reads bytes[0..7], so accounts like `morphit`, `morphitir` and `morphitlat`
@@ -288,6 +273,15 @@ export function seedBytesFromString(seed: string, n = 16): Uint8Array {
 	return out;
 }
 
+/**
+ * The identicon of an ACCOUNT: seeded by its name, hashed (seedBytesFromString).
+ * Every surface that knows the account name draws it this way — the header
+ * menu, every label, the profile page, the block explorer, on every Morphit
+ * instance — so one account has one heart everywhere (v1.21.21: the profile
+ * page and the explorer fed the raw name bytes and drew a different one).
+ * Raw bytes (identiconDataUri) are only for a posting key before the account
+ * has a name, mid-onboarding.
+ */
 export function identiconDataUriFromString(seed: string, size = 64): string {
 	const bytes = seedBytesFromString(seed);
 	return identiconDataUri(bytes, size);

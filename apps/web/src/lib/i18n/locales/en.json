@@ -2661,15 +2661,21 @@
 						"active": "That's your Active key, which controls funds and account changes. For your safety, {brand} signs in with your Posting key only. Please paste your Posting key instead.",
 						"owner": "That's your Owner key — the most powerful key on your account, and the one to guard most carefully. {brand} only ever signs you in with your Posting key. Please paste your Posting key instead.",
 						"memo": "That's your Memo key — it's only used to encrypt and decrypt private messages and can't sign you in. Please paste your Posting key instead."
-					},
-					"could_not_resolve": "We couldn't detect your account from this key. Double-check that you copied your Posting Private Key correctly, or import with your 12-word seed or Keyfile instead."
+					}
 				},
 				"account_bad": "invalid",
 				"manual_account_label": "Your Blurt username",
 				"manual_account_placeholder": "e.g. alice",
 				"manual_account_hint": "We couldn't detect your account from this key — it may be from before Blurt existed. Type your Blurt username so we can confirm the key belongs to it.",
+				"manual_account_hint_slow": "The Blurt network is slow to tell us which account this key belongs to. If you know your Blurt username, you can type it here — or just wait, we keep asking.",
 				"manual_account_invalid": "That username doesn't match this key. Check the spelling, or that you pasted the right Posting Private Key.",
-				"detected_account": "Recognised — this key belongs to @{account}. No username needed."
+				"detected_account": "Recognised — this key belongs to @{account}. No username needed.",
+				"checking_key": "Checking your key with the Blurt network…",
+				"checking_key_slow": "The Blurt network is slow to answer right now. We keep trying by ourselves — there's nothing you need to do.",
+				"checking_key_button": "Checking your key…",
+				"waiting_title": "Still checking your key",
+				"waiting_body": "The Blurt network is slow to answer right now, so we're asking again automatically. This isn't caused by anything you did, and there's nothing you need to do. Keep this page open — we'll carry on as soon as it answers.",
+				"waiting_stop": "Stop"
 			},
 			"error": {
 				"seed_word_count": "A Blurt seed phrase is exactly 12 words — you've entered {count}. Make sure all 12 are present, each separated by a single space.",
@@ -4446,7 +4452,7 @@
 			"guidance_dimensions": "Ideal source: a square image at least 96×96 pixels. Anything larger will be resized down to 96×96 for you; anything smaller will look grainy.",
 			"guidance_filesize": "Source file size: up to 5 MB. Larger images will be downsampled to 96×96 automatically, so even a phone photo straight from your camera works fine.",
 			"guidance_size": "Raster images are automatically re-encoded to WebP at high quality. SVGs are minified losslessly. The final payload must fit under 6 KB.",
-			"guidance_svg_tips": "SVG tip: a square viewBox (e.g. 0 0 100 100) renders best. Scripts, external references, and HTML-in-SVG are stripped automatically for security.",
+			"guidance_svg_tips": "SVG tip: a square viewBox (e.g. 0 0 100 100) renders best. Scripts, external references, and HTML-in-SVG are stripped automatically for security. Animation inside the SVG is kept, so an animated SVG moves; a GIF becomes a still picture.",
 			"permanence_heading": "This goes on-chain permanently.",
 			"permanence_body": "Once broadcast, your avatar is public on the blockchain forever. It cannot be deleted, only replaced. Never upload an image you wouldn't want publicly associated with your account for the rest of time — photos of faces, in particular, are a privacy consideration given modern face-recognition tools.",
 			"file_input_label": "Choose an avatar image file",

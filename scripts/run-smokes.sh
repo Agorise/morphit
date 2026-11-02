@@ -545,7 +545,7 @@ SMOKES=(
 	"apps/web:settings-chain-crypto-smoke"
 	"apps/web:order-completion-semantics-smoke"
 	"apps/relay:push-dedup-survives-delivery-smoke"
-	"apps/indexer:profiles-batch-accounts-anchored-smoke"
+	"apps/indexer:profiles-batch-anchor-smoke"
 	"apps/indexer:trade-count-semantics-smoke"
 	"apps/web:privacy-headline-length-smoke"
 	"apps/web:carrier-registry-invariants-smoke"

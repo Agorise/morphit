@@ -62,9 +62,14 @@ frontend already uses for caches (`Map<account, Profile>`).
 
 ### Unknown / missing accounts
 
-**Silently dropped from the response.** If the caller requests
+**Absent from the response.** If the caller requests
 `?accounts=alice,bob,nonexistent`, the response contains `alice`
 and `bob` under `profiles`, and `nonexistent` is simply absent.
+"Known" means either a profile row or an accounts row: since v1.5.5 a
+known account without a profile comes back with null profile fields
+and its posting key, and since v1.21.21 an account with a profile but
+no accounts row comes back too (the query starts from the requested
+names and joins both tables).
 
 Rationale:
 - Batches should degrade gracefully. A 404 for the whole batch
@@ -76,6 +81,13 @@ Rationale:
   but adds noise for the 99% case where everything is found.
 
 ### Caching
+
+> **Served under `/v1`, every batch answer is `Cache-Control: no-store`.**
+> Since VT3-6 the security middleware never lets an answer that names an
+> account be stored — not by the browser's disk cache (it outlived Sign out)
+> and not by a shared cache — and it overrides the route's own header. The
+> rules below are what the route sets where it is served without that
+> middleware; the in-memory caches on both sides are unaffected.
 
 - **`Cache-Control: public, max-age=90, stale-while-revalidate=60`** —
   but ONLY when the batch is COMPLETE (every requested account
@@ -94,7 +106,7 @@ Rationale:
   Positive results are still cached for the full 90s; only negatives
   are excluded. Mirrors the client's soft-null policy and the
   dynamic-data service-worker exclusion.
-- 90 seconds = 90 blocks on Blurt (3s block time). A user who
+- 90 seconds = 30 blocks on Blurt (3s block time). A user who
   updates their avatar waits ~90 seconds for it to propagate via
   the cache to other visitors' orderbook views. That's acceptable
   because the orderbook-row avatar is a nice-to-have, not a

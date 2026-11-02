@@ -419,7 +419,11 @@ export async function getProfilesBatch(
 							// negative: pinning an absence would hide a just-created
 							// profile across reloads, the trap the endpoint's
 							// no-store-on-partial and the soft-null policy both avoid.
-							if (!failed && value !== null && !fromDisk) {
+							// A key-only row (an account the indexer knows, with no
+							// profile op yet: source_block_num null) is such a negative
+							// too, though it is not null — kept for a week on disk, it
+							// served the default picture first on every later visit.
+							if (!failed && value !== null && value.source_block_num !== null && !fromDisk) {
 								toPersist.push({ account, profile: value, fetchedAt: now });
 							}
 						}

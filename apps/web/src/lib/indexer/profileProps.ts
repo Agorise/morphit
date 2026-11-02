@@ -46,6 +46,12 @@ export interface IdentityLabelProfileProps {
 	readonly shortBio: string | null;
 }
 
+/** Avatars sanitized this session: the result depends on the input alone, and
+ *  one trader's avatar is drawn many times (every order row, every chat
+ *  message). Bounded, oldest first out. */
+const SANITIZED_AVATARS_MAX = 256;
+const sanitizedAvatars = new Map<string, string | null>();
+
 /** Re-sanitize an indexer-supplied SVG string.  Returns the
  *  sanitized form on success, or null on parse-failure or
  *  unsupported environment (SSR — DOMParser missing).  Empty
@@ -58,9 +64,15 @@ function safeSanitizeFromIndexer(s: string): string | null {
 		// Production browser path always has DOMParser.
 		return null;
 	}
+	const kept = sanitizedAvatars.get(s);
+	if (kept !== undefined) return kept;
 	const result = sanitizeSvg(s);
-	if (!result.ok) return null;
-	return result.value;
+	const value = result.ok ? result.value : null;
+	if (sanitizedAvatars.size >= SANITIZED_AVATARS_MAX) {
+		sanitizedAvatars.delete(sanitizedAvatars.keys().next().value!);
+	}
+	sanitizedAvatars.set(s, value);
+	return value;
 }
 
 /** Validate that a string looks like a base64 image data URI.

@@ -29,10 +29,14 @@
  * checks are enough to catch a regression in the encoding.
  */
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { identiconSvg, identiconDataUri, identiconDataUriFromString } from '../src/lib/crypto/identicon.ts';
+import {
+	identiconSvg,
+	identiconDataUri,
+	identiconDataUriFromString
+} from '../src/lib/crypto/identicon.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -96,10 +100,7 @@ for (const { name, bytes } of seeds) {
 }
 
 // ── 2. Source-level: identicon.ts must use base64, not percent ───────
-const identiconSrc = readFileSync(
-	join(REPO_ROOT, 'apps/web/src/lib/crypto/identicon.ts'),
-	'utf-8'
-);
+const identiconSrc = readFileSync(join(REPO_ROOT, 'apps/web/src/lib/crypto/identicon.ts'), 'utf-8');
 check(
 	'source uses ;base64, data URI',
 	identiconSrc.includes('data:image/svg+xml;base64,'),
@@ -141,10 +142,134 @@ check(
 		join(__dirname, '..', 'src', 'lib', 'components', 'IdentityLabel.svelte'),
 		'utf8'
 	);
-	check('IdentityLabel seeds the account via seedBytesFromString', /seedBytesFromString\(account\)/.test(idLabel));
+	check(
+		'IdentityLabel seeds the account via seedBytesFromString',
+		/seedBytesFromString\(account\)/.test(idLabel)
+	);
 	check(
 		'IdentityLabel does not raw-UTF8-encode the account seed',
 		!/new TextEncoder\(\)\.encode\(account\)/.test(idLabel)
+	);
+}
+
+// ── v1.21.21: ONE heart per account, on every surface ─────────────────
+// The v1.16.5 switch to the hashed name seed reached IdentityLabel and the
+// header menu but not the profile page's hero or the explorer, which kept the
+// raw UTF-8 bytes — so @classx's profile page showed a different heart than
+// the header. Every identicon in the app is checked here, not one component:
+// a NAME reaches an identicon only through the hashed seed
+// (identiconDataUriFromString / seedBytesFromString); raw bytes are allowed
+// only for a posting key, before an account name exists (onboarding).
+{
+	const webSrc = join(__dirname, '..', 'src');
+	const files: string[] = [];
+	const walk = (dir: string): void => {
+		for (const e of readdirSync(dir, { withFileTypes: true })) {
+			const p = join(dir, e.name);
+			if (e.isDirectory()) walk(p);
+			else if (/\.(svelte|ts)$/.test(e.name) && !/\.test\.ts$/.test(e.name)) files.push(p);
+		}
+	};
+	walk(webSrc);
+
+	/**
+	 * The identicon calls in one source file that are not one-heart-per-account:
+	 * a raw-bytes identicon (identiconDataUri / identiconSvg) whose seed is not
+	 * the hashed name (seedBytes from seedBytesFromString, or
+	 * seedBytesFromString(…) itself) or a posting key before a name exists
+	 * (live.posting.publicKey); the raw function used in any way but a direct
+	 * call (an alias import, a namespace import, passed as a value) — the
+	 * call-site check could not see what it is fed; or any TextEncoder in a
+	 * file that draws a raw-bytes identicon.
+	 */
+	function identiconOffenders(src: string): { sites: number; offenders: string[] } {
+		// Comments say the names too; only code counts.
+		const code = src
+			.replace(/(^|\s)\/\*[\s\S]*?\*\//g, '$1')
+			.replace(/<!--[\s\S]*?-->/g, '')
+			.replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+		const offenders: string[] = [];
+		let sites = 0;
+		const RAW = '(?:identiconDataUri|identiconSvg)(?!FromString)';
+		for (const imp of code.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]\$crypto\/identicon['"]/g)) {
+			if (new RegExp(`\\b${RAW}\\s+as\\b`).test(imp[1]!)) offenders.push(`alias import: ${imp[0]}`);
+		}
+		if (/import\s*\*\s*as\s+\w+\s+from\s*['"]\$crypto\/identicon['"]/.test(code)) {
+			offenders.push('namespace import of $crypto/identicon');
+		}
+		const SEED_OK =
+			/^(?:seedBytes\b(?!FromString)|seedBytesFromString\s*\(|live\.posting\.publicKey\b)/;
+		let raw = 0;
+		for (const m of code.matchAll(new RegExp(`(?<![\\w.$])${RAW}\\b(\\s*\\()?`, 'g'))) {
+			const at = m.index!;
+			// The import line itself.
+			if (/import\s*\{[^}]*$/.test(code.slice(Math.max(0, at - 200), at))) continue;
+			if (!m[1]) {
+				offenders.push(`used as a value: …${code.slice(at, at + 40)}`);
+				continue;
+			}
+			sites++;
+			raw++;
+			const arg = code.slice(at + m[0].length).trimStart();
+			if (!SEED_OK.test(arg))
+				offenders.push(`seeded with: ${m[0]}${arg.slice(0, 40)}`.replace(/\s+/g, ' '));
+		}
+		for (const m of code.matchAll(/(?<![\w.$])identiconDataUriFromString\s*\(/g)) (void m, sites++);
+		if (raw > 0 && /\bTextEncoder\b/.test(code))
+			offenders.push('TextEncoder next to a raw-bytes identicon');
+		if (
+			/\bseedBytes\b(?!FromString)/.test(code) &&
+			raw > 0 &&
+			!/seedBytesFromString\s*\(/.test(code)
+		) {
+			offenders.push('a seedBytes that is not from seedBytesFromString');
+		}
+		return { sites, offenders };
+	}
+
+	// The check catches what it is for (seen failing on purpose) …
+	const EVASIONS: Record<string, string> = {
+		'raw name bytes': `const a = identiconDataUri(new TextEncoder().encode(account), 96);`,
+		'alias import': `import { identiconDataUri as idu } from '$crypto/identicon';\nconst a = idu(new TextEncoder().encode(peer));`,
+		'namespace import': `import * as ic from '$crypto/identicon';\nconst a = ic.identiconDataUri(x);`,
+		'space before (': `const a = identiconDataUri (new TextEncoder().encode(name));`,
+		'passed as a value': `const all = names.map(seedBytesFromString).map(identiconDataUri);`,
+		'a variable called bytes': `const bytes = new TextEncoder().encode(op.account);\nconst a = identiconDataUri(bytes);`,
+		'a seedBytes of raw bytes': `const seedBytes = new Uint8Array(Buffer.from(peer));\nconst a = identiconDataUri(seedBytes);`,
+		identiconSvg: `const s = identiconSvg(enc.encode(peer), 40);`,
+		// A '/*' inside a string is not a comment: it must not hide what follows.
+		"a call after a '/*' in a string": `const accept = 'image/*';\nconst a = identiconDataUri(new TextEncoder().encode(account));\n/* a real comment */`
+	};
+	for (const [what, snippet] of Object.entries(EVASIONS)) {
+		check(`the call-site check catches: ${what}`, identiconOffenders(snippet).offenders.length > 0);
+	}
+	// … and passes the right ways to draw one.
+	const FINE: Record<string, string> = {
+		'the hashed name': `import { identiconDataUriFromString } from '$crypto/identicon';\nconst a = identiconDataUriFromString(account, 96);`,
+		'seedBytesFromString inline': `import { identiconDataUri, seedBytesFromString } from '$crypto/identicon';\nconst a = identiconDataUri(seedBytesFromString(account));`,
+		'seedBytes from seedBytesFromString': `const seedBytes = $derived(seedBytesFromString(account));\nconst a = identiconDataUri(seedBytes, 40);`,
+		'a posting key before a name': `const a = identiconDataUri(live.posting.publicKey, 96);`,
+		'a comment that names it': `// identiconDataUri(new TextEncoder().encode(name)) was the bug\nconst a = identiconDataUriFromString(name);`
+	};
+	for (const [what, snippet] of Object.entries(FINE)) {
+		const r = identiconOffenders(snippet);
+		check(`the call-site check passes: ${what}`, r.offenders.length === 0, r.offenders.join(' | '));
+	}
+
+	const offenders: string[] = [];
+	let sites = 0;
+	for (const f of files) {
+		if (f.endsWith(join('crypto', 'identicon.ts'))) continue;
+		const r = identiconOffenders(readFileSync(f, 'utf8'));
+		sites += r.sites;
+		for (const o of r.offenders) offenders.push(`${f.slice(webSrc.length + 1)}: ${o}`);
+	}
+	// 4 raw-bytes calls (posting key / seedBytes) + 5 by name, today.
+	check(`found the app's identicon call sites (${sites})`, sites >= 9);
+	check(
+		"no identicon is seeded from a name's raw bytes (one heart per account, everywhere)",
+		offenders.length === 0,
+		offenders.join(' | ')
 	);
 }
 

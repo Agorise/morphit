@@ -2661,15 +2661,21 @@
 						"active": "To twój klucz ACTIVE. {brand} potrzebuje tylko POSTING — wklej ten.",
 						"owner": "To twój klucz OWNER. {brand} potrzebuje tylko POSTING — wklej ten. (Klucze owner dają pełną kontrolę nad kontem; nigdzie ich nie wklejaj.)",
 						"memo": "To twój klucz MEMO. {brand} potrzebuje POSTING — wklej ten."
-					},
-					"could_not_resolve": "Nie udało się wykryć twojego konta na podstawie tego klucza. Sprawdź, czy poprawnie skopiowałeś swój Posting Private Key, albo zaimportuj za pomocą 12-wyrazowej frazy seed lub pliku Keyfile."
+					}
 				},
 				"account_bad": "nieprawidłowy",
 				"manual_account_label": "Twoja nazwa użytkownika Blurt",
 				"manual_account_placeholder": "np. alice",
 				"manual_account_hint": "Nie udało się wykryć Twojego konta na podstawie tego klucza — może pochodzić sprzed Blurt. Wpisz swoją nazwę użytkownika Blurt, abyśmy mogli potwierdzić, że klucz do niego należy.",
+				"manual_account_hint_slow": "Sieć Blurt długo nie mówi nam, do którego konta należy ten klucz. Jeśli znasz swoją nazwę użytkownika Blurt, możesz ją tu wpisać — albo po prostu poczekaj, pytamy dalej.",
 				"manual_account_invalid": "Ta nazwa użytkownika nie pasuje do tego klucza. Sprawdź pisownię lub czy wkleiłeś właściwy prywatny klucz publikowania.",
-				"detected_account": "Rozpoznano — ten klucz należy do @{account}. Nazwa użytkownika nie jest potrzebna."
+				"detected_account": "Rozpoznano — ten klucz należy do @{account}. Nazwa użytkownika nie jest potrzebna.",
+				"checking_key": "Sprawdzamy twój klucz w sieci Blurt…",
+				"checking_key_slow": "Sieć Blurt odpowiada teraz powoli. Próbujemy dalej sami — nie musisz nic robić.",
+				"checking_key_button": "Sprawdzanie klucza…",
+				"waiting_title": "Wciąż sprawdzamy twój klucz",
+				"waiting_body": "Sieć Blurt odpowiada teraz powoli, więc pytamy ponownie automatycznie. To nie twoja wina i nie musisz nic robić. Nie zamykaj tej strony — przejdziemy dalej, gdy tylko odpowie.",
+				"waiting_stop": "Zatrzymaj"
 			},
 			"error": {
 				"seed_word_count": "Fraza seed Blurt ma dokładnie 12 słów — wpisano {count}. Upewnij się, że jest wszystkie 12, każde oddzielone pojedynczą spacją.",
@@ -4424,7 +4430,7 @@
 			"guidance_dimensions": "Ideał: kwadratowy obrazek o wymiarach co najmniej 96×96 pikseli. Większe zostanie przeskalowane do 96×96; mniejsze będzie ziarniste.",
 			"guidance_filesize": "Rozmiar pliku źródłowego: do 5 MB. Większe obrazy zostaną automatycznie zmniejszone do 96×96, więc nawet zdjęcie prosto z telefonu zadziała bez problemu.",
 			"guidance_size": "Obrazy rastrowe są automatycznie ponownie kodowane do WebP wysokiej jakości. SVG są minifikowane bezstratnie. Ostateczny ładunek musi zmieścić się w 6 KB.",
-			"guidance_svg_tips": "Wskazówka SVG: kwadratowy viewBox (np. 0 0 100 100) renderuje się najlepiej. Skrypty, zewnętrzne odniesienia i HTML w SVG są automatycznie usuwane ze względów bezpieczeństwa.",
+			"guidance_svg_tips": "Wskazówka SVG: kwadratowy viewBox (np. 0 0 100 100) renderuje się najlepiej. Skrypty, zewnętrzne odniesienia i HTML w SVG są automatycznie usuwane ze względów bezpieczeństwa. Animacja w SVG zostaje zachowana, więc animowany SVG się porusza; GIF staje się nieruchomym obrazem.",
 			"permanence_heading": "To trafia do łańcucha na stałe.",
 			"permanence_body": "Po nadaniu twój awatar jest publiczny w blockchainie na zawsze. Nie można go usunąć, można tylko zastąpić. Nigdy nie przesyłaj obrazka, którego nie chciałbyś mieć publicznie powiązanego z kontem do końca życia — zdjęcia twarzy w szczególności są kwestią prywatności w świetle nowoczesnych narzędzi rozpoznawania twarzy.",
 			"file_input_label": "Wybierz plik obrazu dla awatara",

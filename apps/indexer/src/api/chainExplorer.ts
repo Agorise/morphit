@@ -7,7 +7,9 @@
  *   POST /v1/chain/key-references → { accounts: string[] }  (body: { keys: string[] })
  *     400 on a bad block number / trx id / malformed key-reference body.
  *     404 when the chain has no such block / transaction.
- *     502 (code "internal") if the chain RPC could not be reached.
+ *     502 (code "internal") if the chain RPC could not be reached — for
+ *     key-references, only when nothing was found and a source failed (an
+ *     empty answer then is not "no account").
  *
  * WHY THESE EXIST — PRIVACY (priority #1). The block-explorer's block and
  * transaction pages used to call Blurt `get_block` / `get_transaction`
@@ -359,9 +361,10 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 		//       fallback. Stored posting_pubkey is the same BLT-formatted string
 		//       the browser sends, so it's a direct equality match.
 		//
-		// Best-effort on BOTH: a hit from either is a valid answer, and we only
-		// fail the request if BOTH sources error (previously an unreachable RPC
-		// pool 502'd even when the indexer could have answered from its own DB).
+		// Best-effort on BOTH: a hit from either is a valid answer (an unreachable
+		// RPC pool used to 502 even when the indexer could answer from its own
+		// DB). The request fails when nothing was found and either source
+		// failed — see below.
 		const accounts = new Set<string>();
 		let chainErrored = false;
 		let dbErrored = false;
@@ -398,10 +401,14 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 			dbErrored = true;
 		}
 
-		// Only surface an error if NEITHER source could answer. If the DB
-		// answered (or legitimately returned no rows), a chain outage is not
-		// fatal — and vice versa.
-		if (chainErrored && dbErrored) {
+		// A hit from either source is an answer, so one source failing is not
+		// fatal when the other found the account. But "no account" needs BOTH
+		// to have said so: with the chain not answering, an empty table only
+		// means this indexer has not met the account; with the table unreadable,
+		// an empty chain answer misses the pre-fork accounts only the table
+		// holds. A 200 with [] made the sign-in page tell the person it could
+		// not find their account. The browser asks again on a 502.
+		if (accounts.size === 0 && (chainErrored || dbErrored)) {
 			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
 		}
 

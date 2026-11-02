@@ -30,25 +30,45 @@
  *     and a tracking / dead-drop vector for attacker-controlled servers
  *   - `<foreignObject>` — embeds arbitrary HTML including iframes,
  *     scripts, and event handlers not reachable via SVG tag allowlist
- *   - `<animate>` / `<set>` with `onbegin` / `onend` SMIL events
- *   - `<style>` with CSS `expression()` or `url()` containing
- *     `javascript:` — rare in modern browsers but historically abused
- *   - `<use>` with external fragments
- *   - XML processing instructions, DOCTYPEs (entity expansion / XXE)
+ *   - `<animate>` / `<set>` with `onbegin` / `onend` SMIL events, or that
+ *     animate a link, an event handler, `style`, `class` or `id`, or animate
+ *     to a value carrying a protocol or an outside `url()` (see
+ *     {@link isSafeAnimation}: animation that only changes how the picture
+ *     looks is kept, so an animated avatar stays animated)
+ *   - `<feImage>` — it loads a picture from elsewhere or another part of the page
+ *   - `<style>` elements (all of them) and `class` (with no stylesheet it
+ *     does nothing here, and inlined it would pick up the page's own CSS)
+ *   - a `style=""` declaration that is not a presentation property, or whose
+ *     value names something outside the picture (see {@link cleanStyle})
+ *   - `fill` / `stroke` / `clip-path` / `mask` / `marker-*` / `filter`
+ *     pointing outside the picture (`url(https://…)`); `filter` is only ever
+ *     `url(#id)` — never a CSS function like `blur(5000px)`
+ *   - `<use>` with external fragments, a `<use>` of something that itself
+ *     holds a `<use>` (fan-out: 5 levels of 10 froze a tab for seconds), and
+ *     more than MAX_USE_ELEMENTS of them
+ *   - filter numbers that would freeze every viewer's tab: blur, spread,
+ *     shift, octaves and the filter region are held to a size that suits a
+ *     picture of this size (see {@link boundFilters}), and nothing inside a
+ *     `<filter>` is animated
+ *   - an animation's own `href` (it would retarget it onto the page an
+ *     inlined SVG sits in) and `begin` / `end` that wait on anything but a
+ *     time or another animation in the same picture
+ *   - CDATA sections, comments, XML processing instructions, DOCTYPEs
+ *     (entity expansion / XXE). CDATA is not kept as text either: the
+ *     minifier works on the serialized text, and a CDATA section is the one
+ *     place serialized markup is not escaped
  *
  * Strategy: allowlist tags + allowlist attributes + validate href
  * protocol. Recursive walk of the parsed DOM, remove anything not
- * explicitly allowed.
- *
- * Note: we deliberately allow inline `<style>` ONLY when the style
- * body is empty (i.e., we strip style element children). Style
- * injection is subtle enough to warrant blanket-removal rather
- * than parsing CSS ourselves.
+ * explicitly allowed. The finished output is then sanitized AGAIN and must
+ * come out the same (a fixed point): whatever the minifier did to the text,
+ * the result is something the sanitizer itself would keep.
  *
  * The allowlist below is intentionally narrow. It covers what
  * people need for a personal avatar (shapes, paths, gradients,
- * basic text) but refuses the esoteric features. If a future
- * use case needs filters, we can widen the list deliberately.
+ * basic text, filters, SMIL animation) but refuses the esoteric
+ * features. Animation and filters were added deliberately (an
+ * animated avatar used to reach the chain as one still frame).
  */
 
 /** Max byte size for the final avatar payload (SVG text or raster
@@ -81,7 +101,8 @@ export const MAX_AVATAR_SOURCE_DIM = 12000; // per side
 export function readRasterDimensions(b: Uint8Array): { width: number; height: number } | null {
 	// PNG: \x89PNG\r\n\x1a\n then IHDR; width/height are BE uint32 at 16/20.
 	if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
-		const be32 = (o: number): number => ((b[o]! << 24) | (b[o + 1]! << 16) | (b[o + 2]! << 8) | b[o + 3]!) >>> 0;
+		const be32 = (o: number): number =>
+			((b[o]! << 24) | (b[o + 1]! << 16) | (b[o + 2]! << 8) | b[o + 3]!) >>> 0;
 		return { width: be32(16), height: be32(20) };
 	}
 	// GIF: "GIF8" then LE uint16 width/height at 6/8.
@@ -89,7 +110,21 @@ export function readRasterDimensions(b: Uint8Array): { width: number; height: nu
 		return { width: b[6]! | (b[7]! << 8), height: b[8]! | (b[9]! << 8) };
 	}
 	// WebP: "RIFF"...."WEBP" then a chunk; VP8X carries 24-bit (dim-1) at 24/27.
-	if (b.length >= 30 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50 && b[12] === 0x56 && b[13] === 0x50 && b[14] === 0x38 && b[15] === 0x58) {
+	if (
+		b.length >= 30 &&
+		b[0] === 0x52 &&
+		b[1] === 0x49 &&
+		b[2] === 0x46 &&
+		b[3] === 0x46 &&
+		b[8] === 0x57 &&
+		b[9] === 0x45 &&
+		b[10] === 0x42 &&
+		b[11] === 0x50 &&
+		b[12] === 0x56 &&
+		b[13] === 0x50 &&
+		b[14] === 0x38 &&
+		b[15] === 0x58
+	) {
 		const w = (b[24]! | (b[25]! << 8) | (b[26]! << 16)) + 1;
 		const h = (b[27]! | (b[28]! << 8) | (b[29]! << 16)) + 1;
 		return { width: w, height: h };
@@ -104,7 +139,13 @@ export function readRasterDimensions(b: Uint8Array): { width: number; height: nu
 			}
 			const marker = b[i + 1]!;
 			// SOF0..SOF15 carry dimensions, except DHT(C4)/JPG(C8)/DAC(CC).
-			if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+			if (
+				marker >= 0xc0 &&
+				marker <= 0xcf &&
+				marker !== 0xc4 &&
+				marker !== 0xc8 &&
+				marker !== 0xcc
+			) {
 				return { width: (b[i + 7]! << 8) | b[i + 8]!, height: (b[i + 5]! << 8) | b[i + 6]! };
 			}
 			if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
@@ -339,14 +380,46 @@ const ALLOWED_TAGS = new Set([
 	'clippath',
 	'mask',
 	'pattern',
-	'marker'
+	'marker',
+	// SMIL animation — kept only when isSafeAnimation says so.
+	'animate',
+	'animatetransform',
+	'animatemotion',
+	'set',
+	'mpath',
+	// Filters. Not <feImage>: it loads a picture (from elsewhere, or another
+	// part of the page when the SVG is inlined).
+	'filter',
+	'feblend',
+	'fecolormatrix',
+	'fecomponenttransfer',
+	'fefunca',
+	'fefuncb',
+	'fefuncg',
+	'fefuncr',
+	'fecomposite',
+	'feconvolvematrix',
+	'fediffuselighting',
+	'fedisplacementmap',
+	'fedistantlight',
+	'fedropshadow',
+	'feflood',
+	'fegaussianblur',
+	'femerge',
+	'femergenode',
+	'femorphology',
+	'feoffset',
+	'fepointlight',
+	'fespecularlighting',
+	'fespotlight',
+	'fetile',
+	'feturbulence'
 ]);
 
 /** Global attributes allowed on any allowed element. */
 const ALLOWED_ATTRS_GLOBAL = new Set([
 	'id',
-	'class',
-	'style',
+	'style', // cleaned declaration by declaration (cleanStyle)
 	'transform',
 	'fill',
 	'fill-opacity',
@@ -364,7 +437,7 @@ const ALLOWED_ATTRS_GLOBAL = new Set([
 	'visibility',
 	'clip-path',
 	'mask',
-	'filter', // allowed only if no <filter> element — we block filter elements below
+	'filter', // url(#id) of a <filter> in the same picture, nothing else (isSafeReference)
 	'marker-start',
 	'marker-mid',
 	'marker-end',
@@ -378,6 +451,499 @@ const ALLOWED_ATTRS_GLOBAL = new Set([
 	'dominant-baseline',
 	'letter-spacing'
 ]);
+
+/** When an animation runs. No value here can load anything or run script
+ *  (`begin="click"` waits for a click; it does not run code). Clock values
+ *  ("00:00:02") contain a colon, so these are not checked like SMIL_VALUES. */
+const SMIL_TIMING = [
+	'begin',
+	'dur',
+	'end',
+	'min',
+	'max',
+	'restart',
+	'repeatcount',
+	'repeatdur',
+	'fill', // freeze | remove, on an animation
+	'calcmode',
+	'keytimes',
+	'keysplines',
+	'additive',
+	'accumulate'
+] as const;
+
+/** What an animation animates TO: checked by isSafeAnimationValue. */
+const SMIL_VALUES = ['values', 'from', 'to', 'by'] as const;
+
+/** Attributes every filter primitive takes. `in` / `in2` / `result` name other
+ *  primitives' results inside the same filter. No primitive subregion
+ *  (`x` / `y` / `width` / `height`): the filter's own region, bounded by
+ *  boundFilters, is the only one. */
+const FE_COMMON = ['result', 'in', 'color-interpolation-filters'] as const;
+
+/** The transfer functions of feComponentTransfer. */
+const FE_FUNC = [
+	'type',
+	'tablevalues',
+	'slope',
+	'intercept',
+	'amplitude',
+	'exponent',
+	'offset'
+] as const;
+
+/** What an avatar animation may change: how the picture looks, nothing else.
+ *  Never a link (`href`), an event handler, `style`, `class` or `id` — set on
+ *  an SVG that another reader inlines, those would turn it into a link, run
+ *  script, or move it out of its frame over the page. */
+const SAFE_ANIMATION_TARGETS = new Set([
+	'opacity',
+	'fill',
+	'fill-opacity',
+	'stroke',
+	'stroke-width',
+	'stroke-opacity',
+	'stroke-dasharray',
+	'stroke-dashoffset',
+	'visibility',
+	'display',
+	'color',
+	'stop-color',
+	'stop-opacity',
+	'offset',
+	'd',
+	'points',
+	'cx',
+	'cy',
+	'r',
+	'rx',
+	'ry',
+	'x',
+	'y',
+	'x1',
+	'y1',
+	'x2',
+	'y2',
+	'width',
+	'height',
+	'fx',
+	'fy',
+	'transform',
+	'gradienttransform',
+	'patterntransform',
+	'dx',
+	'dy',
+	'font-size',
+	'letter-spacing',
+	'flood-color',
+	'flood-opacity',
+	'pathlength'
+]);
+
+/** An animated value must name nothing outside the picture: no protocol
+ *  (javascript:, data:, https:), no outside `url()` — only `url(#id)` —, no
+ *  markup and no CSS escape (which could spell either). Numbers, colours,
+ *  path data and `#id` references all pass. */
+function isSafeAnimationValue(value: string): boolean {
+	if (/[:<>\\]/.test(value)) return false;
+	return !/url\(\s*[^\s#]/i.test(value);
+}
+
+/**
+ * Whether an animation element may stay. It must name exactly ONE target
+ * attribute, in any letter case (XML treats `attributename` as a different
+ * attribute, but an HTML parser that inlines the SVG restores the case, so a
+ * second spelling would be a second target), that target must change only how
+ * the picture looks, and every value it animates to must pass
+ * isSafeAnimationValue. <animateMotion> moves its element along a path and
+ * takes no target (its allowlist drops any `attributeName`). Anything else
+ * removes the whole animation: one with its target or values stripped would do
+ * nothing anyway. An animation inside a `<filter>` is never kept.
+ */
+function isSafeAnimation(el: Element, tag: string, parentTag: string): boolean {
+	// Nothing in a filter moves: a filter re-run every frame, with its blur or
+	// spread growing, is what froze a viewer's tab.
+	if (parentTag === 'filter' || parentTag.startsWith('fe')) return false;
+	const attrs = Array.from(el.attributes);
+	if (tag !== 'animatemotion') {
+		const targets = attrs
+			.filter((a) => a.name.toLowerCase() === 'attributename')
+			.map((a) => a.value.trim().toLowerCase());
+		if (targets.length !== 1 || !SAFE_ANIMATION_TARGETS.has(targets[0]!)) return false;
+		// The picture's own size and place stay put: inlined in a page, an
+		// `<svg width>` animated to 1e9 would stretch the page.
+		if (parentTag === 'svg' && ROOT_FRAME_ATTRS.has(targets[0]!)) return false;
+	}
+	return attrs
+		.filter((a) => (SMIL_VALUES as readonly string[]).includes(a.name.toLowerCase()))
+		.every((a) => isSafeAnimationValue(a.value));
+}
+
+const ANIMATION_TAGS = new Set(['animate', 'animatetransform', 'animatemotion', 'set']);
+
+/** An `<svg>`'s own frame: not animated (isSafeAnimation). */
+const ROOT_FRAME_ATTRS = new Set(['x', 'y', 'width', 'height']);
+
+/** The elements an `#id` href means something on. */
+const HREF_TAGS = new Set(['use', 'mpath', 'lineargradient', 'radialgradient', 'pattern']);
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** An element of the SVG namespace (or of none: an `<svg>` written without
+ *  xmlns, which gets it added). An `<animate>` in the XHTML namespace does
+ *  nothing here, but an HTML parser that inlines the SVG ignores the
+ *  namespace and makes it a live SVG animation again. */
+function isSvgElement(el: Element): boolean {
+	return el.namespaceURI === SVG_NS || el.namespaceURI === null;
+}
+
+/** Attributes whose value may point at another part of the picture with
+ *  `url(#id)` — and never anywhere else. */
+const REFERENCE_ATTRS = new Set([
+	'fill',
+	'stroke',
+	'clip-path',
+	'mask',
+	'filter',
+	'marker-start',
+	'marker-mid',
+	'marker-end'
+]);
+
+/** CSS functions a paint / reference value may use: colours, and `url()` of
+ *  an `#id` in the picture. Anything else (`image-set("x.png" 1x)` in a
+ *  `mask`, `cross-fade()`, `element()`, `blur()`…) could load a picture or
+ *  get round the filter limits. */
+const SAFE_CSS_FUNCTIONS = new Set(['rgb', 'rgba', 'hsl', 'hsla']);
+
+/**
+ * A paint / reference / style value that stays inside the picture: no markup
+ * or CSS escape, and no function but a colour or `url(#id)` — so `filter` can
+ * only name `<filter>`s of the picture: a CSS filter function (`blur(5000px)`)
+ * would get round the limits boundFilters puts on the `<filter>` elements.
+ */
+function isSafeReference(value: string): boolean {
+	if (/[<>\\]/.test(value)) return false;
+	for (const m of value.matchAll(/([a-z][\w-]*)\s*\(/gi)) {
+		const fn = m[1]!.toLowerCase();
+		if (fn === 'url') {
+			if (!/^url\(\s*(['"]?)#[^\s'"()]+\1\s*\)/i.test(value.slice(m.index))) return false;
+		} else if (!SAFE_CSS_FUNCTIONS.has(fn)) {
+			return false;
+		}
+	}
+	// A `(` that is not a function call (`(` alone, `x (`) is not paint either.
+	return (value.match(/\(/g) ?? []).length === [...value.matchAll(/[a-z][\w-]*\s*\(/gi)].length;
+}
+
+/** Properties a `style=""` may set: presentation properties only. */
+const STYLE_PROPS = new Set([
+	// Not `filter`: only the attribute, which boundFilters counts.
+	...Array.from(ALLOWED_ATTRS_GLOBAL).filter(
+		(a) => a !== 'id' && a !== 'style' && a !== 'transform' && a !== 'filter'
+	),
+	'stop-color',
+	'stop-opacity',
+	'flood-color',
+	'flood-opacity',
+	'lighting-color',
+	'color-interpolation-filters'
+]);
+
+/**
+ * Keep the declarations of a `style=""` that only change how the picture
+ * looks; drop the rest (positioning, `animation`, `content`, `behavior`, CSS
+ * filter functions, anything with an outside `url()`, a comment or an
+ * escape). Returns the kept declarations, or '' for none.
+ */
+export function cleanStyle(value: string): string {
+	if (/\/\*|\\/.test(value)) return '';
+	const kept: string[] = [];
+	for (const decl of value.split(';')) {
+		const i = decl.indexOf(':');
+		if (i < 0) continue;
+		const prop = decl.slice(0, i).trim().toLowerCase();
+		const val = decl.slice(i + 1).trim();
+		if (!STYLE_PROPS.has(prop) || val.length === 0) continue;
+		if (/[:;{}]/.test(val) || !isSafeReference(val)) continue;
+		kept.push(`${prop}:${val}`);
+	}
+	return kept.join(';');
+}
+
+/** Elements whose content is drawn once per referrer (or, for a marker, once
+ *  per point of the path): no `<use>` and no filter inside them, or one small
+ *  element multiplies into hundreds of filter runs. */
+const REPEATED_CONTENT_TAGS = new Set(['marker', 'pattern', 'mask', 'clippath']);
+
+function drawnOnlyByUse(el: Element): boolean {
+	for (let p: Element | null = el; p !== null; p = p.parentElement) {
+		const t = p.nodeName.toLowerCase();
+		if (t === 'defs' || t === 'symbol') return true;
+	}
+	return false;
+}
+
+function insideRepeatedContent(el: Element): boolean {
+	for (let p = el.parentElement; p !== null; p = p.parentElement) {
+		if (REPEATED_CONTENT_TAGS.has(p.nodeName.toLowerCase())) return true;
+	}
+	return false;
+}
+
+/** Every element under `root`. (Not querySelectorAll: in jsdom, where the
+ *  tests and the fuzz run, it slows down with every document parsed — 2.9 s
+ *  then 4.5 s per 1000 small documents, against a flat 70 ms for this.) */
+function descendants(root: Element): Element[] {
+	return Array.from(root.getElementsByTagName('*'));
+}
+
+/** The element a `<use>` copies, if it is in this picture. */
+function useTarget(use: Element, byId: Map<string, Element>): Element | undefined {
+	const ref = (use.getAttribute('href') ?? use.getAttribute('xlink:href') ?? '').trim();
+	return ref.startsWith('#') ? byId.get(ref.slice(1)) : undefined;
+}
+
+function elementsById(root: Element): Map<string, Element> {
+	const byId = new Map<string, Element>();
+	for (const el of descendants(root).filter((e) => e.hasAttribute('id'))) {
+		const id = el.getAttribute('id')!;
+		if (!byId.has(id)) byId.set(id, el);
+	}
+	return byId;
+}
+
+/** At most this many `<use>` in one avatar (the owner's 5 KB scene has 11). */
+export const MAX_USE_ELEMENTS = 32;
+
+/**
+ * `<use>` copies another part of the picture. A copy of something that itself
+ * holds a `<use>` multiplies: 5 levels of 10 is 100 000 shapes from a 1.7 KB
+ * file, seconds of frozen tab for every viewer. So a `<use>` may only copy
+ * an element of this picture that holds no `<use>`, and there may be at most
+ * MAX_USE_ELEMENTS of them; the rest are removed.
+ */
+function boundUses(root: Element): void {
+	const byId = elementsById(root);
+	let kept = 0;
+	for (const use of Array.from(root.getElementsByTagName('use'))) {
+		if (!use.isConnected) continue;
+		if (insideRepeatedContent(use)) {
+			use.parentNode?.removeChild(use);
+			continue;
+		}
+		const target = useTarget(use, byId);
+		const fans =
+			target === undefined ||
+			target.nodeName.toLowerCase() === 'use' ||
+			target.getElementsByTagName('use').length > 0 ||
+			target.contains(use);
+		if (fans || kept >= MAX_USE_ELEMENTS) {
+			use.parentNode?.removeChild(use);
+			continue;
+		}
+		kept++;
+	}
+}
+
+/** The picture's size in its own units: the smaller side of the viewBox, or
+ *  of width / height, or the avatar size. Filter limits are shares of it. */
+function pictureExtent(root: Element): number {
+	const vb = (root.getAttribute('viewBox') ?? root.getAttribute('viewbox') ?? '')
+		.trim()
+		.split(/[\s,]+/)
+		.map(Number);
+	if (vb.length === 4 && vb[2]! > 0 && vb[3]! > 0) return Math.min(vb[2]!, vb[3]!);
+	const w = parseFloat(root.getAttribute('width') ?? '');
+	const h = parseFloat(root.getAttribute('height') ?? '');
+	if (w > 0 && h > 0) return Math.min(w, h);
+	return AVATAR_RASTER_SIZE;
+}
+
+/** Hold every number of a list attribute to [min, max]; a value that is not
+ *  a number list is removed. */
+function clampNumbers(el: Element, name: string, min: number, max: number, integer = false): void {
+	const raw = el.getAttribute(name);
+	if (raw === null) return;
+	const parts = raw.trim().split(/[\s,]+/);
+	const nums = parts.map(Number);
+	if (parts.length === 0 || nums.some((n) => !Number.isFinite(n))) {
+		el.removeAttribute(name);
+		return;
+	}
+	if (nums.every((n) => n >= min && n <= max && (!integer || Number.isInteger(n)))) return;
+	const held = nums.map((n) => {
+		const c = Math.min(max, Math.max(min, n));
+		return integer ? Math.floor(c) : c;
+	});
+	el.setAttribute(name, held.join(' '));
+}
+
+/** A filter region number: `-30%`, `1.6`. Held to [min, max] as a share of
+ *  the filtered shape's box; anything else is removed (the default region,
+ *  10% around the box, applies). */
+function clampRegion(el: Element, name: string, min: number, max: number): void {
+	const raw = el.getAttribute(name);
+	if (raw === null) return;
+	const m = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*(%?)\s*$/i.exec(raw);
+	if (!m) {
+		el.removeAttribute(name);
+		return;
+	}
+	const share = Number(m[1]) / (m[2] ? 100 : 1);
+	if (share >= min && share <= max) return;
+	el.setAttribute(name, String(Math.min(max, Math.max(min, share))));
+}
+
+/**
+ * Filters cost the viewer's browser in proportion to their region and their
+ * blur / spread sizes: `<feMorphology radius="5000">` in a 298-byte avatar
+ * held 30 orderbook avatars to 3 frames in 4 s. These limits keep everything
+ * a picture this size can show (a blur or spread up to an eighth of the
+ * picture, a shadow or shift up to its width, a region up to three times the
+ * shape) and nothing that only burns the viewer's CPU. MAX_FILTER_COST bounds
+ * how often they run.
+ */
+/**
+ * How much filter work one avatar may ask for. Every filtered element runs
+ * each primitive of its filter once, and once more for every `<use>` that
+ * copies it; each run costs FILTER_PRIMITIVE_COST of its primitive, and the
+ * total may not pass MAX_FILTER_COST. Measured in Chromium (software
+ * rendering, 30 avatars of one design on screen — one account with 30 orders
+ * in the orderbook —, 4 s, the largest filter region allowed): any animation
+ * anywhere in the picture re-runs every filter every frame, and 8 filtered
+ * shapes × 3 heavy primitives held the page to 4 frames. Per run, a 5 × 5
+ * convolution cost about 19 ms (it is held to 3 × 3 now), a morphology about
+ * 8.5, specular lighting about 3, diffuse lighting and a drop shadow 2.5, a
+ * blur 1.5, a displacement 0.75, the rest next to nothing. At this budget the
+ * worst designs measured kept about 175–220 of 240 frames. The owner's 5 KB scene
+ * (5 runs of one small blur) costs 10.
+ * Over the budget the picture keeps its shapes and loses its filters: a
+ * still, sharp avatar instead of a frozen tab for every viewer.
+ */
+export const MAX_FILTER_COST = 12;
+
+const FILTER_PRIMITIVE_COST: Readonly<Record<string, number>> = {
+	femorphology: 6,
+	feconvolvematrix: 12,
+	fegaussianblur: 2,
+	fedropshadow: 3,
+	fediffuselighting: 3,
+	fespecularlighting: 4,
+	fedisplacementmap: 2
+};
+/** Any other primitive (colour matrix, offset, flood, tile, merge, blend,
+ *  composite, component transfer, turbulence). */
+const CHEAP_PRIMITIVE_COST = 1;
+
+function boundFilters(root: Element): void {
+	// Filtered content inside markers / patterns / masks / clip paths is drawn
+	// once per referrer or path point: no filter there.
+	for (const el of descendants(root).filter((e) => e.hasAttribute('filter'))) {
+		if (insideRepeatedContent(el)) el.removeAttribute('filter');
+	}
+	const byId = elementsById(root);
+	const filtered = descendants(root).filter((e) => e.hasAttribute('filter'));
+	/** What one run of the element's filter(s) costs (each url(#id) in it). */
+	const costOf = (el: Element): number =>
+		[...(el.getAttribute('filter') ?? '').matchAll(/#([^\s'"()]+)/g)].reduce((n, m) => {
+			const f = byId.get(m[1]!);
+			if (f === undefined || f.nodeName.toLowerCase() !== 'filter') return n;
+			for (const c of Array.from(f.children)) {
+				const t = c.nodeName.toLowerCase();
+				if (t.startsWith('fe')) n += FILTER_PRIMITIVE_COST[t] ?? CHEAP_PRIMITIVE_COST;
+			}
+			return n;
+		}, 0);
+	// A shape in <defs> or a <symbol> is only drawn through a <use> (counted
+	// below), never by itself.
+	let cost = filtered.reduce((n, el) => (drawnOnlyByUse(el) ? n : n + costOf(el)), 0);
+	for (const use of Array.from(root.getElementsByTagName('use'))) {
+		const target = useTarget(use, byId);
+		if (target === undefined) continue;
+		for (const el of filtered) if (target.contains(el)) cost += costOf(el);
+	}
+	if (cost > MAX_FILTER_COST) {
+		for (const el of filtered) el.removeAttribute('filter');
+	}
+	const extent = pictureExtent(root);
+	const spread = extent / 8;
+	for (const f of Array.from(root.getElementsByTagName('filter'))) {
+		clampRegion(f, 'x', -1, 1);
+		clampRegion(f, 'y', -1, 1);
+		clampRegion(f, 'width', 0, 3);
+		clampRegion(f, 'height', 0, 3);
+	}
+	for (const el of descendants(root)) {
+		switch (el.nodeName.toLowerCase()) {
+			case 'fegaussianblur':
+				clampNumbers(el, 'stdDeviation', 0, spread);
+				clampNumbers(el, 'stddeviation', 0, spread);
+				break;
+			case 'fedropshadow':
+				clampNumbers(el, 'stdDeviation', 0, spread);
+				clampNumbers(el, 'stddeviation', 0, spread);
+				clampNumbers(el, 'dx', -extent, extent);
+				clampNumbers(el, 'dy', -extent, extent);
+				break;
+			case 'femorphology':
+				clampNumbers(el, 'radius', 0, spread);
+				break;
+			case 'feoffset':
+				clampNumbers(el, 'dx', -extent, extent);
+				clampNumbers(el, 'dy', -extent, extent);
+				break;
+			case 'fedisplacementmap':
+				clampNumbers(el, 'scale', -extent, extent);
+				break;
+			case 'feturbulence':
+				clampNumbers(el, 'numOctaves', 1, 4, true);
+				clampNumbers(el, 'numoctaves', 1, 4, true);
+				break;
+			case 'feconvolvematrix':
+				clampNumbers(el, 'order', 1, 3, true);
+				break;
+		}
+	}
+}
+
+/** One `begin` / `end` item: a time offset (`-5s`, `2.5`, `200ms`), a clock
+ *  value (`00:02`), `indefinite`, or another animation of this picture
+ *  (`a.end`, `a.begin+1s`). */
+const TIME_OFFSET = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:h|min|s|ms)?`;
+const TIME_CLOCK = String.raw`[+-]?(?:\d+:)?\d{1,2}:\d{2}(?:\.\d+)?`;
+const TIME_ITEM_RE = new RegExp(`^(?:${TIME_OFFSET}|${TIME_CLOCK}|indefinite)$`);
+const SYNCBASE_RE = new RegExp(
+	`^([A-Za-z_][\\w-]*)\\.(?:begin|end)(?:\\s*[+-]\\s*(?:${TIME_OFFSET}|${TIME_CLOCK}))?$`
+);
+
+/**
+ * When an animation starts or ends: only at a time, or relative to another
+ * animation in the same picture. Never on an event (`x.click`, `accessKey(…)`)
+ * or a wall clock: an SVG inlined in a page could otherwise wait on the
+ * page's own elements. A `begin` / `end` that is anything else is removed
+ * (the animation then simply starts at once / runs on).
+ */
+function boundTiming(root: Element): void {
+	const animationIds = new Set<string>();
+	for (const el of descendants(root).filter((e) => e.hasAttribute('id'))) {
+		if (ANIMATION_TAGS.has(el.nodeName.toLowerCase())) animationIds.add(el.getAttribute('id')!);
+	}
+	for (const el of descendants(root)) {
+		if (!ANIMATION_TAGS.has(el.nodeName.toLowerCase())) continue;
+		for (const attr of Array.from(el.attributes)) {
+			const name = attr.name.toLowerCase();
+			if (name !== 'begin' && name !== 'end') continue;
+			const ok = attr.value.split(';').every((raw) => {
+				const item = raw.trim();
+				if (TIME_ITEM_RE.test(item)) return true;
+				const sync = SYNCBASE_RE.exec(item);
+				return sync !== null && animationIds.has(sync[1]!);
+			});
+			if (!ok) el.removeAttribute(attr.name);
+		}
+	}
+}
 
 /** Per-element attribute allowlists. Union with the global set. */
 const ALLOWED_ATTRS_PER_TAG: Record<string, Set<string>> = {
@@ -446,6 +1012,83 @@ const ALLOWED_ATTRS_PER_TAG: Record<string, Set<string>> = {
 		'refx',
 		'refy',
 		'viewbox'
+	]),
+	animate: new Set([...SMIL_TIMING, ...SMIL_VALUES, 'attributename', 'attributetype']),
+	animatetransform: new Set([
+		...SMIL_TIMING,
+		...SMIL_VALUES,
+		'attributename',
+		'attributetype',
+		'type'
+	]),
+	animatemotion: new Set([...SMIL_TIMING, ...SMIL_VALUES, 'path', 'keypoints', 'rotate', 'origin']),
+	set: new Set([...SMIL_TIMING, 'attributename', 'attributetype', 'to']),
+	mpath: new Set([]),
+	// No filterUnits / primitiveUnits: the region is always a share of the
+	// filtered shape's box (bounded by boundFilters), and blur sizes are in the
+	// picture's own units, which boundFilters holds to the picture's size.
+	filter: new Set(['x', 'y', 'width', 'height', 'color-interpolation-filters']),
+	feblend: new Set([...FE_COMMON, 'in2', 'mode']),
+	fecolormatrix: new Set([...FE_COMMON, 'type', 'values']),
+	fecomponenttransfer: new Set([...FE_COMMON]),
+	fefunca: new Set(FE_FUNC),
+	fefuncb: new Set(FE_FUNC),
+	fefuncg: new Set(FE_FUNC),
+	fefuncr: new Set(FE_FUNC),
+	fecomposite: new Set([...FE_COMMON, 'in2', 'operator', 'k1', 'k2', 'k3', 'k4']),
+	feconvolvematrix: new Set([
+		...FE_COMMON,
+		'order',
+		'kernelmatrix',
+		'divisor',
+		'bias',
+		'targetx',
+		'targety',
+		'edgemode',
+		'preservealpha'
+	]),
+	fediffuselighting: new Set([...FE_COMMON, 'surfacescale', 'diffuseconstant', 'lighting-color']),
+	fedisplacementmap: new Set([
+		...FE_COMMON,
+		'in2',
+		'scale',
+		'xchannelselector',
+		'ychannelselector'
+	]),
+	fedistantlight: new Set(['azimuth', 'elevation']),
+	fedropshadow: new Set([...FE_COMMON, 'dx', 'dy', 'stddeviation', 'flood-color', 'flood-opacity']),
+	feflood: new Set([...FE_COMMON, 'flood-color', 'flood-opacity']),
+	fegaussianblur: new Set([...FE_COMMON, 'stddeviation', 'edgemode']),
+	femerge: new Set([...FE_COMMON]),
+	femergenode: new Set(['in']),
+	femorphology: new Set([...FE_COMMON, 'operator', 'radius']),
+	feoffset: new Set([...FE_COMMON, 'dx', 'dy']),
+	fepointlight: new Set(['x', 'y', 'z']),
+	fespecularlighting: new Set([
+		...FE_COMMON,
+		'surfacescale',
+		'specularconstant',
+		'specularexponent',
+		'lighting-color'
+	]),
+	fespotlight: new Set([
+		'x',
+		'y',
+		'z',
+		'pointsatx',
+		'pointsaty',
+		'pointsatz',
+		'specularexponent',
+		'limitingconeangle'
+	]),
+	fetile: new Set([...FE_COMMON]),
+	feturbulence: new Set([
+		...FE_COMMON,
+		'basefrequency',
+		'numoctaves',
+		'seed',
+		'stitchtiles',
+		'type'
 	])
 };
 
@@ -489,6 +1132,23 @@ export { svgAvatarImgSrc } from './imgSrc';
  * href protocols, plus any comments / processing instructions.
  */
 export function sanitizeSvg(input: string): AvatarResult {
+	// What is stored must be a FIXED POINT: sanitized again, it comes out the
+	// same. The minifier edits serialized TEXT; if anything it did (or anything
+	// the parser and serializer disagree on) produced something the sanitizer
+	// would not keep, that shows here. A harmless difference settles in one
+	// more pass (an emptied `<svg></svg>` serializes as `<svg/>`); one that
+	// does not settle is refused rather than stored.
+	let current = sanitizeSvgOnce(input);
+	for (let pass = 0; pass < 3; pass++) {
+		if (!current.ok) return current;
+		const again = sanitizeSvgOnce(current.value);
+		if (again.ok && again.value === current.value) return current;
+		current = again;
+	}
+	return { ok: false, code: 'parse_failed' };
+}
+
+function sanitizeSvgOnce(input: string): AvatarResult {
 	if (!input || input.trim().length === 0) {
 		return { ok: false, code: 'empty_file' };
 	}
@@ -505,11 +1165,14 @@ export function sanitizeSvg(input: string): AvatarResult {
 		return { ok: false, code: 'parse_failed' };
 	}
 	const root = doc.documentElement;
-	if (!root || root.nodeName.toLowerCase() !== 'svg') {
+	if (!root || root.nodeName.toLowerCase() !== 'svg' || !isSvgElement(root)) {
 		return { ok: false, code: 'svg_no_root' };
 	}
 
 	cleanElement(root);
+	boundUses(root);
+	boundFilters(root);
+	boundTiming(root);
 
 	// Force dimensions: if the user's SVG doesn't declare them, set
 	// a reasonable default. Matches the raster path size.
@@ -562,15 +1225,27 @@ function cleanElement(el: Element): void {
 			el.removeAttribute(attr.name);
 			continue;
 		}
-		// href and xlink:href — strip unless protocol-safe.
+		// href and xlink:href — strip unless protocol-safe, and unless this is an
+		// element that uses one (HREF_TAGS). An animation never keeps one: it
+		// would retarget the animation (inlined, onto the page).
 		if (name === 'href' || name === 'xlink:href') {
-			if (!isSafeHref(attr.value)) {
+			if (!isSafeHref(attr.value) || !HREF_TAGS.has(tag)) {
 				el.removeAttribute(attr.name);
 			}
 			continue;
 		}
 		// Allowlist check.
 		if (!perTag.has(name) && !ALLOWED_ATTRS_GLOBAL.has(name)) {
+			el.removeAttribute(attr.name);
+			continue;
+		}
+		if (name === 'style') {
+			const kept = cleanStyle(attr.value);
+			if (kept === '') el.removeAttribute(attr.name);
+			else if (kept !== attr.value) el.setAttribute(attr.name, kept);
+			continue;
+		}
+		if (REFERENCE_ATTRS.has(name) && !isSafeReference(attr.value)) {
 			el.removeAttribute(attr.name);
 		}
 	}
@@ -579,8 +1254,13 @@ function cleanElement(el: Element): void {
 	const children = Array.from(el.children);
 	for (const child of children) {
 		const childTag = child.nodeName.toLowerCase();
-		if (!ALLOWED_TAGS.has(childTag)) {
+		if (!ALLOWED_TAGS.has(childTag) || !isSvgElement(child)) {
 			// Drop the entire subtree.
+			el.removeChild(child);
+			continue;
+		}
+		// An animation that could change more than the look goes whole.
+		if (ANIMATION_TAGS.has(childTag) && !isSafeAnimation(child, childTag, tag)) {
 			el.removeChild(child);
 			continue;
 		}
@@ -588,13 +1268,14 @@ function cleanElement(el: Element): void {
 		// top of cleanElement now.
 		cleanElement(child);
 	}
-	// Also strip comments and processing instructions (childNodes,
-	// not children — children is elements only).
+	// Keep only elements and plain text (childNodes, not children — children
+	// is elements only): comments, processing instructions and CDATA sections
+	// go. CDATA is the one place the serializer writes markup unescaped, and
+	// the minifier edits that text, so markup hidden in it could come back as
+	// real elements (CDATA + `<title/>` smuggled a <script> through).
 	const nodes = Array.from(el.childNodes);
 	for (const n of nodes) {
-		if (n.nodeType === 8 /* COMMENT_NODE */) {
-			el.removeChild(n);
-		} else if (n.nodeType === 7 /* PROCESSING_INSTRUCTION_NODE */) {
+		if (n.nodeType !== 1 /* ELEMENT_NODE */ && n.nodeType !== 3 /* TEXT_NODE */) {
 			el.removeChild(n);
 		}
 	}

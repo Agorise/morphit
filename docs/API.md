@@ -925,18 +925,23 @@ a Morphit profile yet).
 Tier: `list`
 
 Batch profile lookup.  Up to 100 accounts per request, comma-
-separated.  Accounts without a profile row are silently dropped
-from the response (no 404 since some-found-some-not is the common
-case).  Use this for orderbook rows and feedback lists — N+1
-single-account lookups are how clients used to flood the API.
+separated.  Every requested account the indexer knows — from its
+profiles or from its accounts table — comes back; one that has not
+set a Morphit profile has `display_name`, `json_metadata`,
+`source_block_num` and `updated_at` null and carries its
+`posting_pubkey` (null when not indexed).  A name neither table
+knows is absent (no 404, since some-found-some-not is the common
+case).  Since v1.21.21 an account with a profile but no accounts
+row is returned too (it used to be left out).  Use this for orderbook
+rows and feedback lists — N+1 single-account lookups are how clients
+used to flood the API.
 
-Caching: a COMPLETE batch (every requested account resolved) is sent
-with `Cache-Control: public, max-age=90, stale-while-revalidate=60`.
-A PARTIAL batch — one where any requested account is absent — is sent
-with `Cache-Control: no-store`, because an absent account is usually
-just indexer lag right after that account's profile broadcast, and
-caching the negative result would pin it in the client's HTTP cache
-across page refreshes.
+Caching: served under `/v1`, the answer is `Cache-Control: no-store` —
+a request that names accounts is never stored (VT3-6, the security
+middleware).  The route itself would send
+`public, max-age=90, stale-while-revalidate=60` for a batch in which
+every requested account has a profile and `no-store` otherwise; that
+value applies only where the route is served without the middleware.
 
 #### `GET /v1/instance/payment-methods`
 

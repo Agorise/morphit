@@ -125,7 +125,7 @@ const ReleaseSchema = z.object({
 const ErrorResponseSchema = z.object({
 	status: z.literal('error'),
 	code: z.string(), // ErrorCode is a string union; relaxed to z.string() since
-	                  // the exact union changes faster than this schema.
+	// the exact union changes faster than this schema.
 	message: z.string()
 });
 
@@ -235,8 +235,8 @@ const InstanceResponseSchema = z
 		disabled_assets: z.array(z.string()).optional()
 	})
 	.passthrough(); // The real InstanceResponse has many more optional fields;
-	                 // .passthrough() allows them so a snapshot fixture stays
-	                 // valid as new fields are added.
+// .passthrough() allows them so a snapshot fixture stays
+// valid as new fields are added.
 
 const InstanceDirectoryEntrySchema = z
 	.object({
@@ -339,12 +339,15 @@ const AccountOrdersResponseSchema = z.object({
 	next_cursor: z.string().nullable()
 });
 
+// A known account with no profile op yet comes back from the batch with its
+// profile fields null (v1.5.5) and its posting key, when indexed.
 const ProfileResponseSchema = z.object({
 	account: z.string(),
-	display_name: z.string(),
+	display_name: z.string().nullable(),
 	json_metadata: z.unknown(),
-	source_block_num: z.number(),
-	updated_at: z.string()
+	source_block_num: z.number().nullable(),
+	updated_at: z.string().nullable(),
+	posting_pubkey: z.string().nullable().optional()
 });
 
 const OperatorStatsInnerSchema = z.object({
@@ -758,8 +761,17 @@ const sampleClearingPriceHistory = {
 	max_slots: 3
 } satisfies ClearingPriceHistoryResponse;
 
+const sampleKeyOnlyProfile = {
+	account: 'carol',
+	display_name: null,
+	json_metadata: null,
+	source_block_num: null,
+	updated_at: null,
+	posting_pubkey: 'BLT6LLegbAgLAy28EHrffBVuANFWcFgmqRMW13wBmTExqFE9SCkg4'
+} satisfies ProfileResponse;
+
 const sampleBatchProfiles = {
-	profiles: { alice: sampleProfile, bob: sampleProfile }
+	profiles: { alice: sampleProfile, bob: sampleProfile, carol: sampleKeyOnlyProfile }
 } satisfies BatchProfilesResponse;
 
 const sampleFeedbackResponse = {
@@ -1188,7 +1200,5 @@ if (failed === 0) {
 	console.log(`✓ all ${scenarios.length * 2} api-response-shape checks hold`);
 	process.exit(0);
 }
-console.error(
-	`✗ ${failed} failed, ${scenarios.length * 2 - failed} passed`
-);
+console.error(`✗ ${failed} failed, ${scenarios.length * 2 - failed} passed`);
 process.exit(1);
