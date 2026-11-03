@@ -89,6 +89,7 @@ import type { Config } from '$config';
 import type { Database } from '$db/pool';
 import { transactionIdOf } from '$blurt/snapshotOpTrust';
 import { CANONICAL_TREASURY } from '../config/canonicalTreasury';
+import { countForSybilTierAsOf } from '$api/sybilTier';
 import { listingFeeStatus, sumFeeTransfers } from '$indexer/fee';
 import { listingFeeInputsAt } from '$indexer/fee/feeRulesAtBlock';
 import { graceRecipientAt, operatorTagOf, ownerRecipientsAt } from '$indexer/feeRecipients';
@@ -424,7 +425,8 @@ export class BlurtFeeReverifier {
 					`morphit-fee:${row.permlink}`
 				);
 				if (fee !== null) {
-					const nth = (await sybilCountAsOf(client, row.account, row.permlink, blockTime, row)) + 1;
+					const nth =
+						(await countForSybilTierAsOf(client, row.account, row.permlink, blockTime, row)) + 1;
 					// The live handler's inputs, as of the op's block: from the
 					// consensus activation time the pin in force there (the
 					// federation's default when none) and the federation's
@@ -608,55 +610,6 @@ async function markDone(
 		 ON CONFLICT (block_num, trx_in_block, op_in_trx) DO NOTHING`,
 		[ref.block_num, ref.trx_in_block, ref.op_in_trx, opId, outcome]
 	);
-}
-
-/**
- * The payer's order count toward the Sybil tier AS IT STOOD when the live
- * handler judged the op at `pos` (the order handler's countForSybilTier,
- * reconstructed). (V3-9) An order counts when its CREATING op came earlier in
- * CHAIN ORDER — block, then transaction, then op, read from the event log —
- * exactly the orders the live handler had already stored; an order with no
- * event-log row falls back to created_at strictly before the block. It must
- * also have been live then (still live, or changed after the block, and not
- * expired by then), or created in the 24 h before it. Excludes the order
- * itself. (Counting by created_at alone counted orders later in the SAME
- * block, so a re-check refused a fee the live pass accepted.)
- */
-async function sybilCountAsOf(
-	client: pg.PoolClient,
-	account: string,
-	permlink: string,
-	blockTime: Date,
-	pos: OpRef
-): Promise<number> {
-	const cutoff = new Date(blockTime.getTime() - 24 * 3600 * 1000);
-	const res = await client.query<{ n: string }>(
-		`SELECT COUNT(*)::text AS n
-		   FROM orders o2
-		   LEFT JOIN LATERAL (
-		        SELECT block_num, trx_in_block, op_in_trx FROM ops
-		         WHERE ops.signer = o2.account AND ops.op_id = $5 AND ops.status = 'applied'
-		           AND ops.payload->>'permlink' = o2.permlink
-		         ORDER BY block_num ASC, trx_in_block ASC, op_in_trx ASC
-		         LIMIT 1) c ON TRUE
-		  WHERE o2.account = $1 AND o2.permlink <> $2
-		    AND (CASE WHEN c.block_num IS NOT NULL
-		              THEN (c.block_num, c.trx_in_block, c.op_in_trx) < ($6::bigint, $7::int, $8::int)
-		              ELSE o2.created_at < $3 END)
-		    AND (((o2.status = 'live' OR o2.updated_at > $3) AND (o2.expires_at IS NULL OR o2.expires_at > $3))
-		         OR o2.created_at >= $4)`,
-		[
-			account,
-			permlink,
-			blockTime,
-			cutoff,
-			ORDER_OP_ID,
-			pos.block_num,
-			pos.trx_in_block,
-			pos.op_in_trx
-		]
-	);
-	return parseInt(res.rows[0]?.n ?? '0', 10);
 }
 
 /** The chain-pinned BLURT fee base in force before `blockNum` (the newest valid

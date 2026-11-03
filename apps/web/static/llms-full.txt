@@ -1,6 +1,6 @@
 # Morphit — complete FAQ (English)
 
-> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP marketplace.
+> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX marketplace.
 > No KYC. No custody. No arbitration. Federated, open-source.
 > Translations available at https://morphit.io/faq?lang=<code>
 > where <code> ∈ {en, es, de, pl, fr, it, ru, fa, zh-CN, zh-HK}.
@@ -27,7 +27,7 @@ So that nobody — not a company, not a government, not even us — can take Mor
 
 **FAQ key:** `what_is_morphit`
 
-Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (XMR, BTC, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, and XRP) directly with each other. You can barter goods and services too.
+Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (XMR, BTC, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, and ECX) directly with each other. You can barter goods and services too.
 
 Morphit never holds your cash or coins, and never asks who you are. Think of it as a public bulletin board for trades (a decentralised bulletin board service, or DBBS) — not a bank or an exchange.
 
@@ -281,7 +281,7 @@ Monero hides amounts on its chain, but the figure still travels through chats, s
 
 The extra is at most:
 • XMR: 0.000000999999
-• BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR: 999 satoshis (0.00000999)
+• BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, ECX: 999 satoshis (0.00000999)
 • ETH, XRP, USDT, USDC, DAI: 0.000999
 • SOL: 0.000000999
 • BLURT: 0.099
@@ -556,7 +556,7 @@ Why it comes up:
 • **Rewards.** The welcome bonus and loyalty rewards come in BLURT and Blurt Power (BP).
 • **Blurt Power.** BP earns you a nice % APR and gives your votes weight on Blurt social sites like blurt.media and blurt.blog.
 
-You can trade XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, or XRP on Morphit without ever trading BLURT itself. You only need that little bit for network fees.
+You can trade XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, or ECX on Morphit without ever trading BLURT itself. You only need that little bit for network fees.
 
 ---
 
@@ -599,7 +599,7 @@ The operator can show prices in a currency other than USD, such as EUR. Then the
 
 **FAQ key:** `where_to_buy_blurt`
 
-**Right here on Morphit.** BLURT is one of the 16 assets traded here, alongside XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, and XRP. Open the [orderbook](/orderbook), find someone selling BLURT, and message them. You pay them the way they accept (cash, bank transfer, another coin…), and they send BLURT to your account. No exchange account, no card, no KYC. You can also post your own buy order and let sellers come to you.
+**Right here on Morphit.** BLURT is one of the 17 assets traded here, alongside XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, and ECX. Open the [orderbook](/orderbook), find someone selling BLURT, and message them. You pay them the way they accept (cash, bank transfer, another coin…), and they send BLURT to your account. No exchange account, no card, no KYC. You can also post your own buy order and let sellers come to you.
 
 **Your first order can be free.** If your very first order is a buy of BLURT worth at least $1, Morphit covers the listing fee. See "Is my first order really free?"
 
@@ -1907,7 +1907,7 @@ Morphit shows this chip to share two facts, so you can choose with open eyes:
 • **Tether can freeze addresses.** Tether, the company behind USDT, can freeze the USDT at an address, and has done so.
 • **USDT payments are public.** On all four networks (Ethereum, Tron, Solana, BNB Smart Chain) anyone can see the transactions. That's how those chains work, not something special about USDT.
 
-This doesn't make USDT bad: it holds a steady dollar value and is easy to trade almost anywhere. If privacy matters most, XMR is the better tool. If you want a coin no company can freeze, look at BTC, BLURT, BCH, LTC, DASH, DOGE, DCR, SOL, ETH, or XRP. The chip is information, not a verdict.
+This doesn't make USDT bad: it holds a steady dollar value and is easy to trade almost anywhere. If privacy matters most, XMR is the better tool. If you want a coin no company can freeze, look at BTC, BLURT, BCH, LTC, DASH, DOGE, DCR, SOL, ETH, XRP, or ECX. The chip is information, not a verdict.
 
 ---
 
@@ -1920,7 +1920,7 @@ For the same reason as USDT: USDC is a stablecoin run by a company. The warning 
 • **Circle can freeze addresses.** Circle, the company behind USDC, can freeze the USDC at an address on any supported network, and has done so.
 • **USDC payments are public** on all four networks (Ethereum, Solana, Base, Polygon).
 
-The other coins here (XMR, BTC, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) have no company that can freeze them.
+The other coins here (XMR, BTC, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX) have no company that can freeze them.
 
 Many traders accept this trade-off for a steady dollar value, and that's fine. The warning appears on Morphit's order form and in the window where you share an address; it never blocks anything, it just makes sure the choice is yours. An operator can also switch USDC off for their whole site. If so, pick another coin or another site.
 
@@ -2141,6 +2141,23 @@ A site's operator can switch XRP off for their site; other Morphit sites can sti
 
 ---
 
+## What is eCash (ECX), and why is it on Morphit?
+
+**FAQ key:** `what_is_ecx`
+
+eCash (ECX) split off from Bitcoin at block 973,728, on 29 October 2026. It shares Bitcoin's history up to the split and adds drivechains: optional side chains with their own rules. Every payment is public, as on Bitcoin. ECX is not XEC (an older coin also called eCash), and not wECX (a wrapped token on Solana): Morphit trades native ECX on the eCash chain.
+
+On Morphit, ECX is **trade-only**: you can buy and sell it, but you can't pay listing fees with it (those are paid in BLURT, BTC or XMR).
+
+Three things to know before you trade:
+• **An eCash address looks exactly like a Bitcoin address** (`1…`, `3…`, `bc1…`), and it is one. Pay ECX from an eCash wallet: a Bitcoin wallet would send bitcoin to the same address instead, and you may not get it back. That's why Morphit gives no "pay with wallet" link for ECX.
+• **Coins you held before the split exist on both chains, and so can coins received since from such coins.** Sent without replay protection, an ECX payment from those coins can also go through on Bitcoin, and you lose the same amount of bitcoin. It works the other way too: a bitcoin payment from those coins can spend your ECX. Only splitting your coins stops both, so split them before you trade: news reports say eCash's official wallet does this for you. The eCash node's own wallet adds no replay protection unless you set it up yourself, so assume your wallet adds none unless it says it does.
+• **The chain is new.** Wait for more confirmations than you would for bitcoin before you treat a payment as final.
+
+A site's operator can switch ECX off for their site; other Morphit sites can still trade it. More tips: [ECX privacy guide](/privacy/ecx).
+
+---
+
 ## What is Bitcoin Cash (BCH), and why is it on Morphit?
 
 **FAQ key:** `what_is_bch`
@@ -2340,7 +2357,7 @@ Anyone with the ID can look the payment up on a public block explorer. On open c
 
 ## Metadata
 
-Total FAQ entries: 147
+Total FAQ entries: 148
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

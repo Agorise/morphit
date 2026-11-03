@@ -1072,6 +1072,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   SOL:  https://explorer.solana.com/tx/{txid}');
 	lines.push('#   ETH:  https://eth.blockscout.com/tx/{txid}');
 	lines.push('#   XRP:  https://livenet.xrpl.org/transactions/{txid}');
+	lines.push('#   ECX:  https://explorer.ecash.com/tx/{txid}');
 	lines.push('#');
 	lines.push('# Defaults (multi-network, per chain):');
 	lines.push('#   USDT (ERC-20):  https://etherscan.io/tx/{txid}');
@@ -1100,7 +1101,8 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 		`MORPHIT_FRONTEND_DCR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dcr)}`,
 		`MORPHIT_FRONTEND_SOL_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.sol)}`,
 		`MORPHIT_FRONTEND_ETH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.eth)}`,
-		`MORPHIT_FRONTEND_XRP_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.xrp)}`
+		`MORPHIT_FRONTEND_XRP_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.xrp)}`,
+		`MORPHIT_FRONTEND_ECX_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.ecx)}`
 	);
 	// USDT per-network env vars.  These
 	// finally route through the indexer body to the frontend's

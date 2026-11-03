@@ -26,7 +26,14 @@ vi.mock('svelte-i18n', async (orig) => ({
 	locale: readable('en')
 }));
 
-afterEach(() => {
+// Every mounted picker is unmounted after its test: left mounted, clearing
+// the page moved focus out of an open one, and the update that followed could
+// run after the test environment was torn down ("document is not defined").
+const mounted: Record<string, unknown>[] = [];
+afterEach(async () => {
+	const { unmount, flushSync } = await import('svelte');
+	for (const c of mounted.splice(0)) await unmount(c);
+	flushSync();
 	document.body.innerHTML = '';
 });
 
@@ -40,7 +47,7 @@ async function mount(name: 'LanguageFilterSelect' | 'FiatCurrencySelect' | 'Paym
 				: await import('./PaymentFilterSelect.svelte');
 	const target = document.createElement('div');
 	document.body.appendChild(target);
-	m(mod.default, { target, props: { value: [] } as never });
+	mounted.push(m(mod.default, { target, props: { value: [] } as never }));
 	flushSync();
 	const input = target.querySelector('input[role="combobox"]') as HTMLInputElement;
 	const scrim = () => document.querySelector('button.fixed.inset-0');

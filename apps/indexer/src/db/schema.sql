@@ -2182,8 +2182,8 @@ COMMENT ON TABLE one_way_pile_on IS
 -- (ERC-20/TRC-20/SPL/BEP-20); a later change added USDC as a
 -- second multi-network asset (ERC-20/SPL/Base/Polygon); Part
 -- 122 a later change added DAI as a third (ERC-20/Polygon/Base/Arbitrum).
--- Single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP)
--- write NULL.
+-- Single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP,
+-- ECX) write NULL.
 --
 -- Pre-Part-121 rows stay NULL on this column.  Validate-time
 -- gates in the order handler:
@@ -2196,8 +2196,8 @@ COMMENT ON TABLE one_way_pile_on IS
 --   - any other asset MUST have asset_network NULL
 --
 -- The combined constraint mirrors the registry rule:
--- `supportedNetworks` is a singleton for BTC/XMR/BLURT/BCH/LTC/
--- DASH/DOGE; a 4-element list for USDT (erc20/trc20/spl/bep20); a
+-- `supportedNetworks` is a singleton for every coin but the three
+-- stablecoins; a 4-element list for USDT (erc20/trc20/spl/bep20); a
 -- 4-element list for USDC (erc20/spl/base/polygon); a 4-element
 -- list for DAI (erc20/polygon/base/arbitrum).  The wire-format-
 -- frozen `fee_method` enum stays at exactly

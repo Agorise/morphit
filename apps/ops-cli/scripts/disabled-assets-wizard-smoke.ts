@@ -28,7 +28,7 @@ type Scenario = {
 
 const scenarios: Scenario[] = [
 	{
-		name: 'Category-B filter returns the 13 trade-only cryptos + BARTER (14 total) from canonical registry',
+		name: 'Category-B filter returns the 14 trade-only cryptos + BARTER (15 total) from canonical registry',
 		check: () => {
 			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map((a) => a.ticker);
 			return (
@@ -45,8 +45,9 @@ const scenarios: Scenario[] = [
 				catB.includes('SOL') &&
 				catB.includes('ETH') &&
 				catB.includes('XRP') &&
+				catB.includes('ECX') &&
 				catB.includes('BARTER') &&
-				catB.length === 14
+				catB.length === 15
 			);
 		}
 	},
@@ -137,8 +138,9 @@ const scenarios: Scenario[] = [
 				(a) => a.ticker
 			);
 			for (const t of catBTickers) {
-				// (a long description sits on the next line once formatted)
-				if (!new RegExp(`\\b${t}:\\s*'`).test(stepsSrc)) {
+				// (a long description sits on the next line once formatted; a text
+				// with an apostrophe is double-quoted)
+				if (!new RegExp(`\\b${t}:\\s*['"\`]`).test(stepsSrc)) {
 					console.error(`  CATEGORY_B_DESCRIPTIONS missing entry for ${t}`);
 					return false;
 				}

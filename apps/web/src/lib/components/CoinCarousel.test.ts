@@ -6,6 +6,10 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readable, writable } from 'svelte/store';
+import { ASSET_TICKERS, isGoodsAsset, MULTI_NETWORK_TICKERS } from '@morphit/asset-registry';
+
+/** Every tradable coin (barter is goods, not a coin). */
+const COINS = ASSET_TICKERS.filter((t) => !isGoodsAsset(t)).length;
 
 vi.mock(
 	'svelte',
@@ -43,9 +47,9 @@ async function slots(disabled: string[]): Promise<string[]> {
 }
 
 describe('CoinCarousel', () => {
-	it('everything accepted: 16 coins, 5 networks, barter', async () => {
+	it('everything accepted: every coin, 5 networks, barter', async () => {
 		const s = await slots([]);
-		expect(s.length).toBe(22);
+		expect(s.length).toBe(COINS + 5 + 1);
 		expect(s).toContain('home.coin_carousel.networks.arbitrum_sr');
 		expect(s).toContain('home.coin_carousel.barter.sr');
 		expect(s.some((x) => x.includes('(BARTER)'))).toBe(false);
@@ -57,7 +61,7 @@ describe('CoinCarousel', () => {
 		for (const n of ['arbitrum', 'base', 'bep20', 'polygon', 'trc20']) {
 			expect(s).not.toContain(`home.coin_carousel.networks.${n}_sr`);
 		}
-		expect(s.length).toBe(14); // 13 coins + barter
+		expect(s.length).toBe(COINS - MULTI_NETWORK_TICKERS.length + 1); // the other coins + barter
 	});
 
 	it('only USDT keeps BEP-20 and TRC-20 (its networks), not Arbitrum/Base/Polygon', async () => {

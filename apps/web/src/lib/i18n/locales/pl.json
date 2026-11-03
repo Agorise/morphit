@@ -246,6 +246,11 @@
 				"live": "1 DAI = ${price}",
 				"unavailable": "cena niedostępna"
 			}
+		},
+		"ecx": {
+			"address_share": {
+				"warning": "Wysyłaj ECX tylko w sieci eCash, z portfela eCash. To jest też poprawny adres Bitcoin: portfel Bitcoin wysłałby tu bitcoiny, których możesz już nie odzyskać. Jeśli Twoje monety pochodzą sprzed forka (blok 973 728, 29 października 2026 r.) lub z takich monet, najpierw je rozdziel: inaczej ta sama płatność może wyjść także w sieci Bitcoin, a stracisz tyle samo bitcoinów."
+			}
 		}
 	},
 	"avatar_menu": {
@@ -614,8 +619,11 @@
 			"address_invalid_eth": "Nieprawidłowy adres Ethereum.  Oczekiwane 0x + 40 znaków hex (łącznie 42).",
 			"pill_method_eth": "Ethereum (ETH)",
 			"address_placeholder_xrp": "Twój adres XRP (r + 24-34 znaków base58)",
+			"address_placeholder_ecx": "Twój adres eCash (ECX) (1…, 3… lub bc1…)",
 			"address_invalid_xrp": "Nieprawidłowy adres XRP Ledger.  Oczekiwany adres zaczynający się od r, po którym następuje 24-34 znaków base58 (brak destination tag w tym polu).",
+			"address_invalid_ecx": "To nie jest poprawny adres eCash.  eCash używa formatów Bitcoina: adres zaczynający się od 1, 3 lub bc1.",
 			"pill_method_xrp": "Ripple (XRP)",
+			"pill_method_ecx": "eCash (ECX)",
 			"blurt_account_not_found": "Nie istnieje konto Blurt o tej nazwie.",
 			"asset_label": "Moneta",
 			"too_long_to_send": "To jest za długie na jedną wiadomość czatu. Skróć notatkę lub link PayJoin i spróbuj ponownie.",
@@ -682,6 +690,7 @@
 			"pill_title_sol": "SOL wysłany",
 			"pill_title_eth": "ETH wysłany",
 			"pill_title_xrp": "XRP wysłany",
+			"pill_title_ecx": "ECX wysłany",
 			"pill_title_blurt_received": "Otrzymano Blurt",
 			"receipt_title": "Potwierdzenie płatności",
 			"receipt_when": "{when}",
@@ -902,6 +911,7 @@
 			"sol": "Solana — kryptowaluta PoS o wysokiej przepustowości z sekwencjonowaniem Proof-of-History. Przejrzysta warstwa bazowa, zarządzanie fundacja + społeczność walidatorów, ekosystem SPL-token. Tylko handel: nie może opłacać prowizji od ogłoszeń.",
 			"eth": "Ethereum — platforma smart-kontraktów Proof-of-Stake. Przejrzysta warstwa bazowa; brak natywnego protokołu miksowania (miksery firm trzecich są sankcjonowane w wielu jurysdykcjach). Rotacja adresów po stronie portfela to główna dźwignia prywatności. Handel + opłaty za ogłoszenia.",
 			"xrp": "Ripple (XRP) — kryptowaluta Federated Byzantine Agreement na XRP Ledger zorientowana na płatności. Przejrzysta warstwa bazowa; brak prywatności na poziomie protokołu. Destination tag to identyfikator (do routingu giełd), nie funkcja prywatności. Rotacja adresów po stronie portfela to główna dźwignia prywatności. Handel + opłaty za ogłoszenia.",
+			"ecx": "ECX — eCash.  Fork Bitcoina (blok 973 728, 29 października 2026 r.) dodający drivechainy; to nie XEC.  Na {brand|Morphicie} tylko do handlu.  Te same formaty adresów co Bitcoin (`1…`, `3…`, `bc1…`): płać z portfela eCash, nigdy z portfela Bitcoin.  Monety sprzed forka, a także otrzymane później z takich monet, mogą istnieć w obu łańcuchach: rozdziel je przed transakcją (tylko rozdzielenie oddziela od siebie oba łańcuchy).  Przejrzysty jak Bitcoin.",
 			"barter": "Barter — towary lub usługi, nie moneta. Wyceń w walucie lokalnej, wybierz akceptowane krypto (np. XMR, BTC, DOGE) i opisz dokładnie ofertę w Warunkach. Ogłoszenie nie wymaga adresu krypto; rozliczasz się w akceptowanym krypto wybranym przez kupującego. Na {brand} tylko do wymiany."
 		},
 		"section_recovery": {
@@ -1309,7 +1319,7 @@
 			},
 			"monero_amount_jitter": {
 				"q": "Dlaczego {brand} losuje moją kwotę przelewu?",
-				"a": "Żeby nikt nie mógł dopasować twojej płatności do twojego zlecenia.\n\nJeśli zlecenie mówi 0,005 BTC i dokładnie 0,005 BTC pojawia się w blockchainie, każdy obserwator może je powiązać. Dlatego gdy udostępniasz na czacie swój adres odbiorczy, {brand} dodaje do kwoty, którą kupujący ma wysłać, maleńką losową nadwyżkę („jitter”). Sprzedawca zawsze dostaje nieco **więcej**, nigdy mniej.\n\nMonero ukrywa kwoty w swoim łańcuchu, ale sama liczba i tak krąży po czatach, zrzutach ekranu, portfelach i giełdach. Tam nadwyżka też pomaga.\n\nNadwyżka wynosi najwyżej:\n• XMR: 0,000000999999\n• BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR: 999 satoshi (0,00000999)\n• ETH, XRP, USDT, USDC, DAI: 0,000999\n• SOL: 0,000000999\n• BLURT: 0,099\n\nJest włączona domyślnie; przełącznik jest pod kwotą, gdy udostępniasz adres. Wyłączaj ją tylko wtedy, gdy musisz wysłać dokładną kwotę, np. z faktury. Nie chroni przed zamrożeniem USDT lub USDC; zobacz [poradniki prywatności](/privacy) dla każdej monety."
+				"a": "Żeby nikt nie mógł dopasować twojej płatności do twojego zlecenia.\n\nJeśli zlecenie mówi 0,005 BTC i dokładnie 0,005 BTC pojawia się w blockchainie, każdy obserwator może je powiązać. Dlatego gdy udostępniasz na czacie swój adres odbiorczy, {brand} dodaje do kwoty, którą kupujący ma wysłać, maleńką losową nadwyżkę („jitter”). Sprzedawca zawsze dostaje nieco **więcej**, nigdy mniej.\n\nMonero ukrywa kwoty w swoim łańcuchu, ale sama liczba i tak krąży po czatach, zrzutach ekranu, portfelach i giełdach. Tam nadwyżka też pomaga.\n\nNadwyżka wynosi najwyżej:\n• XMR: 0,000000999999\n• BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, ECX: 999 satoshi (0,00000999)\n• ETH, XRP, USDT, USDC, DAI: 0,000999\n• SOL: 0,000000999\n• BLURT: 0,099\n\nJest włączona domyślnie; przełącznik jest pod kwotą, gdy udostępniasz adres. Wyłączaj ją tylko wtedy, gdy musisz wysłać dokładną kwotę, np. z faktury. Nie chroni przed zamrożeniem USDT lub USDC; zobacz [poradniki prywatności](/privacy) dla każdej monety."
 			},
 			"feedback_immutable": {
 				"q": "Czy opinie można edytować lub usuwać?",
@@ -1717,7 +1727,7 @@
 			},
 			"why_usdt_warning": {
 				"q": "Dlaczego {brand} pokazuje informację o tym, jak USDT jest emitowany i przesyłany?",
-				"a": "{brand} pokazuje ten znaczek, żeby przekazać dwa fakty, abyś mógł wybrać świadomie:\n\n• **Tether może zamrażać adresy.** Tether, firma stojąca za USDT, może zamrozić USDT na danym adresie i już to robiła.\n• **Płatności USDT są publiczne.** We wszystkich czterech sieciach (Ethereum, Tron, Solana, BNB Smart Chain) każdy może zobaczyć transakcje. Tak działają te łańcuchy; to nic szczególnego dla USDT.\n\nTo nie czyni USDT złym: utrzymuje stabilną wartość dolara i łatwo nim handlować prawie wszędzie. Jeśli najważniejsza jest prywatność, lepszym narzędziem jest XMR. Jeśli chcesz monety, której żadna firma nie może zamrozić, spójrz na {coins:btc,blurt,bch,ltc,dash,doge,dcr,sol,eth,xrp|or}. Znaczek to informacja, a nie wyrok."
+				"a": "{brand} pokazuje ten znaczek, żeby przekazać dwa fakty, abyś mógł wybrać świadomie:\n\n• **Tether może zamrażać adresy.** Tether, firma stojąca za USDT, może zamrozić USDT na danym adresie i już to robiła.\n• **Płatności USDT są publiczne.** We wszystkich czterech sieciach (Ethereum, Tron, Solana, BNB Smart Chain) każdy może zobaczyć transakcje. Tak działają te łańcuchy; to nic szczególnego dla USDT.\n\nTo nie czyni USDT złym: utrzymuje stabilną wartość dolara i łatwo nim handlować prawie wszędzie. Jeśli najważniejsza jest prywatność, lepszym narzędziem jest XMR. Jeśli chcesz monety, której żadna firma nie może zamrozić, spójrz na {coins:btc,blurt,bch,ltc,dash,doge,dcr,sol,eth,xrp,ecx|or}. Znaczek to informacja, a nie wyrok."
 			},
 			"why_usdc_warning": {
 				"q": "Dlaczego {brand} pokazuje ostrzeżenie o prywatności, gdy handluję USDC?",
@@ -1778,6 +1788,10 @@
 			"what_is_xrp": {
 				"q": "Czym jest Ripple (XRP) i dlaczego jest na {brand}?",
 				"a": "XRP to moneta XRP Ledger. Nie ma wydobycia: lista zaufanych walidatorów uzgadnia każdy nowy wpis. Nikt nie może zamrozić natywnego XRP. Każda płatność jest publiczna.\n\nNa {brand|Morphicie} XRP służy **tylko do handlu**: możesz go kupować i sprzedawać, ale nie możesz nim płacić opłat za ogłoszenie (płaci się je w BLURT, BTC lub XMR).\n\n**Adresy** zaczynają się od `r` i mają 25–35 znaków.\n\nDwie rzeczy, które warto wiedzieć przed transakcją:\n• **Bez tagów docelowych.** {brand} nie może przekazać tagu docelowego (dodatkowej liczby, o którą proszą giełdy). Dlatego ten, kto otrzymuje XRP, musi podać adres własnego portfela — nigdy adres do wpłat na giełdę, bo XRP może trafić do puli giełdy i nigdy do niego nie dotrzeć.\n• **Minimum 1 XRP dla nowego adresu.** Adres XRP istnieje dopiero wtedy, gdy ma co najmniej 1 XRP. Wysłanie mniejszej kwoty na zupełnie nowy adres się nie powiedzie, więc jego pierwsza płatność musi wynosić co najmniej 1 XRP.\n\nOperator strony może wyłączyć XRP na swojej stronie; na innych stronach Morphit nadal można nim handlować. Więcej wskazówek: [przewodnik prywatności XRP](/privacy/xrp)."
+			},
+			"what_is_ecx": {
+				"q": "Czym jest eCash (ECX) i dlaczego jest na {brand}?",
+				"a": "eCash (ECX) oddzielił się od Bitcoina w bloku 973 728, 29 października 2026 r. Dzieli historię Bitcoina aż do rozdzielenia i dodaje drivechainy: opcjonalne łańcuchy boczne z własnymi zasadami. Każda płatność jest publiczna, jak w Bitcoinie. ECX to nie XEC (starsza moneta, która też nazywa się eCash) ani wECX (opakowany token na Solanie): {brand} obsługuje natywny ECX w łańcuchu eCash.\n\nNa {brand|Morphicie} ECX służy **tylko do handlu**: możesz go kupować i sprzedawać, ale nie możesz nim płacić opłat za ogłoszenie (płaci się je w BLURT, BTC lub XMR).\n\nTrzy rzeczy, które warto wiedzieć przed transakcją:\n• **Adres eCash wygląda dokładnie jak adres Bitcoin** (`1…`, `3…`, `bc1…`) — i nim jest. Płać ECX z portfela eCash: portfel Bitcoin wysłałby na ten sam adres bitcoiny, których możesz już nie odzyskać. Dlatego {brand} nie daje dla ECX linku „zapłać portfelem”.\n• **Monety posiadane przed rozdzieleniem istnieją w obu łańcuchach; mogą w nich istnieć także monety otrzymane później z takich monet.** Bez ochrony przed powtórzeniem (replay) płatność ECX z tych monet może przejść także w sieci Bitcoin — i tracisz tyle samo bitcoinów. Działa to też w drugą stronę: płatność bitcoinami z tych monet może wydać także Twoje ECX. Tylko rozdzielenie monet zapobiega obu sytuacjom, więc rozdziel je przed transakcją: według doniesień prasowych oficjalny portfel eCash robi to za Ciebie. Portfel samego węzła eCash nie dodaje ochrony przed powtórzeniem, jeśli jej samodzielnie nie ustawisz; załóż, że Twój portfel nie dodaje tej ochrony, jeśli wyraźnie tego nie podaje.\n• **Łańcuch jest nowy.** Zanim uznasz płatność za ostateczną, poczekaj na więcej potwierdzeń niż przy bitcoinie.\n\nOperator strony może wyłączyć ECX na swojej stronie; inne strony Morphit nadal mogą nim handlować. Więcej wskazówek: [przewodnik prywatności ECX](/privacy/ecx)."
 			},
 			"what_is_bch": {
 				"q": "Czym jest Bitcoin Cash (BCH) i dlaczego jest na {brand}?",
@@ -2219,7 +2233,7 @@
 			},
 			"trade_anything": {
 				"title": "Handluj czymkolwiek",
-				"body": "Ponad 16 krypto plus bezpośrednie towary, usługi, a nawet barter. Wieloaktywowo, wielosieciowo, wielonośnikowo."
+				"body": "17 krypto plus bezpośrednie towary, usługi, a nawet barter. Wieloaktywowo, wielosieciowo, wielonośnikowo."
 			},
 			"card_aria_label": "{title} — dowiedz się więcej w FAQ"
 		},
@@ -3258,6 +3272,9 @@
 		},
 		"pay_xrp": {
 			"description": "Zapłać w Ripple (XRP). XRP to kryptowaluta z federacyjnym porozumieniem bizantyjskim na XRP Ledger. Użyj portfela XRPL, np. Xaman (dawniej Xumm), Crossmark lub Bifrost. Wyślij natywne XRP. {brand} nie przekazuje destination tagu, więc sprzedający musi udostępnić samodzielnie przechowywany adres XRPL, który go nie wymaga — nigdy adres wpłat giełdy."
+		},
+		"pay_ecx": {
+			"description": "Zapłać w eCash (ECX), forku Bitcoina z 2026 r. z drivechainami — to nie XEC. Używaj portfela eCash, nigdy portfela Bitcoin: adres eCash jest też adresem Bitcoin. Monety sprzed forka, a także otrzymane później z takich monet, mogą istnieć w obu łańcuchach: rozdziel je przed transakcją (tylko rozdzielenie oddziela od siebie oba łańcuchy)."
 		}
 	},
 	"plan": {
@@ -3348,6 +3365,7 @@
 				"sol": "Solana — kryptowaluta PoS o wysokiej przepustowości z sekwencjonowaniem Proof-of-History. Przejrzysta warstwa bazowa, brak natywnego protokołu miksowania. Rotacja adresów po stronie portfela to główna dźwignia prywatności.",
 				"eth": "Ethereum (ETH) — platforma smart-kontraktów Proof-of-Stake. Przejrzysta warstwa bazowa; brak natywnego protokołu miksowania. Uważaj na odbiorców kontraktów (wysłanie ETH do kontraktu bez `payable receive()` lub `fallback()` zostanie cofnięte; monety nie są stracone, ale transakcja zawodzi i płacisz gaz).",
 				"xrp": "Ripple (XRP) — kryptowaluta Federated Byzantine Agreement na XRP Ledger zorientowana na płatności. Przejrzysta warstwa bazowa; brak prywatności na poziomie protokołu. Destination tag to identyfikator (do routingu giełd), nie funkcja prywatności. Rotacja adresów po stronie portfela to główna dźwignia prywatności.",
+				"ecx": "eCash (ECX) — fork Bitcoina z 2026 r. z drivechainami; to nie XEC. Adresy są takie same jak w Bitcoinie (`1…`, `3…`, `bc1…`), więc płać z portfela eCash, nigdy z portfela Bitcoin. Monety sprzed forka, a także otrzymane później z takich monet, mogą istnieć w obu łańcuchach: rozdziel je przed transakcją (tylko rozdzielenie oddziela od siebie oba łańcuchy).",
 				"barter": "Barter (towary/usługi). To nie kryptowaluta — oferujesz towary lub usługę i otrzymujesz zapłatę w krypto, które wybierzesz do przyjęcia. Wyceń w swojej walucie lokalnej; ty i kupujący ustalacie szczegóły na czacie i rozliczacie się w jednej z akceptowanych krypto. Opisz dokładnie, co oferujesz, w polu Warunki."
 			},
 			"waiver_fiat_hint": "💡 Większość transakcji BLURT na {brand} odbywa się z aktywnymi użytkownikami sieci społecznościowej Blurt, istniejącymi operatorami lub poprzez barter. Wybierz więc walutę fiat, której używasz lokalnie (USD, EUR, MXN itd.) i zaproponuj metody płatności osobiście lub barter (towary/usługi) w Kroku 3, jeśli chcesz zaoferować coś innego o wartości.",
@@ -3544,7 +3562,7 @@
 	},
 	"privacy": {
 		"index_heading": "Praktyki prywatności w {brand}",
-		"index_intro": "Większość aktywów handlowanych na {brand} ({coins:btc,bch,ltc,dash,doge,dcr,sol,eth,xrp,blurt,usdt,usdc,dai|list}) żyje na przejrzystych łańcuchach — każdy obserwator może odczytać historię łańcucha. Zcash (ZEC) jest przejrzysty, chyba że używasz jego osłoniętych (shielded) adresów; Pirate Chain (ARRR), podobnie jak Monero, domyślnie ukrywa nadawcę, odbiorcę i kwotę. Istnieją konkretne kroki, które możesz podjąć, aby TWOJE transakcje były znacznie trudniejsze do połączenia, sprofilowania lub nadzorowania. Jest to oparte na rejestrze: kolejne aktywo, które dodamy, automatycznie otrzyma przewodnik. Poza pojedynczymi transakcjami Morphit chroni prywatność także na poziomie sieci: można go osiągać i uruchamiać w całości przez Tor i I2P — węzeł może nawet działać całkiem bez clearnetu — jak opisano na stronie Bezpieczeństwo i w katalogu instancji.",
+		"index_intro": "Większość aktywów handlowanych na {brand} ({coins:btc,bch,ltc,dash,doge,dcr,sol,eth,xrp,ecx,blurt,usdt,usdc,dai|list}) żyje na przejrzystych łańcuchach — każdy obserwator może odczytać historię łańcucha. Zcash (ZEC) jest przejrzysty, chyba że używasz jego osłoniętych (shielded) adresów; Pirate Chain (ARRR), podobnie jak Monero, domyślnie ukrywa nadawcę, odbiorcę i kwotę. Istnieją konkretne kroki, które możesz podjąć, aby TWOJE transakcje były znacznie trudniejsze do połączenia, sprofilowania lub nadzorowania. Jest to oparte na rejestrze: kolejne aktywo, które dodamy, automatycznie otrzyma przewodnik. Poza pojedynczymi transakcjami Morphit chroni prywatność także na poziomie sieci: można go osiągać i uruchamiać w całości przez Tor i I2P — węzeł może nawet działać całkiem bez clearnetu — jak opisano na stronie Bezpieczeństwo i w katalogu instancji.",
 		"guide_heading": "Praktyki prywatności dla wymian {asset}",
 		"back_to_index": "Wszystkie aktywa",
 		"section_fresh_addresses": "Używaj nowego adresu dla każdej wymiany",
@@ -3692,6 +3710,12 @@
 				"intro": "Ripple (XRP) został uruchomiony w 2012 roku jako kryptowaluta zorientowana na płatności.  XRPL używa konsensusu Federated Byzantine Agreement (FBA) — walidatorzy z Unique Node List (UNL) uzgadniają kolejność transakcji.  Domyślna UNL jest publikowana przez XRP Ledger Foundation (non-profit), a for-profit Ripple Labs Inc. historycznie wpływał na dobór walidatorów.  Natywny XRP nie może zostać zamrożony przez żaden centralny organ — flaga freeze w XRPL dotyczy tylko emitowanych tokenów (IOU), a nie natywnego XRP.\n\nChain jest przejrzysty na warstwie bazowej — nadawca, odbiorca, kwota i destination tag (jeśli obecny) są wszystkie widoczne on-chain, podobnie jak w Bitcoin.  XRPL nie ma natywnego mixingu na poziomie protokołu.  Użytkownicy chcący prywatności na poziomie transakcji polegają na rotacji adresów po stronie portfela (generując nowy adres dla każdej transakcji z seeda HD) oraz na koordynacji off-chain — poniższe praktyki obejmują to, nad czym masz kontrolę.",
 				"meta_description": "Praktyki prywatności dla wymian Ripple (XRP) na {brand}: konsensus FBA XRPL, przejrzysta warstwa bazowa, UX destination tag, wymóg rezerwy i rozważania o dostawcach RPC.",
 				"caveats": "XRPL jest przejrzysty na warstwie bazowej, bez natywnego protokołu mieszania.\n\n- **Udostępniaj świeże adresy dla każdego trade'u.**  Używanie tego samego adresu XRPL w wielu listingach {brand} pozwala obserwatorom skorelować Twoje zamówienia na całkowicie przejrzystym chainie.  Wygeneruj świeży adres odbiorczy dla każdego trade'u — nowoczesne portfele XRPL (Xaman, Crossmark, Bifrost) wyprowadzają je z Twojego seeda HD i pozwalają tworzyć nowe konta w kilka sekund.\n- **Destination tagi nie są funkcją prywatności — to identyfikator, a {brand} nie potrafi go przekazać.** Tag jest widoczny w łańcuchu i łączy transakcje. Udostępnianie adresu w {brand} nie ma pola na tag, a link płatności go nie ustawia, więc nigdy nie podawaj adresu wpłat giełdy wymagającego tagu (środki przepadłyby we wspólnej puli giełdy); podawaj samodzielnie przechowywany adres, który go nie wymaga.\n- **Wymóg rezerwy tworzy widoczność tworzenia konta.**  Twoje pierwsze przychodzące XRP musi być ≥1 XRP (base reserve).  Transakcja `Payment` on-chain, która finansuje nowe konto, jest publicznie widoczna jako aktywacja konta, co jest silniejszym sygnałem korelacji niż zwykła płatność na już istniejące konto.  Jeśli redukcja tego sygnału ma znaczenie, sfinansuj adres odbiorczy najpierw sam (z konta już zmieszanego/oddzielonego) i dopiero potem go udostępnij.\n- **Prywatność na warstwie sieciowej nadal ma znaczenie.**  Rozsyłanie przez Tor lub tryb prywatności portfela utrzymuje Twój domowy IP poza polem widzenia chaina.\n- **Dostawcy RPC XRPL mogą korelować.**  Twój portfel rozmawia z endpointem RPC XRPL (xrplcluster.com, Ripple, lub self-hostowany węzeł rippled) — ten dostawca widzi każdą transakcję, którą podpisujesz.  Self-hosting węzła rippled lub rotacja między dostawcami zmniejsza powierzchnię ataku.\n- **Koncentracja consensus-set to znana właściwość.**  Domyślna UNL (Unique Node List) jest publikowana przez XRP Ledger Foundation; uruchamianie własnego walidatora z niestandardową UNL jest wspierane, ale rzadkie.  Dla celów Morphit wpływa to bardziej na rozważania odporności na cenzurę (skoordynowana UNL mogłaby odmówić włączenia transakcji) niż na prywatność transakcji.  Udokumentuj i zdecyduj w oparciu o swój model zagrożeń.\n- **Przyjmowane są tylko adresy klasyczne.** XRPL ma nowszy format „X-address” (XLS-5d), który zawiera destination tag w adresie. {brand} przyjmuje tylko klasyczne adresy z prefiksem `r` i nie przekazuje tagu, więc podaj samodzielnie przechowywany adres klasyczny, który go nie wymaga."
+			},
+			"ecx": {
+				"one_line": "Fork Bitcoina z drivechainami.  Przejrzysty jak Bitcoin; przed wysłaniem rozdziel monety sprzed forka lub otrzymane z takich monet.",
+				"intro": "eCash (ECX) oddzielił się od Bitcoina w bloku 973 728, 29 października 2026 r.  Zachowuje adresy i format transakcji Bitcoina, zmienia kilka zasad (np. dostosowywanie trudności) i dodaje drivechainy (BIP300/301): opcjonalne łańcuchy boczne z własnymi zasadami, z których wypłaty zatwierdzają górnicy.  To nie XEC, starsza moneta, która też nazywa się eCash.\n\nŁańcuch jest przejrzysty jak Bitcoin — nadawca, odbiorca i kwota są widoczne dla każdego.  Dwie rzeczy są specyficzne dla eCash: adres eCash jest też adresem Bitcoin, a monety sprzed forka, a także otrzymane później z takich monet, mogą istnieć w obu łańcuchach, więc niechroniona płatność może zostać powtórzona (replay) w drugim łańcuchu.  Poniższe praktyki obejmują to, na co masz wpływ.",
+				"meta_description": "Praktyki prywatności i bezpieczeństwa przy handlu eCash (ECX) na {brand|Morphicie}: przejrzysty fork Bitcoina, adresy identyczne z adresami Bitcoin, ochrona przed powtórzeniem i rozdzielanie monet sprzed forka.",
+				"caveats": "eCash jest przejrzysty jak Bitcoin i dzieli z Bitcoinem monety sprzed forka.\n\n- **Rozdziel monety przed transakcją.** Monety posiadane przed blokiem 973 728 (29 października 2026 r.) istnieją w obu łańcuchach; mogą w nich istnieć także monety otrzymane później z takich monet (płatność z nierozdzielonych monet może przejść w obu łańcuchach). Dopóki nie przeniesiesz ich w sieci eCash z ochroną przed powtórzeniem, płatność eCash z ich użyciem może zostać powtórzona w sieci Bitcoin, a płatność bitcoinami z ich użyciem może wydać także Twoje ECX. Według doniesień prasowych oficjalny portfel eCash rozdziela je za Ciebie. Portfel samego węzła eCash nie dodaje ochrony przed powtórzeniem, jeśli jej samodzielnie nie ustawisz; załóż, że Twój portfel nie dodaje tej ochrony, jeśli wyraźnie tego nie podaje.\n- **Płać tylko z portfela eCash.** Adres eCash jest też adresem Bitcoin. Portfel Bitcoin wysyła na ten adres bitcoiny, a nie ECX, i możesz ich już nie odzyskać.\n- **Trzymaj eCash w osobnym portfelu, po rozdzieleniu.** Seed, który przed forkiem trzymał bitcoiny, kontroluje te same monety w obu łańcuchach. Gdy monety są już rozdzielone, przeniesienie ECX na osobny seed eCash daje im od teraz własne adresy zamiast adresów Twojego portfela Bitcoin. Samo przeniesienie jest publiczne, a historia monet sprzed forka zostaje w obu łańcuchach.\n- **Przy każdej transakcji podawaj nowy adres.** Ponowne użycie adresu pozwala każdemu powiązać Twoje transakcje w przejrzystym łańcuchu; portfel HD daje nowy adres do każdej transakcji.\n- **Łańcuch jest młody.** Nowy łańcuch łatwiej niż Bitcoin może zreorganizować ostatnie bloki. Zanim uznasz płatność za ostateczną, poczekaj na więcej potwierdzeń.\n- **Prywatność na poziomie sieci nadal ma znaczenie.** Rozgłaszanie przez Tor ukrywa Twój domowy adres IP przed siecią."
 			}
 		}
 	},

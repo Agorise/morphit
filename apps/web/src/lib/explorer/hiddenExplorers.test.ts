@@ -20,6 +20,7 @@ const snapshot = vi.hoisted(() => ({
 			sol: null as string | null,
 			eth: null as string | null,
 			xrp: null as string | null,
+			ecx: null as string | null,
 			usdt: { erc20: null, trc20: null, spl: null, bep20: null } as Record<string, string | null>,
 			usdc: { erc20: null, spl: null, base: null, polygon: null } as Record<string, string | null>,
 			dai: { erc20: null, polygon: null, base: null, arbitrum: null } as Record<
@@ -107,7 +108,8 @@ const NATIVE: ExternalAsset[] = [
 	'DCR',
 	'SOL',
 	'ETH',
-	'XRP'
+	'XRP',
+	'ECX'
 ];
 const TXID: Record<ExternalAsset, string> = {
 	BTC: HEX,
@@ -121,7 +123,8 @@ const TXID: Record<ExternalAsset, string> = {
 	DCR: HEX,
 	SOL: '5'.repeat(88),
 	ETH: `0x${HEX}`,
-	XRP: HEX.toUpperCase()
+	XRP: HEX.toUpperCase(),
+	ECX: HEX
 };
 
 function setPageHost(hostname: string | null): void {
@@ -170,7 +173,8 @@ function resetOverrides(): void {
 		'dcr',
 		'sol',
 		'eth',
-		'xrp'
+		'xrp',
+		'ecx'
 	] as const)
 		c[k] = null;
 	for (const m of [c.usdt, c.usdc, c.dai]) for (const k of Object.keys(m)) m[k] = null;
@@ -234,6 +238,8 @@ describe('the hidden explorer addresses', () => {
 		expect(ONION_EXPLORER_URLS.ZEC[0]?.startsWith(x3)).toBe(true);
 		expect(ONION_EXPLORER_URLS.DCR).toEqual([]);
 		expect(ONION_EXPLORER_URLS.ARRR).toEqual([]);
+		expect(ONION_EXPLORER_URLS.ECX).toEqual([]);
+		expect(I2P_EXPLORER_URLS.ECX ?? []).toEqual([]);
 	});
 
 	it('leave out every address that did not load in the maintainer’s check', () => {
@@ -294,10 +300,12 @@ describe('links on a hidden page', () => {
 		});
 	}
 
-	it('show no link for Decred, Pirate Chain or the Blurt explorer fallback', () => {
+	it('show no link for Decred, Pirate Chain, eCash or the Blurt explorer fallback', () => {
 		setPageHost('x.b32.i2p');
 		expect(externalExplorerUrls('DCR', HEX)).toEqual([]);
 		expect(externalExplorerUrl('ARRR', HEX)).toBeNull();
+		// never a Bitcoin explorer for an eCash txid
+		expect(externalExplorerUrls('ECX', HEX)).toEqual([]);
 		expect(blurtWalletExplorerFallbackUrl('tx', 'a'.repeat(40))).toBeNull();
 	});
 

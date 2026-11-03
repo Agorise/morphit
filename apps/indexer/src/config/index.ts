@@ -616,7 +616,7 @@ export interface Config {
 
 	/** Per-instance DOGE chat-link explorer URL template.  When undefined, frontend uses its bundled default
 	 *  (`https://blockchair.com/dogecoin/transaction/{txid}`).
-	 *  Same shape contract as BTC/XMR/BCH/LTC/DASH: https://,
+	 *  Same shape contract as every single-network coin: https://,
 	 *  contains `{txid}`, parses as URL.  Operators wanting a
 	 *  different DOGE explorer set MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL;
 	 *  candidates surveyed at addition time (2026-05-19):
@@ -628,7 +628,7 @@ export interface Config {
 	 *  (exchange-adjacent; declined). */
 	readonly frontendDogeChatLinkUrl: string | undefined;
 
-	/** Per-instance ZEC chat-link explorer URL template.  Same shape as BTC/XMR/BCH/LTC/DASH/DOGE (single
+	/** Per-instance ZEC chat-link explorer URL template.  Same shape as every single-network coin (single
 	 *  field, single-network mainnet).  When unset, the frontend
 	 *  uses the bundled default `mainnet.zcashexplorer.app`.
 	 *  Validation: https:// scheme, contains `{txid}` placeholder,
@@ -712,6 +712,14 @@ export interface Config {
 	 *  blockchair.com/xrp-ledger (multi-chain aggregator),
 	 *  blockexplorer.one/xrp/mainnet (multi-chain third-party). */
 	readonly frontendXrpChatLinkUrl: string | undefined;
+
+	/** eCash (ECX) chat-link explorer URL template.  When set, the frontend
+	 *  uses it instead of the bundled `explorer.ecash.com/tx/{txid}` (the
+	 *  project's own mempool.space instance).  Must contain `{txid}`; checked
+	 *  at config load.  Bitcoin explorers do NOT work for ECX: a txid can
+	 *  exist on both chains (replay), so a Bitcoin explorer can show the
+	 *  Bitcoin copy of a payment. */
+	readonly frontendEcxChatLinkUrl: string | undefined;
 
 	/** Per-instance per-network USDT chat-link explorer URL
 	 *  templates (DD-11 closure; the multi-network
@@ -1556,7 +1564,7 @@ const envSchema = z.object({
 			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// DOGE chat-link explorer URL.  Same shape
-	// contract as BTC/XMR/BCH/LTC/DASH; when unset, frontend
+	// contract as every single-network coin; when unset, frontend
 	// falls back to the bundled blockchair.com/dogecoin default.
 	MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL: z
 		.string()
@@ -1567,7 +1575,7 @@ const envSchema = z.object({
 			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// ZEC chat-link explorer URL override.
-	// Single-network like BTC/XMR/BCH/LTC/DASH/DOGE.  When unset,
+	// Single-network like the coins above.  When unset,
 	// falls back to the bundled mainnet.zcashexplorer.app default.
 	MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL: z
 		.string()
@@ -1578,7 +1586,7 @@ const envSchema = z.object({
 			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// ARRR (Pirate Chain) chat-link explorer URL
-	// override.  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE/ZEC.
+	// override.  Single-network like the coins above.
 	// When unset, falls back to the bundled
 	// explorer.piratechain.com default.
 	MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL: z
@@ -1590,8 +1598,8 @@ const envSchema = z.object({
 			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
 	// DCR (Decred) chat-link explorer URL
-	// override.  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE/
-	// ZEC/ARRR.  When unset, falls back to the bundled
+	// override.  Single-network like the coins above.
+	// When unset, falls back to the bundled
 	// dcrdata.decred.org default.
 	MORPHIT_FRONTEND_DCR_CHAT_LINK_URL: z
 		.string()
@@ -1629,6 +1637,16 @@ const envSchema = z.object({
 	// override.  Single-network XRPL mainnet.  When unset,
 	// falls back to the bundled livenet.xrpl.org default.
 	MORPHIT_FRONTEND_XRP_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
+		),
+	// eCash (ECX) chat-link explorer URL override.  Single-network.  When
+	// unset, falls back to the bundled explorer.ecash.com default.
+	MORPHIT_FRONTEND_ECX_CHAT_LINK_URL: z
 		.string()
 		.max(512)
 		.optional()
@@ -2107,6 +2125,7 @@ export function loadConfig(): Config {
 		frontendSolChatLinkUrl: e.MORPHIT_FRONTEND_SOL_CHAT_LINK_URL,
 		frontendEthChatLinkUrl: e.MORPHIT_FRONTEND_ETH_CHAT_LINK_URL,
 		frontendXrpChatLinkUrl: e.MORPHIT_FRONTEND_XRP_CHAT_LINK_URL,
+		frontendEcxChatLinkUrl: e.MORPHIT_FRONTEND_ECX_CHAT_LINK_URL,
 		// multi-network USDT + USDC chat-link
 		// overrides.  Independent fields per (asset, network) since
 		// the underlying explorers vary per chain and an operator's

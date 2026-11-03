@@ -39,9 +39,9 @@ function scenario(name: string, fn: () => void): void {
 
 console.log('\n── asset registry smoke ─────────────────────────────────\n');
 
-scenario('all current assets registered (17 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, BARTER)', () => {
+scenario('all current assets registered (18 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, BARTER)', () => {
 	const tickers = ASSETS.map((a) => a.ticker).sort();
-	const expected = ['arrr', 'barter', 'bch', 'blurt', 'btc', 'dai', 'dash', 'dcr', 'doge', 'eth', 'ltc', 'sol', 'usdc', 'usdt', 'xmr', 'xrp', 'zec'];
+	const expected = ['arrr', 'barter', 'bch', 'blurt', 'btc', 'dai', 'dash', 'dcr', 'doge', 'ecx', 'eth', 'ltc', 'sol', 'usdc', 'usdt', 'xmr', 'xrp', 'zec'];
 	if (JSON.stringify(tickers) !== JSON.stringify(expected)) {
 		throw new Error(`expected ${expected}, got ${tickers}`);
 	}
@@ -128,7 +128,7 @@ scenario('logo paths are stable + distinct + exist on disk', () => {
 	if (set.size !== paths.length) {
 		throw new Error('duplicate logo path');
 	}
-	// All 16 tradable assets now consistently use the
+	// Every tradable asset now consistently uses the
 	// /icons/icon-<lower-ticker>.svg path convention.  An earlier
 	// /coins/<ticker>.svg path was vestigial (files never shipped to
 	// disk under that path) and has been folded into the canonical
@@ -189,6 +189,7 @@ scenario('lower-case tickers match payload union', () => {
 		'sol',
 		'eth',
 		'xrp',
+		'ecx',
 		'barter'
 	]);
 	for (const a of ASSETS) {

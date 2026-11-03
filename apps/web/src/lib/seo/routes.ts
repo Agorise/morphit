@@ -230,7 +230,7 @@ export const ROUTES: readonly RouteDescriptor[] = [
 	// directly answer high-intent search queries ("is XMR private",
 	// "USDT traceability", etc.).  Keeping them out of the sitemap
 	// was sidestepping the asset-registry coupling but cost visibility
-	// to ~160 indexable URLs (16 tickers × 10 locales).
+	// to the indexable URLs (one per coin × 10 locales).
 	//
 	// The build-sitemap script expands the `[asset]` dynamic segment
 	// to one entry per tradable ticker from packages/asset-registry,

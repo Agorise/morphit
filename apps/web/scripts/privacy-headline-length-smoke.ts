@@ -18,7 +18,8 @@
  * 'BLURT' (5 chars), so the actual headline length is roughly
  * `template_chars - 7 + ticker_length`.
  *
- * Scenario count: 16 tickers × 10 locales = 160 length checks.
+ * Scenario count: one length check per coin per locale (17 × 10 = 170
+ * today; it scales with the registry).
  * Pass/fail is reported at the per-locale level (one scenario per
  * locale × worst-case ticker), with detail showing the longest
  * rendered headline for each locale.

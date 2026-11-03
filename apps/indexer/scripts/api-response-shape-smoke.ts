@@ -25,6 +25,7 @@ import { readFileSync as _readFileSync } from 'node:fs';
 import { fileURLToPath as _fileURLToPath } from 'node:url';
 import { buildListingFeeBody } from '../src/api/listingFeeBody.ts';
 import { buildStrangerFeeQuoteBody } from '../src/api/strangerFeeQuoteBody.ts';
+import { ASSET_TICKERS, isGoodsAsset } from '@morphit/asset-registry';
 import { buildStatsResponse } from '../src/api/stats.ts';
 import { RpcHealthProber, type ProbeResult } from '../src/api/rpcHealth.ts';
 import { isAccountName } from '../src/api/shared.ts';
@@ -626,8 +627,15 @@ await scenario('stats: supported assets = canonical minus disabled (case-insensi
 	if (r.assets.supported.includes('XMR')) throw new Error('XMR should be filtered (disabled)');
 	if (r.assets.supported.includes('DOGE')) throw new Error('DOGE should be filtered (disabled)');
 	if (!r.assets.supported.includes('BTC')) throw new Error('BTC should remain supported');
-	// 16 canonical tickers minus 2 disabled = 14.
-	assertEqual(r.assets.supported.length, 14, 'supported count');
+	// Every coin in the registry (BARTER is goods, not a coin) minus the 2
+	// disabled: derived, so adding a coin does not break this check.
+	const coins = ASSET_TICKERS.filter((t) => !isGoodsAsset(t));
+	assertEqual(
+		r.assets.supported,
+		coins.filter((t) => t !== 'XMR' && t !== 'DOGE'),
+		'supported'
+	);
+	assertEqual(r.assets.supported.length, coins.length - 2, 'supported count');
 });
 
 await scenario('stats: PRIVACY — response has ONLY aggregate keys, nothing per-account', () => {

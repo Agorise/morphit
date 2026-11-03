@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -78,6 +78,7 @@
  *  `network` + `address` combination (asset-wide shape passes
  *  but per-network shape fails).  networks.ts has no imports
  *  itself, so no circular-dep risk. */
+import type { AssetTicker, SameTickerSet } from '@morphit/asset-registry';
 import {
 	validateUsdtAddress,
 	validateUsdtTxid,
@@ -565,7 +566,7 @@ export function jitterStablecoinAmount(base: string): string {
 }
 
 /** Amount-jitter for transparent UTXO chains
- *  (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR — all 8 UTXO
+ *  (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, ECX — all 9 UTXO
  *  assets ride this same function; SOL/ETH/XRP have their own
  *  per-asset jitter functions because their unit precision and
  *  network semantics differ).  Same defense as jitterMoneroAmount
@@ -809,7 +810,8 @@ export function jitterAmountForAsset(asset: ChatAssetTicker, base: string): stri
 		asset === 'doge' ||
 		asset === 'zec' ||
 		asset === 'arrr' ||
-		asset === 'dcr'
+		asset === 'dcr' ||
+		asset === 'ecx'
 	) {
 		return jitterUtxoAmount(base);
 	}
@@ -831,6 +833,12 @@ export function jitterAmountForAsset(asset: ChatAssetTicker, base: string): stri
 		// precision, not token-native decimals.
 		return jitterStablecoinAmount(base);
 	}
+	// Barter has no on-chain amount to blur.
+	if (asset === 'barter') return base;
+	// Every ticker is handled above: a new coin does not compile until it has
+	// its own jitter here (without it, its amounts would go out unblurred).
+	const unhandled: never = asset;
+	void unhandled;
 	return base;
 }
 
@@ -923,7 +931,65 @@ export type ChatAssetTicker =
 	| 'sol'
 	| 'eth'
 	| 'xrp'
+	| 'ecx'
 	| 'barter';
+
+/** The same set as the canonical registry's tickers, lowercased — proven by the
+ *  compiler. A coin added to `@morphit/asset-registry` does not compile until it
+ *  is added to ChatAssetTicker above; then every per-coin function below (address
+ *  and txid checks, amount jitter, payment link) and the other exhaustive maps
+ *  that take a ChatAssetTicker name the next place it is missing. (Before, a coin
+ *  missing from those fell through to "invalid address", "no jitter" or "no
+ *  link" with no error anywhere.) See docs/ADDING-A-COIN.md. */
+export const CHAT_TICKERS_ARE_THE_REGISTRY: SameTickerSet<
+	ChatAssetTicker,
+	Lowercase<AssetTicker>
+> = true;
+
+/** A coin paid outside the Blurt chain (every ticker but BLURT, which settles
+ *  on Blurt itself, and barter, which is goods): the ones a "Mark as sent" receipt
+ *  is for. Derived, so a new coin is one without being listed here. */
+export type OffChainCoin = Exclude<ChatAssetTicker, 'blurt' | 'barter'>;
+export function isOffChainCoin(method: ChatAssetTicker): method is OffChainCoin {
+	return method !== 'blurt' && method !== 'barter';
+}
+
+/** The coins a chat address or "funds sent" message may name: every ticker
+ *  but barter (goods have no address and no transaction).  A Record over
+ *  ChatAssetTicker, so a coin added to the union does not compile until it is
+ *  listed here; before v1.22.0 the encoders and the decoder each carried
+ *  their own hand-written list, which a new coin could miss without any
+ *  error (its addresses would be refused when sent and shown as plain text
+ *  when received). */
+const CHAT_PAYMENT_METHOD: Readonly<Record<ChatAssetTicker, boolean>> = Object.freeze({
+	btc: true,
+	xmr: true,
+	blurt: true,
+	usdt: true,
+	usdc: true,
+	dai: true,
+	bch: true,
+	ltc: true,
+	dash: true,
+	doge: true,
+	zec: true,
+	arrr: true,
+	dcr: true,
+	sol: true,
+	eth: true,
+	xrp: true,
+	ecx: true,
+	barter: false
+});
+
+/** True when `m` is a coin a chat address / funds-sent message may name. */
+export function isChatPaymentMethod(m: unknown): m is Exclude<ChatAssetTicker, 'barter'> {
+	return (
+		typeof m === 'string' &&
+		Object.prototype.hasOwnProperty.call(CHAT_PAYMENT_METHOD, m) &&
+		CHAT_PAYMENT_METHOD[m as ChatAssetTicker]
+	);
+}
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -1273,6 +1339,14 @@ export function isValidBtcAddress(s: string): boolean {
 	return BTC_P2PKH_RE.test(s) || BTC_P2SH_RE.test(s) || BTC_BECH32_RE.test(s);
 }
 
+/** Validate an ECX (eCash) address shape.  eCash keeps Bitcoin's address
+ *  formats unchanged (base58 prefixes 0 and 5, bech32 hrp "bc"), so this is
+ *  the BTC check: nothing in the string tells the two chains apart, which is
+ *  why the chat card names the chain in words. */
+export function isValidEcxAddress(s: string): boolean {
+	return isValidBtcAddress(s);
+}
+
 /** Validate an XMR address shape.  No checksum verify. */
 export function isValidXmrAddress(s: string): boolean {
 	if (typeof s !== 'string') return false;
@@ -1579,6 +1653,13 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'sol') return isValidSolAddress(addr);
 	if (method === 'eth') return isValidEthAddress(addr);
 	if (method === 'xrp') return isValidXrpAddress(addr);
+	if (method === 'ecx') return isValidEcxAddress(addr);
+	// Barter is goods, not a coin: no address.
+	if (method === 'barter') return false;
+	// Every ticker is handled above: a new coin does not compile until it has
+	// its own address check here (without it, every address of it is refused).
+	const unhandled: never = method;
+	void unhandled;
 	return false;
 }
 
@@ -1601,6 +1682,14 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'sol') return isValidSolTxid(txid);
 	if (method === 'eth') return isValidEthTxid(txid);
 	if (method === 'xrp') return isValidXrpTxid(txid);
+	// eCash keeps Bitcoin's transaction format.
+	if (method === 'ecx') return BTC_TXID_RE.test(txid);
+	// Barter is goods, not a coin: no transaction id.
+	if (method === 'barter') return false;
+	// Every ticker is handled above: a new coin does not compile until it has
+	// its own txid check here (without it, every txid of it is refused).
+	const unhandled: never = method;
+	void unhandled;
 	return false;
 }
 
@@ -1616,24 +1705,7 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 export function encodeAddressPayload(p: AddressPayload): string {
 	if (p.v !== 1) throw new Error('payload: unsupported version');
 	if (p.kind !== 'morphit_addr') throw new Error('payload: wrong kind');
-	if (
-		p.method !== 'btc' &&
-		p.method !== 'xmr' &&
-		p.method !== 'blurt' &&
-		p.method !== 'usdt' &&
-		p.method !== 'usdc' &&
-		p.method !== 'dai' &&
-		p.method !== 'bch' &&
-		p.method !== 'ltc' &&
-		p.method !== 'dash' &&
-		p.method !== 'doge' &&
-		p.method !== 'zec' &&
-		p.method !== 'arrr' &&
-		p.method !== 'dcr' &&
-		p.method !== 'sol' &&
-		p.method !== 'eth' &&
-		p.method !== 'xrp'
-	) {
+	if (!isChatPaymentMethod(p.method)) {
 		throw new Error('payload: invalid method');
 	}
 	if (!isValidAddress(p.method, p.address)) {
@@ -1798,24 +1870,7 @@ export function encodeAddressPayload(p: AddressPayload): string {
 export function encodeFundsSentPayload(p: FundsSentPayload): string {
 	if (p.v !== 1) throw new Error('payload: unsupported version');
 	if (p.kind !== 'morphit_funds_sent') throw new Error('payload: wrong kind');
-	if (
-		p.method !== 'btc' &&
-		p.method !== 'xmr' &&
-		p.method !== 'blurt' &&
-		p.method !== 'usdt' &&
-		p.method !== 'usdc' &&
-		p.method !== 'dai' &&
-		p.method !== 'bch' &&
-		p.method !== 'ltc' &&
-		p.method !== 'dash' &&
-		p.method !== 'doge' &&
-		p.method !== 'zec' &&
-		p.method !== 'arrr' &&
-		p.method !== 'dcr' &&
-		p.method !== 'sol' &&
-		p.method !== 'eth' &&
-		p.method !== 'xrp'
-	) {
+	if (!isChatPaymentMethod(p.method)) {
 		throw new Error('payload: invalid method');
 	}
 	if (!isValidTxid(p.method, p.txid)) {
@@ -2178,25 +2233,7 @@ export function decodePayload(plaintext: string): DecodeResult {
 
 	if (o.kind === 'morphit_addr') {
 		if (typeof o.method !== 'string') return { kind: 'plaintext' };
-		if (
-			o.method !== 'btc' &&
-			o.method !== 'xmr' &&
-			o.method !== 'blurt' &&
-			o.method !== 'usdt' &&
-			o.method !== 'usdc' &&
-			o.method !== 'dai' &&
-			o.method !== 'bch' &&
-			o.method !== 'ltc' &&
-			o.method !== 'dash' &&
-			o.method !== 'doge' &&
-			o.method !== 'zec' &&
-			o.method !== 'arrr' &&
-			o.method !== 'dcr' &&
-			o.method !== 'sol' &&
-			o.method !== 'eth' &&
-			o.method !== 'xrp'
-		)
-			return { kind: 'plaintext' };
+		if (!isChatPaymentMethod(o.method)) return { kind: 'plaintext' };
 		if (typeof o.address !== 'string') return { kind: 'plaintext' };
 		if (!isValidAddress(o.method, o.address)) return { kind: 'plaintext' };
 		const payload: AddressPayload = {
@@ -2212,25 +2249,7 @@ export function decodePayload(plaintext: string): DecodeResult {
 
 	if (o.kind === 'morphit_funds_sent') {
 		if (typeof o.method !== 'string') return { kind: 'plaintext' };
-		if (
-			o.method !== 'btc' &&
-			o.method !== 'xmr' &&
-			o.method !== 'blurt' &&
-			o.method !== 'usdt' &&
-			o.method !== 'usdc' &&
-			o.method !== 'dai' &&
-			o.method !== 'bch' &&
-			o.method !== 'ltc' &&
-			o.method !== 'dash' &&
-			o.method !== 'doge' &&
-			o.method !== 'zec' &&
-			o.method !== 'arrr' &&
-			o.method !== 'dcr' &&
-			o.method !== 'sol' &&
-			o.method !== 'eth' &&
-			o.method !== 'xrp'
-		)
-			return { kind: 'plaintext' };
+		if (!isChatPaymentMethod(o.method)) return { kind: 'plaintext' };
 		if (typeof o.txid !== 'string') return { kind: 'plaintext' };
 		if (!isValidTxid(o.method, o.txid)) return { kind: 'plaintext' };
 		const payload: FundsSentPayload = {
@@ -2881,7 +2900,20 @@ export function buildPaymentUri(p: AddressPayload): string {
 		// support Steem-family chains pre-fill the recipient.
 		return p.address;
 	}
-	// Exhaustiveness — TS already enforces but be safe at runtime.
+	// The stablecoins' wallets take the bare address (their network is shown
+	// beside it), and barter has no wallet link.
+	if (p.method === 'usdt' || p.method === 'usdc' || p.method === 'dai' || p.method === 'barter') {
+		return p.address;
+	}
+	// eCash defines no URI scheme of its own, and both candidates are wrong:
+	// `bitcoin:` opens a Bitcoin wallet, which would pay BTC to the same
+	// address; `ecash:` is the address prefix of XEC, a different coin. The
+	// bare address only.
+	if (p.method === 'ecx') return p.address;
+	// Every ticker is handled above: a new coin does not compile until it has
+	// its own payment link (or an explicit bare-address case) here.
+	const unhandled: never = p.method;
+	void unhandled;
 	return p.address;
 }
 

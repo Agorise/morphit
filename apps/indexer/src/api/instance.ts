@@ -32,6 +32,7 @@
 
 import { Hono } from 'hono';
 
+import type { NativeCoinTicker, SameTickerSet } from '@morphit/asset-registry';
 import type { Config } from '$config';
 import { computeClearnetEliminated, clearnetEliminationMissing, clearnetLegsFromConfig } from '$indexer/clearnetGate';
 import { relayReportsHiddenOnly } from '$indexer/relayPosture';
@@ -172,14 +173,14 @@ export interface InstanceResponse {
 		 *  null. */
 		dash: string | null;
 		/** DOGE chat-link explorer URL override.
-		 *  Same pattern as BTC/XMR/BCH/LTC/DASH (single-network,
+		 *  Same pattern as every single-network coin (one network,
 		 *  single field).  Operator sets via
 		 *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL; frontend falls
 		 *  back to the bundled blockchair.com/dogecoin default
 		 *  when null. */
 		doge: string | null;
 		/** ZEC chat-link explorer URL override.
-		 *  Same pattern as BTC/XMR/BCH/LTC/DASH/DOGE (single-network,
+		 *  Same pattern as every single-network coin (one network,
 		 *  single field).  Operator sets via
 		 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL; frontend falls
 		 *  back to the bundled mainnet.zcashexplorer.app default
@@ -190,6 +191,7 @@ export interface InstanceResponse {
 		sol: string | null;
 		eth: string | null;
 		xrp: string | null;
+		ecx: string | null;
 		/** USDT per-network explorer URL
 		 *  overrides.  Optional sub-map; older indexer builds
 		 *  (older — yes, this includes every prior build of
@@ -283,6 +285,15 @@ export interface InstanceResponse {
 	 *  /v1/instance and configure themselves accordingly. */
 	mcp_url: string | null;
 }
+
+/** One chat-link setting per coin with a chain of its own (plus the per-network
+ *  token maps) — checked against the canonical registry: a coin added there does
+ *  not compile until it has its field here, in the body below, in Config and in
+ *  the env schema (MORPHIT_FRONTEND_<TICKER>_CHAT_LINK_URL). */
+export const CHAT_LINK_URLS_ARE_THE_NATIVE_COINS: SameTickerSet<
+	Exclude<keyof InstanceResponse['chat_link_urls'], 'usdt' | 'usdc' | 'dai'>,
+	Lowercase<NativeCoinTicker>
+> = true;
 
 /**
  * The fees account the frontend is told to pay the 90 % owner leg to.
@@ -396,6 +407,7 @@ export function instanceRoute(
 				sol: config.frontendSolChatLinkUrl ?? null,
 				eth: config.frontendEthChatLinkUrl ?? null,
 				xrp: config.frontendXrpChatLinkUrl ?? null,
+				ecx: config.frontendEcxChatLinkUrl ?? null,
 				usdt: {
 					erc20: config.frontendUsdtErc20ChatLinkUrl ?? null,
 					trc20: config.frontendUsdtTrc20ChatLinkUrl ?? null,

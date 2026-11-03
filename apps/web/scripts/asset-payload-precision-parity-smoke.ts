@@ -60,7 +60,9 @@ type AssetExpectation = {
 	ticker: string;
 	chatTicker: ChatAssetTicker;
 	expectedJitterDecimals: number; // may differ from canonical.decimals (DAI uses 6-decimal jitter on 18-decimal on-chain by design)
-	expectedUriScheme: string | null; // null = no URI (BLURT) or per-network (USDT/USDC/DAI)
+	// null = no URI (BLURT) or per-network (USDT/USDC/DAI); 'bare-address' =
+	// deliberately no scheme: the payment link is the address itself (ECX)
+	expectedUriScheme: string | null | 'bare-address';
 	txidShapeAcceptable: string;
 	txidShapeUnacceptable: string;
 };
@@ -216,6 +218,17 @@ const EXPECTATIONS: AssetExpectation[] = [
 		expectedUriScheme: 'ripple:',
 		txidShapeAcceptable: 'a'.repeat(64),
 		txidShapeUnacceptable: 'a'.repeat(63)
+	},
+	{
+		ticker: 'ECX',
+		chatTicker: 'ecx',
+		// eCash (ADR-0053): 8 decimals like Bitcoin. NO payment scheme:
+		// `bitcoin:` would open a Bitcoin wallet and pay BTC to the same
+		// address, and `ecash:` is XEC's prefix — the link is the address.
+		expectedJitterDecimals: 8,
+		expectedUriScheme: 'bare-address',
+		txidShapeAcceptable: 'a'.repeat(64),
+		txidShapeUnacceptable: 'a'.repeat(63)
 	}
 ];
 
@@ -308,7 +321,8 @@ for (const exp of EXPECTATIONS) {
 			DCR: 'Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d',
 			SOL: 'So11111111111111111111111111111111111111112',
 			ETH: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
-			XRP: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh'
+			XRP: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh',
+			ECX: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
 		};
 		const addr = sampleAddrs[exp.ticker];
 		if (!addr) {
@@ -318,6 +332,14 @@ for (const exp of EXPECTATIONS) {
 		uri = buildPaymentUri({ method: exp.chatTicker, address: addr } as any);
 	} catch (e) {
 		fail(`${exp.ticker} URI callable`, String(e));
+		continue;
+	}
+	if (exp.expectedUriScheme === 'bare-address') {
+		// The sample address has no ':'; any scheme would add one.
+		const bare = !uri.includes(':') && uri.length > 0;
+		if (bare) pass(`${exp.ticker} payment link is the bare address (no scheme)`);
+		else
+			fail(`${exp.ticker} payment link is the bare address (no scheme)`, `got "${uri.slice(0, 40)}..."`);
 		continue;
 	}
 	if (uri.startsWith(exp.expectedUriScheme)) {

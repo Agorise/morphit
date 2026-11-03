@@ -23,6 +23,7 @@
  * `external_tx_id` field gets stuffed into a URL.
  */
 
+import type { NativeCoinTicker } from '@morphit/asset-registry';
 import { getInstanceSnapshot } from '$lib/stores/instance';
 import {
 	BTC_TXID_RE,
@@ -37,6 +38,7 @@ import {
 	SOL_TXID_RE,
 	ETH_TXID_RE,
 	XRP_TXID_RE,
+	ECX_TXID_RE,
 	BLURT_TRXID_RE,
 	ACCOUNT_NAME_RE,
 	BUNDLED_BTC_CHAT_LINK_URL,
@@ -51,6 +53,7 @@ import {
 	BUNDLED_SOL_CHAT_LINK_URL,
 	BUNDLED_ETH_CHAT_LINK_URL,
 	BUNDLED_XRP_CHAT_LINK_URL,
+	BUNDLED_ECX_CHAT_LINK_URL,
 	BUNDLED_BTC_CHAT_LINK_URLS,
 	BUNDLED_XMR_CHAT_LINK_URLS,
 	BUNDLED_BCH_CHAT_LINK_URLS,
@@ -63,6 +66,7 @@ import {
 	BUNDLED_SOL_CHAT_LINK_URLS,
 	BUNDLED_ETH_CHAT_LINK_URLS,
 	BUNDLED_XRP_CHAT_LINK_URLS,
+	BUNDLED_ECX_CHAT_LINK_URLS,
 	TOKEN_NETWORK_EXPLORER_URLS,
 	substituteTxidIntoTemplate,
 	isValidChatLinkTemplate
@@ -103,6 +107,7 @@ export {
 	BUNDLED_SOL_CHAT_LINK_URL,
 	BUNDLED_ETH_CHAT_LINK_URL,
 	BUNDLED_XRP_CHAT_LINK_URL,
+	BUNDLED_ECX_CHAT_LINK_URL,
 	BUNDLED_BTC_CHAT_LINK_URLS,
 	BUNDLED_XMR_CHAT_LINK_URLS,
 	BUNDLED_BCH_CHAT_LINK_URLS,
@@ -114,13 +119,17 @@ export {
 	BUNDLED_DCR_CHAT_LINK_URLS,
 	BUNDLED_SOL_CHAT_LINK_URLS,
 	BUNDLED_ETH_CHAT_LINK_URLS,
-	BUNDLED_XRP_CHAT_LINK_URLS
+	BUNDLED_XRP_CHAT_LINK_URLS,
+	BUNDLED_ECX_CHAT_LINK_URLS
 } from './urlsCore';
 
 /** External (non-BLURT) asset tickers Morphit knows how to build
- *  explorer URLs for.  Uppercase to match the canonical asset
- *  registry's `AssetTicker` spelling. */
-export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'ZEC' | 'ARRR' | 'DCR' | 'SOL' | 'ETH' | 'XRP';
+ *  explorer URLs for: the canonical registry's coins with a chain of their own
+ *  (NativeCoinTicker — not BLURT, our own explorer; not barter; not the
+ *  multi-network tokens, whose explorers are per network). A coin added to
+ *  `@morphit/asset-registry` is one at once, and EXPLORER_REGISTRY below (and the
+ *  hidden-network tables) do not compile until they carry its explorers. */
+export type ExternalAsset = NativeCoinTicker;
 
 /** Registry-driven dispatch for external-explorer URL building.
  *  Each entry pairs an asset's txid validator with the keys used
@@ -139,7 +148,7 @@ export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'Z
  *  explorer-URL builder serves that path. */
 interface ExplorerEntry {
 	readonly txidRe: RegExp;
-	readonly instanceTplKey: 'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp';
+	readonly instanceTplKey: Lowercase<ExternalAsset>;
 	readonly bundledDefault: string;
 	/** full bundled list, best→worst.  bundledDefault is
 	 *  always bundledList[0]; the rest are alternatives the user
@@ -219,6 +228,12 @@ const EXPLORER_REGISTRY: Readonly<Record<ExternalAsset, ExplorerEntry>> = Object
 		instanceTplKey: 'xrp',
 		bundledDefault: BUNDLED_XRP_CHAT_LINK_URL,
 		bundledList: BUNDLED_XRP_CHAT_LINK_URLS
+	}),
+	ECX: Object.freeze({
+		txidRe: ECX_TXID_RE,
+		instanceTplKey: 'ecx',
+		bundledDefault: BUNDLED_ECX_CHAT_LINK_URL,
+		bundledList: BUNDLED_ECX_CHAT_LINK_URLS
 	})
 });
 
@@ -298,8 +313,8 @@ export function externalExplorerUrl(asset: ExternalAsset, txid: string): string 
 		operatorTpl !== undefined &&
 		isValidChatLinkTemplate(operatorTpl) &&
 		overrideFitsPage(operatorTpl, 'clearnet')
-		? operatorTpl
-		: entry.bundledDefault;
+			? operatorTpl
+			: entry.bundledDefault;
 	return substituteTxidIntoTemplate(tpl, lower);
 }
 
@@ -379,7 +394,9 @@ export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | nu
 	const override = usdtOverrides ? usdtOverrides[network] : null;
 	const pageNetwork = currentPageNetwork();
 	if (pageNetwork !== 'clearnet') {
-		return hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null;
+		return (
+			hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null
+		);
 	}
 
 	// (defense-in-depth) — re-validate the
@@ -425,7 +442,9 @@ export function usdcExplorerUrl(network: UsdcNetwork, txid: string): string | nu
 	const override = usdcOverrides ? usdcOverrides[network] : null;
 	const pageNetwork = currentPageNetwork();
 	if (pageNetwork !== 'clearnet') {
-		return hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null;
+		return (
+			hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null
+		);
 	}
 
 	// (defense-in-depth) — same XSS-protection
@@ -462,7 +481,9 @@ export function daiExplorerUrl(network: DaiNetwork, txid: string): string | null
 	const override = daiOverrides ? daiOverrides[network] : null;
 	const pageNetwork = currentPageNetwork();
 	if (pageNetwork !== 'clearnet') {
-		return hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null;
+		return (
+			hiddenPageUrls(network, normalizeTokenTxid(network, txid), override, pageNetwork)[0] ?? null
+		);
 	}
 
 	// (defense-in-depth) — same XSS-protection

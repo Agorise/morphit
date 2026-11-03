@@ -3,7 +3,7 @@
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import PasswordScope from '$components/PasswordScope.svelte';
 	import { localePath } from '$i18n/path';
-	import { DEFAULT_LOCALE, type LocaleCode , SUPPORTED_LOCALES} from '$i18n/locales';
+	import { DEFAULT_LOCALE, type LocaleCode, SUPPORTED_LOCALES } from '$i18n/locales';
 	/**
 	 * Morphit — post-an-order compose page.
 	 *
@@ -90,12 +90,7 @@
 	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
 	import { addPendingOrder } from '$lib/stores/pendingOrders';
 	import { orderPayloadToRecord, type OrderPayload } from '$lib/orders/payload';
-	import {
-		computeFee,
-		BASE_FEE_BLURT,
-		resolveFeeRecipient,
-		type FeeQuote
-	} from '$lib/orders/fee';
+	import { computeFee, BASE_FEE_BLURT, resolveFeeRecipient, type FeeQuote } from '$lib/orders/fee';
 	import { resolveQuoteBase, boundedPiconero, boundedSatoshis } from '$lib/orders/feeQuoteFloor';
 	import { chainPinnedTreasury } from '$stores/release';
 	import { checkXmrTxKey, xmrBoundPrimary } from '$lib/orders/xmrFeeMode';
@@ -132,7 +127,11 @@
 	import type { FxResponse } from '@morphit/indexer-client';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
-	import { resolvePostDefaultLang, noteUsedPostLang, readLocalPreferredLangs } from '$lib/stores/preferredLangs';
+	import {
+		resolvePostDefaultLang,
+		noteUsedPostLang,
+		readLocalPreferredLangs
+	} from '$lib/stores/preferredLangs';
 	import { makeExpiryFlooredUtcDay, makeOrderPermlink } from '$lib/orders/payload';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { sanitizeBarterTitle, SPECIFIC_BARTER_TITLE_MAX } from '$lib/orders/payload';
@@ -941,7 +940,9 @@
 	 *  FAQ entry EXCEPT BTC and XMR (no deep-link — matches the prior
 	 *  per-asset Tooltip markup). The "Learn more" link is omitted for
 	 *  those two; their explainer text still shows. */
-	const ASSET_FAQ: Partial<Record<AssetTicker, FaqKey>> = {
+	// Every coin but BTC and XMR has one: a full map, so a coin added to the
+	// registry does not compile until it has its FAQ link here.
+	const ASSET_FAQ: Record<Exclude<AssetTicker, 'BTC' | 'XMR'>, FaqKey> = {
 		BLURT: 'what_is_blurt',
 		USDT: 'what_is_usdt',
 		USDC: 'what_is_usdc',
@@ -956,6 +957,7 @@
 		SOL: 'what_is_sol',
 		ETH: 'what_is_eth',
 		XRP: 'what_is_xrp',
+		ECX: 'what_is_ecx',
 		BARTER: 'what_is_barter'
 	};
 	/** the Step-1 asset blocks, ALPHABETIZED by ticker. Each block
@@ -977,7 +979,7 @@
 				ticker: a,
 				iconPath: `/icons/icon-${a.toLowerCase()}.svg`,
 				explainerKey: `post_order.form.asset_explainer.${a.toLowerCase()}`,
-				faqKey: ASSET_FAQ[a]
+				faqKey: a === 'BTC' || a === 'XMR' ? undefined : ASSET_FAQ[a]
 			}))
 	);
 	/** The user's choice for this order. Four options post-4b:
@@ -1428,7 +1430,8 @@
 				if (params.get('welcome') === '1') {
 					if (side === null) side = 'buy';
 					if (asset === null) asset = 'BLURT';
-					if (amountMin === '') amountMin = formatAmountForInput(WAIVER_SUGGESTED_DEFAULT, amountLocale);
+					if (amountMin === '')
+						amountMin = formatAmountForInput(WAIVER_SUGGESTED_DEFAULT, amountLocale);
 				}
 			}
 		} catch {
@@ -1598,9 +1601,7 @@
 	 *  that states an amount_min, since FX rates differ per node. An
 	 *  unconvertible fiat is not treated as already-USD: the form says so
 	 *  instead of offering a free first buy it cannot value. */
-	const waiverFloor = $derived(
-		waiverFloorStatus(fxTable, amountMinNum, fiat, WAIVER_MIN_FIAT_USD)
-	);
+	const waiverFloor = $derived(waiverFloorStatus(fxTable, amountMinNum, fiat, WAIVER_MIN_FIAT_USD));
 	const amountMaxNum = $derived(parsedOrNull(amountMax, amountMaxParse));
 
 	/** Sanity cap.  Mirror of indexer's MAX_AMOUNT in
@@ -1956,9 +1957,7 @@
 	}
 
 	const step3Done = $derived(
-		isBarter
-			? acceptedAssets.length > 0
-			: paymentMethods.length > 0 && paymentMethodsError === ''
+		isBarter ? acceptedAssets.length > 0 : paymentMethods.length > 0 && paymentMethodsError === ''
 	);
 
 	// (#4) +: Terms are REQUIRED when the deal is a barter — either
@@ -2180,8 +2179,8 @@
 				: {}),
 			// sub-network for multi-network
 			// assets.  USDT, USDC, and DAI all carry a network
-			// discriminator; single-network assets (BTC/XMR/BLURT/BCH/
-			// LTC/DASH/DOGE) pass undefined and the payload builder
+			// discriminator; single-network assets (every
+			// other coin) pass undefined and the payload builder
 			// omits the field.  CP34 closure: a later change added DAI to the
 			// registry + payment_method + chat surfaces but MISSED
 			// this assetNetwork dispatch — meaning DAI orders posted
@@ -2614,7 +2613,6 @@
 			{ locale: currentLang }
 		);
 		return $_(parts.key, { values: parts.values }) as string;
-
 	}
 
 	// A sentinel no user text can contain (letters + single spaces only; NUL can't
@@ -2647,8 +2645,7 @@
 			// render (review + broadcast confirmation) uses the resolved text; the
 			// editable step-3 preview swaps in a live inline input at this slot via
 			// barterSentenceParts below.
-			const goodsText =
-				specificBarterTitle.trim() || ($_('order_title.goods_services') as string);
+			const goodsText = specificBarterTitle.trim() || ($_('order_title.goods_services') as string);
 			return barterTitleFor(goodsText);
 		}
 
@@ -2906,9 +2903,7 @@
 							<button
 								type="button"
 								{disabled}
-								title={disabled
-									? ($_('post_order.form.waiver_asset_locked_title') as string)
-									: ''}
+								title={disabled ? ($_('post_order.form.waiver_asset_locked_title') as string) : ''}
 								onclick={() => {
 									asset = a as Asset;
 									// reset network when
@@ -2949,7 +2944,7 @@
 			     USDC, and DAI are the three stablecoin assets that
 			     surface here (USDT/USDC are issuer-centralized;
 			     DAI is partly-centralized via its collateral mix);
-			     BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP all carry
+			     BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX all carry
 			     null and skip. -->
 			{#if asset === 'USDT'}
 				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />
@@ -3126,113 +3121,113 @@
 				       spread → { kind: 'spread', percent: <number> }
 				       fixed  → { kind: 'fixed',  price:   <number> } -->
 				{#if !isBarter}
-				<!-- the spread/fixed price-model controls price a CRYPTO
+					<!-- the spread/fixed price-model controls price a CRYPTO
 				     against fiat; a BARTER (goods/services) listing is valued
 				     directly in local currency (the amount above), so hide them. -->
-				<fieldset class="mt-4 rounded-xl border border-ink-200 p-3 dark:border-ink-700">
-					<legend class="px-2 text-sm font-semibold">
-						{$_('post_order.form.price_model_legend')}
-					</legend>
-					<p class="mb-3 text-xs text-ink-500">
-						{$_('post_order.form.price_model_hint')}
-					</p>
+					<fieldset class="mt-4 rounded-xl border border-ink-200 p-3 dark:border-ink-700">
+						<legend class="px-2 text-sm font-semibold">
+							{$_('post_order.form.price_model_legend')}
+						</legend>
+						<p class="mb-3 text-xs text-ink-500">
+							{$_('post_order.form.price_model_hint')}
+						</p>
 
-					<div class="space-y-2">
-						<label
-							class="flex cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-ink-50 dark:hover:bg-ink-800"
-						>
-							<input
-								type="radio"
-								name="price-model-kind"
-								value="spread"
-								bind:group={priceModelKind}
-								class="mt-0.5 h-4 w-4 flex-none accent-morphit-emerald"
-							/>
-							<div class="min-w-0">
-								<p class="font-semibold">
-									{$_('post_order.form.price_model_spread_label')}
-								</p>
-								<p class="text-xs text-ink-600 dark:text-ink-300">
-									{$_('post_order.form.price_model_spread_help')}
-								</p>
-								{#if priceModelKind === 'spread'}
-									<div class="mt-2 flex items-center gap-2">
-										<input
-											type="text"
-											inputmode="decimal"
-											maxlength="6"
-											id="post-spread-percent"
-											name="spread_percent"
-											value={spreadPercent}
-											oninput={handleSpreadInput}
-											aria-invalid={!!priceModelError}
-											aria-describedby={priceModelError ? 'price-model-error' : undefined}
-											class="w-24 rounded-lg border {priceModelError
-												? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
-												: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none dark:bg-ink-900"
-											aria-label={$_('post_order.form.price_model_spread_aria') as string}
-										/>
-										<span class="text-sm text-ink-600 dark:text-ink-300">%</span>
-										<span class="text-xs text-ink-500">
-											{$_('post_order.form.price_model_spread_unit_hint')}
-										</span>
-									</div>
-									{#if priceModelError}
-										<StatusLine kind="warn" id="price-model-error">{priceModelError}</StatusLine>
+						<div class="space-y-2">
+							<label
+								class="flex cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-ink-50 dark:hover:bg-ink-800"
+							>
+								<input
+									type="radio"
+									name="price-model-kind"
+									value="spread"
+									bind:group={priceModelKind}
+									class="mt-0.5 h-4 w-4 flex-none accent-morphit-emerald"
+								/>
+								<div class="min-w-0">
+									<p class="font-semibold">
+										{$_('post_order.form.price_model_spread_label')}
+									</p>
+									<p class="text-xs text-ink-600 dark:text-ink-300">
+										{$_('post_order.form.price_model_spread_help')}
+									</p>
+									{#if priceModelKind === 'spread'}
+										<div class="mt-2 flex items-center gap-2">
+											<input
+												type="text"
+												inputmode="decimal"
+												maxlength="6"
+												id="post-spread-percent"
+												name="spread_percent"
+												value={spreadPercent}
+												oninput={handleSpreadInput}
+												aria-invalid={!!priceModelError}
+												aria-describedby={priceModelError ? 'price-model-error' : undefined}
+												class="w-24 rounded-lg border {priceModelError
+													? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
+													: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none dark:bg-ink-900"
+												aria-label={$_('post_order.form.price_model_spread_aria') as string}
+											/>
+											<span class="text-sm text-ink-600 dark:text-ink-300">%</span>
+											<span class="text-xs text-ink-500">
+												{$_('post_order.form.price_model_spread_unit_hint')}
+											</span>
+										</div>
+										{#if priceModelError}
+											<StatusLine kind="warn" id="price-model-error">{priceModelError}</StatusLine>
+										{/if}
 									{/if}
-								{/if}
-							</div>
-						</label>
+								</div>
+							</label>
 
-						<label
-							class="flex cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-ink-50 dark:hover:bg-ink-800"
-						>
-							<input
-								type="radio"
-								name="price-model-kind"
-								value="fixed"
-								bind:group={priceModelKind}
-								class="mt-0.5 h-4 w-4 flex-none accent-morphit-emerald"
-							/>
-							<div class="min-w-0">
-								<p class="font-semibold">
-									{$_('post_order.form.price_model_fixed_label')}
-								</p>
-								<p class="text-xs text-ink-600 dark:text-ink-300">
-									{$_('post_order.form.price_model_fixed_help')}
-								</p>
-								{#if priceModelKind === 'fixed'}
-									<div class="mt-2 flex items-center gap-2">
-										<input
-											type="text"
-											inputmode="decimal"
-											maxlength="16"
-											id="post-fixed-price"
-											name="fixed_price"
-											value={fixedPrice}
-											oninput={handleFixedPriceInput}
-											aria-invalid={fixedPriceTouched && !!priceModelError}
-											aria-describedby={fixedPriceTouched && priceModelError
-												? 'fixed-price-error'
-												: undefined}
-											class="w-32 rounded-lg border {fixedPriceTouched && priceModelError
-												? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
-												: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none dark:bg-ink-900"
-											placeholder={$_('post_order.form.price_model_fixed_placeholder') as string}
-											aria-label={$_('post_order.form.price_model_fixed_aria') as string}
-										/>
-										<span class="text-sm text-ink-600 dark:text-ink-300">
-											{fiat || $_('post_order.form.price_model_fiat_placeholder')}
-										</span>
-									</div>
-									{#if fixedPriceTouched && priceModelError}
-										<StatusLine kind="warn" id="fixed-price-error">{priceModelError}</StatusLine>
+							<label
+								class="flex cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-ink-50 dark:hover:bg-ink-800"
+							>
+								<input
+									type="radio"
+									name="price-model-kind"
+									value="fixed"
+									bind:group={priceModelKind}
+									class="mt-0.5 h-4 w-4 flex-none accent-morphit-emerald"
+								/>
+								<div class="min-w-0">
+									<p class="font-semibold">
+										{$_('post_order.form.price_model_fixed_label')}
+									</p>
+									<p class="text-xs text-ink-600 dark:text-ink-300">
+										{$_('post_order.form.price_model_fixed_help')}
+									</p>
+									{#if priceModelKind === 'fixed'}
+										<div class="mt-2 flex items-center gap-2">
+											<input
+												type="text"
+												inputmode="decimal"
+												maxlength="16"
+												id="post-fixed-price"
+												name="fixed_price"
+												value={fixedPrice}
+												oninput={handleFixedPriceInput}
+												aria-invalid={fixedPriceTouched && !!priceModelError}
+												aria-describedby={fixedPriceTouched && priceModelError
+													? 'fixed-price-error'
+													: undefined}
+												class="w-32 rounded-lg border {fixedPriceTouched && priceModelError
+													? 'border-red-500 focus:ring-2 focus:ring-red-500 dark:border-red-500'
+													: 'border-ink-200 dark:border-ink-700'} bg-white px-2 py-1 text-sm focus:outline-none dark:bg-ink-900"
+												placeholder={$_('post_order.form.price_model_fixed_placeholder') as string}
+												aria-label={$_('post_order.form.price_model_fixed_aria') as string}
+											/>
+											<span class="text-sm text-ink-600 dark:text-ink-300">
+												{fiat || $_('post_order.form.price_model_fiat_placeholder')}
+											</span>
+										</div>
+										{#if fixedPriceTouched && priceModelError}
+											<StatusLine kind="warn" id="fixed-price-error">{priceModelError}</StatusLine>
+										{/if}
 									{/if}
-								{/if}
-							</div>
-						</label>
-					</div>
-				</fieldset>
+								</div>
+							</label>
+						</div>
+					</fieldset>
 				{/if}
 
 				{#if feeMethodChoice === 'waived_first_buy'}
@@ -3273,7 +3268,11 @@
 			<section class="card mb-4 animate-fade-up" aria-labelledby="step3-heading">
 				<div class="mb-4 flex items-baseline justify-between gap-3">
 					<h2 id="step3-heading" class="font-display text-lg font-bold">
-						{$_(side === 'sell' ? 'post_order.form.step_3_heading_sell' : 'post_order.form.step_3_heading')}
+						{$_(
+							side === 'sell'
+								? 'post_order.form.step_3_heading_sell'
+								: 'post_order.form.step_3_heading'
+						)}
 					</h2>
 					<span class="shrink-0 text-xs font-medium text-ink-400 dark:text-ink-500">
 						{$_('post_order.form.step_counter', { values: { n: 3, total: 4 } })}
@@ -3284,7 +3283,11 @@
 					{#if isBarter}
 						<p class="mb-1 text-sm font-semibold">{$_('post_order.form.barter_accept_label')}</p>
 						<p class="mb-2 text-xs text-ink-500">{$_('post_order.form.barter_accept_hint')}</p>
-						<div class="flex flex-wrap gap-2" role="group" aria-label={$_('post_order.form.barter_accept_label')}>
+						<div
+							class="flex flex-wrap gap-2"
+							role="group"
+							aria-label={$_('post_order.form.barter_accept_label')}
+						>
 							{#each cryptoTickers as t (t)}
 								{@const sel = acceptedAssets.includes(t)}
 								<button
@@ -3301,7 +3304,13 @@
 							{/each}
 						</div>
 					{:else}
-						<p class="mb-1 text-sm font-semibold">{$_(side === 'sell' ? 'post_order.form.payment_methods_label_sell' : 'post_order.form.payment_methods_label')}</p>
+						<p class="mb-1 text-sm font-semibold">
+							{$_(
+								side === 'sell'
+									? 'post_order.form.payment_methods_label_sell'
+									: 'post_order.form.payment_methods_label'
+							)}
+						</p>
 						<p class="mb-2 text-xs text-ink-500">{$_('post_order.form.payment_methods_hint')}</p>
 						{#await loadPaymentMethodsPicker() then PaymentMethodsPicker}
 							<PaymentMethodsPicker
@@ -3389,8 +3398,8 @@
 
 				<label class="mb-4 block">
 					<span class="mb-1 flex items-center justify-between gap-2 text-sm font-semibold">
-					<span>{$_('post_order.form.terms_label')}</span>
-					<!-- subdued markdown-guide icon over the field's top-right
+						<span>{$_('post_order.form.terms_label')}</span>
+						<!-- subdued markdown-guide icon over the field's top-right
 					     corner. preventDefault stops the wrapping <label> from stealing
 					     focus to the textarea.
 					     the tooltip is state-driven, not
@@ -3400,56 +3409,56 @@
 					     the cursor and don't re-evaluate :hover until the pointer moves).
 					     Typing now dismisses it — see `mdTipOpen`. Pointer AND keyboard
 					     both open it; Escape closes it without moving the mouse. -->
-					<button
-						type="button"
-						class="relative inline-flex text-ink-400 transition-colors hover:text-morphit-emerald focus:outline-none focus-visible:text-morphit-emerald"
-						aria-label={$_('post_order.terms_md_guide.tooltip_title') as string}
-						onmouseenter={() => (mdTipOpen = true)}
-						onmouseleave={() => (mdTipOpen = false)}
-						onfocus={() => (mdTipOpen = true)}
-						onblur={() => (mdTipOpen = false)}
-						onkeydown={(e) => {
-							if (e.key === 'Escape') mdTipOpen = false;
-						}}
-						onclick={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							// The modal supersedes the tooltip — leaving it up would strand it
-							// behind the dialog with no pointer left to un-hover it.
-							mdTipOpen = false;
-							mdGuideOpen = true;
-						}}
-					>
-						<svg class="h-4 w-6" viewBox="0 0 208 128" fill="none" aria-hidden="true">
-							<rect
-								x="5"
-								y="5"
-								width="198"
-								height="118"
-								rx="12"
-								stroke="currentColor"
-								stroke-width="12"
-							/>
-							<path
-								fill="currentColor"
-								d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39zm132 0-30-33h20V30h20v35h20z"
-							/>
-						</svg>
-						{#if mdTipOpen}
-						<span
-							class="pointer-events-none absolute end-0 top-6 z-10 block w-56 rounded-lg bg-ink-900 p-2 text-start text-xs font-normal text-white shadow-lg dark:bg-ink-700"
-							role="tooltip"
+						<button
+							type="button"
+							class="relative inline-flex text-ink-400 transition-colors hover:text-morphit-emerald focus:outline-none focus-visible:text-morphit-emerald"
+							aria-label={$_('post_order.terms_md_guide.tooltip_title') as string}
+							onmouseenter={() => (mdTipOpen = true)}
+							onmouseleave={() => (mdTipOpen = false)}
+							onfocus={() => (mdTipOpen = true)}
+							onblur={() => (mdTipOpen = false)}
+							onkeydown={(e) => {
+								if (e.key === 'Escape') mdTipOpen = false;
+							}}
+							onclick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								// The modal supersedes the tooltip — leaving it up would strand it
+								// behind the dialog with no pointer left to un-hover it.
+								mdTipOpen = false;
+								mdGuideOpen = true;
+							}}
 						>
-							<span class="block font-semibold"
-								>{$_('post_order.terms_md_guide.tooltip_title')}</span
-							>
-							<span class="mt-0.5 block text-ink-300"
-								>{$_('post_order.terms_md_guide.tooltip_body')}</span
-							>
-						</span>
-						{/if}
-					</button>
-				</span>
+							<svg class="h-4 w-6" viewBox="0 0 208 128" fill="none" aria-hidden="true">
+								<rect
+									x="5"
+									y="5"
+									width="198"
+									height="118"
+									rx="12"
+									stroke="currentColor"
+									stroke-width="12"
+								/>
+								<path
+									fill="currentColor"
+									d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39zm132 0-30-33h20V30h20v35h20z"
+								/>
+							</svg>
+							{#if mdTipOpen}
+								<span
+									class="pointer-events-none absolute end-0 top-6 z-10 block w-56 rounded-lg bg-ink-900 p-2 text-start text-xs font-normal text-white shadow-lg dark:bg-ink-700"
+									role="tooltip"
+								>
+									<span class="block font-semibold"
+										>{$_('post_order.terms_md_guide.tooltip_title')}</span
+									>
+									<span class="mt-0.5 block text-ink-300"
+										>{$_('post_order.terms_md_guide.tooltip_body')}</span
+									>
+								</span>
+							{/if}
+						</button>
+					</span>
 					<ProtectedTextarea
 						bind:value={terms}
 						name="order-terms"
@@ -3775,42 +3784,42 @@
 						</span>
 					</label>
 					{#if btcFeeOffered}
-					<label class="flex items-start gap-2 py-1">
-						<input
-							type="radio"
-							name="fee-method"
-							value="btc"
-							bind:group={feeMethodChoice}
-							class="mt-0.5 accent-morphit-emerald"
-						/>
-						<span class="text-sm">
-							<span class="font-semibold">{$_('post_order.fee_method.btc_label')}</span>
-							<span class="block text-xs text-ink-500">
-								{#if btcPerOrderAddress}
-									{$_('post_order.fee_method.btc_hint_per_order')}
-								{:else}
-									{$_('post_order.fee_method.btc_hint')}
-								{/if}
+						<label class="flex items-start gap-2 py-1">
+							<input
+								type="radio"
+								name="fee-method"
+								value="btc"
+								bind:group={feeMethodChoice}
+								class="mt-0.5 accent-morphit-emerald"
+							/>
+							<span class="text-sm">
+								<span class="font-semibold">{$_('post_order.fee_method.btc_label')}</span>
+								<span class="block text-xs text-ink-500">
+									{#if btcPerOrderAddress}
+										{$_('post_order.fee_method.btc_hint_per_order')}
+									{:else}
+										{$_('post_order.fee_method.btc_hint')}
+									{/if}
+								</span>
 							</span>
-						</span>
-					</label>
+						</label>
 					{/if}
 					{#if xmrFeeOffered}
-					<label class="flex items-start gap-2 py-1">
-						<input
-							type="radio"
-							name="fee-method"
-							value="xmr"
-							bind:group={feeMethodChoice}
-							class="mt-0.5 accent-morphit-emerald"
-						/>
-						<span class="text-sm">
-							<span class="font-semibold">{$_('post_order.fee_method.xmr_label')}</span>
-							<span class="block text-xs text-ink-500">
-								{$_('post_order.fee_method.xmr_hint')}
+						<label class="flex items-start gap-2 py-1">
+							<input
+								type="radio"
+								name="fee-method"
+								value="xmr"
+								bind:group={feeMethodChoice}
+								class="mt-0.5 accent-morphit-emerald"
+							/>
+							<span class="text-sm">
+								<span class="font-semibold">{$_('post_order.fee_method.xmr_label')}</span>
+								<span class="block text-xs text-ink-500">
+									{$_('post_order.fee_method.xmr_hint')}
+								</span>
 							</span>
-						</span>
-					</label>
+						</label>
 					{/if}
 					{#if someFeeMethodOff}
 						<p class="mt-1 text-xs text-ink-500">
@@ -3847,43 +3856,43 @@
 			{/await}
 
 			{#if !(feeMethodChoice === 'btc' && btcPerOrderAddress)}
-			<section class="card mb-4" aria-labelledby="txid-heading">
-				<div class="mb-3 flex items-center gap-2">
-					<h2 id="txid-heading" class="font-display text-lg font-bold">
-						{$_('post_order.fee_method.txid_label')}
-					</h2>
-					<Tooltip
-						textKey="post_order.fee_method.txid_tooltip"
-						faqKey="what_is_a_txid"
-						ariaLabel={$_('post_order.fee_method.txid_tooltip_aria')}
+				<section class="card mb-4" aria-labelledby="txid-heading">
+					<div class="mb-3 flex items-center gap-2">
+						<h2 id="txid-heading" class="font-display text-lg font-bold">
+							{$_('post_order.fee_method.txid_label')}
+						</h2>
+						<Tooltip
+							textKey="post_order.fee_method.txid_tooltip"
+							faqKey="what_is_a_txid"
+							ariaLabel={$_('post_order.fee_method.txid_tooltip_aria')}
+						/>
+					</div>
+					<input
+						id="external-tx-id"
+						type="text"
+						autocomplete="off"
+						autocapitalize="none"
+						spellcheck="false"
+						bind:value={externalTxId}
+						maxlength="128"
+						placeholder={$_('post_order.fee_method.txid_placeholder')}
+						class="w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm tracking-tight dark:border-ink-600 dark:bg-ink-900"
+						aria-invalid={externalTxIdError !== '' && externalTxIdError !== 'ok'}
+						aria-describedby="txid-msg"
 					/>
-				</div>
-				<input
-					id="external-tx-id"
-					type="text"
-					autocomplete="off"
-					autocapitalize="none"
-					spellcheck="false"
-					bind:value={externalTxId}
-					maxlength="128"
-					placeholder={$_('post_order.fee_method.txid_placeholder')}
-					class="w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm tracking-tight dark:border-ink-600 dark:bg-ink-900"
-					aria-invalid={externalTxIdError !== '' && externalTxIdError !== 'ok'}
-					aria-describedby="txid-msg"
-				/>
-				<p
-					id="txid-msg"
-					class="mt-2 text-xs {externalTxIdError !== '' && externalTxIdError !== 'ok'
-						? 'text-red-600 dark:text-red-400'
-						: 'text-ink-500'}"
-				>
-					{#if externalTxIdError !== '' && externalTxIdError !== 'ok'}
-						{externalTxIdError}
-					{:else}
-						{$_('post_order.fee_method.txid_hint')}
-					{/if}
-				</p>
-			</section>
+					<p
+						id="txid-msg"
+						class="mt-2 text-xs {externalTxIdError !== '' && externalTxIdError !== 'ok'
+							? 'text-red-600 dark:text-red-400'
+							: 'text-ink-500'}"
+					>
+						{#if externalTxIdError !== '' && externalTxIdError !== 'ok'}
+							{externalTxIdError}
+						{:else}
+							{$_('post_order.fee_method.txid_hint')}
+						{/if}
+					</p>
+				</section>
 			{/if}
 		{/if}
 
@@ -4061,7 +4070,9 @@
 				disabled={(feeMethodChoice === 'blurt' && !feeQuote) ||
 					(feeMethodChoice === 'btc' && !btcPerOrderAddress && externalTxIdError !== 'ok') ||
 					(feeMethodChoice === 'xmr' &&
-						(externalTxIdError !== 'ok' || txKeyError !== 'ok' || (xmrBound && xmrPayFor === null)))}
+						(externalTxIdError !== 'ok' ||
+							txKeyError !== 'ok' ||
+							(xmrBound && xmrPayFor === null)))}
 				onclick={goToPasswordPrompt}
 			>
 				{#if feeMethodChoice === 'waived_first_buy'}

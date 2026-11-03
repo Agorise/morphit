@@ -21,6 +21,7 @@
  * and choose to show a "still loading" or just-default UI.
  */
 
+import type { NativeCoinTicker, SameTickerSet } from '@morphit/asset-registry';
 import { feeRecipientRegisteredOf } from './feeRecipient';
 import { writable, get, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
@@ -96,13 +97,13 @@ export interface InstanceState {
 		 *  MORPHIT_FRONTEND_DASH_CHAT_LINK_URL. */
 		readonly dash: string | null;
 		/** DOGE chat-link explorer override.
-		 *  Single-network like BTC/XMR/BCH/LTC/DASH (no per-
+		 *  Single-network like the coins above (no per-
 		 *  network sub-map).  Operator can override the
 		 *  bundled blockchair.com/dogecoin default via
 		 *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL. */
 		readonly doge: string | null;
 		/** ZEC chat-link explorer override.
-		 *  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE (no
+		 *  Single-network like the coins above (no
 		 *  per-network sub-map).  Operator can override the
 		 *  bundled mainnet.zcashexplorer.app default via
 		 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL. */
@@ -112,6 +113,7 @@ export interface InstanceState {
 		readonly sol: string | null;
 		readonly eth: string | null;
 		readonly xrp: string | null;
+		readonly ecx: string | null;
 		/** USDT per-network explorer URL overrides.
 		 *  Each field is either a `https://…/{txid}…` template
 		 *  (operator override) or null (use frontend bundled
@@ -183,6 +185,15 @@ export interface InstanceState {
 	readonly loaded: boolean;
 }
 
+/** chat_link_urls has one setting per coin with a chain of its own (plus the
+ *  per-network token maps) — checked against the canonical registry, so a coin
+ *  added there does not compile until it has its field above, in the defaults
+ *  and in the normaliser below (and the indexer and its client carry it too). */
+export const CHAT_LINK_URLS_ARE_THE_NATIVE_COINS: SameTickerSet<
+	Exclude<keyof InstanceState['chat_link_urls'], 'usdt' | 'usdc' | 'dai'>,
+	Lowercase<NativeCoinTicker>
+> = true;
+
 /** fee_methods from the wire `treasury` object (see InstanceState). */
 export function feeMethodsFromWire(treasury: unknown): InstanceState['fee_methods'] {
 	if (typeof treasury !== 'object' || treasury === null) return { btc: null, xmr: null };
@@ -229,6 +240,7 @@ const FALLBACK: InstanceState = {
 		sol: null,
 		eth: null,
 		xrp: null,
+		ecx: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 		usdc: { erc20: null, spl: null, base: null, polygon: null },
 		dai: { erc20: null, polygon: null, base: null, arbitrum: null }
@@ -340,6 +352,7 @@ export function initInstance(): Promise<void> {
 								sol: result.data.chat_link_urls.sol ?? null,
 								eth: result.data.chat_link_urls.eth ?? null,
 								xrp: result.data.chat_link_urls.xrp ?? null,
+								ecx: result.data.chat_link_urls.ecx ?? null,
 								usdt: result.data.chat_link_urls.usdt ?? {
 									erc20: null,
 									trc20: null,
@@ -372,6 +385,7 @@ export function initInstance(): Promise<void> {
 								sol: null,
 								eth: null,
 								xrp: null,
+								ecx: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 								usdc: { erc20: null, spl: null, base: null, polygon: null },
 								dai: { erc20: null, polygon: null, base: null, arbitrum: null }

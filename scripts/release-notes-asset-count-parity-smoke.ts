@@ -22,6 +22,14 @@
  *     `packages/asset-registry/src/index.ts`.
  *   - Trade-only count: total - fee-eligible.
  *
+ * Which notes: ONLY the current release's notes
+ * (docs/release-notes/RELEASE-NOTES-v<root package.json version>.md).
+ * Every release keeps its own notes as written: a count in an older
+ * release's notes was true for that release, and adding a coin later
+ * must never ask anyone to rewrite it. A release whose notes make no
+ * count claim passes. A self-test on a made-up sentence proves the
+ * patterns still catch a wrong count.
+ *
  * Pattern set (English release notes only — translated FAQ
  * entries are out of scope; they'd need per-locale count-word
  * maps, deferred to a future smoke if drift surfaces in
@@ -31,14 +39,10 @@
  *   2. "<N> ... trade-only"                → matches trade-only count
  *   3. "<N> ... (can pay )?listing fees"   → matches fee-eligible count
  *
- * Each pattern is matched in the RELEASE-NOTES-*.md file(s)
- * found under repo root.  Each match's count-word is compared
- * to the truth-source.
- *
  * Each (file, pattern, match) tuple = one scenario.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -120,20 +124,20 @@ function parseCount(token: string): number | null {
 	return isFinite(n) && n > 0 ? n : null;
 }
 
-// ─── 3. Find release-notes files ─────────────────────────────────
+// ─── 3. The current release's notes (older notes stay as written) ──
 const NOTES_DIR = join(REPO, 'docs', 'release-notes');
-const allFiles = existsSync(NOTES_DIR) ? readdirSync(NOTES_DIR) : [];
-const RELEASE_NOTES_FILES = allFiles
-	.filter((f) => /^RELEASE-NOTES-v[\w.-]+\.md$/.test(f))
-	.map((f) => join(NOTES_DIR, f));
+const VERSION = (
+	JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as { version: string }
+).version;
+const CURRENT_NOTES = join(NOTES_DIR, `RELEASE-NOTES-v${VERSION}.md`);
+const RELEASE_NOTES_FILES = existsSync(CURRENT_NOTES) ? [CURRENT_NOTES] : [];
 
-if (RELEASE_NOTES_FILES.length === 0) {
-	console.log('  ✗ no RELEASE-NOTES-v*.md files found in docs/release-notes/');
-	console.log('\n✗ 1/1 scenarios failed');
-	process.exit(1);
-}
-
-console.log(`  release-notes files: ${RELEASE_NOTES_FILES.length}`);
+console.log(`  current release: v${VERSION}`);
+console.log(
+	RELEASE_NOTES_FILES.length === 1
+		? `  checking: docs/release-notes/RELEASE-NOTES-v${VERSION}.md`
+		: `  no notes yet for v${VERSION}: nothing to check`
+);
 
 // ─── 4. Patterns + truth-source mapping ─────────────────────────
 interface Pattern {
@@ -188,12 +192,9 @@ interface Finding {
 	matchToken: string;
 }
 
-const findings: Finding[] = [];
-let scenarios = 0;
-
-for (const filePath of RELEASE_NOTES_FILES) {
-	const text = readFileSync(filePath, 'utf8');
-	const rel = filePath.replace(REPO + '/', '');
+function scan(text: string, rel: string): { checked: number; findings: Finding[] } {
+	const out: Finding[] = [];
+	let checked = 0;
 	for (const pat of PATTERNS) {
 		pat.regex.lastIndex = 0;
 		let m: RegExpExecArray | null;
@@ -206,9 +207,9 @@ for (const filePath of RELEASE_NOTES_FILES) {
 				// pattern with token="the").  Skip silently.
 				continue;
 			}
-			scenarios++;
+			checked++;
 			if (actual !== pat.expected) {
-				findings.push({
+				out.push({
 					file: rel,
 					pattern: pat.name,
 					expected: pat.expected,
@@ -219,16 +220,40 @@ for (const filePath of RELEASE_NOTES_FILES) {
 			}
 		}
 	}
+	return { checked, findings: out };
+}
+
+// Self-test: a sentence one coin off on every count must be caught three times.
+{
+	const off = (n: number): string => NUMBERS_TO_WORDS[n + 1] ?? String(n + 1);
+	const probe =
+		`${off(tradableCount)} tradable assets. The other ${off(tradeOnlyCount)} are trade-only. ` +
+		`${off(feeEligibleCount)} — BTC, XMR, BLURT — can pay listing fees.`;
+	const r = scan(probe, '(self-test)');
+	if (r.findings.length !== 3) {
+		console.log(`  ✗ self-test: a wrong count went unnoticed (${r.findings.length}/3 caught)`);
+		console.log('\n✗ 1/1 scenarios failed');
+		process.exit(1);
+	}
+	console.log('  ✓ self-test: a wrong count in each pattern is caught');
+}
+
+const findings: Finding[] = [];
+let scenarios = 0;
+
+for (const filePath of RELEASE_NOTES_FILES) {
+	const r = scan(readFileSync(filePath, 'utf8'), filePath.replace(REPO + '/', ''));
+	scenarios += r.checked;
+	findings.push(...r.findings);
 }
 
 console.log(`  pattern matches checked: ${scenarios}`);
 
 if (scenarios === 0) {
-	console.log('\n  ✗ no asset-count claims found in any release-notes file —');
-	console.log("    pattern set is broken, or release notes don't carry claims");
-	console.log('    (this is itself a regression — release notes should claim asset counts)');
-	console.log('\n✗ 1/1 scenarios failed');
-	process.exit(1);
+	console.log('  ✓ the current notes make no asset-count claim');
+	console.log('\n──────────────────────────────────────────────────────');
+	console.log('✓ all 1 scenarios passed'); // the self-test
+	process.exit(0);
 }
 
 if (findings.length > 0) {
@@ -242,9 +267,8 @@ if (findings.length > 0) {
 		console.log(`        context: "${f.matchText.replace(/\s+/g, ' ').trim()}"`);
 	}
 	console.log(
-		`\n  Fix: edit the release-notes file(s) so each count matches the` +
-			`\n  registry, OR update the registry if the asset list changed and` +
-			`\n  the release notes are the leading source.`
+		`\n  Fix: correct the count in this release's notes (older releases'` +
+			`\n  notes stay as they were written).`
 	);
 	console.log('\n──────────────────────────────────────────────────────');
 	console.log(`✗ ${findings.length}/${scenarios} scenarios failed`);

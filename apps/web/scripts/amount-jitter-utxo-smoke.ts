@@ -21,9 +21,7 @@
  *    reversed because the amount-correlation linkability
  *    threat is independent of the centralization concern.
  *  - jitterAmountForAsset dispatcher: per-asset routing across
- *    all 15 tradable assets (was "12" stale since an earlier release;
- *    ZEC + ARRR + DCR + SOL + ETH all
- *    brought us to 15 without updating this comment)
+ *    every tradable asset
  *  - input validation throws on garbage
  */
 

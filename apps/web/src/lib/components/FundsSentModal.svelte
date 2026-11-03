@@ -87,7 +87,7 @@
 		initialDaiNetwork?: DaiNetwork | null;
 		/** Q5 — Initial amount, pre-filled when the modal was
 		 *  triggered from an incoming external-asset address pill
-		 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH) that carried an amount.
+		 *  (any coin but BLURT) that carried an amount.
 		 *  The buyer types the txid; the amount field starts
 		 *  populated with whatever the seller asked for (which,
 		 *  for jittered XMR/UTXO/stablecoin amounts, is the exact
@@ -148,7 +148,8 @@
 		'dcr',
 		'sol',
 		'eth',
-		'xrp'
+		'xrp',
+		'ecx'
 	];
 	const visibleMethods = $derived(
 		allowedMethods && allowedMethods.length > 0

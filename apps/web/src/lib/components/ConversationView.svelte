@@ -128,7 +128,7 @@
 	import { decodePayload, encodeFundsSentPayload, type FundsSentPayload } from '$lib/chat/payload';
 	import { legLedger, legPaymentsFor, recordLegPayment } from '$lib/chat/legLedger';
 	import { chainAckedFor, rememberChainAck } from '$lib/chat/chainAckMemory';
-	import type { ChatAssetTicker } from '$lib/chat/payload';
+	import type { ChatAssetTicker, OffChainCoin } from '$lib/chat/payload';
 	import { chatAssetFromTicker, getAsset } from '$lib/assets/registry';
 	import { isGoodsAsset } from '@morphit/asset-registry';
 	import { computeOrderPayAmount } from '$lib/orders/payAmount';
@@ -948,29 +948,14 @@
 	let showShipmentModal = $state(false);
 	/** Q5 — Mark-as-sent prefill from an incoming address pill
 	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/
-	 *  ETH/XRP — all 15 single-side methods; BLURT pays via the
+	 *  ETH/XRP/ECX — every coin but BLURT, which pays via the
 	 *  separate PayBlurtModal path).  Held separately from
 	 *  showFundsSentModal so the composer-level "I sent it"
 	 *  button (no prefill) and the pill-level Mark-as-sent
 	 *  button (with prefill) share the modal but supply
 	 *  different starting state. */
 	let markSentArgs = $state<{
-		method:
-			| 'btc'
-			| 'xmr'
-			| 'usdt'
-			| 'usdc'
-			| 'dai'
-			| 'bch'
-			| 'ltc'
-			| 'dash'
-			| 'doge'
-			| 'zec'
-			| 'arrr'
-			| 'dcr'
-			| 'sol'
-			| 'eth'
-			| 'xrp';
+		method: OffChainCoin;
 		amount?: string;
 		orderPermlink?: string;
 		// + — pill's "Mark as sent" button now
@@ -1115,7 +1100,7 @@
 
 	/** Q5 — Mark-as-sent click on an incoming address pill
 	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/
-	 *  ETH/XRP).  Captures the seller's specified method+amount
+	 *  ETH/XRP/ECX).  Captures the seller's specified method+amount
 	 *  and opens FundsSentModal pre-filled. Critical for the
 	 *  Monero amount-jitter flow: the buyer's funds-sent echo
 	 *  MUST carry the same jittered amount the seller asked for,
@@ -1126,22 +1111,7 @@
 	 *  their own wallet (scanning the QR / pasting the address),
 	 *  then comes back to this modal with the txid in hand. */
 	function handleMarkSentClick(args: {
-		method:
-			| 'btc'
-			| 'xmr'
-			| 'usdt'
-			| 'usdc'
-			| 'dai'
-			| 'bch'
-			| 'ltc'
-			| 'dash'
-			| 'doge'
-			| 'zec'
-			| 'arrr'
-			| 'dcr'
-			| 'sol'
-			| 'eth'
-			| 'xrp';
+		method: OffChainCoin;
 		amount?: string;
 		orderPermlink?: string;
 		network?: string;
@@ -2272,7 +2242,7 @@
 	 *  `OrderRecord.asset` is the canonical UPPERCASE AssetTicker
 	 *  ('BLURT') while ChatAssetTicker is lower-case ('blurt'); the old inline
 	 *  check compared them directly and ALWAYS failed, so the lock never engaged
-	 *  and every order fell back to the free 16-coin picker. `chatAssetFromTicker`
+	 *  and every order fell back to the free coin picker. `chatAssetFromTicker`
 	 *  folds the case. */
 	const composerPayNowAsset = $derived(
 		markSentArgs === null && orderRecord && !isGoodsAsset(orderRecord.asset)

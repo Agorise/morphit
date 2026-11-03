@@ -215,6 +215,8 @@ SECTIONS = [
         ('Dash (DASH)',                                                      ['Y','-','-','-','Y'], None),
         ('Solana (SOL)',                                                     ['Y','-','-','-','-'], None),
         ('XRP (XRP)',                                                        ['Y','-','-','-','-'], None),
+        # eCash launched 29 Oct 2026; none of the four lists it (checked 2026-11-02).
+        ('eCash (ECX)',                                                      ['Y','-','-','-','-'], None),
         ('Fiat (cash, bank transfer, etc.)',                                 ['Y','Y','Y','Y','-'], None),
         ('Barter for goods and services',                                    ['Y','-','-','-','-'], None),
         ('Cash by mail with carrier-tracking workflow',                      ['Y','-','-','-','-'], None),

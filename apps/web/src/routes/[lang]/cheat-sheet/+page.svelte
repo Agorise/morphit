@@ -29,10 +29,11 @@
 	import Head from '$components/Head.svelte';
 	import { getAsset } from '$lib/assets/registry';
 	import type { ChatAssetTicker } from '$lib/chat/payload';
+	import type { SameTickerSet } from '@morphit/asset-registry';
 	import { instance } from '$stores/instance';
 
 	/** The sheet's asset rows, in this order — the ones this site accepts. */
-	const SHEET_ORDER: readonly ChatAssetTicker[] = [
+	const SHEET_ORDER = [
 		'btc',
 		'xmr',
 		'blurt',
@@ -49,8 +50,14 @@
 		'sol',
 		'eth',
 		'xrp',
+		'ecx',
 		'barter'
-	];
+	] as const satisfies readonly ChatAssetTicker[];
+	/** Every coin is on the sheet: a coin added to the registry does not compile
+	 *  until it has its row in SHEET_ORDER (and, by the per-asset-mandatory-family
+	 *  smoke, its cheat_sheet.section_assets text in every locale). */
+	const SHEET_HAS_EVERY_COIN: SameTickerSet<(typeof SHEET_ORDER)[number], ChatAssetTicker> = true;
+	void SHEET_HAS_EVERY_COIN;
 	const sheetAssets = $derived.by(() => {
 		const off = new Set($instance.disabled_assets.map((t) => t.toUpperCase()));
 		return SHEET_ORDER.map(getAsset).filter((a) => !off.has(a.displayTicker.toUpperCase()));

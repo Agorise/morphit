@@ -35,10 +35,7 @@ const __dirname = dirname(__filename);
 const STATIC_DIR = resolve(__dirname, '../apps/web/static');
 const OUT_PATH = resolve(STATIC_DIR, 'sitemap.xml');
 const ROUTES_TS_PATH = resolve(__dirname, '../apps/web/src/lib/seo/routes.ts');
-const ASSET_REGISTRY_PATH = resolve(
-	__dirname,
-	'../packages/asset-registry/src/index.ts'
-);
+const ASSET_REGISTRY_PATH = resolve(__dirname, '../packages/asset-registry/src/index.ts');
 const LOCALES_DIR = resolve(__dirname, '../apps/web/src/lib/i18n/locales');
 
 // The build origin: `morphit-ops` rewrites it to each instance's own
@@ -78,7 +75,7 @@ const ROUTES = [
 	{ path: '/privacy', priority: 0.6, changefreq: 'monthly' },
 	// dynamic-path entry.  The `[asset]` segment expands to
 	// one URL per tradable ticker at sitemap build time (see expandRoutes).
-	// 16 current tradable tickers × 10 locales = 160 new sitemap URLs.
+	// One URL per ticker in ASSET_TICKERS × 10 locales.
 	{ path: '/privacy/[asset]', priority: 0.5, changefreq: 'monthly' }
 ];
 
@@ -95,8 +92,8 @@ function readAssetTickers() {
 	const m = src.match(/export\s+const\s+ASSET_TICKERS\s*=\s*\[([^\]]+)\]\s*as\s+const/);
 	if (!m) {
 		throw new Error(
-			'build-sitemap: ASSET_TICKERS not found in asset-registry. '
-				+ 'The parser may be out of date with the file shape.'
+			'build-sitemap: ASSET_TICKERS not found in asset-registry. ' +
+				'The parser may be out of date with the file shape.'
 		);
 	}
 	const tickers = [];
@@ -140,8 +137,8 @@ function expandRoutes(routes) {
 			}
 		} else if (r.path.includes('[')) {
 			throw new Error(
-				`build-sitemap: unhandled dynamic segment in route ${r.path}. `
-					+ 'Add a case to expandRoutes() for this segment.'
+				`build-sitemap: unhandled dynamic segment in route ${r.path}. ` +
+					'Add a case to expandRoutes() for this segment.'
 			);
 		} else {
 			out.push(r);
@@ -183,17 +180,17 @@ function assertRoutesInSync() {
 	}
 	if (parsed.length === 0) {
 		throw new Error(
-			'build-sitemap: parsed zero indexable routes from routes.ts. '
-				+ 'The parser may be out of date with the file shape.'
+			'build-sitemap: parsed zero indexable routes from routes.ts. ' +
+				'The parser may be out of date with the file shape.'
 		);
 	}
 	// Compare: same paths, in the same order, with same priority+changefreq.
 	if (parsed.length !== ROUTES.length) {
 		throw new Error(
-			`build-sitemap: drift — routes.ts has ${parsed.length} indexable `
-				+ `routes but this script has ${ROUTES.length}. Synchronize the `
-				+ `ROUTES array in scripts/build-sitemap.mjs with INDEXABLE_ROUTES `
-				+ `in apps/web/src/lib/seo/routes.ts.`
+			`build-sitemap: drift — routes.ts has ${parsed.length} indexable ` +
+				`routes but this script has ${ROUTES.length}. Synchronize the ` +
+				`ROUTES array in scripts/build-sitemap.mjs with INDEXABLE_ROUTES ` +
+				`in apps/web/src/lib/seo/routes.ts.`
 		);
 	}
 	for (let i = 0; i < parsed.length; i++) {
@@ -201,9 +198,9 @@ function assertRoutesInSync() {
 		const b = ROUTES[i];
 		if (a.path !== b.path || a.priority !== b.priority || a.changefreq !== b.changefreq) {
 			throw new Error(
-				`build-sitemap: drift at index ${i} — routes.ts has `
-					+ `${JSON.stringify(a)} but this script has ${JSON.stringify(b)}. `
-					+ `Synchronize the two.`
+				`build-sitemap: drift at index ${i} — routes.ts has ` +
+					`${JSON.stringify(a)} but this script has ${JSON.stringify(b)}. ` +
+					`Synchronize the two.`
 			);
 		}
 	}

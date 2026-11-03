@@ -165,7 +165,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 	},
 	{
 		// Decred as a payment method.  Same
-		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC/ARRR:
+		// Category-B semantics as the other trade-only coins:
 		// when the trade's traded asset is DCR, "pay with DCR"
 		// is hidden (assetExclusion); when the traded asset is
 		// something else, DCR appears as a selectable payment-
@@ -207,6 +207,16 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'DOGE'
 	},
 	{
+		// eCash (ECX) as a payment method.  Same Category-B semantics as the
+		// other trade-only coins: hidden when the traded asset is ECX.
+		// invariant: every tradable asset MUST also be wired as a payment rail.
+		key: 'pay_ecx',
+		name: 'eCash (ECX)',
+		url: 'https://ecash.com',
+		category: 'crypto',
+		assetExclusion: 'ECX'
+	},
+	{
 		// Ethereum as a payment method.  Same
 		// Category-B semantics as the other trade-only assets:
 		// when the trade's traded asset is ETH, "pay with ETH"
@@ -219,8 +229,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// CP32 LL #36 INVARIANT: every tradable asset MUST also
 		// be wired as a payment rail.  A later change ships ETH with the
 		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE, ZEC,
-		// ARRR, DCR, SOL.
+		// pattern established for the coins added before it.
 		key: 'pay_eth',
 		name: 'Ethereum (ETH)',
 		url: 'https://ethereum.org',
@@ -251,7 +260,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 	},
 	{
 		// Pirate Chain as a payment method.  Same
-		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC: when the
+		// Category-B semantics as the other trade-only coins: when the
 		// trade's traded asset is ARRR, "pay with ARRR" is hidden
 		// (assetExclusion); when the traded asset is something
 		// else, ARRR appears as a selectable payment-rail chip.
@@ -309,8 +318,8 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// Mirror BTC/XMR/BLURT semantics — when the trade's asset
 		// is USDT, "pay with USDT" doesn't make sense, so hide
 		// this option in the payment-methods picker.  When the
-		// trade's asset is BTC, XMR, BLURT, USDC, DAI, BCH, LTC,
-		// DASH, or DOGE, USDT is a valid payment rail and shows up as a
+		// trade's asset is any other coin, USDT is a valid payment
+		// rail and shows up as a
 		// selectable chip.  The specific network (ERC-20 / TRC-20
 		// / SPL / BEP-20) is pinned at chat-time via
 		// AddressShareModal's USDT tab; the picker itself doesn't

@@ -298,6 +298,11 @@ const XRP_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
 
 const validateXrp: AddressValidator = (s) => XRP_RE.test(s);
 
+// eCash (ECX) keeps Bitcoin's address formats unchanged (base58 prefixes 0
+// and 5, bech32 hrp "bc"): an ECX address IS a BTC address, so the check is
+// Bitcoin's.  The chat card names the chain in words (assets.ecx.address_share).
+const validateEcx: AddressValidator = (s) => validateBtc(s);
+
 // ─── Registry ────────────────────────────────────────────────────
 
 /** The full registry, ordered for display purposes (Monero
@@ -412,7 +417,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: false,
 		addressValidator: validateUsdc,
 		// TRADE-ONLY INVARIANT: USDC cannot pay listing fees.
-		// Trade-only Category B asset alongside USDT/DAI/BCH/LTC/DASH/DOGE.
+		// Trade-only Category B asset, like every coin but BTC, XMR and BLURT.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
 		// Multi-network: ERC-20, SPL, Base, Polygon.  Native USDC
@@ -461,7 +466,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		supportsMemo: false,
 		addressValidator: validateDai,
 		// TRADE-ONLY INVARIANT: DAI cannot pay listing fees.
-		// Trade-only Category B asset alongside USDT/USDC/BCH/LTC/DASH/DOGE.
+		// Trade-only Category B asset, like every coin but BTC, XMR and BLURT.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
 		// Multi-network: ERC-20 (native), Polygon (PoS), Base,
@@ -791,6 +796,28 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		privacyWarningKey: null
 	},
 	{
+		// eCash (ECX): the hard fork of Bitcoin associated with LayerTwo Labs
+		// (block 973,728, 29 Oct 2026), with drivechains.  Always shown as "eCash (ECX)": XEC,
+		// Bitcoin ABC's older coin, is also called eCash.  ADR-0053.
+		ticker: 'ecx',
+		displayTicker: 'ECX',
+		displayName: 'eCash (ECX)',
+		oneLineDescription:
+			'eCash (ECX) — a 2026 hard fork of Bitcoin with drivechains, not XEC.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-ecx.svg',
+		accentClass: 'text-orange-300',
+		decimals: 8,
+		supportsMemo: false,
+		addressValidator: validateEcx,
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// No issuer can freeze ECX.  Its hazards (Bitcoin-identical addresses,
+		// opt-in replay protection) are on the chat card and in the FAQ.
+		privacyWarningKey: null
+	},
+	{
 		// BARTER: goods/services as a tradable asset (not a crypto).
 		// Display metadata only; every crypto-shaped path (address, price,
 		// network, memo, listing-fee) is gated away by isGoodsAsset().
@@ -853,7 +880,7 @@ export function getAsset(ticker: ChatAssetTicker): AssetMetadata {
  *  AssetTicker ('BLURT'), but this registry + ChatAssetTicker are lower-case
  *  ('blurt'); without folding the case an uppercase order asset never matched,
  *  so the composer "Pay now" asset-lock silently failed and the modal fell back
- *  to the free 16-coin picker. Case-insensitive + total. */
+ *  to the free coin picker. Case-insensitive + total. */
 export function chatAssetFromTicker(ticker: string): ChatAssetTicker | null {
 	const lower = ticker.toLowerCase();
 	return Object.prototype.hasOwnProperty.call(BY_TICKER, lower)

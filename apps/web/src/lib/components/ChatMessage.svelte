@@ -41,7 +41,12 @@
 		SESSION_LOCKED_SENTINEL,
 		MESSAGE_TOO_LONG_SENTINEL
 	} from '$lib/chat/chatService';
-	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
+	import {
+		decodePayload,
+		isOffChainCoin,
+		type ChatAssetTicker,
+		type OffChainCoin
+	} from '$lib/chat/payload';
 	import { CARRIERS, buildTrackingUrl } from '$lib/shipping/carriers';
 
 	// O(1) carrier lookup for shipment-pill rendering.
@@ -104,8 +109,8 @@
 			orderPermlink?: string;
 		}) => void;
 		/** Q5 — invoked when the user taps "Mark as sent" on an
-		 *  incoming address pill (BTC, XMR, USDT, BCH, LTC, or
-		 *  DASH).  Opens FundsSentModal pre-filled with the
+		 *  incoming address pill (any coin but BLURT).  Opens
+		 *  FundsSentModal pre-filled with the
 		 *  seller's specified method+amount — critical for the
 		 *  Monero amount-jitter flow, since the buyer's
 		 *  funds-sent echo needs to reference the same jittered
@@ -117,22 +122,7 @@
 		 *  BLURT transfers are single-tx and don't go through
 		 *  the mark-sent reconciliation flow). */
 		onMarkSent?: (args: {
-			method:
-				| 'btc'
-				| 'xmr'
-				| 'usdt'
-				| 'usdc'
-				| 'dai'
-				| 'bch'
-				| 'ltc'
-				| 'dash'
-				| 'doge'
-				| 'zec'
-				| 'arrr'
-				| 'dcr'
-				| 'sol'
-				| 'eth'
-				| 'xrp';
+			method: OffChainCoin;
 			amount?: string;
 			orderPermlink?: string;
 			network?: string;
@@ -346,8 +336,8 @@
 	}
 
 	/** Batch K — build the right explorer URL for a funds-sent
-	 *  txid.  Transparent external chains (BTC, XMR, BCH, LTC,
-	 *  DASH, and each USDT network) go to known-good external
+	 *  txid.  Every coin but BLURT (each network of USDT, USDC and DAI
+	 *  separately) goes to a known-good external
 	 *  explorers (link opens in new tab).  Native BLURT transfers
 	 *  go to our own /explorer/tx route (same-tab navigation).
 	 *  Returns null for unknown methods, malformed txids, or
@@ -374,6 +364,7 @@
 		if (method === 'sol') return externalExplorerUrl('SOL', txid);
 		if (method === 'eth') return externalExplorerUrl('ETH', txid);
 		if (method === 'xrp') return externalExplorerUrl('XRP', txid);
+		if (method === 'ecx') return externalExplorerUrl('ECX', txid);
 		if (method === 'usdt') {
 			// Per-network USDT explorer URL.  Without a network we
 			// can't pick the right template — older clients sending
@@ -409,6 +400,12 @@
 			}
 			return null;
 		}
+		// Barter is goods: no transaction to link.
+		if (method === 'barter') return null;
+		// Every ticker is handled above: a new coin does not compile until it
+		// has its explorer link here.
+		const unhandled: never = method;
+		void unhandled;
 		return null;
 	}
 
@@ -439,6 +436,7 @@
 		if (method === 'sol') return externalExplorerUrls('SOL', txid);
 		if (method === 'eth') return externalExplorerUrls('ETH', txid);
 		if (method === 'xrp') return externalExplorerUrls('XRP', txid);
+		if (method === 'ecx') return externalExplorerUrls('ECX', txid);
 		// multi-network tokens now get the same "+N more
 		// explorers" dropdown as native-chain assets.  Require the
 		// wire-format `network` field to disambiguate (same contract
@@ -903,21 +901,7 @@
 					ownOrder &&
 					ownerKnown &&
 					message.senderUnverified !== true &&
-					(p.method === 'btc' ||
-						p.method === 'xmr' ||
-						p.method === 'usdt' ||
-						p.method === 'usdc' ||
-						p.method === 'dai' ||
-						p.method === 'bch' ||
-						p.method === 'ltc' ||
-						p.method === 'dash' ||
-						p.method === 'doge' ||
-						p.method === 'zec' ||
-						p.method === 'arrr' ||
-						p.method === 'dcr' ||
-						p.method === 'sol' ||
-						p.method === 'eth' ||
-						p.method === 'xrp') &&
+					isOffChainCoin(p.method) &&
 					isIncoming}
 				{@const xmrLooksStandard = p.method === 'xmr' && p.address.startsWith('4')}
 				{@const usdtNetworkValid =
@@ -940,31 +924,7 @@
 					<div
 						class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-semibold uppercase tracking-wider opacity-70"
 					>
-						{#if p.method === 'btc'}
-							{$_('chat.address.pill_method_btc')}
-						{:else if p.method === 'xmr'}
-							{$_('chat.address.pill_method_xmr')}
-						{:else if p.method === 'bch'}
-							{$_('chat.address.pill_method_bch')}
-						{:else if p.method === 'ltc'}
-							{$_('chat.address.pill_method_ltc')}
-						{:else if p.method === 'dash'}
-							{$_('chat.address.pill_method_dash')}
-						{:else if p.method === 'doge'}
-							{$_('chat.address.pill_method_doge')}
-						{:else if p.method === 'zec'}
-							{$_('chat.address.pill_method_zec')}
-						{:else if p.method === 'arrr'}
-							{$_('chat.address.pill_method_arrr')}
-						{:else if p.method === 'dcr'}
-							{$_('chat.address.pill_method_dcr')}
-						{:else if p.method === 'sol'}
-							{$_('chat.address.pill_method_sol')}
-						{:else if p.method === 'eth'}
-							{$_('chat.address.pill_method_eth')}
-						{:else if p.method === 'xrp'}
-							{$_('chat.address.pill_method_xrp')}
-						{:else if p.method === 'usdt'}
+						{#if p.method === 'usdt'}
 							<!-- USDT pill header carries the
 							     network as a BOLD prefix so the buyer
 							     can't miss which chain to send on. -->
@@ -1002,8 +962,14 @@
 								</span>
 							{/if}
 							{$_('chat.address.pill_method_dai')}
-						{:else}
+						{:else if p.method === 'blurt'}
 							{$_('chat.address.pill_method_blurt')}
+						{:else}
+							<!-- Every other coin: its own label (per-asset-mandatory-family
+							     smoke: chat.address.pill_method_<coin> in every locale).
+							     The fallback used to be the BLURT label, so a coin missing
+							     from a hand-written list arrived as a "BLURT address". -->
+							{$_(`chat.address.pill_method_${p.method}`)}
 						{/if}
 						{#if p.amount}
 							<span class="font-mono">· {p.amount}</span>
@@ -1095,6 +1061,20 @@
 							})}
 						</aside>
 					{/if}
+					{#if p.method === 'ecx'}
+						<!-- eCash (ECX) warning.  An eCash address IS a Bitcoin
+						     address (same formats), so a Bitcoin wallet would
+						     pay BTC to it; and an eCash payment from coins held
+						     before the fork can be replayed on Bitcoin unless
+						     the wallet protects against it.  Stays on the chat
+						     record so the payer sees it whenever they pay. -->
+						<aside
+							class="rounded-md border border-amber-400/30 bg-amber-400/5 px-2.5 py-2 text-xs text-amber-200"
+							role="note"
+						>
+							{$_('assets.ecx.address_share.warning')}
+						</aside>
+					{/if}
 					{#if xmrLooksStandard}
 						<!-- Subaddress nudge — XMR addresses starting with
 						     `4` (standard or integrated) link every received
@@ -1175,22 +1155,7 @@
 								class="rounded-md border-2 border-morphit-btn bg-morphit-btn px-3 py-1 text-xs font-semibold text-morphit-btn-text hover:brightness-110"
 								onclick={() =>
 									onMarkSent?.({
-										method: p.method as
-											| 'btc'
-											| 'xmr'
-											| 'usdt'
-											| 'usdc'
-											| 'dai'
-											| 'bch'
-											| 'ltc'
-											| 'dash'
-											| 'doge'
-											| 'zec'
-											| 'arrr'
-											| 'dcr'
-											| 'sol'
-											| 'eth'
-											| 'xrp',
+										method: p.method as OffChainCoin,
 										amount: p.amount,
 										orderPermlink: p.orderPermlink,
 										// propagate the network
@@ -1241,31 +1206,7 @@
 					<div
 						class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70"
 					>
-						{#if p.method === 'btc'}
-							{$_('chat.funds_sent.pill_title_btc')}
-						{:else if p.method === 'xmr'}
-							{$_('chat.funds_sent.pill_title_xmr')}
-						{:else if p.method === 'bch'}
-							{$_('chat.funds_sent.pill_title_bch')}
-						{:else if p.method === 'ltc'}
-							{$_('chat.funds_sent.pill_title_ltc')}
-						{:else if p.method === 'dash'}
-							{$_('chat.funds_sent.pill_title_dash')}
-						{:else if p.method === 'doge'}
-							{$_('chat.funds_sent.pill_title_doge')}
-						{:else if p.method === 'zec'}
-							{$_('chat.funds_sent.pill_title_zec')}
-						{:else if p.method === 'arrr'}
-							{$_('chat.funds_sent.pill_title_arrr')}
-						{:else if p.method === 'dcr'}
-							{$_('chat.funds_sent.pill_title_dcr')}
-						{:else if p.method === 'sol'}
-							{$_('chat.funds_sent.pill_title_sol')}
-						{:else if p.method === 'eth'}
-							{$_('chat.funds_sent.pill_title_eth')}
-						{:else if p.method === 'xrp'}
-							{$_('chat.funds_sent.pill_title_xrp')}
-						{:else if p.method === 'usdt'}
+						{#if p.method === 'usdt'}
 							{#if usdtFundsNetworkValid}
 								<span class="rounded-md bg-amber-400/20 px-2 py-0.5 font-bold text-amber-300">
 									{$_(`assets.usdt.network.${p.network}.displayName`)}
@@ -1295,10 +1236,14 @@
 								</span>
 							{/if}
 							{$_('chat.funds_sent.pill_title_dai')}
-						{:else}
+						{:else if p.method === 'blurt'}
 							{isOutgoing
 								? $_('chat.funds_sent.pill_title_blurt')
 								: $_('chat.funds_sent.pill_title_blurt_received')}
+						{:else}
+							<!-- Every other coin: its own title (per-asset-mandatory-family
+							     smoke: chat.funds_sent.pill_title_<coin> in every locale). -->
+							{$_(`chat.funds_sent.pill_title_${p.method}`)}
 						{/if}
 						{#if fullTimestamp !== ''}
 							<span class="font-normal normal-case tracking-normal">

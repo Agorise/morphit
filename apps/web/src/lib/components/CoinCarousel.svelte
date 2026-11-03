@@ -9,7 +9,7 @@
 	disabled-by-operator coins invisible.  This carousel renders
 	three concatenated sources:
 
-	  1. The 16 tradable coin assets, from the canonical registry,
+	  1. The tradable coin assets, from the canonical registry,
 	     filtered against the operator's disabled-asset list.
 	  2. 5 settlement-network indicators (Arbitrum, Base, BEP-20,
 	     Polygon, TRC-20) so users searching for "what networks
@@ -114,7 +114,7 @@
 
 	/** Build the carousel sequence:
 	 *
-	 *    [16 tradable assets, registry-driven, operator-disabled-filtered]
+	 *    [every tradable coin, registry-driven, operator-disabled-filtered]
 	 *  + [5 network indicators]
 	 *  + [barter]
 	 *
@@ -190,7 +190,7 @@
 	 *
 	 *  Why this strategy: the registry order today is BTC, XMR,
 	 *  BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR,
-	 *  SOL, ETH, XRP, [5 networks], barter.  Alternating means each
+	 *  SOL, ETH, XRP, ECX, [5 networks], barter.  Alternating means each
 	 *  row sees a mixed-character set instead of one row of "the
 	 *  important originals" + another of "the latest additions";
 	 *  visually pleasant + every row stays representative as the

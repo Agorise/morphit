@@ -808,6 +808,51 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
+	// ─── eCash (ECX) P2P trading wired (ADR-0053) ───────────────
+	{
+		id: 'ecx-p2p',
+		claim_source: 'brag_list',
+		claim_phrase: 'eCash (ECX) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "ticker: 'ECX'",
+			paths: ['packages/asset-registry/src/index.ts']
+		},
+		status: 'live'
+	},
+	{
+		id: 'ecx-payment-rail-wired',
+		claim_source: 'brag_list',
+		claim_phrase: 'eCash (ECX) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "key: 'pay_ecx'",
+			paths: ['apps/web/src/lib/payments/registry.ts']
+		},
+		status: 'live'
+	},
+	{
+		id: 'ecx-explorer-ecash-only',
+		claim_source: 'brag_list',
+		claim_phrase: 'eCash (ECX) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "BUNDLED_ECX_CHAT_LINK_URL = 'https://explorer.ecash.com/tx/{txid}'",
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
+	{
+		id: 'ecx-no-wallet-link',
+		claim_source: 'brag_list',
+		claim_phrase: 'eCash (ECX) peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: '`ecash:` is the address prefix of XEC',
+			paths: ['apps/web/src/lib/chat/payload.ts']
+		},
+		status: 'live'
+	},
 	// ─── DAI post-page wired ───────────────────────
 	// A later change added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork

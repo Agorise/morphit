@@ -333,7 +333,7 @@ Query parameters (all optional):
 
 | Param            | Type    | Description |
 |---|---|---|
-| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, `USDC`, `DAI`, `BCH`, `LTC`, `DASH`, `DOGE`, `ZEC`, `ARRR`, `DCR`, `SOL`, `ETH`, or `XRP` |
+| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, `USDC`, `DAI`, `BCH`, `LTC`, `DASH`, `DOGE`, `ZEC`, `ARRR`, `DCR`, `SOL`, `ETH`, `XRP`, or `ECX` |
 | `asset_network`  | string  | For multi-network assets: USDT → `erc20`/`trc20`/`spl`/`bep20`; USDC → `erc20`/`spl`/`base`/`polygon`; DAI → `erc20`/`polygon`/`base`/`arbitrum`. Only orders on that network; refused for an asset that has one network or not this one |
 | `side`           | string  | `buy` or `sell` |
 | `fiat_currency`  | string  | ISO-4217, one or more, comma-separated, e.g. `USD` or `USD,EUR` |

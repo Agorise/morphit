@@ -72,8 +72,14 @@ export const ETH_TXID_RE = /^(0x)?[a-fA-F0-9]{64}$/;
  *  (32 bytes) hex, conventionally uppercase on the chain but the
  *  regex is case-insensitive.  64 hex chars, NO prefix — same
  *  shape as the BTC-family hex txids (BTC/BCH/LTC/DASH/DOGE/ZEC/
- *  ARRR/DCR).  Asset field disambiguates per LL #50. */
+ *  ARRR/DCR/ECX).  Asset field disambiguates per LL #50. */
 export const XRP_TXID_RE = /^[a-fA-F0-9]{64}$/;
+
+/** ECX (eCash) txid.  64 hex chars: eCash is a fork of Bitcoin and keeps
+ *  its transaction format.  A payment made from coins held before the fork
+ *  can have the SAME txid on Bitcoin (replay), so an ECX txid is only ever
+ *  linked to an eCash explorer. */
+export const ECX_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
@@ -347,6 +353,13 @@ export const BUNDLED_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
  *  MORPHIT_FRONTEND_XRP_CHAT_LINK_URL. */
 export const BUNDLED_XRP_CHAT_LINK_URL = 'https://livenet.xrpl.org/transactions/{txid}';
 
+/** ECX (eCash) chat-link explorer.  explorer.ecash.com, the project's own
+ *  mempool.space instance (the same /tx/{txid} page and /api the project
+ *  serves).  Never a Bitcoin explorer: the same txid can exist on Bitcoin
+ *  when a payment was replayed there, and a Bitcoin explorer would show
+ *  that copy.  Operators override via MORPHIT_FRONTEND_ECX_CHAT_LINK_URL. */
+export const BUNDLED_ECX_CHAT_LINK_URL = 'https://explorer.ecash.com/tx/{txid}';
+
 /** best→worst ordered lists of bundled explorer templates
  *  per asset.  The first element is the same string as the singular
  *  `BUNDLED_<ASSET>_CHAT_LINK_URL` constant above; the rest are
@@ -443,6 +456,14 @@ export const BUNDLED_XRP_CHAT_LINK_URLS: readonly string[] = [
 	'https://xrpscan.com/tx/{txid}',
 	'https://bithomp.com/explorer/{txid}',
 	'https://blockchair.com/xrp-ledger/transaction/{txid}'
+];
+
+export const BUNDLED_ECX_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_ECX_CHAT_LINK_URL,
+	// A second eCash explorer ("eCash Explorer", the same API and a
+	// client-routed /tx/{txid} page; its /api/tx answered for a mainnet txid
+	// at block 982,846 on 2026-11-03). See ADR-0053.
+	'https://explorer.blockfab.org/tx/{txid}'
 ];
 
 /** per-NETWORK ordered explorer-alternative lists for the

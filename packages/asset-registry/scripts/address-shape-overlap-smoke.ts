@@ -23,6 +23,9 @@
  *    (BCH preserves legacy compatibility; LTC `3...` is legacy P2SH).
  *  - {ZEC, ARRR} both accept zs1 Sapling shielded addresses
  *    (Pirate Chain forked from Zcash Sapling protocol).
+ *  - {BTC, ECX} accept exactly the same addresses: eCash (ECX) kept
+ *    Bitcoin's formats, so the string never tells the two apart (the
+ *    chat card names the chain; ADR-0053).
  *
  * Any UNDOCUMENTED overlap fails the smoke.
  *
@@ -62,7 +65,9 @@ const SPECIMENS: Record<string, string[]> = {
 	DCR: ['Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d', 'DcaBzU8eM3o5dC6Phx8nDQAVa1iSYHwSc9N'],
 	SOL: ['So11111111111111111111111111111111111111112', '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM'],
 	ETH: ['0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'],
-	XRP: ['rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh', 'rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv']
+	XRP: ['rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh', 'rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv'],
+	// eCash keeps Bitcoin's address formats: the same strings.
+	ECX: ['1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy', 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq']
 };
 
 // Documented intentional overlaps as (A_owner, addr_class, B_acceptors).
@@ -154,7 +159,25 @@ const EXPECTED_OVERLAPS: Set<string> = new Set([
 	'ZEC-t3JXcyHRZqv6sgCnJiR9Zc4sXh9pK77HQjE->SOL',
 	'ZEC-t3JXcyHRZqv6sgCnJiR9Zc4sXh9pK77HQjE->USDC',
 	'ZEC-t3JXcyHRZqv6sgCnJiR9Zc4sXh9pK77HQjE->USDT',
-	'ZEC-zs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq->ARRR',
+	'ZEC-zs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq->ARRR',	// eCash (ECX) uses Bitcoin's own address formats: every BTC specimen is an
+	// ECX one and the reverse, with all of BTC's overlaps (ADR-0053).
+	'BCH-1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa->ECX',
+	'BTC-1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa->ECX',
+	'BTC-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->ECX',
+	'BTC-bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq->ECX',
+	'ECX-1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa->BCH',
+	'ECX-1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa->BTC',
+	'ECX-1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa->SOL',
+	'ECX-1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa->USDC',
+	'ECX-1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa->USDT',
+	'ECX-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->BCH',
+	'ECX-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->BTC',
+	'ECX-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->LTC',
+	'ECX-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->SOL',
+	'ECX-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->USDC',
+	'ECX-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->USDT',
+	'ECX-bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq->BTC',
+	'LTC-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->ECX',
 ]);
 
 // Walk every (A, specimen, B) triple and record overlaps

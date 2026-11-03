@@ -12239,7 +12239,7 @@ of demand.
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
-single-network trade-only assets (BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) and multi-network trade-only assets (USDT, USDC, DAI).
+single-network trade-only assets (BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX) and multi-network trade-only assets (USDT, USDC, DAI).
 
 ### How to set this (two paths)
 
@@ -12342,6 +12342,8 @@ MORPHIT_INDEXER_DISABLED_ASSETS="SOL"
 MORPHIT_INDEXER_DISABLED_ASSETS="ETH"
 # Refuse only XRP trades:
 MORPHIT_INDEXER_DISABLED_ASSETS="XRP"
+# Refuse only ECX (eCash) trades:
+MORPHIT_INDEXER_DISABLED_ASSETS="ECX"
 # Refuse BARTER (the goods/services "asset"; e.g. a
 # crypto-only instance that doesn't want off-platform barter listings):
 MORPHIT_INDEXER_DISABLED_ASSETS="BARTER"
@@ -12356,17 +12358,17 @@ MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI,USDC"
 # plus BTC/XMR/BLURT)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
 
-# Refuse all four Bitcoin-fork variants (still keeps BTC + XMR
-# + BLURT + USDT + USDC + DAI + ZEC + ARRR + DCR + SOL + ETH +
-# XRP enabled)
+# Refuse the four older Bitcoin-derived coins (still keeps BTC +
+# XMR + BLURT + USDT + USDC + DAI + ZEC + ARRR + DCR + SOL + ETH +
+# XRP + ECX enabled)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH,DOGE"
-# Refuse all centralized + partly-centralized stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP only)
+# Refuse all centralized + partly-centralized stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX only)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI"
 
-# Refuse everything that isn't BLURT + XMR + BTC (all 13
+# Refuse everything that isn't BLURT + XMR + BTC (all 14
 # Category-B trade-only assets disabled — keeps only the three
 # Category-A fee-payable assets)
-MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP"
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP,ECX"
 
 # Whitespace-tolerant — same result as above
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT, DAI, USDC"
@@ -12643,9 +12645,9 @@ If you choose to disable DASH instance-wide via
 `MORPHIT_INDEXER_DISABLED_ASSETS=DASH`, the chat-link config
 has no effect on your instance.
 
-### Single-network chat-link explorer URL overrides for DOGE / ZEC / ARRR / DCR / SOL / ETH / XRP
+### Single-network chat-link explorer URL overrides for the other coins
 
-Each of these assets shares the same single-network, single-URL
+Each coin listed below shares the same single-network, single-URL
 shape as the BCH/LTC/DASH sections above.  The pattern is:
 
 ```bash
@@ -12662,23 +12664,24 @@ lowercased transaction ID.  Validation: must be `https://` (or
 Invalid templates fail indexer startup with a clear error.
 
 The ops-cli `morphit-ops init` wizard step 12 (Chat-link external
-explorer URLs) walks through all 13 single-network chat-link
-explorer overrides in canonical asset-registry order
+explorer URLs) walks through the chat-link explorer override of
+every single-network coin, in canonical asset-registry order
 (BTC → XMR → BCH → LTC → DASH → DOGE → ZEC → ARRR → DCR → SOL →
-ETH → XRP), each with the same probe-reachability check — except an
+ETH → XRP → ECX), each with the same probe-reachability check — except an
 `.onion` / `.i2p` / `.loki` one, which is never probed from the server (that
 would hand the name to its resolver; v1.21.15), and no probe follows a redirect
 to such a host.
 
 Bundled defaults + alternative-explorer surveys at addition time:
 
-- **DOGE** — bundled `https://blockchair.com/dogecoin/transaction/{txid}` (chosen from a 9-explorer survey: dogechain.info, blockchair.com/dogecoin, bitinfocharts.com/dogecoin, live.blockcypher.com/doge, blockexplorer.one/dogecoin/mainnet, blockchain.com/explorer/assets/doge, sochain.com/DOGE, chain.so/DOGE, oklink.com).  See ADR-0030.
-- **ZEC** — bundled `https://mainnet.zcashexplorer.app/transactions/{txid}` (chosen for transparent+shielded coverage; see ADR-0031).  Note: shielded-only transactions don't expose data to ANY explorer by design — the chat link works for transparent payments and shows a privacy-respecting summary for shielded ones.
-- **ARRR** — bundled `https://explorer.piratechain.com/tx/{txid}` (the official Pirate Chain explorer; all transactions on ARRR are shielded by construction, so the explorer shows only the proof-of-inclusion summary — no amount or recipient info ever leaks).  See ADR-0032.
-- **DCR** — bundled `https://dcrdata.decred.org/tx/{txid}` (the official Decred dcrdata explorer; see ADR-0033).
-- **SOL** — bundled `https://explorer.solana.com/tx/{txid}` (the official Solana project explorer; chosen from a 5-explorer survey).  See ADR-0034.
-- **ETH** — bundled `https://eth.blockscout.com/tx/{txid}` (chosen for being an open-source non-aggregator project explorer with no SQL trackers; alternatives surveyed: etherscan.io, ethplorer.io, beaconcha.in/block-explorer).  See ADR-0035.
-- **XRP** — bundled `https://livenet.xrpl.org/transactions/{txid}` (the official XRP Ledger Foundation explorer — a non-profit organization; chosen for the non-aggregator + non-Ripple-Labs criteria).  See ADR-0036.
+- **DOGE** (`MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL`) — bundled `https://blockchair.com/dogecoin/transaction/{txid}` (chosen from a 9-explorer survey: dogechain.info, blockchair.com/dogecoin, bitinfocharts.com/dogecoin, live.blockcypher.com/doge, blockexplorer.one/dogecoin/mainnet, blockchain.com/explorer/assets/doge, sochain.com/DOGE, chain.so/DOGE, oklink.com).  See ADR-0030.
+- **ZEC** (`MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL`) — bundled `https://mainnet.zcashexplorer.app/transactions/{txid}` (chosen for transparent+shielded coverage; see ADR-0031).  Note: shielded-only transactions don't expose data to ANY explorer by design — the chat link works for transparent payments and shows a privacy-respecting summary for shielded ones.
+- **ARRR** (`MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL`) — bundled `https://explorer.piratechain.com/tx/{txid}` (the official Pirate Chain explorer; all transactions on ARRR are shielded by construction, so the explorer shows only the proof-of-inclusion summary — no amount or recipient info ever leaks).  See ADR-0032.
+- **DCR** (`MORPHIT_FRONTEND_DCR_CHAT_LINK_URL`) — bundled `https://dcrdata.decred.org/tx/{txid}` (the official Decred dcrdata explorer; see ADR-0033).
+- **SOL** (`MORPHIT_FRONTEND_SOL_CHAT_LINK_URL`) — bundled `https://explorer.solana.com/tx/{txid}` (the official Solana project explorer; chosen from a 5-explorer survey).  See ADR-0034.
+- **ETH** (`MORPHIT_FRONTEND_ETH_CHAT_LINK_URL`) — bundled `https://eth.blockscout.com/tx/{txid}` (chosen for being an open-source non-aggregator project explorer with no SQL trackers; alternatives surveyed: etherscan.io, ethplorer.io, beaconcha.in/block-explorer).  See ADR-0035.
+- **XRP** (`MORPHIT_FRONTEND_XRP_CHAT_LINK_URL`) — bundled `https://livenet.xrpl.org/transactions/{txid}` (the official XRP Ledger Foundation explorer — a non-profit organization; chosen for the non-aggregator + non-Ripple-Labs criteria).  See ADR-0036.
+- **ECX** (`MORPHIT_FRONTEND_ECX_CHAT_LINK_URL`) — bundled `https://explorer.ecash.com/tx/{txid}` (the eCash project's own mempool.space instance; `https://explorer.blockfab.org/tx/{txid}` is a second eCash explorer).  Point it only at an eCash explorer, never a Bitcoin one: eCash addresses and txids look exactly like Bitcoin's, and a payment replayed on Bitcoin has the same txid there.  No Tor or I2P eCash explorer is known, so a page opened over Tor or I2P shows no link for ECX unless you set a `.onion` / `.i2p` one here.  See ADR-0053.
 
 If you choose to disable any of these instance-wide via
 `MORPHIT_INDEXER_DISABLED_ASSETS=<TICKER>`, the corresponding
@@ -12689,7 +12692,7 @@ chat-link config has no effect on your instance.
 `apps/indexer/src/db/schema.sql` adds an `orders.asset_network
 TEXT` column for multi-network assets.  Pre-Part-121 rows
 have `asset_network IS NULL`, which is the correct value for
-single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP
+single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX
 all single-network; USDT, USDC, DAI multi-network; all
 single-network assets write NULL).
 USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`;

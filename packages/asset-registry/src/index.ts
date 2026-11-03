@@ -44,7 +44,26 @@
  *  Tickers are uppercase string literals.  The chain payload
  *  schema (orders, fees, attestations) uses these exact strings
  *  on the wire, so renaming one is a hard breaking change. */
-export const ASSET_TICKERS = ['BTC', 'XMR', 'BLURT', 'USDT', 'USDC', 'DAI', 'BCH', 'LTC', 'DASH', 'DOGE', 'ZEC', 'ARRR', 'DCR', 'SOL', 'ETH', 'XRP', 'BARTER'] as const;
+export const ASSET_TICKERS = [
+	'BTC',
+	'XMR',
+	'BLURT',
+	'USDT',
+	'USDC',
+	'DAI',
+	'BCH',
+	'LTC',
+	'DASH',
+	'DOGE',
+	'ZEC',
+	'ARRR',
+	'DCR',
+	'SOL',
+	'ETH',
+	'XRP',
+	'ECX',
+	'BARTER'
+] as const;
 
 /** TypeScript type union derived from the ASSET_TICKERS list.
  *  Use this as the type of any field that holds an asset
@@ -163,7 +182,15 @@ export interface AssetEntry {
 	readonly privacyFeatures: {
 		readonly freshAddressAdvice: 'subaddress' | 'hd-derived' | 'account-reuse';
 		readonly optInPrivacyTech:
-			| readonly ('mweb' | 'cashfusion' | 'coinjoin' | 'payjoin' | 'privatesend' | 'shielded-pools' | 'csppmix')[]
+			| readonly (
+					| 'mweb'
+					| 'cashfusion'
+					| 'coinjoin'
+					| 'payjoin'
+					| 'privatesend'
+					| 'shielded-pools'
+					| 'csppmix'
+			  )[]
 			| null;
 		readonly privacyGuideKey: string;
 	};
@@ -324,8 +351,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		//   - ERC-20 + BEP-20: 0x + 40 hex chars (Ethereum address)
 		//   - TRC-20: T + 33 base58 chars (Tron address)
 		//   - SPL: base58 32-44 chars (Solana pubkey, no prefix)
-		addressShape:
-			/^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
+		addressShape: /^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
 	}),
 	Object.freeze({
 		ticker: 'USDC',
@@ -340,8 +366,8 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		canBeTraded: true,
 		// TRADE-ONLY INVARIANT: USDC is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
-		// fee_method enum is frozen at BLURT/BTC/XMR; USDC joins
-		// USDT/DAI/BCH/LTC/DASH/DOGE as Category-B trade-only assets.
+		// fee_method enum is frozen at BLURT/BTC/XMR; USDC is a
+		// Category-B trade-only asset like every other coin.
 		canPayListingFee: false,
 		// Networks shipped at launch.  Native USDC only — bridged
 		// variants (USDC.e on Avalanche / Optimism / Arbitrum,
@@ -387,8 +413,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		//   - SPL: base58 32-44 chars (Solana pubkey, no prefix)
 		// Note no Tron-style T-prefix branch since USDC isn't
 		// issued on Tron by Circle.
-		addressShape:
-			/^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
+		addressShape: /^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/
 	}),
 	Object.freeze({
 		ticker: 'DAI',
@@ -410,8 +435,8 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		canBeTraded: true,
 		// TRADE-ONLY INVARIANT: DAI is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
-		// fee_method enum is frozen at BLURT/BTC/XMR; DAI joins
-		// USDT/USDC/BCH/LTC/DASH/DOGE as Category-B trade-only assets.
+		// fee_method enum is frozen at BLURT/BTC/XMR; DAI is a
+		// Category-B trade-only asset like every other coin.
 		// See ADR-0029 §4 for the rationale.
 		canPayListingFee: false,
 		// Networks shipped at launch: Ethereum, Polygon (PoS), Base,
@@ -725,7 +750,8 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// excludes `1`, `b`, `i`, `o` to avoid visual ambiguity
 		// (we use [02-9ac-hj-np-z] for the bech32 data portion,
 		// matching the LTC MWEB pattern).
-		addressShape: /^(t[13][1-9A-HJ-NP-Za-km-z]{33}|zs1[02-9ac-hj-np-z]{75}|u1[02-9ac-hj-np-z]{30,300})$/
+		addressShape:
+			/^(t[13][1-9A-HJ-NP-Za-km-z]{33}|zs1[02-9ac-hj-np-z]{75}|u1[02-9ac-hj-np-z]{30,300})$/
 	}),
 	Object.freeze<AssetEntry>({
 		ticker: 'ARRR',
@@ -804,8 +830,8 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// from the wire-format side.
 		canPayListingFee: false,
 		// Single-network coin.  Decred has a testnet but Morphit
-		// trades only on mainnet (consistent with BCH/LTC/DASH/DOGE/
-		// ZEC/ARRR — none of those run testnet on Morphit either).
+		// trades only on mainnet, like every other coin here (none
+		// runs on a testnet on Morphit).
 		supportedNetworks: ['mainnet'],
 		defaultNetwork: 'mainnet',
 		// Decred runs a hybrid Proof-of-Work + Proof-of-Stake
@@ -1049,6 +1075,36 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// DESTINATION TAG and RESERVE REQUIREMENT are documented
 		// in privacy.guides.xrp.caveats × 10 locales.
 		addressShape: /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/
+	}),
+	Object.freeze<AssetEntry>({
+		// eCash (ECX): the hard fork of Bitcoin associated with LayerTwo Labs, at
+		// block 973,728 (29 Oct 2026), with drivechains (BIP300/301). NOT XEC, the
+		// older Bitcoin ABC coin also called eCash, and not wECX, a wrapped
+		// token on Solana: native ECX on its own chain. See ADR-0053.
+		// Bitcoin's units: 1 ECX = 100,000,000 sats (COIN in its node code).
+		ticker: 'ECX',
+		decimals: 8,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// Trade-only, like every coin added after BLURT/BTC/XMR.
+		canPayListingFee: false,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// No issuer can freeze ECX. The real hazards are the ones the chat
+		// card and the FAQ warn about: a Bitcoin address is an eCash address,
+		// and an eCash payment from coins held before the fork can be
+		// replayed on Bitcoin unless the wallet protects against it.
+		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'hd-derived',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'ecx'
+		},
+		// Bitcoin's own formats (base58 prefixes 0 and 5, bech32 hrp "bc"):
+		// the same string is a BTC and an ECX address. Same shape as BTC;
+		// address-shape-overlap-smoke documents the overlap.
+		addressShape:
+			/^(1[1-9A-HJ-NP-Za-km-z]{25,34}|3[1-9A-HJ-NP-Za-km-z]{25,34}|bc1[023456789acdefghjklmnpqrstuvwxyz]{6,87})$/
 	}),
 	Object.freeze({
 		// BARTER: goods/services as a first-class tradable "asset".
@@ -1395,7 +1451,9 @@ export function listingFeeBlurtBase(blurtUsdPrice: number): number | null {
  */
 export function listingFeeSatoshis(btcUsdPrice: number): number | null {
 	if (!usablePrice(btcUsdPrice)) return null;
-	return safeUnitCount(Math.round((LISTING_FEE_USD.btc / btcUsdPrice) * 10 ** FEE_ASSET_DECIMALS.btc));
+	return safeUnitCount(
+		Math.round((LISTING_FEE_USD.btc / btcUsdPrice) * 10 ** FEE_ASSET_DECIMALS.btc)
+	);
 }
 
 /**
@@ -1484,6 +1542,83 @@ export function isFeeCapableAsset(ticker: AssetTicker): ticker is 'BLURT' | 'BTC
 export function isGoodsAsset(ticker: AssetTicker): ticker is 'BARTER' {
 	return ticker === 'BARTER';
 }
+
+/** The multi-network tokens: one ticker on several chains, so their explorers,
+ *  chat-link settings and address checks are per network. Kept equal to the
+ *  registry entries with more than one network by asset-registry-smoke. */
+export const MULTI_NETWORK_TICKERS = ['USDT', 'USDC', 'DAI'] as const;
+
+/** A coin with a chain of its own (not BLURT, the coordination chain; not
+ *  barter, which is goods; not a multi-network token). Each one has its own
+ *  block explorer, its own chat-link explorer setting
+ *  (MORPHIT_FRONTEND_<TICKER>_CHAT_LINK_URL) and its own hidden-network explorer
+ *  entry. Derived: a coin added to ASSET_TICKERS is one at once, and every map
+ *  keyed by it (in the indexer, the client, the web app and morphit-ops) stops
+ *  compiling until it carries the new coin. See docs/ADDING-A-COIN.md. */
+export type NativeCoinTicker = Exclude<
+	AssetTicker,
+	'BLURT' | 'BARTER' | (typeof MULTI_NETWORK_TICKERS)[number]
+>;
+
+/** The same, at runtime, in the registry's display order (ASSETS). */
+export const NATIVE_COIN_TICKERS: readonly NativeCoinTicker[] = Object.freeze(
+	ASSETS.map((a) => a.ticker).filter(
+		(t): t is NativeCoinTicker =>
+			t !== 'BLURT' && t !== 'BARTER' && !(MULTI_NETWORK_TICKERS as readonly string[]).includes(t)
+	)
+);
+
+/** Compile-time set equality, for the "this map has exactly the registry's
+ *  coins" checks: `const ok: SameTickerSet<keyof Map, NativeCoinTicker> = true`
+ *  stops compiling the moment the two sets differ. */
+export type SameTickerSet<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+/**
+ * How private a coin's own chain is, as Morphit's pages describe it:
+ *
+ * - `private-by-default`: every payment hides sender, receiver and amount
+ *   (XMR, ARRR).
+ * - `opt-in-shielded`: transparent unless the wallet uses shielded addresses
+ *   (ZEC).
+ * - `opt-in-mixing`: a transparent chain with mixing built into the coin
+ *   (DASH's PrivateSend, DCR's CoinShuffle++).
+ * - `transparent`: every payment can be read on the chain. Wallet-side tools
+ *   (CoinJoin, PayJoin, CashFusion, MWEB) do not make a coin a privacy coin
+ *   here.
+ *
+ * The first three are Morphit's "privacy coins": the privacy FAQ, the
+ * metadata-leak catalog and the comparison image list them by name, and
+ * scripts/coin-completeness-smoke.ts holds those lists to this table. A Record
+ * over every native coin: a coin added to ASSETS stops this file compiling
+ * until it is classified here.
+ */
+export type CoinPrivacyClass =
+	| 'private-by-default'
+	| 'opt-in-shielded'
+	| 'opt-in-mixing'
+	| 'transparent';
+
+export const COIN_PRIVACY_CLASS: Readonly<Record<NativeCoinTicker, CoinPrivacyClass>> =
+	Object.freeze({
+		XMR: 'private-by-default',
+		BTC: 'transparent',
+		BCH: 'transparent',
+		LTC: 'transparent',
+		DASH: 'opt-in-mixing',
+		DOGE: 'transparent',
+		ZEC: 'opt-in-shielded',
+		ARRR: 'private-by-default',
+		DCR: 'opt-in-mixing',
+		SOL: 'transparent',
+		ETH: 'transparent',
+		XRP: 'transparent',
+		ECX: 'transparent'
+	});
+
+/** Morphit's privacy coins (every class but `transparent`), in display order. */
+export const PRIVACY_COIN_TICKERS: readonly NativeCoinTicker[] = Object.freeze(
+	NATIVE_COIN_TICKERS.filter((t) => COIN_PRIVACY_CLASS[t] !== 'transparent')
+);
 
 /**
  * Review text policy, shared by the indexer's review handlers (feedback,

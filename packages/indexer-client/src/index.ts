@@ -1,4 +1,4 @@
-import type { AssetTicker } from '@morphit/asset-registry';
+import type { AssetTicker, NativeCoinTicker, SameTickerSet } from '@morphit/asset-registry';
 /**
  * @morphit/indexer-client — shared types for the indexer HTTP API.
  *
@@ -238,8 +238,8 @@ export interface OrderRecord {
 	 *  'erc20'|'spl'|'base'|'polygon' when `asset === 'USDC'`.  For
 	 *  DAI: one of 'erc20'|'polygon'|'base'|'arbitrum' when
 	 *  `asset === 'DAI'`.  Null otherwise (older rows and
-	 *  orders with single-network assets BTC/XMR/BLURT/BCH/LTC/DASH/
-	 *  DOGE). */
+	 *  orders with a single-network asset: every asset but
+	 *  USDT, USDC and DAI). */
 	readonly asset_network?: string | null;
 	/** Number of feedback rows this account has received.
 	 *  Proxy for "completed trades." Zero on accounts with no
@@ -1554,6 +1554,7 @@ export interface InstanceResponse {
 		readonly sol?: string | null;
 		readonly eth?: string | null;
 		readonly xrp?: string | null;
+		readonly ecx?: string | null;
 		/** USDT per-network explorer URL overrides.
 		 *  Optional sub-map; older indexer builds (older)
 		 *  omit this field, in which case the frontend uses its
@@ -1628,6 +1629,13 @@ export interface InstanceResponse {
 	 *  + Memory's @user:server vs #room:server rule. */
 	readonly operator_matrix_room?: string | null;
 }
+
+/** The client's mirror carries one chat-link setting per coin with a chain of its
+ *  own, like the indexer's — checked against the canonical registry. */
+export const CHAT_LINK_URLS_ARE_THE_NATIVE_COINS: SameTickerSet<
+	Exclude<keyof NonNullable<InstanceResponse['chat_link_urls']>, 'usdt' | 'usdc' | 'dai'>,
+	Lowercase<NativeCoinTicker>
+> = true;
 
 // ─── Federation directory (Phase D.5) ──────────────────────────────
 

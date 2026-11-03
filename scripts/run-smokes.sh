@@ -378,6 +378,7 @@ SMOKES=(
 	".:no-master-password-in-fee-flows-smoke"
 	".:verify-download-smoke"
 	".:release-notes-asset-count-parity-smoke"
+	".:coin-completeness-smoke"
 	".:canary-rpc-failover-smoke"
 	".:canary-btc-failover-smoke"
 	".:canary-setup-smoke"

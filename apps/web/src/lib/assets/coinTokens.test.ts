@@ -3,11 +3,20 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+	ASSETS,
+	ASSET_TICKERS,
+	isGoodsAsset,
+	MULTI_NETWORK_TICKERS
+} from '@morphit/asset-registry';
+import {
 	acceptedCoinTickers,
 	applyCoinTokens,
 	applyCoinTokensToMessages,
 	hasCoinToken
 } from './coinTokens';
+
+/** Every tradable coin (barter is goods, not a coin). */
+const COINS = ASSET_TICKERS.filter((t) => !isGoodsAsset(t)).length;
 
 describe('coin tokens', () => {
 	it('lists every tradable coin (not barter) when nothing is switched off', () => {
@@ -15,7 +24,7 @@ describe('coin tokens', () => {
 		expect(all).toContain('BTC');
 		expect(all).toContain('XMR');
 		expect(all).not.toContain('BARTER');
-		expect(all.length).toBe(16);
+		expect(all.length).toBe(COINS);
 	});
 
 	it('drops the coins the operator switched off, in any case', () => {
@@ -23,25 +32,14 @@ describe('coin tokens', () => {
 		expect(got).not.toContain('USDT');
 		expect(got).not.toContain('USDC');
 		expect(got).not.toContain('DAI');
-		expect(got.length).toBe(13);
+		expect(got.length).toBe(COINS - MULTI_NETWORK_TICKERS.length);
 	});
 
 	it('fills lists with the language’s own words, and counts as a numeral', () => {
-		const off = [
-			'USDT',
-			'USDC',
-			'DAI',
-			'BCH',
-			'LTC',
-			'DASH',
-			'DOGE',
-			'ZEC',
-			'ARRR',
-			'DCR',
-			'SOL',
-			'ETH',
-			'XRP'
-		];
+		// every trade-only coin off: XMR, BTC and BLURT are left
+		const off = ASSETS.filter((a) => !a.canPayListingFee && !isGoodsAsset(a.ticker)).map(
+			(a) => a.ticker
+		);
 		expect(applyCoinTokens('({coins})', 'en', off)).toBe('(XMR, BTC, and BLURT)');
 		expect(applyCoinTokens('{coins|or}', 'en', off)).toBe('XMR, BTC, or BLURT');
 		expect(applyCoinTokens('{coins|list}', 'en', off)).toBe('XMR, BTC, BLURT');
@@ -58,7 +56,7 @@ describe('coin tokens', () => {
 		expect(applyCoinTokens(s, 'en', [])).toBe(s);
 		const dict = { a: { b: 'x {coin_count}', c: 'plain' }, d: 'plain' };
 		const out = applyCoinTokensToMessages(dict, 'en', []);
-		expect(out.a.b).toBe('x 16');
+		expect(out.a.b).toBe(`x ${COINS}`);
 		expect(out.d).toBe('plain');
 		expect(applyCoinTokensToMessages({ d: 'plain' }, 'en', [])).toEqual({ d: 'plain' });
 		expect(hasCoinToken('{coins:-blurt|or}')).toBe(true);

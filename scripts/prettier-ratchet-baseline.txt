@@ -120,7 +120,6 @@ apps/indexer/src/db/snapshotOplogVerify.ts
 apps/indexer/src/indexer/fee/moneroProofVerifier.ts
 apps/indexer/src/indexer/flowBackfill.ts
 apps/indexer/src/indexer/fx/frankfurterFetcher.ts
-apps/indexer/src/indexer/handlers/order.ts
 apps/indexer/src/indexer/price/aggregate.ts
 apps/indexer/src/indexer/price/blurtBlogFetcher.ts
 apps/indexer/src/indexer/price/compositeSource.ts
@@ -546,7 +545,6 @@ apps/web/src/lib/crypto/publicKeyDisplay.ts
 apps/web/src/lib/crypto/seedNormalize.ts
 apps/web/src/lib/explorer/decorate.ts
 apps/web/src/lib/explorer/jsonHighlight.test.ts
-apps/web/src/lib/explorer/urls.ts
 apps/web/src/lib/explorer/urlsCore.ts
 apps/web/src/lib/faq/glossaryTerms.ts
 apps/web/src/lib/faq/renderInline.ts
@@ -583,7 +581,6 @@ apps/web/src/routes/[lang]/+layout.svelte
 apps/web/src/routes/[lang]/[x+40][account=account]/[permlink=permlink]/+page.svelte
 apps/web/src/routes/[lang]/admin/setup-wizard/+page.svelte
 apps/web/src/routes/[lang]/chat/+page.svelte
-apps/web/src/routes/[lang]/dev/icons/+page.svelte
 apps/web/src/routes/[lang]/explorer/block/[num=blocknum]/+page.svelte
 apps/web/src/routes/[lang]/explorer/tx/[id=trxid]/+page.svelte
 apps/web/src/routes/[lang]/instances/+page.svelte
@@ -592,11 +589,9 @@ apps/web/src/routes/[lang]/my/wallet/+page.svelte
 apps/web/src/routes/[lang]/onboarding/+page.svelte
 apps/web/src/routes/[lang]/operators/+page.svelte
 apps/web/src/routes/[lang]/plan/+page.svelte
-apps/web/src/routes/[lang]/post/+page.svelte
 apps/web/src/routes/[lang]/post/edit/[permlink]/+page.svelte
 apps/web/src/routes/[lang]/security/+page.svelte
 apps/web/src/routes/[lang]/stats/+page.svelte
-packages/asset-registry/src/index.ts
 packages/hidden-transport/src/index.ts
 packages/indexer-client/src/index.ts
 packages/node-health/src/index.ts
@@ -611,7 +606,6 @@ scripts/backup-install-parity-smoke.ts
 scripts/backup-script-posix-safety-smoke.ts
 scripts/blurt-noble-tx-signature-proof.ts
 scripts/build-llms-full.mjs
-scripts/build-sitemap.mjs
 scripts/canary-btc-failover-smoke.ts
 scripts/canary-serve-dir-smoke.ts
 scripts/canary-setup-smoke.ts

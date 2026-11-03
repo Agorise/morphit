@@ -81,6 +81,12 @@ export interface OpContext {
 	 *  time. Absent when an op is replayed from the event log, which keeps no
 	 *  signatures — a handler that needs it treats its absence as unsigned. */
 	readonly transaction?: BlockTransaction;
+	/** Set when the op is judged AFTER later ops were already applied: the
+	 *  upgrade replay of an op an older version refused (reconcileUpgrade).
+	 *  A handler that counts the signer's rows (the order handler's Sybil
+	 *  tier and first-buy check) then counts only what existed at this op's
+	 *  position in chain order, as the live pass did. Absent in the live pass. */
+	readonly judgedOutOfOrder?: true;
 	/** Blurt read-only client. Handlers should not need it: a chain read
 	 *  inside the block transaction makes the verdict depend on one RPC
 	 *  answer at apply time (see the handler contract above). */

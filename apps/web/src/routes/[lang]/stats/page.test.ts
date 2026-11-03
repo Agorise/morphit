@@ -8,6 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readable, writable } from 'svelte/store';
+import { ASSET_TICKERS, isGoodsAsset } from '@morphit/asset-registry';
 
 vi.mock(
 	'svelte',
@@ -61,24 +62,8 @@ const STATS = {
 	orders: { active: 12, total: 340 },
 	trades: { completed_total: 55, completed_30d: 7 },
 	assets: {
-		supported: [
-			'BTC',
-			'XMR',
-			'BLURT',
-			'USDT',
-			'USDC',
-			'DAI',
-			'BCH',
-			'LTC',
-			'DASH',
-			'DOGE',
-			'ZEC',
-			'ARRR',
-			'DCR',
-			'SOL',
-			'ETH',
-			'XRP'
-		],
+		// what the indexer answers: every tradable coin of this build
+		supported: ASSET_TICKERS.filter((t) => !isGoodsAsset(t)),
 		with_active_orders: 4
 	},
 	fiat_currencies: { with_active_orders: 3 }

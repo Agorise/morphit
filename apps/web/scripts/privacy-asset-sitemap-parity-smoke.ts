@@ -14,8 +14,9 @@
  *   - No /privacy/<ticker> entries exist for tickers NOT in the registry
  *     (catches a stale ticker someone deleted from the registry but
  *     forgot to remove from the sitemap)
- *   - The count is exact: 16 tickers × 10 locales = 160 privacy-asset
- *     URLs in the rendered sitemap.xml (today; auto-scales with registry)
+ *   - The count is exact: one privacy-asset URL per coin per locale in
+ *     the rendered sitemap.xml (17 × 10 = 170 today; scales with the
+ *     registry)
  *
  * The smoke READS the rendered sitemap.xml, so it catches both
  * (a) sitemap-builder-script bugs (forgot to expand a route), AND

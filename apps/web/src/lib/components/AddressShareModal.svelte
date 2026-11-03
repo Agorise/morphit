@@ -2,8 +2,8 @@
 	/**
 	 * AddressShareModal — share a receiving address through the
 	 * chat for any tradable asset (BTC, XMR, BLURT, USDT, USDC,
-	 * DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP —
-	 * all 16 currently-shipped tradable assets).
+	 * DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX —
+	 * every tradable coin).
 	 *
 	 * This modal builds a structured payload (`morphit_addr` v1) and
 	 * sends it through the same chat-send path as a normal text
@@ -103,7 +103,8 @@
 		'dcr',
 		'sol',
 		'eth',
-		'xrp'
+		'xrp',
+		'ecx'
 	];
 	const visibleMethods = $derived(
 		allowedMethods && allowedMethods.length > 0
@@ -206,7 +207,7 @@
 	 *  (BTC/BCH/LTC/BLURT).  XMR uses 6 trailing
 	 *  decimals of jitter to defeat amount-correlation on the
 	 *  Monero chain (see jitterMoneroAmount).  All 8 UTXO assets
-	 *  (BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR) use satoshi-precision
+	 *  (BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/ECX) use satoshi-precision
 	 *  jitter (up to 999 sat ≈ $0.001-$0.50 trivial cost — see
 	 *  jitterUtxoAmount).  BLURT uses milliblurt-precision jitter
 	 *  (see jitterBlurtAmount).  SOL/ETH/XRP use their own
@@ -402,7 +403,7 @@
 	 *  invalid AFTER they've typed something substantial.  BLURT
 	 *  account names are short (3-16 chars) so the threshold is
 	 *  lower than for the other assets (BTC, XMR, USDT, USDC, DAI,
-	 *  BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP — all
+	 *  BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX — all
 	 *  use the same 10-char threshold). */
 	const addressErrorKey = $derived.by(() => {
 		if (trimmedAddress.length === 0) return null;
@@ -418,22 +419,11 @@
 		) {
 			return 'chat.address.blurt_account_not_found';
 		}
-		if (method === 'btc') return 'chat.address.address_invalid_btc';
-		if (method === 'xmr') return 'chat.address.address_invalid_xmr';
-		if (method === 'usdt') return 'chat.address.address_invalid_usdt';
-		if (method === 'usdc') return 'chat.address.address_invalid_usdc';
-		if (method === 'dai') return 'chat.address.address_invalid_dai';
-		if (method === 'bch') return 'chat.address.address_invalid_bch';
-		if (method === 'ltc') return 'chat.address.address_invalid_ltc';
-		if (method === 'dash') return 'chat.address.address_invalid_dash';
-		if (method === 'doge') return 'chat.address.address_invalid_doge';
-		if (method === 'zec') return 'chat.address.address_invalid_zec';
-		if (method === 'arrr') return 'chat.address.address_invalid_arrr';
-		if (method === 'dcr') return 'chat.address.address_invalid_dcr';
-		if (method === 'sol') return 'chat.address.address_invalid_sol';
-		if (method === 'eth') return 'chat.address.address_invalid_eth';
-		if (method === 'xrp') return 'chat.address.address_invalid_xrp';
-		return 'chat.address.address_invalid_blurt';
+		// Each coin's own message (per-asset-mandatory-family smoke:
+		// chat.address.address_invalid_<coin> in every locale). The fallback used
+		// to be BLURT's message, so a coin missing from a hand-written list was
+		// told its address was not a valid Blurt account name.
+		return `chat.address.address_invalid_${method}`;
 	});
 
 	/** v1.5.0 — red border on the address input whenever it's invalid
@@ -666,37 +656,7 @@
 				type="text"
 				bind:value={address}
 				maxlength="256"
-				placeholder={method === 'btc'
-					? ($_('chat.address.address_placeholder_btc') as string)
-					: method === 'xmr'
-						? ($_('chat.address.address_placeholder_xmr') as string)
-						: method === 'usdt'
-							? ($_('chat.address.address_placeholder_usdt') as string)
-							: method === 'usdc'
-								? ($_('chat.address.address_placeholder_usdc') as string)
-								: method === 'dai'
-									? ($_('chat.address.address_placeholder_dai') as string)
-									: method === 'bch'
-										? ($_('chat.address.address_placeholder_bch') as string)
-										: method === 'ltc'
-											? ($_('chat.address.address_placeholder_ltc') as string)
-											: method === 'dash'
-												? ($_('chat.address.address_placeholder_dash') as string)
-												: method === 'doge'
-													? ($_('chat.address.address_placeholder_doge') as string)
-													: method === 'zec'
-														? ($_('chat.address.address_placeholder_zec') as string)
-														: method === 'arrr'
-															? ($_('chat.address.address_placeholder_arrr') as string)
-															: method === 'dcr'
-																? ($_('chat.address.address_placeholder_dcr') as string)
-																: method === 'sol'
-																	? ($_('chat.address.address_placeholder_sol') as string)
-																	: method === 'eth'
-																		? ($_('chat.address.address_placeholder_eth') as string)
-																		: method === 'xrp'
-																			? ($_('chat.address.address_placeholder_xrp') as string)
-																			: ($_('chat.address.address_placeholder_blurt') as string)}
+				placeholder={$_(`chat.address.address_placeholder_${method}`) as string}
 				autocomplete="off"
 				autocapitalize="none"
 				autocorrect="off"

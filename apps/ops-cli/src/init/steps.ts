@@ -61,7 +61,11 @@ import {
 	computeFeeAmounts,
 	fetchBtcXmrPricesFromCoingecko
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
-import { LISTING_FEE_USD } from '@morphit/asset-registry';
+import {
+	LISTING_FEE_USD,
+	type NativeCoinTicker,
+	type SameTickerSet
+} from '@morphit/asset-registry';
 import type { ListingFeeResult } from './render.ts';
 import {
 	detectDbContainerAsync,
@@ -1456,6 +1460,13 @@ export const DEFAULT_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
 // MORPHIT_FRONTEND_XRP_CHAT_LINK_URL.
 export const DEFAULT_XRP_CHAT_LINK_URL = 'https://livenet.xrpl.org/transactions/{txid}';
 
+// eCash (ECX) chat-link explorer URL bundled default: explorer.ecash.com,
+// the project's own mempool.space instance; explorer.blockfab.org is a
+// second eCash explorer with the same /tx/{txid} page.  Never a Bitcoin explorer:
+// an eCash txid can also exist on Bitcoin (replay).  Operators wanting a
+// different default override via MORPHIT_FRONTEND_ECX_CHAT_LINK_URL.
+export const DEFAULT_ECX_CHAT_LINK_URL = 'https://explorer.ecash.com/tx/{txid}';
+
 // USDT per-network chat-link explorer URL
 // bundled defaults.  USDT is multi-network so the operator
 // override is per-network (each chain has its own explorer
@@ -1706,6 +1717,7 @@ export interface ChatLinkExplorersResult {
 	readonly sol: string;
 	readonly eth: string;
 	readonly xrp: string;
+	readonly ecx: string;
 	/** multi-network USDT per-network chat-link
 	 *  URLs.  4 networks (erc20/trc20/spl/bep20).  Operator-tunable
 	 *  via wizard step 12b or by setting MORPHIT_FRONTEND_USDT_<NET>
@@ -1740,6 +1752,14 @@ export interface ChatLinkExplorersResult {
 		readonly arbitrum: string;
 	};
 }
+
+/** One wizard answer per coin with a chain of its own — checked against the
+ *  canonical registry: a coin added there does not compile until it has its field
+ *  here and its prompt in stepChatLinkExplorers (which returns this type). */
+export const CHAT_LINK_ANSWERS_ARE_THE_NATIVE_COINS: SameTickerSet<
+	Exclude<keyof ChatLinkExplorersResult, 'usdt' | 'usdc' | 'dai'>,
+	Lowercase<NativeCoinTicker>
+> = true;
 
 /** Validate a chat-link URL template.  Must be https:// (or http:// to a
  *  Tor v3 onion or an I2P host — v1.21.15, what a hidden site links to),
@@ -1823,7 +1843,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'\n' +
 			'Single-network assets (one URL each):\n' +
 			'  • BTC, XMR, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL,\n' +
-			'    ETH, XRP\n' +
+			'    ETH, XRP, ECX\n' +
 			'\n' +
 			'Multi-network assets (one URL per network):\n' +
 			'  • USDT: ERC-20, TRC-20, SPL, BEP-20\n' +
@@ -1884,6 +1904,10 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	// ─── XRP ──
 	console.log('\n  ── XRP block explorer URL ──\n');
 	const xrp = await editChatLinkUrl('XRP block explorer URL', DEFAULT_XRP_CHAT_LINK_URL);
+
+	// ─── ECX ──
+	console.log('\n  ── ECX (eCash) block explorer URL ──\n');
+	const ecx = await editChatLinkUrl('ECX block explorer URL', DEFAULT_ECX_CHAT_LINK_URL);
 
 	// ─── USDT multi-network ──
 	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
@@ -2052,7 +2076,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 					)
 				};
 
-	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, dcr, sol, eth, xrp, usdt, usdc, dai };
+	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, dcr, sol, eth, xrp, ecx, usdt, usdc, dai };
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
@@ -2104,8 +2128,8 @@ async function editChatLinkUrl(label: string, defaultUrl: string): Promise<strin
  * `MORPHIT_INDEXER_DISABLED_ASSETS` in morphit.config.env.
  *
  * Category-B = `canBeTraded && !canPayListingFee` from the
- * canonical asset registry.  Currently: USDT, USDC, DAI, BCH, LTC,
- * DASH, DOGE.  Any future trade-only addition will surface here
+ * canonical asset registry: every coin except BTC, XMR and BLURT.
+ * Any future trade-only addition will surface here
  * automatically — the step iterates the registry filtered by
  * the Category-B predicate, so no per-asset wizard code is
  * needed when new tickers ship.
@@ -2122,7 +2146,7 @@ export interface DisabledAssetsResult {
 	/** Uppercase tickers the operator has chosen to disable on
 	 *  this instance.  Empty means accept every trade-only
 	 *  asset (the default).  Renders into
-	 *  `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,DAI,DOGE,USDC,USDT"`
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS="BCH,DAI,USDT"`
 	 *  (alphabetized
 	 *  for stable env-file output). */
 	readonly disabledTickers: readonly string[];
@@ -2155,6 +2179,7 @@ const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze(
 	XRP: 'Ripple — single-network XRPL mainnet.  Launched 2012 with Federated\n    Byzantine Agreement (FBA) consensus — validators on a Unique Node\n    List (UNL) reach agreement on transaction ordering.  The default UNL\n    is published by the XRP Ledger Foundation (non-profit) with the for-\n    profit Ripple Labs Inc. historically influencing validator selection.\n    Native XRP cannot be frozen by any central authority — the freeze\n    flag on XRPL applies only to ISSUED tokens (IOUs).  Addresses are\n    base58 starting with `r`, 24-34 chars total.  Two XRPL-specific UX\n    gotchas: (1) destination tags (32-bit integers) required when sending\n    to exchange-hosted addresses; without the tag funds practically lose\n    (recoverable only via exchange support); (2) account reserve (≥1 XRP)\n    required to fund a never-funded address.  Transparent base layer\n    with no native protocol-level mixing; wallet-side address rotation\n    is the privacy lever.',
 	ETH: 'Ethereum — single-network mainnet.  Launched 2015 with Proof-of-Work,\n    transitioned to Proof-of-Stake in September 2022 ("The Merge").  Validators\n    stake ETH and process blocks in rotation; no central freeze authority.\n    Addresses are 20-byte hex with 0x prefix (42 chars total) — SAME shape as\n    every EVM token-account address on Base, Polygon, Arbitrum, BSC.  Asset\n    field (and network field for multi-network assets) disambiguates.  ENS\n    names are NOT resolved by Morphit (avoids centralized RPC dependency).\n    Smart-contract destinations may revert if the contract lacks a payable\n    receive() or fallback() function — wallet UX warns before sending.\n    Transparent base layer with no native protocol-level mixing; wallet-side\n    address rotation is the privacy lever.  No central issuer.',
 	SOL: 'Solana — single-network mainnet-beta.  Launched 2020.  Delegated\n    Proof-of-Stake consensus with Proof-of-History sequencing for high\n    transaction throughput.  Validators stake SOL and process blocks in\n    rotation; no central freeze authority.  Addresses are 32-byte public\n    keys base58-encoded (32-44 chars, most are 44).  Same address format\n    as USDT-Solana and USDC-Solana SPL token-accounts — asset field on\n    the order disambiguates.  Transparent base layer with no native\n    protocol-level mixing; wallet-side address rotation is the privacy\n    lever.  No central issuer.',
+	ECX: "eCash (ECX) — single-network mainnet.  A hard fork of Bitcoin\n    associated with LayerTwo Labs, at block 973,728 (29 Oct 2026), that adds\n    drivechains (BIP300/301).  Not XEC, the older Bitcoin ABC coin also called eCash.\n    Addresses are Bitcoin's own formats (1..., 3..., bc1...): the same\n    string is a BTC and an ECX address, so the chat card names the chain.\n    Replay protection is opt-in (the node's own wallet adds none): a\n    payment from coins held before the fork can also go out on Bitcoin, so\n    users are told to split those coins first.\n    Transparent like BTC; no central issuer.",
 	BARTER:
 		'Barter — goods & services traded directly, NOT a coin.  Priced in\n    fiat; a seller lists wares and the buyer settles in whichever accepted\n    crypto the two agree on, so BARTER has no receive address, price feed,\n    or chain of its own (isGoodsAsset gates it out of every crypto surface).\n    Disable this if you do not want your instance to carry goods/services\n    listings alongside crypto trades — it is the one most operators consider\n    turning off first.'
 });

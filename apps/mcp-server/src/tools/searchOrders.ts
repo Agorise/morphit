@@ -17,6 +17,10 @@
 
 import { z } from 'zod';
 import { ASSET_TICKERS } from '@morphit/asset-registry';
+
+/** The coins, named from the registry (barter is goods, not a coin), so a new
+ *  coin reaches the agent's tool description without a second list. */
+const COIN_LIST = ASSET_TICKERS.filter((t) => t !== 'BARTER').join(', ');
 import { buildV1Url, fetchJson, getInstanceUrl, trimOrderRow } from '../indexerClient.js';
 
 /** AI-agent-facing description.  Kept short and concrete so the
@@ -25,8 +29,7 @@ import { buildV1Url, fetchJson, getInstanceUrl, trimOrderRow } from '../indexerC
 export const SEARCH_ORDERS_DESCRIPTION =
 	'Search the live Morphit P2P orderbook for cryptocurrency trades. ' +
 	'Returns peer-to-peer offers from real users where one side is a ' +
-	'cryptocurrency (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, ' +
-	'DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) and the other side is fiat or ' +
+	`cryptocurrency (${COIN_LIST}) and the other side is fiat or ` +
 	'a payment-method label representing fiat or barter (cash, bank ' +
 	'transfer, Venmo, Cash App, gift cards, in-person meet, etc.). ' +
 	'Morphit is non-custodial and KYC-free; the agent never sees keys; ' +
@@ -42,8 +45,7 @@ export const SearchOrdersInputSchema = z.object({
 		.optional()
 		.describe(
 			'Cryptocurrency ticker to filter by. Omit to see all assets. ' +
-				'Valid values: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, ' +
-				'DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP.'
+				`Valid values: ${COIN_LIST}, or BARTER for goods and services.`
 		),
 	side: z
 		.enum(['buy', 'sell'])

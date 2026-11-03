@@ -28,6 +28,7 @@
  */
 
 import { isHiddenServiceHost } from './urlsCore';
+import type { ExternalAsset } from './urls';
 
 const BLOCKCHAIR = 'http://blkchairbknpn73cfjhevhla7rkp4ed5gg2knctvv7it4lioy22defid.onion';
 const THREEXPL = 'http://3xplor3rzajysy4j5fi3g3k27vivfcw75zjxdb2tg2wpz3i4cdiyhxyd.onion';
@@ -41,18 +42,7 @@ const multi = (slug: string): readonly string[] => [
  *  (urls.ts ExternalAsset) and the token networks (urlsCore.ts
  *  TOKEN_NETWORK_EXPLORER_URLS keys). */
 export type HiddenExplorerKey =
-	| 'BTC'
-	| 'XMR'
-	| 'BCH'
-	| 'LTC'
-	| 'DASH'
-	| 'DOGE'
-	| 'ZEC'
-	| 'ARRR'
-	| 'DCR'
-	| 'SOL'
-	| 'ETH'
-	| 'XRP'
+	| ExternalAsset
 	| 'erc20'
 	| 'trc20'
 	| 'spl'
@@ -93,6 +83,9 @@ export const ONION_EXPLORER_URLS: Readonly<Record<HiddenExplorerKey, readonly st
 		ZEC: [`${THREEXPL}/zcash/transaction/{txid}`, `${BLOCKCHAIR}/zcash/transaction/{txid}`],
 		ARRR: [],
 		DCR: [],
+		// No Tor or I2P eCash explorer is known (2026-11). A Bitcoin one must
+		// not stand in: the same txid can be a Bitcoin payment (replay).
+		ECX: [],
 		SOL: multi('solana'),
 		ETH: multi('ethereum'),
 		XRP: multi('xrp-ledger'),

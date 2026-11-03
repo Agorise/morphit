@@ -49,7 +49,8 @@ const internalStore = writable<Record<PricedSymbol, PriceQuote | null>>({
 	DCR: null,
 	SOL: null,
 	ETH: null,
-	XRP: null
+	XRP: null,
+	ECX: null
 });
 
 /**

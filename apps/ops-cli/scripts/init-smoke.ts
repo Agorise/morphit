@@ -198,6 +198,7 @@ const sampleAnswers: WizardAnswers = {
 		sol: 'https://explorer.solana.com/tx/{txid}',
 		eth: 'https://eth.blockscout.com/tx/{txid}',
 		xrp: 'https://livenet.xrpl.org/transactions/{txid}',
+		ecx: 'https://explorer.ecash.com/tx/{txid}',
 		usdt: {
 			erc20: 'https://etherscan.io/tx/{txid}',
 			trc20: 'https://tronscan.org/#/transaction/{txid}',

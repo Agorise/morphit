@@ -23,6 +23,10 @@ import {
 	getAsset,
 	isAssetTicker,
 	isGoodsAsset,
+	MULTI_NETWORK_TICKERS,
+	NATIVE_COIN_TICKERS,
+	COIN_PRIVACY_CLASS,
+	PRIVACY_COIN_TICKERS,
 	tradeable,
 	type AssetEntry,
 	type AssetTicker
@@ -46,10 +50,7 @@ assert(
 	`ASSET_TICKERS_SET.size (${ASSET_TICKERS_SET.size}) !== ASSET_TICKERS.length (${ASSET_TICKERS.length})`
 );
 for (const t of ASSET_TICKERS) {
-	assert(
-		ASSET_TICKERS_SET.has(t),
-		`ASSET_TICKERS_SET missing entry '${t}'`
-	);
+	assert(ASSET_TICKERS_SET.has(t), `ASSET_TICKERS_SET missing entry '${t}'`);
 }
 for (const a of ASSETS) {
 	assert(
@@ -64,18 +65,12 @@ for (const a of ASSETS) {
 		typeof a.ticker === 'string' && a.ticker.length >= 3,
 		`asset has bad ticker: ${JSON.stringify(a.ticker)}`
 	);
-	assert(
-		a.ticker === a.ticker.toUpperCase(),
-		`asset ticker '${a.ticker}' must be uppercase`
-	);
+	assert(a.ticker === a.ticker.toUpperCase(), `asset ticker '${a.ticker}' must be uppercase`);
 	assert(
 		Number.isInteger(a.decimals) && a.decimals >= 0 && a.decimals <= 18,
 		`asset '${a.ticker}' has implausible decimals: ${a.decimals}`
 	);
-	assert(
-		typeof a.canBeTraded === 'boolean',
-		`asset '${a.ticker}' canBeTraded must be boolean`
-	);
+	assert(typeof a.canBeTraded === 'boolean', `asset '${a.ticker}' canBeTraded must be boolean`);
 	assert(
 		typeof a.canPayListingFee === 'boolean',
 		`asset '${a.ticker}' canPayListingFee must be boolean`
@@ -127,10 +122,7 @@ for (const a of ASSETS) {
 			`asset '${a.ticker}' has canPayListingFee=true but only BLURT/BTC/XMR may pay listing fees (trade-only rule, fee_method enum is frozen)`
 		);
 	}
-	assert(
-		a.addressShape instanceof RegExp,
-		`asset '${a.ticker}' addressShape must be a RegExp`
-	);
+	assert(a.addressShape instanceof RegExp, `asset '${a.ticker}' addressShape must be a RegExp`);
 }
 
 // ── Exactly one coordination chain ───────────────────────────────
@@ -147,10 +139,7 @@ assert(
 // ── No duplicate tickers ─────────────────────────────────────────
 const seenTickers = new Set<string>();
 for (const a of ASSETS) {
-	assert(
-		!seenTickers.has(a.ticker),
-		`duplicate ticker '${a.ticker}' in ASSETS`
-	);
+	assert(!seenTickers.has(a.ticker), `duplicate ticker '${a.ticker}' in ASSETS`);
 	seenTickers.add(a.ticker);
 }
 
@@ -174,16 +163,10 @@ for (const a of tradeable()) {
 	assert(a.canBeTraded, `tradeable() returned non-tradeable '${a.ticker}'`);
 }
 for (const a of feePayable()) {
-	assert(
-		a.canPayListingFee,
-		`feePayable() returned non-fee-payable '${a.ticker}'`
-	);
+	assert(a.canPayListingFee, `feePayable() returned non-fee-payable '${a.ticker}'`);
 }
 for (const a of externalAssets()) {
-	assert(
-		!a.isCoordinationChain,
-		`externalAssets() returned coordination chain '${a.ticker}'`
-	);
+	assert(!a.isCoordinationChain, `externalAssets() returned coordination chain '${a.ticker}'`);
 }
 
 // ── Address-shape regex sanity ───────────────────────────────────
@@ -199,16 +182,10 @@ const INVALID_ADDRESSES = ['', 'a', 'definitely not a wallet address'];
 for (const a of ASSETS) {
 	const valid = VALID_ADDRESSES[a.ticker];
 	if (valid !== undefined) {
-		assert(
-			a.addressShape.test(valid),
-			`'${a.ticker}' addressShape rejects known-valid '${valid}'`
-		);
+		assert(a.addressShape.test(valid), `'${a.ticker}' addressShape rejects known-valid '${valid}'`);
 	}
 	for (const bad of INVALID_ADDRESSES) {
-		assert(
-			!a.addressShape.test(bad),
-			`'${a.ticker}' addressShape accepts obviously-bad '${bad}'`
-		);
+		assert(!a.addressShape.test(bad), `'${a.ticker}' addressShape accepts obviously-bad '${bad}'`);
 	}
 }
 
@@ -283,6 +260,69 @@ for (const a of ASSETS) {
 	for (const bad of ['Alice', '1alice', 'al', 'alice-', 'alice.', 'a'.repeat(17)]) {
 		assert(!shape.test(bad), `BLURT addressShape accepts the invalid account ${bad}`);
 	}
+}
+
+// ── MULTI_NETWORK_TICKERS / NATIVE_COIN_TICKERS follow the entries ─
+// NativeCoinTicker (one chain, one explorer, one chat-link setting) is derived
+// from MULTI_NETWORK_TICKERS; the list must be exactly the entries with more
+// than one network, or a new multi-network token would be asked for a single
+// explorer, or a new coin left without one.
+{
+	const multi = ASSETS.filter((a) => a.supportedNetworks.length > 1).map((a) => a.ticker);
+	assert(
+		[...multi].sort().join() === [...MULTI_NETWORK_TICKERS].sort().join(),
+		`MULTI_NETWORK_TICKERS (${MULTI_NETWORK_TICKERS.join(', ')}) must be the entries with more than one network (${multi.join(', ')})`
+	);
+	const native = ASSETS.filter(
+		(a) => !a.isCoordinationChain && !isGoodsAsset(a.ticker) && a.supportedNetworks.length === 1
+	).map((a) => a.ticker);
+	assert(
+		native.join() === NATIVE_COIN_TICKERS.join(),
+		`NATIVE_COIN_TICKERS (${NATIVE_COIN_TICKERS.join(', ')}) must be every single-network coin but BLURT, in registry order (${native.join(', ')})`
+	);
+}
+
+// ── COIN_PRIVACY_CLASS agrees with each coin's privacy tech ──────
+// The class decides which pages call a coin a privacy coin; the entry's
+// optInPrivacyTech says what the chain offers. A class that contradicts it
+// (a coin with no mixing or shielding called a privacy coin, or the reverse)
+// would put the coin in the wrong lists.
+{
+	assert(
+		Object.keys(COIN_PRIVACY_CLASS).sort().join() === [...NATIVE_COIN_TICKERS].sort().join(),
+		`COIN_PRIVACY_CLASS must classify exactly the native coins (${NATIVE_COIN_TICKERS.join(', ')})`
+	);
+	const CHAIN_LEVEL: Record<string, readonly string[]> = {
+		'private-by-default': ['shielded-pools'],
+		'opt-in-shielded': ['shielded-pools'],
+		'opt-in-mixing': ['privatesend', 'csppmix']
+	};
+	for (const t of NATIVE_COIN_TICKERS) {
+		const tech = ASSETS.find((a) => a.ticker === t)!.privacyFeatures.optInPrivacyTech ?? [];
+		const cls = COIN_PRIVACY_CLASS[t];
+		const chainLevel = tech.filter((x) => ['shielded-pools', 'privatesend', 'csppmix'].includes(x));
+		if (cls === 'transparent') {
+			assert(
+				chainLevel.length === 0,
+				`${t} is classed transparent but its chain offers ${chainLevel.join(', ')}`
+			);
+		} else if (cls === 'private-by-default') {
+			assert(
+				tech.length === 0 || tech.every((x) => CHAIN_LEVEL[cls]!.includes(x)),
+				`${t} is classed private-by-default; its optInPrivacyTech must be null or shielded-pools`
+			);
+		} else {
+			assert(
+				chainLevel.length > 0 && chainLevel.every((x) => CHAIN_LEVEL[cls]!.includes(x)),
+				`${t} is classed ${cls}; its optInPrivacyTech must include ${CHAIN_LEVEL[cls]!.join(' or ')}`
+			);
+		}
+	}
+	assert(
+		PRIVACY_COIN_TICKERS.join() ===
+			NATIVE_COIN_TICKERS.filter((t) => COIN_PRIVACY_CLASS[t] !== 'transparent').join(),
+		'PRIVACY_COIN_TICKERS must be every native coin not classed transparent, in display order'
+	);
 }
 
 // ── Result ───────────────────────────────────────────────────────

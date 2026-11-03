@@ -5,7 +5,7 @@
  *   {
  *     "permlink": string (1..32, blurt permlink charset),
  *     "side": "buy" | "sell",
- *     "asset": "BTC" | "XMR" | "BLURT" | "USDT" | "USDC" | "DAI" | "BCH" | "LTC" | "DASH" | "DOGE" | "ZEC" | "ARRR" | "DCR" | "SOL" | "ETH" | "XRP",
+ *     "asset": "BTC" | "XMR" | "BLURT" | "USDT" | "USDC" | "DAI" | "BCH" | "LTC" | "DASH" | "DOGE" | "ZEC" | "ARRR" | "DCR" | "SOL" | "ETH" | "XRP" | "ECX",
  *     "fiat_currency": string (1..8, ISO-4217-ish),
  *     "amount_min"?: number | null,
  *     "amount_max"?: number | null,
@@ -30,15 +30,27 @@ import { attributeBlurtFeeToOperator } from '$indexer/operatorEarnings';
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
-import { addressModePermlink, allocateBtcFeeAddress, btcPinAt } from '$indexer/fee/btcFeeAddressIndex';
+import {
+	addressModePermlink,
+	allocateBtcFeeAddress,
+	btcPinAt
+} from '$indexer/fee/btcFeeAddressIndex';
 import { xmrBindingFor, xmrPrimaryAt, type XmrBinding } from '$indexer/fee/xmrBinding';
-import { externalFeeAmountOf, listingFeeInputsAt, treasuryPinAt } from '$indexer/fee/feeRulesAtBlock';
+import {
+	externalFeeAmountOf,
+	listingFeeInputsAt,
+	treasuryPinAt
+} from '$indexer/fee/feeRulesAtBlock';
 import { consensusV2Active } from '$indexer/consensusActivation';
 import { xmrIntegratedAddress } from '@morphit/release-schema';
 import { logger } from '$log';
 import { ASSET_TICKERS_SET, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 import { isOrderLang } from '@morphit/operator-config';
-import { countForSybilTier } from '$api/sybilTier';
+import {
+	countForSybilTier,
+	countForSybilTierAtPosition,
+	countPriorOrdersAsOf
+} from '$api/sybilTier';
 
 const log = logger('order-handler');
 
@@ -134,7 +146,7 @@ interface ValidatedOrder {
 	 *  USDT one of 'erc20'|'trc20'|'spl'|'bep20'; for USDC one of
 	 *  'erc20'|'spl'|'base'|'polygon'; for DAI one of 'erc20'|
 	 *  'polygon'|'base'|'arbitrum'.  Null for single-network assets
-	 *  (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE).  Pinned at post
+	 *  (every asset but USDT, USDC and DAI).  Pinned at post
 	 *  time so cross-network sends are impossible. */
 	readonly asset_network: string | null;
 	/** for a BARTER (goods/services) order, the non-empty set of
@@ -427,10 +439,7 @@ function validate(payload: unknown, blockTime: Date): ValidatedOrder | { reason:
 					// Legacy shape checks kept so a stored proof stays bounded
 					// and printable (it is shown back to the lister, never sent
 					// anywhere any more).
-					if (
-						!trimmed.startsWith('OutProofV1') &&
-						!trimmed.startsWith('OutProofV2')
-					) {
+					if (!trimmed.startsWith('OutProofV1') && !trimmed.startsWith('OutProofV2')) {
 						return { reason: 'tx_proof_malformed_prefix' };
 					}
 					if (trimmed.length < 64 || trimmed.length > 4096) {
@@ -659,9 +668,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (
 		nodeGates &&
 		ctx.config.disabledPaymentMethods.length > 0 &&
-		v.payment_methods.every((m) =>
-			ctx.config.disabledPaymentMethods.includes(m.toLowerCase())
-		)
+		v.payment_methods.every((m) => ctx.config.disabledPaymentMethods.includes(m.toLowerCase()))
 	) {
 		return { ok: false, reason: 'payment_methods_all_disabled' };
 	}
@@ -738,11 +745,24 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// Has this account posted before? Even a rejected prior
 		// attempt counts — the waiver is a one-shot bonus, not a
 		// retry token.
-		const priorCount = await client.query<{ n: string }>(
-			`SELECT COUNT(*)::text AS n FROM orders WHERE account = $1`,
-			[ctx.signer]
-		);
-		if (parseInt(priorCount.rows[0]?.n ?? '0', 10) > 0) {
+		// Judged after later ops (the upgrade replay): only the orders stored
+		// before this op's position count, as in the live pass.
+		const priorCount = ctx.judgedOutOfOrder
+			? await countPriorOrdersAsOf(client, ctx.signer, ctx.blockTime, {
+					block_num: ctx.blockNum,
+					trx_in_block: ctx.trxInBlock,
+					op_in_trx: ctx.opInTrx
+				})
+			: parseInt(
+					(
+						await client.query<{ n: string }>(
+							`SELECT COUNT(*)::text AS n FROM orders WHERE account = $1`,
+							[ctx.signer]
+						)
+					).rows[0]?.n ?? '0',
+					10
+				);
+		if (priorCount > 0) {
 			return { ok: false, reason: 'waiver_not_first_order' };
 		}
 		// Atomic claim of the waiver. If the row doesn't exist in
@@ -1151,7 +1171,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				v.lang,
 				v.tx_key,
 				xmrBinding?.paymentId ?? null,
-				xmrBinding !== null ? xmrIntegratedAddress(xmrBinding.primaryAddress, xmrBinding.paymentId) : null
+				xmrBinding !== null
+					? xmrIntegratedAddress(xmrBinding.primaryAddress, xmrBinding.paymentId)
+					: null
 			]
 		);
 		if ((externalRes.rowCount ?? 0) > 0) {
@@ -1202,7 +1224,15 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// replay and across instances). This order is the (count + 1)-th.
 		// The same function serves GET /v1/orders/:account/sybil_tier, so a
 		// client's quote cannot drift from what is charged here.
-		const existingCount = await countForSybilTier(client, ctx.signer, ctx.blockTime);
+		// An op judged after later ones (the upgrade replay) counts only what
+		// existed at its own position, as the live pass did.
+		const existingCount = ctx.judgedOutOfOrder
+			? await countForSybilTierAtPosition(client, ctx.signer, ctx.blockTime, {
+					block_num: ctx.blockNum,
+					trx_in_block: ctx.trxInBlock,
+					op_in_trx: ctx.opInTrx
+				})
+			: await countForSybilTier(client, ctx.signer, ctx.blockTime);
 		const nth = existingCount + 1;
 		// BLURT-native fee (Model A): the ENFORCED amount stays
 		// a pure function of the pinned base × tier — NO price read

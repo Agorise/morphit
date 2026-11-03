@@ -134,6 +134,33 @@ const MANDATORY_FAMILIES: Family[] = [
 		pathTemplate: 'privacy.guides.{ticker}.meta_description',
 		renderSite: 'apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte (HTML meta description)',
 		cryptoOnly: true
+	},
+	// The chat reads these four by a key built from the coin's ticker
+	// (`chat.address.pill_method_${method}` and so on), so nothing at compile
+	// time notices a coin without them: this smoke is what does.
+	{
+		id: 'chat_address_pill_method',
+		pathTemplate: 'chat.address.pill_method_{ticker}',
+		renderSite: 'apps/web/src/lib/components/ChatMessage.svelte (address card label)',
+		cryptoOnly: true
+	},
+	{
+		id: 'chat_funds_sent_pill_title',
+		pathTemplate: 'chat.funds_sent.pill_title_{ticker}',
+		renderSite: 'apps/web/src/lib/components/ChatMessage.svelte (funds-sent card title)',
+		cryptoOnly: true
+	},
+	{
+		id: 'chat_address_invalid',
+		pathTemplate: 'chat.address.address_invalid_{ticker}',
+		renderSite: 'apps/web/src/lib/components/AddressShareModal.svelte (invalid address message)',
+		cryptoOnly: true
+	},
+	{
+		id: 'chat_address_placeholder',
+		pathTemplate: 'chat.address.address_placeholder_{ticker}',
+		renderSite: 'apps/web/src/lib/components/AddressShareModal.svelte (address field placeholder)',
+		cryptoOnly: true
 	}
 ];
 

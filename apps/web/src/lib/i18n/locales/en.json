@@ -246,6 +246,11 @@
 				"live": "1 DAI = ${price}",
 				"unavailable": "price unavailable"
 			}
+		},
+		"ecx": {
+			"address_share": {
+				"warning": "Send ECX on the eCash network only, from an eCash wallet. This is also a valid Bitcoin address: a Bitcoin wallet would send bitcoin here instead, and you may not get it back. If your coins date from before the fork (block 973,728, 29 October 2026), or came to you from such coins, split them first: otherwise the same payment can also go out on Bitcoin, and you lose that much bitcoin too."
+			}
 		}
 	},
 	"avatar_menu": {
@@ -614,8 +619,11 @@
 			"address_invalid_eth": "Not a valid Ethereum address.  Expected 0x followed by 40 hex characters (42 chars total).",
 			"pill_method_eth": "Ethereum (ETH)",
 			"address_placeholder_xrp": "Your XRP address (r + 24-34 base58 chars)",
+			"address_placeholder_ecx": "Your eCash (ECX) address (1…, 3… or bc1…)",
 			"address_invalid_xrp": "Not a valid XRP Ledger address.  Expected an address starting with r followed by 24-34 base58 characters (no destination tag in this field).",
+			"address_invalid_ecx": "Not a valid eCash address.  eCash uses Bitcoin's formats: an address starting with 1, 3 or bc1.",
 			"pill_method_xrp": "Ripple (XRP)",
+			"pill_method_ecx": "eCash (ECX)",
 			"blurt_account_not_found": "No Blurt account with that name exists.",
 			"asset_label": "Coin",
 			"too_long_to_send": "This is too long to send in one chat message. Shorten the note or the PayJoin link and try again.",
@@ -682,6 +690,7 @@
 			"pill_title_sol": "SOL sent",
 			"pill_title_eth": "ETH sent",
 			"pill_title_xrp": "XRP sent",
+			"pill_title_ecx": "ECX sent",
 			"pill_title_blurt_received": "Blurt received",
 			"receipt_title": "Payment Receipt",
 			"receipt_when": "on {when}",
@@ -902,6 +911,7 @@
 			"sol": "SOL — Solana.  High-throughput Proof-of-Stake cryptocurrency.  Trade-only on {brand}.  Use a Solana wallet (Phantom, Solflare, Cake Wallet for SOL, Trust Wallet); 32-44 character base58 addresses.  Send native SOL — not wrapped SOL or SPL tokens.  No native protocol-level mixing; wallet-side address rotation is the privacy lever.",
 			"eth": "ETH — Ethereum.  Proof-of-Stake cryptocurrency.  Trade-only on {brand}.  Use an Ethereum wallet (MetaMask, Rabby, Frame, Rainbow, Trust Wallet); 42-character 0x-prefixed hex addresses.  Send native ETH — not wrapped ETH (WETH) or ERC-20 tokens.  No native protocol-level mixing; wallet-side address rotation is the privacy lever.  ENS names not resolved — paste raw 0x addresses.",
 			"xrp": "XRP — Ripple.  Federated Byzantine Agreement consensus on the XRP Ledger.  Trade-only on {brand}.  Use an XRPL wallet (Xaman/Xumm, Crossmark, Bifrost, GemWallet, Trust Wallet); 24-34-char base58 addresses starting with `r`.  Destination tags required when sending to exchange-hosted addresses (32-bit integer routing).  Accounts need ≥1 XRP base reserve to exist.  No native protocol-level mixing; wallet-side address rotation is the privacy lever.",
+			"ecx": "ECX — eCash.  A hard fork of Bitcoin (block 973,728, 29 October 2026) that adds drivechains; not XEC.  Trade-only on {brand}.  Same address formats as Bitcoin (`1…`, `3…`, `bc1…`): pay from an eCash wallet, never a Bitcoin one.  Coins held before the fork, or received since from such coins, can exist on both chains: split them before you trade (only splitting keeps the two chains apart).  Transparent like Bitcoin.",
 			"barter": "Barter — goods or services, not a coin. Price your wares in local currency, pick the crypto(s) you'll accept (e.g. XMR, BTC, DOGE), and describe exactly what you're offering in the Terms. The listing needs no crypto address; you settle in whichever accepted crypto the buyer picks. Trade-only on {brand}."
 		},
 		"section_recovery": {
@@ -1309,7 +1319,7 @@
 			},
 			"monero_amount_jitter": {
 				"q": "Why does {brand} randomize my transfer amount?",
-				"a": "So nobody can match your payment to your order.\n\nIf an order says 0.005 BTC and exactly 0.005 BTC appears on the blockchain, anyone watching can link the two. So when you share your receiving address in the chat, {brand} adds a tiny random extra (\"jitter\") to the amount the buyer should send. The seller always gets slightly **more**, never less.\n\nMonero hides amounts on its chain, but the figure still travels through chats, screenshots, wallets and exchanges. The extra helps there too.\n\nThe extra is at most:\n• XMR: 0.000000999999\n• BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR: 999 satoshis (0.00000999)\n• ETH, XRP, USDT, USDC, DAI: 0.000999\n• SOL: 0.000000999\n• BLURT: 0.099\n\nIt is on by default; the switch is under the amount when you share your address. Turn it off only when you must send an exact figure, such as an invoice. It does not protect against USDT or USDC freezes; see the [privacy guides](/privacy) for each coin."
+				"a": "So nobody can match your payment to your order.\n\nIf an order says 0.005 BTC and exactly 0.005 BTC appears on the blockchain, anyone watching can link the two. So when you share your receiving address in the chat, {brand} adds a tiny random extra (\"jitter\") to the amount the buyer should send. The seller always gets slightly **more**, never less.\n\nMonero hides amounts on its chain, but the figure still travels through chats, screenshots, wallets and exchanges. The extra helps there too.\n\nThe extra is at most:\n• XMR: 0.000000999999\n• BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, ECX: 999 satoshis (0.00000999)\n• ETH, XRP, USDT, USDC, DAI: 0.000999\n• SOL: 0.000000999\n• BLURT: 0.099\n\nIt is on by default; the switch is under the amount when you share your address. Turn it off only when you must send an exact figure, such as an invoice. It does not protect against USDT or USDC freezes; see the [privacy guides](/privacy) for each coin."
 			},
 			"feedback_immutable": {
 				"q": "Can feedback be edited or deleted?",
@@ -1717,7 +1727,7 @@
 			},
 			"why_usdt_warning": {
 				"q": "Why does {brand} show a chip about how USDT is issued and transmitted?",
-				"a": "{brand} shows this chip to share two facts, so you can choose with open eyes:\n\n• **Tether can freeze addresses.** Tether, the company behind USDT, can freeze the USDT at an address, and has done so.\n• **USDT payments are public.** On all four networks (Ethereum, Tron, Solana, BNB Smart Chain) anyone can see the transactions. That's how those chains work, not something special about USDT.\n\nThis doesn't make USDT bad: it holds a steady dollar value and is easy to trade almost anywhere. If privacy matters most, XMR is the better tool. If you want a coin no company can freeze, look at {coins:btc,blurt,bch,ltc,dash,doge,dcr,sol,eth,xrp|or}. The chip is information, not a verdict."
+				"a": "{brand} shows this chip to share two facts, so you can choose with open eyes:\n\n• **Tether can freeze addresses.** Tether, the company behind USDT, can freeze the USDT at an address, and has done so.\n• **USDT payments are public.** On all four networks (Ethereum, Tron, Solana, BNB Smart Chain) anyone can see the transactions. That's how those chains work, not something special about USDT.\n\nThis doesn't make USDT bad: it holds a steady dollar value and is easy to trade almost anywhere. If privacy matters most, XMR is the better tool. If you want a coin no company can freeze, look at {coins:btc,blurt,bch,ltc,dash,doge,dcr,sol,eth,xrp,ecx|or}. The chip is information, not a verdict."
 			},
 			"why_usdc_warning": {
 				"q": "Why does {brand} show a privacy warning when I trade USDC?",
@@ -1778,6 +1788,10 @@
 			"what_is_xrp": {
 				"q": "What is Ripple (XRP), and why is it on {brand}?",
 				"a": "XRP is the coin of the XRP Ledger. There is no mining: a list of trusted validators agrees on each new entry. Nobody can freeze native XRP. Every payment is public.\n\nOn {brand}, XRP is **trade-only**: you can buy and sell it, but you can't pay listing fees with it (those are paid in BLURT, BTC or XMR).\n\n**Addresses** start with `r` and are 25–35 characters long.\n\nTwo things to know before you trade:\n• **No destination tags.** {brand} can't pass along a destination tag (the extra number exchanges ask for). So whoever receives the XRP must share their own wallet's address — never an exchange deposit address, or the XRP can land in the exchange's pool and never reach them.\n• **1 XRP minimum for a new address.** An XRP address only exists once it holds at least 1 XRP. Sending less to a brand-new address fails, so its first payment must be at least 1 XRP.\n\nA site's operator can switch XRP off for their site; other Morphit sites can still trade it. More tips: [XRP privacy guide](/privacy/xrp)."
+			},
+			"what_is_ecx": {
+				"q": "What is eCash (ECX), and why is it on {brand}?",
+				"a": "eCash (ECX) split off from Bitcoin at block 973,728, on 29 October 2026. It shares Bitcoin's history up to the split and adds drivechains: optional side chains with their own rules. Every payment is public, as on Bitcoin. ECX is not XEC (an older coin also called eCash), and not wECX (a wrapped token on Solana): {brand} trades native ECX on the eCash chain.\n\nOn {brand}, ECX is **trade-only**: you can buy and sell it, but you can't pay listing fees with it (those are paid in BLURT, BTC or XMR).\n\nThree things to know before you trade:\n• **An eCash address looks exactly like a Bitcoin address** (`1…`, `3…`, `bc1…`), and it is one. Pay ECX from an eCash wallet: a Bitcoin wallet would send bitcoin to the same address instead, and you may not get it back. That's why {brand} gives no \"pay with wallet\" link for ECX.\n• **Coins you held before the split exist on both chains, and so can coins received since from such coins.** Sent without replay protection, an ECX payment from those coins can also go through on Bitcoin, and you lose the same amount of bitcoin. It works the other way too: a bitcoin payment from those coins can spend your ECX. Only splitting your coins stops both, so split them before you trade: news reports say eCash's official wallet does this for you. The eCash node's own wallet adds no replay protection unless you set it up yourself, so assume your wallet adds none unless it says it does.\n• **The chain is new.** Wait for more confirmations than you would for bitcoin before you treat a payment as final.\n\nA site's operator can switch ECX off for their site; other Morphit sites can still trade it. More tips: [ECX privacy guide](/privacy/ecx)."
 			},
 			"what_is_bch": {
 				"q": "What is Bitcoin Cash (BCH), and why is it on {brand}?",
@@ -2219,7 +2233,7 @@
 			},
 			"trade_anything": {
 				"title": "Trade anything",
-				"body": "16+ cryptos plus direct goods, services and even barter. Cross-asset, cross-network, cross-medium."
+				"body": "17 cryptos plus direct goods, services and even barter. Cross-asset, cross-network, cross-medium."
 			},
 			"card_aria_label": "{title} — learn more in our FAQ"
 		},
@@ -3258,6 +3272,9 @@
 		},
 		"pay_xrp": {
 			"description": "Pay in Ripple (XRP). XRP is a Federated Byzantine Agreement cryptocurrency on the XRP Ledger. Use an XRPL wallet like Xaman (formerly Xumm), Crossmark, or Bifrost. Send native XRP. {brand} carries no destination tag, so the seller must share a self-custody XRPL address that needs none — never an exchange deposit address."
+		},
+		"pay_ecx": {
+			"description": "Pay in eCash (ECX), a 2026 hard fork of Bitcoin with drivechains — not XEC. Use an eCash wallet, never a Bitcoin one: an eCash address is also a Bitcoin address. Coins held before the fork, or received since from such coins, can exist on both chains: split them before you trade (only splitting keeps the two chains apart)."
 		}
 	},
 	"plan": {
@@ -3348,6 +3365,7 @@
 				"sol": "Solana (SOL) — high-throughput Proof-of-Stake cryptocurrency. Native SOL transfer (not wrapped SOL or SPL tokens). 32-44 character base58 addresses (same shape as USDT-Solana and USDC-Solana addresses; asset field disambiguates).",
 				"eth": "Ethereum (ETH) — Proof-of-Stake cryptocurrency. Native ETH transfer (not wrapped ETH or ERC-20 tokens). 42-character 0x-prefixed hex addresses (same shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, and every EVM token-account address; asset field + network field disambiguate).",
 				"xrp": "Ripple (XRP) — Federated Byzantine Agreement cryptocurrency on the XRP Ledger. 24-34 character base58 addresses starting with `r`. Destination tags (32-bit integers) are required when sending to exchange-hosted addresses — your peer-to-peer counterparty typically does not need one. XRPL accounts need ≥1 XRP base reserve to exist.",
+				"ecx": "eCash (ECX) — a 2026 hard fork of Bitcoin with drivechains; not XEC. Addresses are Bitcoin's own (`1…`, `3…`, `bc1…`), so pay from an eCash wallet, never a Bitcoin one. Coins held before the fork, or received since from such coins, can exist on both chains: split them before you trade (only splitting keeps the two chains apart).",
 				"barter": "Barter (goods/services). Not a cryptocurrency — you offer wares or a service and get paid in the crypto(s) you choose to accept. Price it in your local currency; you and the buyer work out the details in chat and settle in one of your accepted cryptos. Describe exactly what you're offering in the Terms field."
 			},
 			"waiver_fiat_hint": "💡 Most BLURT trades on {brand} happen with active Blurt social-network users, existing operators, or via barter. So, pick the fiat denomination that you use locally (USD, EUR, MXN, etc), and offer In-Person or Barter (goods/services) payment methods on Step 3 if you want to offer something else of value.",
@@ -3544,7 +3562,7 @@
 	},
 	"privacy": {
 		"index_heading": "Privacy practices on {brand}",
-		"index_intro": "Most assets traded on {brand} ({coins:btc,bch,ltc,dash,doge,dcr,sol,eth,xrp,blurt,usdt,usdc,dai|list}) live on transparent chains — any observer can read the chain history. Zcash (ZEC) is transparent unless you use its shielded addresses; Pirate Chain (ARRR), like Monero, hides sender, receiver and amount by default. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset we add will get a guide automatically. Beyond individual trades, Morphit also protects privacy at the network level: it can be reached and run entirely over Tor and I2P — a node can even operate with zero clearnet at all — as detailed on the Security page and the instance directory.",
+		"index_intro": "Most assets traded on {brand} ({coins:btc,bch,ltc,dash,doge,dcr,sol,eth,xrp,ecx,blurt,usdt,usdc,dai|list}) live on transparent chains — any observer can read the chain history. Zcash (ZEC) is transparent unless you use its shielded addresses; Pirate Chain (ARRR), like Monero, hides sender, receiver and amount by default. There are concrete steps you can take to make YOUR trades much harder to link, profile, or surveil. This is registry-driven: the next asset we add will get a guide automatically. Beyond individual trades, Morphit also protects privacy at the network level: it can be reached and run entirely over Tor and I2P — a node can even operate with zero clearnet at all — as detailed on the Security page and the instance directory.",
 		"guide_heading": "Privacy practices for {asset} trades",
 		"back_to_index": "All assets",
 		"section_fresh_addresses": "Use a fresh address every trade",
@@ -3692,6 +3710,12 @@
 				"intro": "Ripple (XRP) launched in 2012 as a payment-focused cryptocurrency.  XRPL uses Federated Byzantine Agreement (FBA) consensus — validators on a Unique Node List (UNL) reach agreement on transaction ordering.  The default UNL is published by the XRP Ledger Foundation (non-profit) with the for-profit Ripple Labs Inc. historically influencing validator selection.  Native XRP cannot be frozen by any central authority — the freeze flag on XRPL applies only to issued tokens (IOUs), not to native XRP.\n\nThe chain is transparent at the base layer — sender, recipient, amount, and destination tag (if present) are all visible on chain like Bitcoin.  XRPL has no native protocol-level mixing.  Users wanting transaction-level privacy rely on wallet-side address rotation (deriving a fresh address per trade from their HD seed) and off-chain coordination — the practices below cover what you can control.",
 				"meta_description": "Privacy practices for Ripple (XRP) trades on {brand}: XRPL FBA consensus, transparent base layer, destination tag UX, reserve requirement, and RPC provider considerations.",
 				"caveats": "XRPL is transparent at the base layer with no native mixing protocol.\n\n- **Share fresh addresses per trade.**  Using the same XRPL address across multiple {brand} listings lets observers correlate your orders on a fully transparent chain.  Generate a fresh receive address per trade — modern XRPL wallets (Xaman, Crossmark, Bifrost) derive these from your HD seed and let you create new accounts in seconds.\n- **Destination tags are not a privacy feature — they're an identifier, and {brand} cannot carry one.** A tag is visible on chain and correlates transactions. {brand}'s address share has no tag field and its payment link sets none, so never share an exchange-hosted deposit address that needs a tag (the funds would be lost in the exchange's pool); share a self-custody address that needs no tag.\n- **Reserve requirement creates account-creation visibility.**  Your first incoming XRP must be ≥1 XRP (the base reserve).  The on-chain `Payment` transaction that funds a new account is publicly visible as account activation, which is a stronger correlation signal than a regular payment to an already-existing account.  If reducing this signal matters, fund the receive address yourself first (from an account that's already mixed/separated) and only then share it.\n- **Network-layer privacy still matters.**  Broadcasting through Tor or your wallet's privacy mode keeps your home IP off the chain's view of you.\n- **XRPL RPC providers can correlate.**  Your wallet talks to an XRPL RPC endpoint (xrplcluster.com, Ripple's, or a self-hosted rippled node) — that provider sees every transaction you sign.  Self-hosting a rippled node, or rotating between providers, reduces the surface area.\n- **Consensus-set concentration is a known property.**  The default UNL (Unique Node List) is published by the XRP Ledger Foundation; running your own validator with a custom UNL is supported but uncommon.  For Morphit's purposes this affects censorship-resistance considerations (a coordinated UNL could refuse to include transactions) more than transaction privacy.  Document and decide based on your threat model.\n- **Only classic addresses are accepted.** XRPL has a newer \"X-address\" format (XLS-5d) that bundles a destination tag into the address. {brand} accepts only classic `r`-prefixed addresses and carries no tag, so share a self-custody classic address that needs no tag."
+			},
+			"ecx": {
+				"one_line": "A Bitcoin fork with drivechains.  Transparent like Bitcoin; split coins held before the fork, or received from them, before you send.",
+				"intro": "eCash (ECX) split off from Bitcoin at block 973,728, on 29 October 2026.  It keeps Bitcoin's addresses and transaction format, changes a few rules (such as how difficulty adjusts), and adds drivechains (BIP300/301): optional side chains with their own rules, whose withdrawals miners approve.  It is not XEC, the older coin also called eCash.\n\nThe chain is transparent like Bitcoin — sender, recipient and amount are visible to anyone.  Two things are particular to eCash: an eCash address is also a Bitcoin address, and coins held before the fork, or received since from such coins, can exist on both chains, so an unprotected payment can be repeated (replayed) on the other chain.  The practices below cover what you can control.",
+				"meta_description": "Privacy and safety practices for eCash (ECX) trades on {brand}: a transparent Bitcoin fork, Bitcoin-identical addresses, replay protection, and splitting coins held before the fork.",
+				"caveats": "eCash is transparent like Bitcoin, and shares Bitcoin's coins from before the fork.\n\n- **Split your coins before you trade.** Coins you held before block 973,728 (29 October 2026) exist on both chains, and so can coins you received since from such coins (a payment from unsplit coins can go through on both chains). Until you have moved them on eCash with replay protection, an eCash payment from them can be repeated on Bitcoin, and a bitcoin payment from them can spend your ECX. News reports say eCash's official wallet splits them for you. The eCash node's own wallet adds no replay protection unless you set it up yourself, so assume your wallet adds none unless it says it does.\n- **Pay from an eCash wallet only.** An eCash address is also a Bitcoin address. A Bitcoin wallet given that address sends bitcoin, not ECX, and you may not get it back.\n- **Keep eCash in its own wallet, once split.** A seed that held bitcoin before the fork controls the same coins on both chains. Once your coins are split, moving your ECX to a separate eCash seed gives them their own addresses from now on, instead of your Bitcoin wallet's. The move itself is public, and the coins' history before the fork stays on both chains.\n- **Share fresh addresses per trade.** Reusing an address lets anyone link your trades on a transparent chain; an HD wallet gives you a new one for each trade.\n- **The chain is young.** A new chain can reorganize its latest blocks more easily than Bitcoin. Wait for more confirmations before you treat a payment as final.\n- **Network-layer privacy still matters.** Broadcasting through Tor keeps your home IP off the network's view of you."
 			}
 		}
 	},

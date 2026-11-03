@@ -10,8 +10,7 @@
 	Grouped by purpose:
 
 	  1. Brand (mark + wordmark)
-	  2. Asset icons (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC,
-	     DASH, DOGE, YubiKey)
+	  2. Asset icons (every coin in the registry, plus YubiKey)
 	  3. Alt-network icons (Tor, Lokinet, I2P, Nostr, Blurt)
 	  4. UI icon components (in-context samples)
 
@@ -23,6 +22,7 @@
 -->
 <script lang="ts">
 	import Head from '$components/Head.svelte';
+	import { ASSETS as COIN_REGISTRY } from '$lib/assets/registry';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import MorphitMark from '$components/MorphitMark.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
@@ -31,31 +31,16 @@
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 
 	const ALT_NETWORKS = ['tor', 'lokinet', 'i2p', 'nostr', 'blurt'] as const;
-	// Asset icon dev surface.  All 16 tradable assets + the
-	// yubikey ancillary icon.  All icons live at
-	// /icons/icon-<lower-ticker>.svg convention cleanup;
-	// an earlier /coins/<ticker>.svg path was vestigial (the files
-	// never shipped to disk under that path) and has been folded
-	// into the canonical /icons/ form for all 16 entries.
+	// Asset icon dev surface: every coin of the registry (its logoSvgPath —
+	// asset-registry-smoke checks each exists on disk) plus the yubikey
+	// ancillary icon. Derived, so a new coin shows here without a second list.
 	const ASSETS = [
-		{ key: 'btc', path: '/icons/icon-btc.svg' },
-		{ key: 'xmr', path: '/icons/icon-xmr.svg' },
-		{ key: 'blurt', path: '/icons/icon-blurt.svg' },
-		{ key: 'usdt', path: '/icons/icon-usdt.svg' },
-		{ key: 'usdc', path: '/icons/icon-usdc.svg' },
-		{ key: 'dai', path: '/icons/icon-dai.svg' },
-		{ key: 'bch', path: '/icons/icon-bch.svg' },
-		{ key: 'ltc', path: '/icons/icon-ltc.svg' },
-		{ key: 'dash', path: '/icons/icon-dash.svg' },
-		{ key: 'doge', path: '/icons/icon-doge.svg' },
-		{ key: 'zec', path: '/icons/icon-zec.svg' },
-		{ key: 'arrr', path: '/icons/icon-arrr.svg' },
-		{ key: 'dcr', path: '/icons/icon-dcr.svg' },
-		{ key: 'sol', path: '/icons/icon-sol.svg' },
-		{ key: 'eth', path: '/icons/icon-eth.svg' },
-		{ key: 'xrp', path: '/icons/icon-xrp.svg' },
+		...COIN_REGISTRY.filter((a) => a.ticker !== 'barter').map((a) => ({
+			key: a.ticker as string,
+			path: a.logoSvgPath
+		})),
 		{ key: 'yubikey', path: '/icons/icon-yubikey.svg' }
-	] as const;
+	];
 
 	const SIZES = [16, 24, 48] as const;
 </script>
@@ -97,11 +82,23 @@
 			</div>
 			<div class="rounded-xl border border-ink-200 bg-ink-950 p-6 dark:border-ink-800">
 				<p class="mb-3 text-xs uppercase tracking-widest text-ink-400">Wordmark · dark surface</p>
-				<img src="/brand/morphit-wordmark.svg" alt="Morphit wordmark" class="h-10" loading="lazy" decoding="async" />
+				<img
+					src="/brand/morphit-wordmark.svg"
+					alt="Morphit wordmark"
+					class="h-10"
+					loading="lazy"
+					decoding="async"
+				/>
 			</div>
 			<div class="rounded-xl border border-ink-200 bg-white p-6 dark:border-ink-800">
 				<p class="mb-3 text-xs uppercase tracking-widest text-ink-500">Wordmark · light surface</p>
-				<img src="/brand/morphit-wordmark.svg" alt="Morphit wordmark" class="h-10" loading="lazy" decoding="async" />
+				<img
+					src="/brand/morphit-wordmark.svg"
+					alt="Morphit wordmark"
+					class="h-10"
+					loading="lazy"
+					decoding="async"
+				/>
 			</div>
 		</div>
 	</section>
@@ -110,10 +107,9 @@
 	<section class="mb-12">
 		<h2 class="mb-4 font-display text-2xl font-bold">1b. Favicon &amp; PWA app icons</h2>
 		<p class="mb-4 text-sm text-ink-500">
-			How the icon renders in three contexts: the browser tab favicon (transparent
-			background, mark only), the PWA app icon (dark ink-950 canvas, mark centered),
-			and the maskable variant (Android adaptive icon mask preserves the mark inside
-			the inner 40% safe radius).
+			How the icon renders in three contexts: the browser tab favicon (transparent background, mark
+			only), the PWA app icon (dark ink-950 canvas, mark centered), and the maskable variant
+			(Android adaptive icon mask preserves the mark inside the inner 40% safe radius).
 		</p>
 		<div class="grid gap-4 md:grid-cols-3">
 			<!-- favicon.svg — transparent -->
@@ -122,9 +118,30 @@
 					favicon.svg · transparent on light
 				</p>
 				<div class="flex items-center justify-around gap-2">
-					<img src="/favicon.svg" alt="Morphit favicon" width="16" height="16" loading="lazy" decoding="async" />
-					<img src="/favicon.svg" alt="Morphit favicon" width="32" height="32" loading="lazy" decoding="async" />
-					<img src="/favicon.svg" alt="Morphit favicon" width="64" height="64" loading="lazy" decoding="async" />
+					<img
+						src="/favicon.svg"
+						alt="Morphit favicon"
+						width="16"
+						height="16"
+						loading="lazy"
+						decoding="async"
+					/>
+					<img
+						src="/favicon.svg"
+						alt="Morphit favicon"
+						width="32"
+						height="32"
+						loading="lazy"
+						decoding="async"
+					/>
+					<img
+						src="/favicon.svg"
+						alt="Morphit favicon"
+						width="64"
+						height="64"
+						loading="lazy"
+						decoding="async"
+					/>
 				</div>
 			</div>
 			<div class="rounded-xl border border-ink-200 bg-ink-950 p-4 dark:border-ink-800">
@@ -132,13 +149,36 @@
 					favicon.svg · transparent on dark
 				</p>
 				<div class="flex items-center justify-around gap-2">
-					<img src="/favicon.svg" alt="Morphit favicon" width="16" height="16" loading="lazy" decoding="async" />
-					<img src="/favicon.svg" alt="Morphit favicon" width="32" height="32" loading="lazy" decoding="async" />
-					<img src="/favicon.svg" alt="Morphit favicon" width="64" height="64" loading="lazy" decoding="async" />
+					<img
+						src="/favicon.svg"
+						alt="Morphit favicon"
+						width="16"
+						height="16"
+						loading="lazy"
+						decoding="async"
+					/>
+					<img
+						src="/favicon.svg"
+						alt="Morphit favicon"
+						width="32"
+						height="32"
+						loading="lazy"
+						decoding="async"
+					/>
+					<img
+						src="/favicon.svg"
+						alt="Morphit favicon"
+						width="64"
+						height="64"
+						loading="lazy"
+						decoding="async"
+					/>
 				</div>
 			</div>
 			<!-- app-icon.svg — dark background, default PWA icon -->
-			<div class="rounded-xl border border-ink-200 bg-ink-100 p-4 dark:border-ink-800 dark:bg-ink-100">
+			<div
+				class="rounded-xl border border-ink-200 bg-ink-100 p-4 dark:border-ink-800 dark:bg-ink-100"
+			>
 				<p class="mb-3 text-xs uppercase tracking-widest text-ink-700">
 					app-icon.svg · PWA launcher
 				</p>
@@ -173,7 +213,9 @@
 				</div>
 			</div>
 			<!-- app-icon-maskable.svg with simulated Android masks -->
-			<div class="rounded-xl border border-ink-200 bg-ink-100 p-4 dark:border-ink-800 dark:bg-ink-100">
+			<div
+				class="rounded-xl border border-ink-200 bg-ink-100 p-4 dark:border-ink-800 dark:bg-ink-100"
+			>
 				<p class="mb-3 text-xs uppercase tracking-widest text-ink-700">
 					app-icon-maskable.svg · circle mask
 				</p>
@@ -207,7 +249,9 @@
 					/>
 				</div>
 			</div>
-			<div class="rounded-xl border border-ink-200 bg-ink-100 p-4 dark:border-ink-800 dark:bg-ink-100">
+			<div
+				class="rounded-xl border border-ink-200 bg-ink-100 p-4 dark:border-ink-800 dark:bg-ink-100"
+			>
 				<p class="mb-3 text-xs uppercase tracking-widest text-ink-700">
 					app-icon-maskable.svg · squircle mask
 				</p>
@@ -241,7 +285,9 @@
 					/>
 				</div>
 			</div>
-			<div class="rounded-xl border border-ink-200 bg-ink-100 p-4 dark:border-ink-800 dark:bg-ink-100">
+			<div
+				class="rounded-xl border border-ink-200 bg-ink-100 p-4 dark:border-ink-800 dark:bg-ink-100"
+			>
 				<p class="mb-3 text-xs uppercase tracking-widest text-ink-700">
 					app-icon-maskable.svg · rounded square
 				</p>
@@ -290,7 +336,14 @@
 					</p>
 					<div class="flex items-center justify-around">
 						{#each SIZES as sz (sz)}
-							<img src={asset.path} alt={asset.key} width={sz} height={sz} loading="lazy" decoding="async" />
+							<img
+								src={asset.path}
+								alt={asset.key}
+								width={sz}
+								height={sz}
+								loading="lazy"
+								decoding="async"
+							/>
 						{/each}
 					</div>
 				</div>
@@ -320,7 +373,6 @@
 			{/each}
 		</div>
 	</section>
-
 
 	<!-- ─── In-component UI icons ─────────────────────────────── -->
 	<section class="mb-12">
@@ -376,7 +428,6 @@
 					Identicon SVG must be square + match the row's text baseline.
 				</p>
 			</div>
-
 		</div>
 	</section>
 
