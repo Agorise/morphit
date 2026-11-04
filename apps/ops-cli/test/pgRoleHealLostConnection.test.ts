@@ -16,11 +16,15 @@ const URL0 = process.env.TEST_DATABASE_URL ?? '';
 /** A proxy that drops the client side as soon as it has passed on a pg_sleep
  *  statement, while the client waits for its answer: `end` closes it (FIN),
  *  `reset` resets it (RST). `closed`: the dropped connection has closed. */
-async function droppingProxy(
-	how: 'end' | 'reset'
-): Promise<{ url: string; closed: Promise<void>; close: () => Promise<void> }> {
+async function droppingProxy(how: 'end' | 'reset'): Promise<{
+	url: string;
+	dropped: () => boolean;
+	closed: Promise<void>;
+	close: () => Promise<void>;
+}> {
 	const target = new URL(URL0);
 	const sockets: net.Socket[] = [];
+	let didDrop = false;
 	let markClosed = (): void => {};
 	const closed = new Promise<void>((r) => (markClosed = r));
 	const proxy = net.createServer((c) => {
@@ -31,6 +35,7 @@ async function droppingProxy(
 		c.on('data', (d: Buffer) => {
 			s.write(d);
 			if (d.includes(Buffer.from('pg_sleep'))) {
+				didDrop = true;
 				c.on('close', () => markClosed());
 				if (how === 'end') c.end();
 				else c.resetAndDestroy();
@@ -46,6 +51,7 @@ async function droppingProxy(
 	via.port = String((proxy.address() as net.AddressInfo).port);
 	return {
 		url: via.toString(),
+		dropped: () => didDrop,
 		closed,
 		close: async () => {
 			for (const x of sockets) x.destroy();
@@ -61,6 +67,9 @@ describe.skipIf(URL0 === '')('pgRoleHeal: a connection that drops mid-statement'
 			try {
 				const r = await realRuntime.asRole(px.url, ['SELECT pg_sleep(1)']);
 				expect(r.ok).toBe(false);
+				// It failed because the connection dropped mid-statement, not
+				// because the proxy could not reach Postgres.
+				expect(px.dropped(), 'the statement reached the proxy and was cut off').toBe(true);
 				// Anything the closing socket reports arrives after the answer:
 				// wait until it has closed.
 				await px.closed;

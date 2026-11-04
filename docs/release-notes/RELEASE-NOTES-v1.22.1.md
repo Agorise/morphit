@@ -108,3 +108,8 @@ Upgrade as usual.
   `db-pools.test.ts` (+3), relay `test/dbPoolLostConnection.test.ts` (4), ops-cli
   `test/pgRoleHealLostConnection.test.ts` (2). They wait on the connection's own events
   (`'end'`, the socket's `'close'`), not on timers.
+- ops-cli test network guard (`test/setup/noInternet.ts`): a test's `net.connect(port, name)`
+  to a name (CI's `postgres`) failed with `ERR_MISSING_ARGS`, because the guard's copy of
+  net's already normalised arguments lost their mark. The copy keeps it now
+  (`noInternetGuard.test.ts`, +1). The drop test also checks that the statement reached the
+  proxy, so a proxy that cannot reach Postgres fails the test instead of passing it.

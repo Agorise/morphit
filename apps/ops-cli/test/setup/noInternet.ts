@@ -111,9 +111,22 @@ net.Socket.prototype.connect = function (this: net.Socket, ...args: unknown[]) {
 				}
 			} else if (o.lookup === undefined) {
 				const withLookup = { ...o, lookup: guardedLookup };
-				a = Array.isArray(a[0])
-					? [[withLookup, ...a[0].slice(1)], ...a.slice(1)]
-					: [withLookup, ...a.slice(1)];
+				if (Array.isArray(a[0])) {
+					// net.connect() hands the socket its arguments already
+					// normalised: an array marked with a symbol. A copy without the
+					// mark is normalised again, as one argument, and fails with
+					// ERR_MISSING_ARGS — a test's `net.connect(port, 'postgres')`
+					// never connected (v1.22.1 CI).
+					const given = a[0] as unknown[];
+					const copy: unknown[] = [withLookup, ...given.slice(1)];
+					for (const sym of Object.getOwnPropertySymbols(given))
+						(copy as unknown as Record<symbol, unknown>)[sym] = (
+							given as unknown as Record<symbol, unknown>
+						)[sym];
+					a = [copy, ...a.slice(1)];
+				} else {
+					a = [withLookup, ...a.slice(1)];
+				}
 			}
 		}
 	}
