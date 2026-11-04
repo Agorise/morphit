@@ -44,6 +44,18 @@
  *     another node then answers within the budget).
  * Either way, guardDblurtClient stops dblurt from re-requesting the same reply
  * from the same node until its timeout (it retries every fetch error).
+ *
+ * DBLURT'S ATTEMPT TIMER IS FOR THE HEADERS. dblurt gives each read attempt
+ * 500 ms × (attempt + 1) and stops the timer once `fetch` resolves, then reads
+ * the body. The guard reads the body INSIDE `fetch`, so for dblurt's calls the
+ * timer used to run over the whole reply: any reply that took more than 500 ms
+ * to arrive was cut off and requested again, with a longer timer each time, and
+ * one that took a few seconds (a long account history, a 100-account batch from
+ * a node across the world) failed at the client's timeout after being
+ * downloaded several times (v1.22.1). For dblurt's calls the signal is passed
+ * on only until the headers arrive, and the body is bounded by its byte budget
+ * (without the guard, dblurt did not bound it at all). Callers that pass their
+ * own deadline to guardedRpcFetch keep it over the whole reply.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -285,13 +297,37 @@ export async function readCappedBytes(
  * shape an honest node never sends (checkRpcReplyShape), and handed back as a
  * fresh in-memory Response. `base` is looked up at call time when omitted. The
  * byte cap is `max` when given, else the request's budget (rpcReplyBudget).
+ * `signalUntilHeaders`: the caller's signal can abort the request only until
+ * the headers arrive (dblurt's per-attempt timer, see the header).
  */
-export function guardedRpcFetch(base?: typeof fetch, max?: number): typeof fetch {
+export function guardedRpcFetch(
+	base?: typeof fetch,
+	max?: number,
+	opts: { signalUntilHeaders?: boolean } = {}
+): typeof fetch {
 	return (async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
 		const url = urlOf(input);
 		const budget: RpcReplyBudget =
 			max !== undefined ? { maxBytes: max, requestSized: false } : rpcReplyBudget(init?.body);
-		const res = await (base ?? globalThis.fetch)(input, { ...init, redirect: 'manual' });
+		const outer = init?.signal ?? undefined;
+		let res: Response;
+		if (opts.signalUntilHeaders === true && outer !== undefined && outer !== null) {
+			const ctl = new AbortController();
+			const onAbort = (): void => ctl.abort(outer.reason);
+			if (outer.aborted) onAbort();
+			else outer.addEventListener('abort', onAbort, { once: true });
+			try {
+				res = await (base ?? globalThis.fetch)(input, {
+					...init,
+					signal: ctl.signal,
+					redirect: 'manual'
+				});
+			} finally {
+				outer.removeEventListener('abort', onAbort);
+			}
+		} else {
+			res = await (base ?? globalThis.fetch)(input, { ...init, redirect: 'manual' });
+		}
 		if (res.status >= 300 && res.status < 400) {
 			await res.body?.cancel().catch(() => {});
 			throw new RpcRedirectRefusedError(url, res.status);
@@ -364,7 +400,7 @@ let installedWrapper: typeof fetch | null = null;
 export function installRpcFetchGuard(): void {
 	if (installedWrapper !== null && globalThis.fetch === installedWrapper) return;
 	const base = globalThis.fetch;
-	const guarded = guardedRpcFetch(base);
+	const guarded = guardedRpcFetch(base, undefined, { signalUntilHeaders: true });
 	const wrapper = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
 		const scope = rpcScope.getStore();
 		if (scope === undefined) return base(input, init);

@@ -14,8 +14,8 @@
  * quote passes the current time. This reads the orders table as it stands, so
  * it is the count AT the op only when no later op has been applied yet: true
  * in the live pass. An op judged after later ops of the same account were
- * applied uses countForSybilTierAsOf (the fee re-check, unchanged since
- * v1.20.0) or countForSybilTierAtPosition (the upgrade replay).
+ * applied (the upgrade replay, the fee re-check) uses
+ * countForSybilTierAtPosition.
  */
 
 export const SYBIL_TIER_WINDOW_MS = 24 * 3600 * 1000;
@@ -50,60 +50,10 @@ export interface ChainPosition {
 }
 
 /**
- * The account's count toward the Sybil tier AS IT STOOD when the live handler
- * judged the op at `pos` (countForSybilTier, reconstructed for an op judged
- * later). (V3-9) An order counts when its CREATING op came earlier in CHAIN
- * ORDER — block, then transaction, then op, read from the event log — exactly
- * the orders the live handler had already stored; an order with no event-log
- * row falls back to created_at strictly before the block. It must also have
- * been live then (still live, or changed after the block, and not expired by
- * then), or created in the 24 h before it. Excludes the order `permlink`
- * itself. (Counting by created_at alone counted orders later in the SAME
- * block, so a re-check refused a fee the live pass accepted; counting the
- * table as it stands counted the account's LATER orders, so the upgrade
- * replay charged a higher tier than every node that judged the op live.)
- */
-export async function countForSybilTierAsOf(
-	db: SybilTierQueryable,
-	account: string,
-	permlink: string,
-	blockTime: Date,
-	pos: ChainPosition
-): Promise<number> {
-	const cutoff = new Date(blockTime.getTime() - SYBIL_TIER_WINDOW_MS);
-	const res = await db.query<{ n: string }>(
-		`SELECT COUNT(*)::text AS n
-		   FROM orders o2
-		   LEFT JOIN LATERAL (
-		        SELECT block_num, trx_in_block, op_in_trx FROM ops
-		         WHERE ops.signer = o2.account AND ops.op_id = $5 AND ops.status = 'applied'
-		           AND ops.payload->>'permlink' = o2.permlink
-		         ORDER BY block_num ASC, trx_in_block ASC, op_in_trx ASC
-		         LIMIT 1) c ON TRUE
-		  WHERE o2.account = $1 AND o2.permlink <> $2
-		    AND (CASE WHEN c.block_num IS NOT NULL
-		              THEN (c.block_num, c.trx_in_block, c.op_in_trx) < ($6::bigint, $7::int, $8::int)
-		              ELSE o2.created_at < $3 END)
-		    AND (((o2.status = 'live' OR o2.updated_at > $3) AND (o2.expires_at IS NULL OR o2.expires_at > $3))
-		         OR o2.created_at >= $4)`,
-		[
-			account,
-			permlink,
-			blockTime,
-			cutoff,
-			ORDER_OP_ID,
-			pos.block_num,
-			pos.trx_in_block,
-			pos.op_in_trx
-		]
-	);
-	return parseInt(res.rows[0]?.n ?? '0', 10);
-}
-
-/**
- * The upgrade replay's Sybil-tier count (v1.22.0): what countForSybilTier
- * returned when the live handler judged the op at `pos`, reconstructed from
- * the event log after later ops of the account were applied.
+ * What countForSybilTier returned when the live handler judged the op at
+ * `pos`, reconstructed from the event log after later ops of the account were
+ * applied: the upgrade replay's count (v1.22.0) and the fee re-check's
+ * (blurtFeeReverify.ts, from v1.22.1).
  *
  * An order counts when its CREATING op came earlier in chain order (created_at
  * strictly before the block when the event log has no row for it), and either
@@ -117,14 +67,17 @@ export async function countForSybilTierAsOf(
  * no longer live is updated_at used ("changed at or after the block": a
  * same-block end sets it to the block time).
  *
- * countForSybilTierAsOf reads "changed after the block" from updated_at alone,
- * and updated_at also moves on orders that had ENDED before the op: naming a
- * counterparty later on a completed order, a fee attestation on a cancelled
- * one, a fee re-check. Counted as live, such an order raised the replayed
- * op's tier, so an order that paid its fee was stored underpaid on the node
- * that replayed it and verified on every other. No exclusion of the op's own
- * permlink either: the live count has none (its order did not exist yet; an
- * EARLIER order of the same permlink did count).
+ * The count the fee re-check used until v1.22.1 (countForSybilTierAsOf, now
+ * gone) read "changed after the block" from updated_at alone, and got both
+ * ends wrong. updated_at also moves on orders that had ENDED before the op:
+ * naming a counterparty later on a completed order, a fee attestation on a
+ * cancelled one. Counted as live, such an order raised the re-judged op's
+ * tier, so an order that paid its fee stayed underpaid, depending on WHEN the
+ * node ran the re-check. And an order ended in the op's OWN block (its end
+ * stamped with the block time, not after it) was not counted, though the live
+ * pass had counted it: the tier came out one lower and an order the live pass
+ * judged underpaid was verified. No exclusion of the op's own permlink is
+ * needed: its creating op is at `pos`, not before it.
  */
 export async function countForSybilTierAtPosition(
 	db: SybilTierQueryable,

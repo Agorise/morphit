@@ -59,7 +59,13 @@
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { getStrangerFeeQuote, type Queryable } from '$indexer/strangerFeePricing';
+import type { ChainPosition } from '$api/sybilTier';
+import {
+	getStrangerFeeQuote,
+	positionParams,
+	strangerFeeRowBefore,
+	type Queryable
+} from '$indexer/strangerFeePricing';
 import { canonicalShareOk, meetsMinimumMilli, sumFeeTransfers } from '$indexer/fee';
 import { ownerRecipientsAt } from '$indexer/feeRecipients';
 import { consensusV2Active } from '$indexer/consensusActivation';
@@ -92,6 +98,10 @@ export interface StrangerFeeInput {
 	readonly extraOwnerRecipients?: readonly string[];
 	/** Fees from this signer not recorded yet (the head path, S-H3). */
 	readonly extraRecentFees?: number;
+	/** The op's own position, when it is judged after later ops were applied
+	 *  (the fee re-check): the escalating price then counts only the fees
+	 *  whose op came before it, as the live pass did. */
+	readonly judgedAt?: ChainPosition;
 }
 
 export type StrangerFeeVerdict =
@@ -149,7 +159,8 @@ export async function evaluateStrangerFee(
 		client,
 		input.signer,
 		input.blockTime,
-		input.extraRecentFees ?? 0
+		input.extraRecentFees ?? 0,
+		input.judgedAt
 	);
 
 	// Sanity window on the user's quote. Accept if it's at
@@ -214,6 +225,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (!isPlainObject(ctx.payload)) {
 		return { ok: false, reason: 'payload_not_object' };
 	}
+	// Judged after later ops were applied (the fee re-check): read the table
+	// as the live pass saw it at this op's position. Without this, a fee the
+	// sender paid for the same pair LATER made a rejected op "already paid"
+	// (applied), and one paid later in the same block raised the price.
+	const judgedAt: ChainPosition | undefined = ctx.judgedOutOfOrder
+		? { block_num: ctx.blockNum, trx_in_block: ctx.trxInBlock, op_in_trx: ctx.opInTrx }
+		: undefined;
 	const recipient = ctx.payload.recipient;
 	if (
 		typeof recipient === 'string' &&
@@ -227,11 +245,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// re-replay during indexer recovery. In all cases the
 		// user's original admission stands.
 		const existing = await client.query<{ exists: boolean }>(
-			`SELECT EXISTS (
-			   SELECT 1 FROM stranger_fees
-			    WHERE sender = $1 AND recipient = $2
-			 ) AS exists`,
-			[ctx.signer, recipient]
+			judgedAt === undefined
+				? `SELECT EXISTS (
+				     SELECT 1 FROM stranger_fees
+				      WHERE sender = $1 AND recipient = $2
+				   ) AS exists`
+				: `SELECT EXISTS (
+				     SELECT 1 FROM stranger_fees sf
+				      WHERE sf.sender = $1 AND sf.recipient = $2
+				        AND ${strangerFeeRowBefore('sf', positionParams(3))}
+				   ) AS exists`,
+			judgedAt === undefined
+				? [ctx.signer, recipient]
+				: [ctx.signer, recipient, judgedAt.block_num, judgedAt.trx_in_block, judgedAt.op_in_trx]
 		);
 		if (existing.rows[0]?.exists) {
 			return { ok: true };
@@ -246,7 +272,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		blockTime: ctx.blockTime,
 		feeRecipient: ctx.config.feeRecipient,
 		feeTolerance: ctx.config.feeTolerance,
-		extraOwnerRecipients: ctx.extraOwnerRecipients
+		extraOwnerRecipients: ctx.extraOwnerRecipients,
+		judgedAt
 	});
 	if (!verdict.ok) return { ok: false, reason: verdict.reason };
 
@@ -272,6 +299,27 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// earlier op already admitted the sender, so this one
 		// is a no-op.
 		if (isUniqueViolation(err)) {
+			// Judged out of order (the fee re-check): the pair check above saw
+			// no row recorded before this op, so the row is a LATER fee's. On a
+			// node that judged this op valid when it came in, the row is this
+			// op's and the later fee found the pair already paid: move it here,
+			// so that the escalating price of the fees in between counts this
+			// one, as it did there.
+			if (judgedAt !== undefined) {
+				await client.query(
+					`UPDATE stranger_fees
+					    SET paid_block_num = $3, paid_trx_id = $4, paid_at = $5, amount_blurt = $6
+					  WHERE sender = $1 AND recipient = $2`,
+					[
+						ctx.signer,
+						verdict.recipient,
+						ctx.blockNum,
+						ctx.trxId,
+						ctx.blockTime,
+						verdict.totalBlurt
+					]
+				);
+			}
 			return { ok: true };
 		}
 		throw err;

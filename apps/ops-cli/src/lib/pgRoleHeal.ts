@@ -140,7 +140,7 @@ export function heal(ctx: HealCtx): Promise<HealResult> {
 	return healPgRole(ctx);
 }
 
-const realRuntime: PgRoleRuntime = {
+export const realRuntime: PgRoleRuntime = {
 	readFile: (p) => {
 		try {
 			return readFileSync(p, 'utf8');
@@ -158,6 +158,11 @@ const realRuntime: PgRoleRuntime = {
 				connectionTimeoutMillis: 8_000,
 				statement_timeout: 10_000
 			});
+			// Without a listener, a connection that is reset or closed with no
+			// message from Postgres (a backend killed, a network reset) emits
+			// 'error' before the statement fails, and ends morphit-ops mid-upgrade.
+			// With it, the statement fails and the catch below reports it.
+			client.on('error', () => undefined);
 			await client.connect();
 			let rows: string[][] = [];
 			for (const s of sql) {

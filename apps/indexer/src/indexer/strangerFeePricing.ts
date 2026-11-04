@@ -32,6 +32,7 @@
  */
 
 import type pg from 'pg';
+import type { ChainPosition } from '$api/sybilTier';
 
 /** Base stranger fee in BLURT. */
 export const STRANGER_FEE_BASE_BLURT = 5;
@@ -104,7 +105,13 @@ export interface Queryable {
  *  op re-judged after the fact (the cross-instance re-verification,
  *  blurtFeeReverify.ts) must not see payments the sender made
  *  LATER. In live indexing no later row exists yet, so this changes
- *  nothing there. */
+ *  nothing there.
+ *
+ *  `before` (v1.22.1, the re-check): count only fees whose op came
+ *  before this position in chain order. The `now` bound alone still
+ *  counted a fee paid LATER IN THE SAME BLOCK (its paid_at is the same
+ *  block time), which the live pass had not seen yet, so the re-check
+ *  asked a higher price than intake did. */
 export async function getStrangerFeeQuote(
 	client: Queryable,
 	sender: string,
@@ -112,7 +119,8 @@ export async function getStrangerFeeQuote(
 	/** Fees from this sender the table does not hold yet but the caller knows
 	 *  of (head-block fees, headStrangerFees.ts). Counted like recorded ones,
 	 *  so a quote made at the head is never LOWER than the durable one. */
-	extraRecent = 0
+	extraRecent = 0,
+	before?: ChainPosition
 ): Promise<StrangerFeeQuote> {
 	const result = await client.query<{ count: string }>(
 		now === undefined
@@ -120,14 +128,30 @@ export async function getStrangerFeeQuote(
 			   FROM stranger_fees
 			  WHERE sender = $1
 			    AND paid_at > NOW() - $2::interval`
-			: `SELECT COUNT(*)::text AS count
-			   FROM stranger_fees
-			  WHERE sender = $1
-			    AND paid_at > $3::timestamptz - $2::interval
-			    AND paid_at <= $3::timestamptz`,
+			: before === undefined
+				? `SELECT COUNT(*)::text AS count
+				   FROM stranger_fees
+				  WHERE sender = $1
+				    AND paid_at > $3::timestamptz - $2::interval
+				    AND paid_at <= $3::timestamptz`
+				: `SELECT COUNT(*)::text AS count
+				   FROM stranger_fees sf
+				  WHERE sf.sender = $1
+				    AND sf.paid_at > $3::timestamptz - $2::interval
+				    AND sf.paid_at <= $3::timestamptz
+				    AND ${strangerFeeRowBefore('sf', POSITION_PARAMS_FROM_4)}`,
 		now === undefined
 			? [sender, `${STRANGER_FEE_WINDOW_MINUTES} minutes`]
-			: [sender, `${STRANGER_FEE_WINDOW_MINUTES} minutes`, now]
+			: before === undefined
+				? [sender, `${STRANGER_FEE_WINDOW_MINUTES} minutes`, now]
+				: [
+						sender,
+						`${STRANGER_FEE_WINDOW_MINUTES} minutes`,
+						now,
+						before.block_num,
+						before.trx_in_block,
+						before.op_in_trx
+					]
 	);
 	const recentCount = Number(result.rows[0]?.count ?? '0') + Math.max(0, extraRecent);
 	// Multiplier sequence: 1, 2, 4, 8, ..., 128, 128, 128, ...
@@ -142,4 +166,42 @@ export async function getStrangerFeeQuote(
 		recentCount,
 		capped: recentCount >= STRANGER_FEE_MAX_DOUBLINGS - 1
 	};
+}
+
+/** A position in SQL: expressions for its block, transaction and op. */
+export interface SqlPosition {
+	readonly block: string;
+	readonly trx: string;
+	readonly op: string;
+}
+
+/** The position in parameters $n, $n+1, $n+2. */
+export function positionParams(n: number): SqlPosition {
+	return { block: `$${n}::bigint`, trx: `$${n + 1}::int`, op: `$${n + 2}::int` };
+}
+
+const POSITION_PARAMS_FROM_4 = positionParams(4);
+
+/**
+ * SQL condition: the stranger_fees row `alias` was recorded by an op that came
+ * BEFORE the position `at` in chain order, which is the order the live pass
+ * applied stranger fees in (they run first in their block, in chain order:
+ * sortOpsForAdmission). A row from an earlier block counts; one from the same
+ * block counts when the applied op that recorded it (the event log row of its
+ * transaction for this pair) sits earlier. A same-block row with no such
+ * event-log row is not counted, as countForSybilTierAtPosition does not count
+ * a same-block order without one.
+ */
+export function strangerFeeRowBefore(alias: string, at: SqlPosition): string {
+	return `(${alias}.paid_block_num < ${at.block}
+	         OR (${alias}.paid_block_num = ${at.block}
+	             AND EXISTS (SELECT 1 FROM ops sfo
+	                          WHERE sfo.block_num = ${alias}.paid_block_num
+	                            AND sfo.trx_id = ${alias}.paid_trx_id
+	                            AND sfo.op_id = 'morphit_stranger_fee_v1'
+	                            AND sfo.signer = ${alias}.sender
+	                            AND sfo.status = 'applied'
+	                            AND jsonb_typeof(sfo.payload) = 'object'
+	                            AND sfo.payload->>'recipient' = ${alias}.recipient
+	                            AND (sfo.trx_in_block, sfo.op_in_trx) < (${at.trx}, ${at.op}))))`;
 }

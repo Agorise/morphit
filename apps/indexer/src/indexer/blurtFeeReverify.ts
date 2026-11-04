@@ -25,22 +25,40 @@
  * DETERMINISM. Each op is judged AS OF ITS BLOCK: the owner set uses history
  * rows before the op's block, the listing floor uses the BLURT base pinned
  * before it (from the consensus activation time with the federation's default
- * base and tolerance in place of this node's — fee/feeRulesAtBlock.ts), and the Sybil tier counts the payer's orders the live handler had already stored:
+ * base and tolerance in place of this node's — fee/feeRulesAtBlock.ts), and the
+ * Sybil tier counts the payer's orders the live handler had already stored:
  * those whose creating op precedes this one in CHAIN ORDER (block, trx, op —
- * from the event log; V3-9), still live then (from status / updated_at /
- * expires_at). The stranger fee is re-run through its own handler, which is
- * block-time-deterministic (its escalating price is bounded to the block).
+ * from the event log; V3-9), live then (not expired, and not ended by a cancel
+ * or complete applied before it: countForSybilTierAtPosition, shared with the
+ * upgrade replay). The stranger fee is re-run through its own handler, judged
+ * out of order: "the pair is already paid" and the escalating price see only
+ * fees whose op came before this one (strangerFeeRowBefore). Stranger fees
+ * are re-judged in chain order, so a fee made valid here is in place before a
+ * later fee of the same sender is judged.
+ *
+ * Until v1.22.1 the re-check read the tables as they stand: an order ended
+ * before the op but touched later counted toward the tier, one ended in the
+ * op's own block did not; a later payment for the same pair turned a rejected
+ * stranger fee into "already paid", and one later in the same block raised
+ * its price. Verdicts depended on when a node ran the re-check. Those old
+ * verdicts that can be wrong in a way the current rule repairs are judged
+ * again (ORDER_STILL_UNDERPAID and the outcomes beside it).
  *
  * WHAT IS SELECTED. Only ops whose verdict CAN change: live, unexpired BLURT
  * orders stored `underpaid` (≤ 365 days old — orders never live longer) and
- * stranger fees rejected `fee_underpaid` in the last 30 days, whose
+ * stranger fees rejected `fee_underpaid` (of any age: until v1.22.1 only the
+ * last 30 days, so whether a fee was re-judged depended on when a node
+ * upgraded), whose
  * `operator_tag` names an active operator that has registered a fees account
  * (its first registration at block R; E = R + 1 is the first block at which
  * the strict as-of-block rule accepts it), and either
  *  - the op is at/after E and a fee account other than ours was registered
  *    before it (the rollout window — strict as-of-block rule), or
  *  - the op is BEFORE E (LEGACY GRACE, below).
- * Each op is judged ONCE (`fee_reverify_done`).
+ * Each op is judged ONCE (`fee_reverify_done`). A sender's stranger fees are
+ * judged in chain order, a later one only after every earlier one that waits
+ * (see runOnce); when one judged out of order turns out valid and the pair's
+ * row is a later fee's, the row moves to it (strangerFee.ts).
  *
  * LEGACY GRACE (v1.20.0). Orders paid through an operator before it had ever
  * registered a fees account (on v1.19 every order went 90 % to the operator's
@@ -89,7 +107,7 @@ import type { Config } from '$config';
 import type { Database } from '$db/pool';
 import { transactionIdOf } from '$blurt/snapshotOpTrust';
 import { CANONICAL_TREASURY } from '../config/canonicalTreasury';
-import { countForSybilTierAsOf } from '$api/sybilTier';
+import { countForSybilTierAtPosition } from '$api/sybilTier';
 import { listingFeeStatus, sumFeeTransfers } from '$indexer/fee';
 import { listingFeeInputsAt } from '$indexer/fee/feeRulesAtBlock';
 import { graceRecipientAt, operatorTagOf, ownerRecipientsAt } from '$indexer/feeRecipients';
@@ -97,6 +115,7 @@ import { consensusV2Active } from '$indexer/consensusActivation';
 import { trackVerifiedBlurtFee } from '$indexer/loyalty';
 import { attributeBlurtFeeToOperator } from '$indexer/operatorEarnings';
 import strangerFeeHandler from '$indexer/handlers/strangerFee';
+import { strangerFeeRowBefore } from '$indexer/strangerFeePricing';
 import type { Handler, OpContext } from '$indexer/handler-contract';
 import { logger } from '$log';
 
@@ -114,14 +133,41 @@ export const MAX_FETCHES_PER_PASS = 20;
 /** A block fetch that fails, or returns a transaction that is not the one this
  *  node indexed, is retried on later passes up to this many times per process. */
 export const FETCH_FAILURES_PER_OP = 3;
-/** Stranger fees older than this are not re-judged (the sender has long since
- *  re-paid or given up). */
-export const STRANGER_FEE_WINDOW_DAYS = 30;
+
+/**
+ * Outcomes in fee_reverify_done. An op with a row is not re-judged, EXCEPT a
+ * verdict reached by the rule before v1.22.1, which read the account's orders
+ * and the sender's stranger fees as they stand NOW instead of as of the op
+ * (see countForSybilTierAtPosition, strangerFeeRowBefore):
+ *  - an order left underpaid ('still_underpaid') may have been paid in full;
+ *  - a stranger fee left rejected ('still_rejected:<reason>') may have been
+ *    paid in full (a fee paid later in its block raised the price);
+ * Those are judged again, once, by the current rule; its outcomes carry a new
+ * spelling so they are never re-opened. So is a stranger fee the old rule
+ * APPLIED only because the pair was paid by a LATER fee: it is applied and has
+ * no pair row from itself or anything before it (stranger_fees holds the
+ * later fee's), which the live pass can never leave, so it is found from
+ * chain-derived state alone, also on a node fast-synced from one that ran the
+ * old rule (fee_reverify_done is local and starts empty there).
+ *
+ * What the current rule cannot take back: an order the old rule VERIFIED stays
+ * verified (the payer's loyalty credit and its payouts followed at once), and
+ * a stranger fee it applied WITH its own pair row stays applied (the pair has
+ * been admitted since; a later fee priced without it, too).
+ */
+export const ORDER_STILL_UNDERPAID = 'underpaid_as_of_position';
+export const STRANGER_FEE_APPLIED = 'applied_as_of_position';
+export const STRANGER_FEE_STILL_REJECTED = 'rejected_as_of_position:';
+/** An applied stranger fee the re-check now refuses (see above). */
+export const STRANGER_FEE_UNAPPLIED = 'unapplied_as_of_position:';
 
 /** Operators that registered a fees account, with E — the first block at
  *  which the strict rule accepts it (first registration block + 1). */
 const ACCEPTED_SQL = `SELECT account, MIN(effective_block) + 1 AS estar
 	   FROM operator_fee_recipients GROUP BY account`;
+
+/** The position of the `ops` row in the stranger-fee selection. */
+const OPS_POSITION = { block: 'ops.block_num', trx: 'ops.trx_in_block', op: 'ops.op_in_trx' };
 
 export interface ReverifyDeps {
 	readonly db: Pick<Database, 'query' | 'withTx'>;
@@ -132,8 +178,8 @@ export interface ReverifyDeps {
 	readonly onOrderVerified?: (orderId: string) => void;
 	/** Scheduling clock (maybeRun's intervals). */
 	readonly now?: () => number;
-	/** Where the age windows end (orders: not expired and at most 365 days old;
-	 *  stranger fees: the last STRANGER_FEE_WINDOW_DAYS). Unset: the database's
+	/** Where the orders' age window ends (not expired and at most 365 days
+	 *  old). Unset: the database's
 	 *  NOW(), as a node runs. A test sets it to replay a dated scenario, since a
 	 *  scenario with block times relative to the real clock eventually crosses
 	 *  a consensus activation and is judged by other rules. */
@@ -169,13 +215,17 @@ interface OrderCandidate extends OpRef {
 interface StrangerFeeCandidate extends OpRef {
 	readonly signer: string;
 	readonly payload: unknown;
+	/** 'rejected', or 'applied' for one the old rule applied by a later
+	 *  payment of the pair (see the outcomes above). */
+	readonly status: 'applied' | 'rejected';
 	readonly operator_account: string;
 	readonly estar: string;
 }
 
 export class BlurtFeeReverifier {
 	private lastRunAt = Number.NEGATIVE_INFINITY;
-	private readonly failures = new Map<string, number>();
+	/** Failed fetches (or throws) per op key, and the op's signer. */
+	private readonly failures = new Map<string, { n: number; signer: string }>();
 	/** Did the last pass stop on its budget with candidates left? */
 	private backlog = false;
 	/** Fingerprint of the fees-account history, at the last pass. */
@@ -232,6 +282,11 @@ export class BlurtFeeReverifier {
 		let fetchFailures = 0;
 		const orders = { checked: 0, verified: 0 };
 		const strangerFees = { checked: 0, applied: 0 };
+		// Ops this process gave up on are left out of the selection, so they
+		// cannot fill its LIMIT and keep every other candidate out.
+		const givenUp = [...this.failures.entries()]
+			.filter(([, f]) => f.n >= FETCH_FAILURES_PER_OP)
+			.map(([k]) => k);
 
 		// Only ops of operators that registered a fees account can flip: below
 		// E (first registration block + 1) by LEGACY GRACE, from E on by the
@@ -259,10 +314,12 @@ export class BlurtFeeReverifier {
 			                       AND f.fee_recipient <> $2))
 			    AND NOT EXISTS (SELECT 1 FROM fee_reverify_done dn
 			                     WHERE dn.block_num = op.block_num AND dn.trx_in_block = op.trx_in_block
-			                       AND dn.op_in_trx = op.op_in_trx)
+			                       AND dn.op_in_trx = op.op_in_trx
+			                       AND dn.outcome <> 'still_underpaid')
+			    AND (op.block_num::text || ':' || op.trx_in_block || ':' || op.op_in_trx) <> ALL($5::text[])
 			  ORDER BY o.created_at DESC
 			  LIMIT $3`,
-			[ORDER_OP_ID, own, MAX_FETCHES_PER_PASS * 2, windowEnd]
+			[ORDER_OP_ID, own, MAX_FETCHES_PER_PASS * 2, windowEnd, givenUp]
 		);
 		let budgetExhausted = false;
 		for (const row of orderRows.rows) {
@@ -270,53 +327,78 @@ export class BlurtFeeReverifier {
 				budgetExhausted = true;
 				break;
 			}
-			if (this.gaveUp(row)) continue;
 			budget--;
-			const trx = await this.fetchIndexedTrx(row);
+			const trx = await this.fetchIndexedTrx(row, row.account);
 			if (trx === null) {
 				fetchFailures++;
 				continue;
 			}
-			orders.checked++;
-			if (await this.reverifyOrder(row, trx)) orders.verified++;
+			try {
+				if (await this.reverifyOrder(row, trx)) orders.verified++;
+				orders.checked++;
+			} catch (err) {
+				fetchFailures++;
+				this.recordFailure(row, row.account, 'judge_failed', err);
+			}
 		}
 
 		if (budget > 0) {
+			// Stranger fees are judged in chain order, and a sender's fee only
+			// once every earlier one of theirs that waits is judged: its price
+			// counts the fees before it. A sender with an earlier fee that could
+			// not be judged this pass (fetch failed, given up, threw) waits.
+			const waiting = new Set(
+				[...this.failures.values()].filter((f) => f.n >= FETCH_FAILURES_PER_OP).map((f) => f.signer)
+			);
 			const sfRows = await this.deps.db.query<StrangerFeeCandidate>(
 				`SELECT ops.block_num::text AS block_num, ops.trx_in_block, ops.op_in_trx, ops.trx_id,
-				        ops.block_time, ops.signer, ops.payload,
+				        ops.block_time, ops.signer, ops.payload, ops.status,
 				        t.account AS operator_account, acc.estar::text AS estar
 				   FROM ops
 				   JOIN operators t ON t.tag = ops.payload->>'operator_tag' AND t.is_active = TRUE
 				   JOIN (${ACCEPTED_SQL}) acc ON acc.account = t.account
-				  WHERE ops.op_id = $1 AND ops.status = 'rejected' AND ops.reject_reason = 'fee_underpaid'
+				  WHERE ops.op_id = $1
 				    AND jsonb_typeof(ops.payload) = 'object' AND ops.payload ? 'operator_tag'
-				    AND ops.block_time > COALESCE($5::timestamptz, NOW()) - make_interval(days => $2::int)
+				    AND ((ops.status = 'rejected' AND ops.reject_reason = 'fee_underpaid')
+				         OR (ops.status = 'applied'
+				             AND NOT EXISTS (SELECT 1 FROM stranger_fees sf
+				                              WHERE sf.sender = ops.signer AND sf.recipient = ops.payload->>'recipient'
+				                                AND (sf.paid_trx_id = ops.trx_id
+				                                     OR ${strangerFeeRowBefore('sf', OPS_POSITION)}))))
 				    AND (ops.block_num < acc.estar
 				         OR EXISTS (SELECT 1 FROM operator_fee_recipients f
 				                     WHERE f.account = t.account AND f.effective_block < ops.block_num
-				                       AND f.fee_recipient <> $3))
+				                       AND f.fee_recipient <> $2))
 				    AND NOT EXISTS (SELECT 1 FROM fee_reverify_done dn
 				                     WHERE dn.block_num = ops.block_num AND dn.trx_in_block = ops.trx_in_block
-				                       AND dn.op_in_trx = ops.op_in_trx)
-				  ORDER BY ops.block_num DESC
-				  LIMIT $4`,
-				[STRANGER_FEE_OP_ID, STRANGER_FEE_WINDOW_DAYS, own, budget * 2, windowEnd]
+				                       AND dn.op_in_trx = ops.op_in_trx
+				                       AND dn.outcome <> 'applied' AND dn.outcome NOT LIKE 'still\\_rejected:%')
+				    AND (ops.block_num::text || ':' || ops.trx_in_block || ':' || ops.op_in_trx) <> ALL($4::text[])
+				  ORDER BY ops.block_num ASC, ops.trx_in_block ASC, ops.op_in_trx ASC
+				  LIMIT $3`,
+				[STRANGER_FEE_OP_ID, own, budget * 2, givenUp]
 			);
 			for (const row of sfRows.rows) {
 				if (budget <= 0) {
 					budgetExhausted = true;
 					break;
 				}
-				if (this.gaveUp(row)) continue;
+				if (waiting.has(row.signer)) continue;
 				budget--;
-				const trx = await this.fetchIndexedTrx(row);
+				const trx = await this.fetchIndexedTrx(row, row.signer);
 				if (trx === null) {
 					fetchFailures++;
+					waiting.add(row.signer);
 					continue;
 				}
-				strangerFees.checked++;
-				if (await this.reapplyStrangerFee(row, trx)) strangerFees.applied++;
+				try {
+					if (await this.reapplyStrangerFee(row, trx)) strangerFees.applied++;
+					strangerFees.checked++;
+				} catch (err) {
+					fetchFailures++;
+					waiting.add(row.signer);
+					this.recordFailure(row, row.signer, 'judge_failed', err);
+				}
 			}
 		} else {
 			// The budget ran out on orders: stranger-fee
@@ -339,17 +421,24 @@ export class BlurtFeeReverifier {
 		return `${ref.block_num}:${ref.trx_in_block}:${ref.op_in_trx}`;
 	}
 
-	private gaveUp(ref: OpRef): boolean {
-		return (this.failures.get(this.key(ref)) ?? 0) >= FETCH_FAILURES_PER_OP;
+	/** Count a failure for `ref` (retried on later passes, up to
+	 *  FETCH_FAILURES_PER_OP times per process). */
+	private recordFailure(ref: OpRef, signer: string, why: string, err?: unknown): void {
+		const k = this.key(ref);
+		this.failures.set(k, { n: (this.failures.get(k)?.n ?? 0) + 1, signer });
+		log.warn(
+			'reverify_fetch_failed',
+			{ block_num: ref.block_num, trx_id: ref.trx_id, why },
+			err instanceof Error ? err : undefined
+		);
 	}
 
 	/** The transaction this node indexed at `ref`, re-fetched from the chain and
 	 *  proven identical by its content hash; null (and a failure counted) when
 	 *  the block is unavailable or the transaction is not the indexed one. */
-	private async fetchIndexedTrx(ref: OpRef): Promise<BlockTransaction | null> {
+	private async fetchIndexedTrx(ref: OpRef, signer: string): Promise<BlockTransaction | null> {
 		const fail = (why: string): null => {
-			this.failures.set(this.key(ref), (this.failures.get(this.key(ref)) ?? 0) + 1);
-			log.warn('reverify_fetch_failed', { block_num: ref.block_num, trx_id: ref.trx_id, why });
+			this.recordFailure(ref, signer, why);
 			return null;
 		};
 		let block;
@@ -413,7 +502,7 @@ export class BlurtFeeReverifier {
 		const payload = customJsonPayload(trx.operations[row.op_in_trx], ORDER_OP_ID, row.account);
 		const cfg = this.deps.config;
 		const verified = await this.deps.db.withTx(async (client) => {
-			let outcome = 'still_underpaid';
+			let outcome = ORDER_STILL_UNDERPAID;
 			let flipped = false;
 			if (payload !== null && payload.permlink === row.permlink) {
 				const owners = await this.ownersFor(client, row, payload, blockNum);
@@ -425,8 +514,7 @@ export class BlurtFeeReverifier {
 					`morphit-fee:${row.permlink}`
 				);
 				if (fee !== null) {
-					const nth =
-						(await countForSybilTierAsOf(client, row.account, row.permlink, blockTime, row)) + 1;
+					const nth = (await countForSybilTierAtPosition(client, row.account, blockTime, row)) + 1;
 					// The live handler's inputs, as of the op's block: from the
 					// consensus activation time the pin in force there (the
 					// federation's default when none) and the federation's
@@ -527,7 +615,10 @@ export class BlurtFeeReverifier {
 					fiatToUsd: () => null,
 					recordOrderbookChange: () => {},
 					recordChatChange: () => {},
-					extraOwnerRecipients: await this.graceOwners(client, row)
+					extraOwnerRecipients: await this.graceOwners(client, row),
+					// Judged as of its own position: the pair check and the
+					// escalating price see only fees whose op came before it.
+					judgedOutOfOrder: true
 				};
 				await client.query('SAVEPOINT reverify_sf');
 				const r = await handler(ctx, client);
@@ -538,11 +629,30 @@ export class BlurtFeeReverifier {
 						  WHERE block_num = $1 AND trx_in_block = $2 AND op_in_trx = $3 AND status = 'rejected'`,
 						[row.block_num, row.trx_in_block, row.op_in_trx]
 					);
-					applied = true;
-					outcome = 'applied';
+					applied = row.status === 'rejected';
+					outcome = STRANGER_FEE_APPLIED;
 				} else {
 					await client.query('ROLLBACK TO SAVEPOINT reverify_sf');
-					outcome = `still_rejected:${r.reason ?? 'unknown'}`.slice(0, 80);
+					const reason = r.reason ?? 'unknown';
+					if (row.status === 'applied') {
+						// Applied by the old rule only because the pair was paid
+						// later: back to the verdict the live pass reached.
+						// The reason the live pass gave it (it was selected for the
+						// old re-check as fee_underpaid), as on every other node.
+						await client.query(
+							`UPDATE ops SET status = 'rejected', reject_reason = 'fee_underpaid'
+							  WHERE block_num = $1 AND trx_in_block = $2 AND op_in_trx = $3 AND status = 'applied'`,
+							[row.block_num, row.trx_in_block, row.op_in_trx]
+						);
+						outcome = `${STRANGER_FEE_UNAPPLIED}${reason}`.slice(0, 80);
+						log.info('stranger_fee_unapplied', {
+							sender: row.signer,
+							block_num: row.block_num,
+							reason
+						});
+					} else {
+						outcome = `${STRANGER_FEE_STILL_REJECTED}${reason}`.slice(0, 80);
+					}
 				}
 			}
 			await markDone(client, row, STRANGER_FEE_OP_ID, outcome);
@@ -604,10 +714,13 @@ async function markDone(
 	opId: string,
 	outcome: string
 ): Promise<void> {
+	// An op is re-judged only when it has no row or an old rule's verdict
+	// (see the outcomes above): this verdict replaces that one.
 	await client.query(
 		`INSERT INTO fee_reverify_done (block_num, trx_in_block, op_in_trx, op_id, outcome)
 		 VALUES ($1, $2, $3, $4, $5)
-		 ON CONFLICT (block_num, trx_in_block, op_in_trx) DO NOTHING`,
+		 ON CONFLICT (block_num, trx_in_block, op_in_trx)
+		 DO UPDATE SET op_id = EXCLUDED.op_id, outcome = EXCLUDED.outcome, checked_at = NOW()`,
 		[ref.block_num, ref.trx_in_block, ref.op_in_trx, opId, outcome]
 	);
 }

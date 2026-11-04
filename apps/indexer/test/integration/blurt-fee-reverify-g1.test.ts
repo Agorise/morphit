@@ -745,7 +745,7 @@ d('G1 — re-verification of fee ops judged before the fee account was known', (
 		expect(paid.rows).toEqual([{ sender: 'sam' }]);
 	});
 
-	it('the age windows end at the reverifier’s clock: a stranger fee past 30 days and an order past 365 are left alone', async () => {
+	it('the order age window ends at the reverifier’s clock: an order past 365 days is left alone; a stranger fee of any age is re-judged (v1.22.1)', async () => {
 		await operatorB();
 		const legs: ReadonlyArray<[string, string]> = [
 			['b-fees', '4.500 BLURT'],
@@ -773,21 +773,16 @@ d('G1 — re-verification of fee ops judged before the fee account was known', (
 		await bRegisters('fresh', REG, 'b-fees', 'bbbb000000000000000000000000000000000001');
 		const day = 24 * 3600 * 1000;
 		const at = (ms: number) => new Date(timeOf(LEGACY).getTime() + ms);
-		// 31 days on: the stranger fee is out of its window, the order is not.
-		let s = await reverifier(at(31 * day)).runOnce();
-		expect(s.strangerFees.checked).toBe(0);
-		expect(s.orders.checked).toBe(1);
-		// The order is done; a new reverifier a year on finds nothing left.
-		expect(await feeStatus('olga', 'aged')).toBe('verified');
-		await fx.db.query(`UPDATE orders SET fee_status = 'underpaid' WHERE permlink = 'aged'`);
-		await fx.db.query('DELETE FROM fee_reverify_done');
-		s = await reverifier(at(367 * day)).runOnce();
+		// A year and more on: the order is out of its window. The stranger fee
+		// is re-judged at any age (until v1.22.1 only within 30 days, so
+		// whether it was depended on when a node upgraded).
+		let s = await reverifier(at(367 * day)).runOnce();
 		expect(s.orders.checked).toBe(0);
-		expect(s.strangerFees.checked).toBe(0);
-		// And at the scenario's own time both are candidates.
-		s = await reverifier(SCENARIO_NOW).runOnce();
-		expect(s.orders.checked).toBe(1);
 		expect(s.strangerFees).toEqual({ checked: 1, applied: 1 });
+		// 31 days on the order is a candidate.
+		s = await reverifier(at(31 * day)).runOnce();
+		expect(s.orders.checked).toBe(1);
+		expect(await feeStatus('olga', 'aged')).toBe('verified');
 	});
 
 	it('LEGACY GRACE is prompt: a pass runs AT ONCE when B’s registration lands, and a backlog beyond one pass drains every BACKLOG_INTERVAL_MS, not every INTERVAL_MS', async () => {

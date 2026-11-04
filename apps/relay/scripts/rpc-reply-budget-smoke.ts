@@ -14,6 +14,13 @@
  * Here a real EndpointPool drives real dblurt Clients wrapped by
  * guardDblurtClient (how the relay and the indexer build theirs) against two
  * HONEST local nodes, as a read (the mode both clients use for reads).
+ *
+ * Every reply is downloaded once (v1.22.1): dblurt's per-attempt timer (500 ms
+ * on the first attempt) is meant for the headers, and ran over the whole body
+ * once the guard read it, so every reply slower than that was cut off and
+ * requested again. The local nodes serialise their replies before they are
+ * asked, so that only the transfer, not this process building a 98 MiB
+ * string, is timed.
  */
 
 import http from 'node:http';
@@ -121,7 +128,19 @@ function account(name: string, metaBytes: number): unknown {
 type Handler = (method: string, params: unknown) => unknown;
 const hits: Record<string, number> = {};
 const servers: http.Server[] = [];
-function node(name: string, handler: Handler): Promise<string> {
+/** Replies as JSON bytes, built once per result (`prepare`) and not while a
+ *  request waits. */
+const serialised = new WeakMap<object, Buffer>();
+function prepare(result: unknown): Buffer {
+	if (result === null || typeof result !== 'object') return Buffer.from(JSON.stringify(result));
+	let b = serialised.get(result);
+	if (b === undefined) {
+		b = Buffer.from(JSON.stringify(result));
+		serialised.set(result, b);
+	}
+	return b;
+}
+function node(name: string, handler: Handler, bodyDelayMs = 0): Promise<string> {
 	return new Promise((resolve) => {
 		const s = http
 			.createServer((req, rsp) => {
@@ -137,8 +156,17 @@ function node(name: string, handler: Handler): Promise<string> {
 						r.method === 'call' ? String(r.params[1]) : r.method.replace(/^condenser_api\./, '');
 					const params = r.method === 'call' ? r.params[2] : r.params;
 					hits[`${name}:${method}`] = (hits[`${name}:${method}`] ?? 0) + 1;
+					const result = prepare(handler(method, params));
 					rsp.setHeader('content-type', 'application/json');
-					rsp.end(JSON.stringify({ jsonrpc: '2.0', id: r.id, result: handler(method, params) }));
+					rsp.flushHeaders();
+					const send = (): void => {
+						if (rsp.destroyed) return;
+						rsp.write(`{"jsonrpc":"2.0","id":${JSON.stringify(r.id)},"result":`);
+						rsp.write(result);
+						rsp.end('}');
+					};
+					if (bodyDelayMs > 0) setTimeout(send, bodyDelayMs);
+					else send();
 				});
 			})
 			.listen(0, '127.0.0.1', () =>
@@ -149,8 +177,12 @@ function node(name: string, handler: Handler): Promise<string> {
 }
 
 const DGP = { head_block_number: 1, time: '2026-10-01T12:00:00', last_irreversible_block_num: 1 };
+/** dblurt's own timeout for the clients here. */
+const CLIENT_TIMEOUT_MS = 8000;
 const histories: Record<string, unknown[]> = {};
 const accounts: unknown[] = Array.from({ length: 100 }, (_, i) => account(`acct${i}`, 40_000));
+prepare(accounts);
+prepare(DGP);
 const honest: Handler = (method, params) => {
 	if (method === 'get_account_history') return histories[(params as [string])[0]] ?? [];
 	if (method === 'get_accounts') return accounts;
@@ -162,7 +194,9 @@ const urls = [await node('A', honest), await node('B', honest)];
 // Two operators, as two distinct public nodes would be.
 const operatorOf = (u: string): string => (u === urls[0] ? 'op-a' : 'op-b');
 const clients = new Map(
-	urls.map((u) => [u, rpcFetch.guardDblurtClient(new Client(u, { timeout: 8000 }))] as const)
+	urls.map(
+		(u) => [u, rpcFetch.guardDblurtClient(new Client(u, { timeout: CLIENT_TIMEOUT_MS }))] as const
+	)
 );
 const pool = new EndpointPool({
 	endpoints: urls,
@@ -182,6 +216,16 @@ const cooled = (): string =>
 		.filter((s) => s.consecutiveFailures > 0 || s.cooldownUntil > Date.now())
 		.map((s) => `${s.url} failures=${s.consecutiveFailures}`)
 		.join(', ');
+/** Clear the request counts; `askedTwice()` then names any node asked the
+ *  same method more than once since. */
+const resetHits = (): void => {
+	for (const k of Object.keys(hits)) delete hits[k];
+};
+const askedTwice = (): string =>
+	Object.entries(hits)
+		.filter(([, v]) => v > 1)
+		.map(([k, v]) => `${k}×${v}`)
+		.join(', ');
 
 console.log('rpc-reply-budget-smoke');
 
@@ -192,6 +236,8 @@ for (const [label, account, cipher] of [
 ] as const) {
 	histories[account] = Array.from({ length: 10_000 }, (_, i) => chatEntry(i, cipher));
 	const size = replyBytes(histories[account]);
+	prepare(histories[account]);
+	resetHits();
 	let got = -1;
 	let err = '';
 	try {
@@ -206,11 +252,13 @@ for (const [label, account, cipher] of [
 		`entries=${got} ${err}`
 	);
 	check(`…and no node was cooled down`, cooled() === '', cooled());
+	check(`…downloaded once (no node asked twice)`, askedTwice() === '', JSON.stringify(hits));
 }
 
 // 3. Honest 100-account batch with full profiles.
 {
 	const size = replyBytes(accounts);
+	resetHits();
 	let got = -1;
 	let err = '';
 	try {
@@ -227,13 +275,15 @@ for (const [label, account, cipher] of [
 		got === 100,
 		`got=${got} ${err}`
 	);
+	check(`…downloaded once (no node asked twice)`, askedTwice() === '', JSON.stringify(hits));
 }
 
 // 4. An honest reply too large for any budget, the same from every node.
 {
 	histories.longwriter = Array.from({ length: 10_000 }, (_, i) => postEntry(i));
 	const size = replyBytes(histories.longwriter);
-	for (const k of Object.keys(hits)) delete hits[k];
+	prepare(histories.longwriter);
+	resetHits();
 	const t0 = Date.now();
 	let outcome = 'returned';
 	try {
@@ -242,15 +292,14 @@ for (const [label, account, cipher] of [
 		outcome = (e as Error).message.slice(0, 120);
 	}
 	const ms = Date.now() - t0;
-	const asked = (hits['A:get_account_history'] ?? 0) + (hits['B:get_account_history'] ?? 0);
 	check(
 		`a history no budget holds (${MiB(size)}, the same on every node) fails without cooling any node down`,
 		outcome !== 'returned' && cooled() === '',
 		`outcome=${outcome} cooled=[${cooled()}]`
 	);
 	check(
-		'…promptly, with each node asked at most twice (no re-download until the client timeout)',
-		ms < 4000 && asked <= 4,
+		'…at once, with each node asked once at most (no re-download until the client timeout)',
+		ms < CLIENT_TIMEOUT_MS && askedTwice() === '',
 		`ms=${ms} hits=${JSON.stringify(hits)}`
 	);
 	console.log(`      (${ms} ms; requests: ${JSON.stringify(hits)})`);
@@ -263,7 +312,101 @@ for (const [label, account, cipher] of [
 	check('…and the next read goes through at once', next === 'ok', next);
 }
 
-// 5. Bombs stay node faults: a reply over the budget of a request whose size
+// 5. A reply whose body takes longer than dblurt's first attempt timer (500 ms)
+//    to arrive: read once. Before, it was cut off at 500 ms, 1 s, 1.5 s, … and
+//    failed at the client's timeout after five requests.
+{
+	const slowUrl = await node('S', honest, 2_000);
+	const slow = rpcFetch.guardDblurtClient(new Client(slowUrl, { timeout: CLIENT_TIMEOUT_MS }));
+	resetHits();
+	let outcome = 'ok';
+	try {
+		const r = (await slow.call('condenser_api', 'get_dynamic_global_properties', [])) as {
+			head_block_number?: number;
+		};
+		if (r.head_block_number !== 1) outcome = `wrong reply ${JSON.stringify(r)}`;
+	} catch (e) {
+		outcome = (e as Error).message.slice(0, 120);
+	}
+	check(
+		'a reply whose body arrives after 2 s is read, and asked for once',
+		outcome === 'ok' && hits['S:get_dynamic_global_properties'] === 1,
+		`outcome=${outcome} hits=${JSON.stringify(hits)}`
+	);
+}
+
+// 6. The attempt timer still bounds the wait for the headers: dblurt's signal
+//    aborts a request whose headers have not come, and only that.
+{
+	const guarded = (base: (init: RequestInit) => Promise<Response>): typeof fetch =>
+		rpcFetch.guardedRpcFetch(
+			((_: unknown, init: RequestInit) => base(init)) as unknown as typeof fetch,
+			undefined,
+			{ signalUntilHeaders: true }
+		);
+	const body = JSON.stringify({
+		jsonrpc: '2.0',
+		id: 1,
+		method: 'call',
+		params: ['condenser_api', 'get_config', []]
+	});
+	const within = <T>(p: Promise<T>, ms: number): Promise<T | 'still waiting'> =>
+		Promise.race([
+			p,
+			new Promise<'still waiting'>((r) => setTimeout(() => r('still waiting'), ms))
+		]);
+	// No headers yet: the abort ends the request.
+	const before = new AbortController();
+	const pending = guarded(
+		(init) =>
+			new Promise<Response>((_, reject) =>
+				init.signal?.addEventListener('abort', () =>
+					reject(new Error('aborted before the headers'))
+				)
+			)
+	)('http://node.example', { method: 'POST', body, signal: before.signal }).then(
+		() => 'returned',
+		(e: Error) => e.message
+	);
+	before.abort();
+	const b4 = await within(pending, 2_000);
+	check(
+		'an abort before the headers ends the request',
+		b4 === 'aborted before the headers',
+		String(b4)
+	);
+	// Headers in, body still coming: the abort does not cut it off.
+	const after = new AbortController();
+	let cutOff = false;
+	const res = await guarded(async (init) => {
+		init.signal?.addEventListener('abort', () => (cutOff = true));
+		const stream = new ReadableStream<Uint8Array>({
+			start(ctl) {
+				ctl.enqueue(new TextEncoder().encode('{"jsonrpc":"2.0","id":1,'));
+				setTimeout(() => {
+					ctl.enqueue(new TextEncoder().encode('"result":{"ok":true}}'));
+					ctl.close();
+				}, 300);
+			}
+		});
+		const r = new Response(stream, { status: 200 });
+		// The caller's timer fires once the headers are in, while the body is read.
+		setTimeout(() => after.abort(), 50);
+		return r;
+	})('http://node.example', { method: 'POST', body, signal: after.signal })
+		.then((r) => r.json())
+		.then(
+			(j) => JSON.stringify(j),
+			(e: Error) => e.message
+		);
+	check(
+		'an abort after the headers leaves the body to be read',
+		res === '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}' && after.signal.aborted && !cutOff,
+		`reply=${res} aborted=${after.signal.aborted} cutOff=${cutOff}`
+	);
+}
+
+// 7. Bombs stay node faults: a reply over the budget of a request whose size
 //    the chain bounds (blocks), or with more values than any honest reply.
 {
 	const budget = (rpcFetch as { rpcReplyBudget?: (b: unknown) => { maxBytes: number } })

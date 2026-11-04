@@ -233,14 +233,27 @@ upgraded.
 - Only live, unexpired orders are re-checked; an expired or closed order
   does not come back. Stranger fees from before v1.20.0 carried no
   `operator_tag`, so they cannot be attributed and stay rejected; tagged
-  ones from the last 30 days are re-checked the same way.
+  ones are re-checked the same way, at any age (until v1.22.1 only those of
+  the last 30 days, so the outcome depended on when an instance upgraded).
 
 **How it is re-checked.** The indexer re-judges, once each, the live
 BLURT-fee orders it stored `underpaid` and the tagged stranger fees it
-rejected in the last 30 days whose operator has registered a fees account. It
+rejected whose operator has registered a fees account. It
 fetches the original transaction through its own RPC pool (a hidden-only
 node uses only its hidden pool) and checks the transaction's id before
-trusting it; a failed fetch changes nothing and is retried. A check runs as
+trusting it; a failed fetch changes nothing and is retried. Each op is judged
+as of its own place in the chain, as the indexer judged it when it came in:
+the order's listing tier counts only the payer's orders created before it and
+still open at that point (an order ended in the same block still counts; one
+ended before it does not, whatever changed on it later), and a stranger fee
+sees only the sender's fees paid before it, both for "this pair is already
+paid" and for the escalating price; stranger fees are re-checked in chain
+order, a sender's later fee only after the earlier ones that wait for a check;
+when a re-checked fee turns out paid and a LATER fee of the same sender for the
+same person had recorded the payment, the record moves to the earlier fee, as
+an instance that knew the account all along has it (v1.22.1; before, the tables
+were read as they stood when the check ran, so instances could disagree). A
+check runs as
 soon as a fees-account registration lands, then every
 30 seconds while any are left (20 transactions per pass), otherwise every 10
 minutes. First-contact messages already dropped stay lost; once the fee is

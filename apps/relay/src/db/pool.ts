@@ -60,11 +60,52 @@ export function createDatabase(config: Config): Database {
 		log.error('idle_client_error', {}, err);
 	});
 
+	/**
+	 * Check a client out with an 'error' listener for as long as it is out.
+	 * pg-pool listens for 'error' only on IDLE clients: on a checked-out one
+	 * a connection that dies between two statements (Postgres restarted, a
+	 * network drop, a session ended while this code waits on something else)
+	 * emits 'error' with no listener, and Node ends the process. With the
+	 * listener the next statement fails instead ("not queryable"), the
+	 * caller's error path runs, and the client is dropped on release.
+	 */
+	function checkOut(): Promise<{
+		client: pg.PoolClient;
+		lost: () => Error | undefined;
+		done: () => void;
+	}> {
+		// The callback form: pg-pool calls it in the same tick in which it
+		// removed its own listener, while the socket's bytes are still being
+		// read. Awaiting pool.connect() would attach ours a tick later, and a
+		// FATAL that arrived with the "ready" message would find none.
+		return new Promise((resolve, reject) => {
+			pool.connect((err, client) => {
+				if (err || client === undefined) {
+					reject(err ?? new Error('pg-pool returned no client'));
+					return;
+				}
+				let failure: Error | undefined;
+				const onError = (e: Error): void => {
+					failure ??= e;
+					log.warn('checked_out_client_error', {}, e);
+				};
+				client.on('error', onError);
+				resolve({
+					client,
+					lost: () => failure,
+					done: () => {
+						client.removeListener('error', onError);
+					}
+				});
+			});
+		});
+	}
+
 	let closed = false;
 
 	return {
 		async withTx<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-			const client = await pool.connect();
+			const { client, lost, done } = await checkOut();
 			try {
 				await client.query('BEGIN');
 				const result = await fn(client);
@@ -77,9 +118,22 @@ export function createDatabase(config: Config): Database {
 					// Ignore — connection is already dead; releasing it
 					// below still prevents a pool-slot leak.
 				}
+				// The statement that failed only says the client is unusable;
+				// the connection's own error says why.
+				const failure = lost();
+				if (
+					failure !== undefined &&
+					err instanceof Error &&
+					err !== failure &&
+					err.cause === undefined
+				) {
+					err.cause = failure;
+				}
 				throw err;
 			} finally {
-				client.release();
+				done();
+				// A client whose connection failed is dropped, not pooled.
+				client.release(lost());
 			}
 		},
 
@@ -91,7 +145,15 @@ export function createDatabase(config: Config): Database {
 		},
 
 		async connect(): Promise<pg.PoolClient> {
-			return pool.connect();
+			// The listener stays until the caller releases the client (see
+			// checkOut); release then drops a client whose connection failed.
+			const { client, lost, done } = await checkOut();
+			const release = client.release;
+			client.release = (err?: Error | boolean): void => {
+				done();
+				release(err ?? lost());
+			};
+			return client;
 		},
 
 		async close(): Promise<void> {

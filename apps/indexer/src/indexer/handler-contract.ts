@@ -82,9 +82,11 @@ export interface OpContext {
 	 *  signatures — a handler that needs it treats its absence as unsigned. */
 	readonly transaction?: BlockTransaction;
 	/** Set when the op is judged AFTER later ops were already applied: the
-	 *  upgrade replay of an op an older version refused (reconcileUpgrade).
-	 *  A handler that counts the signer's rows (the order handler's Sybil
-	 *  tier and first-buy check) then counts only what existed at this op's
+	 *  upgrade replay of an op an older version refused (reconcileUpgrade),
+	 *  the re-check of a rejected stranger fee (blurtFeeReverify).
+	 *  A handler that reads the signer's rows (the order handler's Sybil
+	 *  tier and first-buy check, the stranger-fee handler's "pair already
+	 *  paid" and escalating price) then reads only what existed at this op's
 	 *  position in chain order, as the live pass did. Absent in the live pass. */
 	readonly judgedOutOfOrder?: true;
 	/** Blurt read-only client. Handlers should not need it: a chain read
