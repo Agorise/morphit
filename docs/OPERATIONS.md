@@ -99,6 +99,7 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 53. [Per-instance branding — your logo, icons and site name](#53-per-instance-branding--your-logo-icons-and-site-name)
 54. [Offline notifications — the accounts your users' notes come from](#54-offline-notifications--the-accounts-your-users-notes-come-from)
 55. [The Blurt Nodes page (/witnesses) — what your instance does for it](#55-the-blurt-nodes-page-witnesses--what-your-instance-does-for-it)
+56. [Prices for the other coins (v1.23.2)](#56-prices-for-the-other-coins-v1232)
 
 ---
 
@@ -14928,15 +14929,18 @@ address comes back, so a change never leaves her without notes.
 
 Since v1.23.0 every instance has a **Blurt Nodes** page (`/witnesses`, linked at the
 bottom of the footer's Federation list): every Blurt witness, ordered by stars — how
-long it has produced blocks, how few it has missed and whether its version is current
-— with vote buttons for signed-in users (a witness vote is signed with the user's
+long it has produced blocks (full marks after two years since v1.23.2), how few it has
+missed (since v1.23.2 the last day's misses count extra, so a witness starting to miss
+loses stars the same day) and whether its version is current — with vote buttons for signed-in users (a witness vote is signed with the user's
 Active key in their browser, like Power Up; your indexer relays it, `/v1/broadcast`).
 Nothing to set up. What it costs your server:
 
 - **Chain reads.** The list (`get_witnesses_by_vote`, about 200 KB) at most once a
   minute while people look at the page, and once every 10 minutes whatever happens, to
   write down each producing witness's total of missed blocks (the page's "missed in
-  24 h" flag; the chain keeps only the running total). On a clearnet instance, also the
+  24 h" flag, which since v1.23.2 also lowers the stars; the chain keeps only the running
+  total). Each instance counts these from its own samples, so two instances can show a
+  witness a third of a star apart for a while. On a clearnet instance, also the
   producing witnesses' accounts (one read of about 80 KB) at most once an hour, for their
   picture addresses.
 - **A small local table**, `witness_missed_samples` (schema v72): about 30 rows every
@@ -14950,7 +14954,7 @@ Nothing to set up. What it costs your server:
   connection pinned to it, no redirects, at most 1 MiB and 4096 px a side, and only a
   PNG, JPEG, GIF or WebP is kept; its DNS lookup has its own timeout and does not use
   the system resolver's shared threads). If the witness's own host fails (gone from DNS,
-  down, or not an image), v1.23.1 asks the Blurt image proxy instead,
+  down, or not an image), v1.23.2 asks the Blurt image proxy instead,
   `https://imgp.blurt.blog/profileimage/<witness>/64x64`, through the same guarded fetch
   (it may redirect at most three times, only within `imgp.blurt.blog`, all within the one
   10-second timeout) — but only for a
@@ -14961,14 +14965,14 @@ Nothing to set up. What it costs your server:
 - **Logs:** `journalctl -u morphit-indexer | grep witnesses` — `sample_failed` (a
   10-minute sample could not be read; the flag waits for the next),
   `avatar_unavailable` (a picture could not be fetched or was not an image; tried
-  again after an hour; since v1.23.1 that means both the witness's own host and the
+  again after an hour; since v1.23.2 that means both the witness's own host and the
   Blurt image proxy failed, and the reason names both). `… has no DNS records` means the
   picture's host name does not exist in DNS any more — not a fault of your server (on
   2026-11-05 `img.blurt.world` went with the `blurt.world` domain's move to parking
   nameservers, and `images.blurt.buzz` does not exist; most witnesses' pictures were on
-  one of the two). Since v1.23.1 those pictures come from the proxy
+  one of the two). Since v1.23.2 those pictures come from the proxy
   (`avatar_via_proxy`).
-- **The first hour (v1.23.1).** A fresh install, or the first upgrade to v1.23, shows
+- **The first hour (v1.23.2).** A fresh install, or the first upgrade to v1.23, shows
   no "missed" flags for an hour: the instance has only just started writing the totals
   down. Then it counts the misses since it started watching, and after 24 hours a full
   day. Upgrades and restarts keep the table; restoring an indexer snapshot empties it
@@ -14978,3 +14982,39 @@ Nothing to set up. What it costs your server:
   ```sh
   sudo -u postgres psql -d morphit_indexer -c "SELECT COUNT(*) AS samples, COUNT(DISTINCT owner) AS witnesses, MIN(sampled_at) AS first, MAX(sampled_at) AS last FROM witness_missed_samples"
   ```
+
+## 56. Prices for the other coins (v1.23.2)
+
+Since v1.23.2 the pay and share-address windows show what an amount of any
+coin is worth — "0.0037 ETH (≈11 BRL)" — and fill the amount in for the
+order's value. For BLURT, BTC and XMR the prices are the ones your instance
+already had. For every coin but BLURT, BTC, XMR and ECX (that is ETH, LTC,
+BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, USDT, USDC and DAI) your indexer now
+keeps a USD price too, **for display only**: no fee, check or signature ever
+uses it. eCash (ECX) has none: other coins use the same ticker.
+
+What your server asks, on every price refresh (`MORPHIT_INDEXER_PRICE_REFRESH_INTERVAL_MS`):
+
+- **Nothing new over Tor.** The onion Bisq and Haveno price nodes your instance
+  already asks for BTC and XMR quote these coins in the same answer; it used to
+  throw that part away.
+- **Where your instance may use clearnet:** one CoinGecko request and one
+  CryptoCompare request, each for all of those coins together
+  (`MORPHIT_INDEXER_COINGECKO_BASE_URL`, `MORPHIT_INDEXER_CRYPTOCOMPARE_BASE_URL`,
+  and their API keys if you set them). A hidden-only instance (no clearnet RPC)
+  sends neither.
+
+The answers are combined like the BTC and XMR prices (the median-anchored
+robust mean, so one wrong answer is outvoted); a coin without a fresh, plausible
+answer is simply not shown. eCash (ECX) is left out on purpose: other coins use
+the same ticker, so a provider's "ECX" may not be this eCash. Turning the price
+feed off (`MORPHIT_INDEXER_PRICE_FEED_ENABLED=false`) turns this off too.
+
+To see the prices your instance serves — on the instance's server:
+
+```sh
+curl -s http://127.0.0.1:8080/v1/listing-fee | jq .asset_prices_usd
+```
+
+Users' browsers read them from your own instance, as before; they ask no
+price service themselves.

@@ -1,6 +1,6 @@
 /**
  * Where the /witnesses table's heading row sticks, and how far down keyboard
- * focus must land so the row never hides it (v1.23.1). PURE: the page measures,
+ * focus must land so the row never hides it (v1.23.2). PURE: the page measures,
  * this decides.
  *
  *   - The row sticks just under the site's sticky main menu, measured to the

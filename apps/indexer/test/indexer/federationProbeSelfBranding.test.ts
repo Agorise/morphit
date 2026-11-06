@@ -119,6 +119,42 @@ describe('FederationProbe — self-instance branding refresh (cp311)', () => {
 		});
 	});
 
+	it("v1.23.2: the self row carries this instance's own indexed block and chain lag (with or without branding)", async () => {
+		for (const branded of [true, false]) {
+			const { db, queries } = makeMockDb();
+			const scheduler = new FederationProbeScheduler(db, {
+				intervalMs: 15_000,
+				selfOrigin: SELF_ORIGIN,
+				localLagBlocks: () => 21,
+				localIndexedBlock: () => 65_117_479,
+				...(branded
+					? {
+							selfBranding: () => ({
+								name: 'Morphit',
+								tagline: null,
+								contactUrl: null,
+								altNetworks: {
+									tor: null,
+									lokinet: null,
+									i2p_b32: null,
+									i2p_name: null,
+									ens: null,
+									nostr: null
+								}
+							})
+						}
+					: {})
+			});
+			await scheduler.scanOnce();
+			const update = queries.find((q) => q.text.trim().toUpperCase().startsWith('UPDATE'));
+			expect(update, `branded=${branded}`).toBeDefined();
+			expect(update!.text).toContain('cached_indexed_block');
+			expect(update!.text).toContain('cached_chain_lag_sec');
+			expect(update!.params).toContain(65_117_479);
+			expect(update!.params).toContain(63); // 21 blocks × 3 s
+		}
+	});
+
 	it('without selfBranding, keeps the old status-only behavior (no cached_* clobber)', async () => {
 		const { db, queries } = makeMockDb();
 		const scheduler = new FederationProbeScheduler(db, {

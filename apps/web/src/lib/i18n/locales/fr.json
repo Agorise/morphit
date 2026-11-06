@@ -499,17 +499,9 @@
 			"menu_label": "Sécurité de la conversation",
 			"confirm": {
 				"title": "Sécurité de la conversation",
-				"body": "Voulez-vous ne plus pouvoir relire vos propres messages après avoir quitté cette discussion ? Votre partenaire pourra toujours les lire, et leur forme chiffrée reste sur la chaîne. Choisissez Non pour continuer à lire votre propre historique, comme dans une messagerie normale.",
-				"yes": "Oui, ne pas garder ma copie",
-				"no": "Non, les conserver",
-				"current_keep": "Actuellement : vous gardez une copie et pouvez relire vos propres messages.",
-				"current_destroy": "Actuellement : vous ne gardez pas de copie, vous ne pouvez donc pas relire vos propres messages après être parti."
-			},
-			"pdf_reminder": {
-				"title": "N'oubliez pas d'exporter cette conversation en PDF",
-				"body": "Dans ce mode, vous ne pourrez plus relire vos propres messages après votre départ (votre partenaire, si). Enregistrez un PDF maintenant si vous voulez en garder une copie.",
-				"get_now": "Obtenir mon PDF maintenant",
-				"later": "Plus tard"
+				"body": "Cette discussion est chiffrée sur la blockchain, elle n'est donc jamais perdue. Mais si vous partagez cet ordinateur avec quelqu'un, cette personne pourrait voir cette copie non chiffrée. Voulez-vous que cette discussion soit supprimée de cet ordinateur une fois que vous l'aurez quittée ?",
+				"yes": "Oui, la supprimer",
+				"no": "Non, la garder"
 			},
 			"chain_unreachable": "La blockchain n'a pas pu être jointe pour vérifier les clés de ce contact, le message n'a donc pas été envoyé. C'est courant sur Tor et I2P, où les connexions mettent plus de temps à s'établir. Rien d'anormal — réessayez dans un instant.",
 			"pub_pin_key_changed": "Non envoyé : la clé de cette personne a changé. Cela arrive quand elle réinitialise ses clés — ou quand quelqu'un essaie de lire vos messages. Ouvrez ⋮ → Vérifier le contact et comparez le nouveau numéro de sécurité avec elle par un autre canal avant de l'accepter.",
@@ -839,7 +831,6 @@
 			"load_failed": "Impossible de charger les messages plus anciens."
 		},
 		"legs": {
-			"waiting_payment": "En attente du paiement de @{peer} en {coins}. N'envoyez rien tant que le paiement n'apparaît pas ici.",
 			"waiting_address": "En attente que @{peer} indique où payer.",
 			"checking_payment": "Vérification du paiement de @{peer}…",
 			"payment_short": "Le paiement de @{peer} ne correspond pas à ce qui a été demandé — voir le reçu ci-dessus. N'envoyez rien sauf si votre propre portefeuille montre le bon paiement.",
@@ -864,7 +855,8 @@
 			"wrong_address": "Ce paiement n'est pas arrivé à l'adresse {coin} partagée dans ce chat.",
 			"short": "Seulement {amount} {coin} sont arrivés à l'adresse partagée — moins que demandé.",
 			"seen": "{amount} {coin} reçus · {n}/{required} confirmations",
-			"confirmed": "{amount} {coin} reçus · confirmé",
+			"confirmed": "{amount} {coin} reçus · {n, plural, one {# confirmation} other {# confirmations}}",
+			"checked_ago": "dernière vérification il y a {minutes, plural, one {# minute} other {# minutes}}",
 			"old": "Ce paiement en {coin} a été fait avant que l'adresse ne soit partagée dans ce chat : ce n'est pas un paiement pour cette transaction."
 		}
 	},
@@ -2517,7 +2509,7 @@
 			"viewed_count": "{count} vues",
 			"viewed_tooltip": "Décompte approximatif du nombre de fois où cette offre a été vue. Visible uniquement par vous.",
 			"action_relist": "Republier cet ordre",
-			"action_relist_hint": "Pré-remplit le formulaire pour vous avec les valeurs et conditions d'origine.",
+			"action_relist_hint": "Pré-remplit le formulaire pour vous avec les valeurs d'origine, que vous pouvez modifier.",
 			"feedback_pick_prompt": "Avec qui avez-vous échangé ?",
 			"not_visible_orderbook": "Non visible dans le carnet d'ordres",
 			"state_completed": "Terminé",

@@ -37,7 +37,7 @@
 
 	let requesting = $state(false);
 
-	// v1.23.1: publish where this banner ends while it sticks under the menu, so
+	// v1.23.2: publish where this banner ends while it sticks under the menu, so
 	// a sticky element further down (the /witnesses heading row) sticks below it.
 	let root = $state<HTMLElement>();
 	$effect(() => {

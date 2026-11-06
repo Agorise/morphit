@@ -37,7 +37,11 @@ import { isValidMemo } from './payload';
 
 /** Result of verifying a BLURT funds-sent claim against chain. */
 export type VerifyResult =
-	| { kind: 'verified' }
+	/** `provisional` (v1.23.2 review): found in the block the receipt named,
+	 *  but that block is not irreversible yet, so a fork could still drop it.
+	 *  Fine to show ("Sent as expected"); never cached, and not enough to
+	 *  release the other coin of a two-leg trade (blurtLegCheck waits). */
+	| { kind: 'verified'; provisional?: true }
 	| {
 			kind: 'mismatch';
 			field: 'to' | 'from' | 'amount' | 'memo';
@@ -51,6 +55,13 @@ export type VerifyResult =
 	| { kind: 'rpc_error'; message: string };
 
 /** Inputs to the verifier — what the seller expected. */
+/** The part of a condenser get_block result the block path reads (v1.23.2):
+ *  `transaction_ids[i]` is the id of `transactions[i]`. */
+interface ChainBlockResponse {
+	readonly transactions?: readonly unknown[];
+	readonly transaction_ids?: readonly unknown[];
+}
+
 export interface VerifyExpect {
 	/** "to" account on the on-chain transfer (the seller). */
 	readonly recipient: string;
@@ -65,6 +76,13 @@ export interface VerifyExpect {
 	 *  requested," in which case any memo on the actual transfer
 	 *  is treated as a mismatch. */
 	readonly memo: string;
+	/** (v1.23.2) The block the sender's broadcast reported (the funds-sent
+	 *  receipt's `block`). A node finds a transaction with get_transaction
+	 *  only once its block is irreversible, ~45 s behind the head, so the
+	 *  check sat on "Verifying…" for about a minute; the block itself is
+	 *  there within one block. The transaction must be IN that block — else
+	 *  the old lookup decides — so a wrong or forged number bypasses nothing. */
+	readonly block?: number;
 }
 
 /** Chain transfer operation shape — public so smoke tests and
@@ -91,7 +109,7 @@ export async function verifyBlurtTransfer(
 	// Cache key includes the expected fields — if the seller's
 	// understanding of the trade somehow differs across mounts
 	// (shouldn't, but defense in depth), the cache doesn't lie.
-	const cacheKey = `${txid}|${expect.recipient}|${expect.sender}|${expect.amountBlurt}|${expect.memo}`;
+	const cacheKey = `${txid}|${expect.recipient}|${expect.sender}|${expect.amountBlurt}|${expect.memo}|${expect.block ?? ''}`;
 	const cached = verifyCache.get(cacheKey);
 	if (cached !== undefined) return cached;
 
@@ -99,7 +117,8 @@ export async function verifyBlurtTransfer(
 	// Cache definitive results (verified, mismatch, not_found,
 	// wrong_op) — those don't change without a chain reorg.  Don't
 	// cache rpc_error — the next attempt may succeed.
-	if (result.kind !== 'rpc_error') {
+	// Nor a provisional verification (its block may still be dropped).
+	if (result.kind !== 'rpc_error' && !(result.kind === 'verified' && result.provisional)) {
 		verifyCache.set(cacheKey, result);
 	}
 	return result;
@@ -130,6 +149,49 @@ async function verifyBlurtTransferUncached(
 	const { chainRelay, ChainRelayError } = (await import(
 		'$net/chainRelay'
 	)) as typeof import('$net/chainRelay');
+
+	// v1.23.2: the block the broadcast reported, when the receipt carries it.
+	if (expect.block !== undefined && Number.isSafeInteger(expect.block) && expect.block > 0) {
+		let blk: ChainBlockResponse | null;
+		try {
+			blk = await chainRelay<ChainBlockResponse | null>('get_block', [expect.block]);
+		} catch (e) {
+			return {
+				kind: 'rpc_error',
+				message: e instanceof ChainRelayError ? e.message : 'could not reach the chain'
+			};
+		}
+		// Not on the instance's node yet (it may lag the head by a block), or a
+		// number that never comes: the old lookup below decides (review) — it
+		// answers "try again" until the transaction is final, then finds it.
+		if (blk && typeof blk === 'object') {
+			const ids = Array.isArray(blk.transaction_ids) ? blk.transaction_ids : [];
+			const want = txid.toLowerCase();
+			const i = ids.findIndex((id) => typeof id === 'string' && id.toLowerCase() === want);
+			const inBlock = i >= 0 && Array.isArray(blk.transactions) ? blk.transactions[i] : undefined;
+			if (inBlock && typeof inBlock === 'object') {
+				const r = verifyBlurtTransferAgainstTx(inBlock as ChainTxResponse, expect);
+				if (r.kind !== 'verified') return r;
+				// Final only once the block is irreversible (review): until then
+				// a fork could still drop it.
+				let lib: number | null = null;
+				try {
+					const props = await chainRelay<{ last_irreversible_block_num?: unknown } | null>(
+						'get_dynamic_global_properties',
+						[]
+					);
+					const n = props?.last_irreversible_block_num;
+					if (typeof n === 'number' && Number.isSafeInteger(n)) lib = n;
+				} catch {
+					lib = null;
+				}
+				return lib !== null && expect.block <= lib
+					? { kind: 'verified' }
+					: { kind: 'verified', provisional: true };
+			}
+		}
+		// Not in that block: the number proves nothing; the old lookup decides.
+	}
 
 	let tx: ChainTxResponse | null;
 	try {

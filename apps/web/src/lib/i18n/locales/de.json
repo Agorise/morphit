@@ -499,17 +499,9 @@
 			"menu_label": "Chat-Sicherheit",
 			"confirm": {
 				"title": "Chat-Sicherheit",
-				"body": "Möchtest du deine eigenen Nachrichten nicht mehr lesen können, nachdem du diesen Chat verlässt? Dein Gegenüber kann sie weiterhin lesen, und ihre verschlüsselte Form bleibt auf der Chain. Wähle Nein, um deinen eigenen Verlauf weiter lesen zu können, wie in einem normalen Messenger.",
-				"yes": "Ja, meine Kopie nicht behalten",
-				"no": "Nein, behalten",
-				"current_keep": "Derzeit: Du behältst eine Kopie und kannst deine eigenen Nachrichten erneut lesen.",
-				"current_destroy": "Derzeit: Du behältst keine Kopie und kannst deine eigenen Nachrichten nach dem Verlassen nicht erneut lesen."
-			},
-			"pdf_reminder": {
-				"title": "Vergiss nicht, diesen Chat als PDF zu exportieren",
-				"body": "In diesem Modus kannst du deine eigenen Nachrichten nach dem Verlassen nicht mehr lesen (dein Gegenüber schon). Speichere jetzt ein PDF, wenn du eine Kopie behalten willst.",
-				"get_now": "Mein PDF jetzt holen",
-				"later": "Später"
+				"body": "Dieser Chat ist auf der Blockchain verschlüsselt, damit er nie verloren geht. Wenn du diesen Computer aber mit jemandem teilst, könnte diese Person diese unverschlüsselte Kopie sehen. Soll dieser Chat von diesem Computer gelöscht werden, nachdem du ihn verlassen hast?",
+				"yes": "Ja, löschen",
+				"no": "Nein, behalten"
 			},
 			"chain_unreachable": "Die Blockchain war nicht erreichbar, um die Schlüssel dieses Kontakts zu prüfen, daher wurde die Nachricht nicht gesendet. Über Tor und I2P kommt das häufiger vor, weil Verbindungen länger brauchen. Es ist nichts verkehrt — versuchen Sie es gleich noch einmal.",
 			"pub_pin_key_changed": "Nicht gesendet: Der Schlüssel dieser Person hat sich geändert. Das passiert, wenn sie ihre Schlüssel zurücksetzt — oder wenn jemand versucht, deine Nachrichten mitzulesen. Öffne ⋮ → Kontakt verifizieren und vergleiche die neue Sicherheitsnummer über einen anderen Kanal mit ihr, bevor du sie akzeptierst.",
@@ -839,7 +831,6 @@
 			"load_failed": "Ältere Nachrichten konnten nicht geladen werden."
 		},
 		"legs": {
-			"waiting_payment": "Warte darauf, dass @{peer} dich mit {coins} bezahlt. Sende nichts, bevor die Zahlung hier erscheint.",
 			"waiting_address": "Warte darauf, dass @{peer} mitteilt, wohin du zahlen sollst.",
 			"checking_payment": "Die Zahlung von @{peer} wird geprüft …",
 			"payment_short": "Die Zahlung von @{peer} entspricht nicht dem Verlangten – siehe den Beleg oben. Sende nichts, außer deine eigene Wallet zeigt die richtige Zahlung.",
@@ -864,7 +855,8 @@
 			"wrong_address": "Diese Zahlung ist nicht an der in diesem Chat geteilten {coin}-Adresse angekommen.",
 			"short": "Nur {amount} {coin} sind an der geteilten Adresse angekommen – weniger als verlangt.",
 			"seen": "{amount} {coin} erhalten · {n}/{required} Bestätigungen",
-			"confirmed": "{amount} {coin} erhalten · bestätigt",
+			"confirmed": "{amount} {coin} erhalten · {n, plural, one {# Bestätigung} other {# Bestätigungen}}",
+			"checked_ago": "zuletzt vor {minutes, plural, one {# Minute} other {# Minuten}} geprüft",
 			"old": "Diese {coin}-Zahlung erfolgte, bevor die Adresse in diesem Chat geteilt wurde: Sie ist keine Zahlung für diesen Trade."
 		}
 	},
@@ -2517,7 +2509,7 @@
 			"viewed_count": "{count} Aufrufe",
 			"viewed_tooltip": "Ungefähre Anzahl, wie oft dieses Angebot angesehen wurde. Nur für dich sichtbar.",
 			"action_relist": "Order erneut einstellen",
-			"action_relist_hint": "Füllt das Formular für dich mit den ursprünglichen Werten und Bedingungen aus.",
+			"action_relist_hint": "Füllt das Formular für dich mit den ursprünglichen Werten aus, die du ändern kannst.",
 			"feedback_pick_prompt": "Mit wem hast du gehandelt?",
 			"not_visible_orderbook": "Nicht im Orderbuch sichtbar",
 			"state_completed": "Abgeschlossen",

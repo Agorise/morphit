@@ -65,3 +65,23 @@ describe('formatMonthYearShort (v1.23.0, the /witnesses "since Nov \'25")', () =
 		expect(fa).not.toContain("'");
 	});
 });
+
+describe('formatFiatCode (v1.23.2: the "(≈11 BRL)" beside a coin amount)', () => {
+	it('the number, then the currency code; no trailing zeros; at most 2 decimals', async () => {
+		const { formatFiatCode } = await import('./formatters');
+		locale.set('en');
+		expect(formatFiatCode(11, 'BRL')).toBe('11 BRL');
+		expect(formatFiatCode(10.98765, 'brl')).toBe('10.99 BRL');
+		expect(formatFiatCode(1234.5, 'USD')).toBe('1,234.5 USD');
+		expect(formatFiatCode(Number.NaN, 'USD')).toBe('');
+	});
+
+	it("each locale's own digits and separators", async () => {
+		const { formatFiatCode } = await import('./formatters');
+		locale.set('de');
+		expect(formatFiatCode(1234.5, 'EUR')).toBe('1.234,5 EUR');
+		locale.set('fa');
+		expect(formatFiatCode(11, 'IRR')).toBe('۱۱ IRR');
+		locale.set('en');
+	});
+});

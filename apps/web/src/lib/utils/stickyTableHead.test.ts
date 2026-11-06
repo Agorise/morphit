@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { STICKY_FOCUS_GAP_PX, stickyTableHead } from './stickyTableHead';
 
-describe('stickyTableHead (v1.23.1, the /witnesses heading row)', () => {
+describe('stickyTableHead (v1.23.2, the /witnesses heading row)', () => {
 	it('sticks right under the main menu, to the fraction of a pixel (zoom, branded logos)', () => {
 		expect(stickyTableHead({ menuHeight: 64.4, bannerBottom: 0, rowHeight: 44 }).top).toBe(64.4);
 	});

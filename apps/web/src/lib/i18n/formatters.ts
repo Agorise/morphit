@@ -195,6 +195,22 @@ export function formatFiat(amount: number, ticker: string = 'USD'): string {
 }
 
 /**
+ * (v1.23.2) A fiat amount as "11 BRL": the locale's digits and separators, at
+ * most 2 decimals and no trailing zeros, then the currency CODE (never a
+ * symbol). For the "(≈11 BRL)" beside a coin amount in the pay and
+ * share-address windows. Empty for a non-finite amount.
+ */
+export function formatFiatCode(amount: number, ticker: string): string {
+	if (!Number.isFinite(amount)) return '';
+	const n = getNumberFormat(activeLocale(), {
+		style: 'decimal',
+		minimumFractionDigits: 0,
+		maximumFractionDigits: 2
+	}).format(amount);
+	return `${n} ${ticker.toUpperCase()}`;
+}
+
+/**
  * like formatFiat, but with the currency symbol GLUED to the
  * number (no separating space): "3,98€" instead of "3,98 €". Some
  * locales (e.g. de-DE) place a space between the amount and a

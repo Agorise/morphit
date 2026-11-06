@@ -412,6 +412,11 @@ export class Poller {
 				if (!st.running || st.chainHeadBlock <= 0) return null;
 				return Math.max(0, st.chainHeadBlock - st.indexedBlock);
 			},
+			// v1.23.2 — our own indexed block, for the self row (never probed).
+			localIndexedBlock: () => {
+				const st = this.getStatus();
+				return st.running && st.indexedBlock > 0 ? st.indexedBlock : null;
+			},
 			// v1.15.3 — the current chain head, so the probe can tell a
 			// clearnet-blocked-but-alive operator (recent on-chain action) from a
 			// dead one, and label it 'clearnet_blocked' instead of 'unreachable'.

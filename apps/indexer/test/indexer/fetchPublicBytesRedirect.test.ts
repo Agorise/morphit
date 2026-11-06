@@ -1,5 +1,5 @@
 /**
- * fetchPublicBytes and redirects (v1.23.1).
+ * fetchPublicBytes and redirects (v1.23.2).
  *
  * The guarded fetch never follows a redirect: it is how a hostile peer would
  * bounce the indexer to an address it did not check. The witness pictures'
@@ -115,7 +115,7 @@ describe('fetchPublicBytes: redirects', () => {
 	});
 });
 
-describe('fetchPublicBytes: a redirect chain (review, v1.23.1)', () => {
+describe('fetchPublicBytes: a redirect chain (review, v1.23.2)', () => {
 	const A = 'https://imgp.blurt.blog/a';
 	const delay = (ms: number, signal?: AbortSignal | null) =>
 		new Promise<void>((res, rej) => {

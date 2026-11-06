@@ -1,41 +1,40 @@
 /**
  * Chat security preference.
  *
- * Two persisted, per-account settings that govern the chat "self-copy"
- * behavior introduced:
+ * v1.23.2 — what Chat Security means now (owner's decision):
  *
- *   mode:
- *     'keep'    (DEFAULT) — encrypt-a-copy-to-self. Every message the user
- *               sends also carries a second ciphertext only the sender can
- *               reopen, so they can reread their own history from chain
- *               forever, like a normal messenger. Anyone who later obtains
- *               the sender's chat key can therefore read what they sent.
- *     'destroy' (opt-in) — no self-copy is written. Own sent messages are
- *               readable only during the live session; afterwards the SENDER
- *               can no longer decrypt them (the ephemeral private key was
- *               wiped and nothing was persisted). This removes only the
- *               sender's own ability to reread: the RECIPIENT's chat key
- *               still decrypts every message, so neither mode has forward
- *               secrecy (see crypto.ts).
+ *   "This chat is encrypted on-chain so it's never lost, but if you share
+ *    this computer with someone, they might be able to see this unencrypted
+ *    copy. Do you want this chat deleted from this computer after you leave
+ *    the chat?"  Yes, delete it / No, keep it.
+ *
+ *   Morphit never stores chat text on the computer: it is decrypted into the
+ *   open tab's memory only. What a person sharing the computer could see is
+ *   the chat on screen, or reopen it while Morphit is unlocked. So "delete it
+ *   from this computer after you leave" = LOCK ON LEAVING: when you leave
+ *   that chat (another page, another chat, closing or reloading the tab),
+ *   Morphit locks on this computer, in every tab, and keeps no reload stash —
+ *   the words are gone from memory and nobody can reopen any chat without
+ *   your password (a session with no password to unlock is signed out, as a
+ *   lock always does). PER CHAT (account, partner, order), LOCAL only: it is
+ *   this computer's concern and publishing it would leak a privacy posture.
+ *
+ *   Your own messages ALWAYS carry their self-copy now, so you can reread
+ *   the whole chat later, on any device ("never lost"). The old opt-out
+ *   ('destroy': no self-copy, own messages unreadable to you after leaving)
+ *   is gone; an account that had chosen it gets lock-on-leaving in every chat
+ *   instead (its closest privacy intent), until it says No in a chat.
+ *   `ChatSecurityMode` and `shouldAttachSelfCopy` stay as the send path's
+ *   switch (chatService), but the store only ever answers 'keep'.
  *
  *   nudgeSeen:
  *     One-time flag. While false, the chat overflow menu shows a red dot
  *     inviting the user to discover the Chat Security setting. Set true the
  *     first time they open the Chat Security item.
  *
- * PER-ACCOUNT (keyed by Blurt account name), not device-global: one browser
- * can host several logins (Bob's multi-account flow), and a security posture
- * is a property of the account, not the machine.
- *
- * LOCAL, not on-chain: the mode is the SENDER's own choice, read at send time
- * to decide whether to attach a self-copy. It never needs to be published, and
- * publishing it would leak the user's privacy posture. Stored via safeLocal so
- * a storage-unavailable environment degrades to the safe default ('keep') and
- * a never-nagging nudge.
- *
- * FORWARD-LOOKING: switching modes only affects messages sent AFTERWARD.
- * Turning on 'destroy' does not retroactively strip self-copies already on
- * chain; turning on 'keep' does not add self-copies to messages already sent.
+ * PER-ACCOUNT keys (Blurt account name): one browser can host several logins.
+ * Stored via safeLocal, so unavailable storage degrades to the safe defaults
+ * (keep the copy; no lock-on-leaving; a never-nagging nudge).
  */
 
 import { safeLocal } from '../utils/safeStorage';
@@ -53,19 +52,42 @@ function nudgeKey(account: string): string {
 }
 
 /**
- * Read the account's chat-security mode. Returns 'keep' (the default) for a
- * missing/unknown value, an empty account, or unavailable storage — i.e. the
- * safe, readable-history default is the fallback in every ambiguous case.
+ * The account's self-copy mode: always 'keep' (v1.23.2). A legacy stored
+ * 'destroy' no longer turns the copy off — see readLockOnLeave instead.
  */
 export function readChatSecurityMode(account: string): ChatSecurityMode {
-	if (account.length === 0) return 'keep';
-	return safeLocal.get(modeKey(account)) === 'destroy' ? 'destroy' : 'keep';
+	void account;
+	return 'keep';
 }
 
-/** Persist the account's chat-security mode. No-op for an empty account. */
-export function writeChatSecurityMode(account: string, mode: ChatSecurityMode): void {
-	if (account.length === 0) return;
-	safeLocal.set(modeKey(account), mode === 'destroy' ? 'destroy' : 'keep');
+const LOCK_ON_LEAVE_PREFIX = 'morphit.chatSecurity.lockOnLeave.';
+
+function lockOnLeaveKey(account: string, peer: string, order: string | null): string {
+	return `${LOCK_ON_LEAVE_PREFIX}${account}\u0000${peer}\u0000${order ?? ''}`;
+}
+
+/**
+ * Lock Morphit on this computer when this account leaves this chat (v1.23.2)?
+ * Per chat: account, partner and order. Unset → the account's legacy choice
+ * (the old 'destroy' mode → yes), else no.
+ */
+export function readLockOnLeave(account: string, peer: string, order: string | null): boolean {
+	if (account.length === 0 || peer.length === 0) return false;
+	const v = safeLocal.get(lockOnLeaveKey(account, peer, order));
+	if (v === '1') return true;
+	if (v === '0') return false;
+	return safeLocal.get(modeKey(account)) === 'destroy';
+}
+
+/** Persist this chat's lock-on-leaving choice. No-op for an empty account. */
+export function writeLockOnLeave(
+	account: string,
+	peer: string,
+	order: string | null,
+	on: boolean
+): void {
+	if (account.length === 0 || peer.length === 0) return;
+	safeLocal.set(lockOnLeaveKey(account, peer, order), on ? '1' : '0');
 }
 
 /**

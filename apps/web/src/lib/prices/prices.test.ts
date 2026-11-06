@@ -70,6 +70,24 @@ describe('prices', () => {
 		expect(await getPrice('LTC')).toBeNull();
 	});
 
+	it('the other coins (v1.23.2): asset_prices_usd, always USD; ECX or junk stays unknown', async () => {
+		body = {
+			...body,
+			denomination_fiat: 'EUR',
+			asset_prices_usd: { ETH: 3005, LTC: 89.5, USDT: 1, DOGE: -1, ECX: 0.00003, BLURT: 9 }
+		};
+		const { getPrice } = await import('$lib/prices');
+		expect((await getPrice('ETH'))?.usd).toBe(3005);
+		expect((await getPrice('LTC'))?.usd).toBe(89.5);
+		expect((await getPrice('USDT'))?.source).toBe('indexer');
+		expect(await getPrice('DOGE')).toBeNull();
+		expect(await getPrice('ECX')).toBeNull();
+		// BLURT, BTC, XMR come only from their own guarded fields.
+		expect(await getPrice('BLURT')).toBeNull();
+		expect(await getPrice('SOL')).toBeNull();
+		expect(calls).toBe(1);
+	});
+
 	it('a failed read is unknown, not a constant', async () => {
 		status = 503;
 		const { getPrice, symbolAmountToUsd } = await import('$lib/prices');

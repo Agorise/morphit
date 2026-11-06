@@ -66,7 +66,8 @@ describe('twoLegButtons — the BLURT seller (pays BLURT, is paid XMR/BTC first)
 			confirmInWallet: false,
 			payBlurt: false,
 			shareAssetAddress: false,
-			hint: 'waiting_payment'
+			// v1.23.2: no "Waiting for @x to pay you in …" line (owner's call).
+			hint: null
 		});
 	});
 	it('address shared, payment recorded, check running: still no "Send BLURT"', () => {
@@ -178,7 +179,7 @@ describe('twoLegButtons — buying XMR with BLURT', () => {
 		const b = twoLegButtons(twoLegPlan(order, false)!, [], ORDER, null);
 		expect(b.sharePaymentAddress).toBe(true);
 		expect(b.sendAsset).toBe(false);
-		expect(b.hint).toBe('waiting_payment');
+		expect(b.hint).toBeNull();
 	});
 	it('the XMR buyer waits for that ask, then pays it; he shares his XMR address any time', () => {
 		const plan = twoLegPlan(order, true)!;

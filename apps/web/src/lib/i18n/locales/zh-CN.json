@@ -499,17 +499,9 @@
 			"menu_label": "聊天安全",
 			"confirm": {
 				"title": "聊天安全",
-				"body": "你是否希望离开此聊天后，自己就无法再重读自己发出的消息？对方仍然可以阅读它们，其加密形式也会留在链上。选择「否」即可像普通聊天软件一样继续阅读自己的历史记录。",
-				"yes": "是，不保留我的副本",
-				"no": "否，保留它们",
-				"current_keep": "当前:你保留副本,可以重新阅读自己的消息。",
-				"current_destroy": "当前:你不保留副本,离开后无法重新阅读自己的消息。"
-			},
-			"pdf_reminder": {
-				"title": "别忘了将此聊天导出为 PDF",
-				"body": "在此模式下，你离开后将无法重读自己的消息（对方仍然可以）。如需保留副本，请现在保存 PDF。",
-				"get_now": "立即获取我的 PDF",
-				"later": "稍后"
+				"body": "这段聊天已在链上加密保存，永远不会丢失；但如果你和别人共用这台电脑，对方可能会看到这份未加密的副本。离开这段聊天后，要从这台电脑上删除它吗？",
+				"yes": "是，删除",
+				"no": "不，保留"
 			},
 			"chain_unreachable": "无法连接到区块链来核对该联系人的密钥，因此消息没有发送。在 Tor 和 I2P 上这很常见，因为建立连接需要更长时间。没有出什么问题——请稍后再试。",
 			"pub_pin_key_changed": "未发送：此人的密钥已更改。这会在对方重置密钥时发生，也可能是有人想读取你的消息。请打开 ⋮ → 验证联系人，先通过其他渠道与对方比对新的安全码，再决定是否接受。",
@@ -839,7 +831,6 @@
 			"load_failed": "无法加载更早的消息。"
 		},
 		"legs": {
-			"waiting_payment": "正在等待 @{peer} 用 {coins} 付款给你。付款出现在这里之前，不要发送任何东西。",
 			"waiting_address": "正在等待 @{peer} 告诉你付款地址。",
 			"checking_payment": "正在核对 @{peer} 的付款…",
 			"payment_short": "@{peer} 的付款与要求的不符——请看上面的收据。除非你自己的钱包显示了正确的付款，否则不要发送任何东西。",
@@ -864,7 +855,8 @@
 			"wrong_address": "这笔付款没有到达本聊天中分享的 {coin} 地址。",
 			"short": "只有 {amount} {coin} 到达分享的地址——少于要求的数额。",
 			"seen": "已收到 {amount} {coin} · {n}/{required} 次确认",
-			"confirmed": "已收到 {amount} {coin} · 已确认",
+			"confirmed": "已收到 {amount} {coin} · {n, plural, other {# 次确认}}",
+			"checked_ago": "上次检查于 {minutes, plural, other {# 分钟}}前",
 			"old": "这笔 {coin} 付款是在本聊天分享地址之前付的：它不是这笔交易的付款。"
 		}
 	},
@@ -2517,7 +2509,7 @@
 			"viewed_count": "{count} 次查看",
 			"viewed_tooltip": "此报价大致被查看的次数。仅你可见。",
 			"action_relist": "重新发布",
-			"action_relist_hint": "用原始数值和条款为你预填表单。",
+			"action_relist_hint": "用原始数值为你预填表单，你可以修改。",
 			"feedback_pick_prompt": "你和谁完成了交易？",
 			"not_visible_orderbook": "未在订单簿中显示",
 			"state_completed": "已完成",

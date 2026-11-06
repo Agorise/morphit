@@ -142,6 +142,20 @@ describe('watchBlurtLeg', () => {
 		expect(chain.asks.length).toBe(n);
 		stop();
 	});
+	it('v1.23.2 review: found in a block not final yet is not "seen" — the other coin waits until it is', async () => {
+		vi.useFakeTimers();
+		expect(blurtLegVerdict(blurtLegStateOf({ kind: 'verified', provisional: true }, input()))).toBe(
+			'checking'
+		);
+		chain.answers.push({ kind: 'verified', provisional: true }, { kind: 'verified' });
+		const w = watchBlurtLeg(input({ txid: 'd'.repeat(40) }));
+		const stop = w.subscribe(() => {});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(get(w)).toEqual({ phase: 'checking' });
+		await vi.advanceTimersByTimeAsync(BLURT_LEG_INTERVAL_MS);
+		expect(get(w)).toEqual({ phase: 'seen', unasked: false });
+		stop();
+	});
 	it('a thrown error is "cannot ask", and looked at again', async () => {
 		vi.useFakeTimers();
 		chain.answers.push(new Error('down'));

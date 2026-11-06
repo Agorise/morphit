@@ -499,17 +499,9 @@
 			"menu_label": "聊天安全",
 			"confirm": {
 				"title": "聊天安全",
-				"body": "你是否希望離開此聊天後，自己就無法再重讀自己發出的訊息？對方仍然可以閱讀它們，其加密形式亦會留在鏈上。選擇「否」就可以好似普通通訊軟件一樣繼續閱讀自己的歷史記錄。",
-				"yes": "是，唔保留我的副本",
-				"no": "否，保留它們",
-				"current_keep": "目前:你保留副本,可以重新閱讀自己的訊息。",
-				"current_destroy": "目前:你不保留副本,離開後無法重新閱讀自己的訊息。"
-			},
-			"pdf_reminder": {
-				"title": "別忘記將此聊天匯出為 PDF",
-				"body": "在此模式下，你離開後將無法重讀自己的訊息（對方仍然可以）。如需保留副本，請現在儲存 PDF。",
-				"get_now": "立即取得我的 PDF",
-				"later": "稍後"
+				"body": "呢段聊天已經喺鏈上加密保存，永遠唔會唔見；不過如果你同人共用呢部電腦，對方可能睇到呢份未加密嘅副本。離開呢段聊天之後，要唔要喺呢部電腦刪除佢？",
+				"yes": "要，刪除佢",
+				"no": "唔使，保留佢"
 			},
 			"chain_unreachable": "無法連接區塊鏈以核對這位聯絡人的金鑰，因此訊息未有送出。在 Tor 與 I2P 上這很常見，因為建立連線需時較長。並無出錯——請稍後再試。",
 			"pub_pin_key_changed": "未發送：呢個人嘅金鑰改咗。對方重設金鑰時會咁，亦可能係有人想讀你嘅訊息。請打開 ⋮ → 驗證對方，先透過其他管道同對方比對新嘅安全碼，再決定接唔接受。",
@@ -839,7 +831,6 @@
 			"load_failed": "載入唔到較早嘅訊息。"
 		},
 		"legs": {
-			"waiting_payment": "等緊 @{peer} 用 {coins} 俾錢你。付款喺度出現之前，唔好發送任何嘢。",
 			"waiting_address": "等緊 @{peer} 話你知要俾錢去邊度。",
 			"checking_payment": "核對緊 @{peer} 嘅付款…",
 			"payment_short": "@{peer} 的付款與要求的不符——請看上面的收據。除非你自己的錢包顯示了正確的付款，否則不要發送任何東西。",
@@ -864,7 +855,8 @@
 			"wrong_address": "呢筆付款冇到達呢個聊天入面分享嘅 {coin} 地址。",
 			"short": "只有 {amount} {coin} 到達分享嘅地址——少過要求嘅數額。",
 			"seen": "已收到 {amount} {coin} · {n}/{required} 次確認",
-			"confirmed": "已收到 {amount} {coin} · 已確認",
+			"confirmed": "已收到 {amount} {coin} · {n, plural, other {# 次確認}}",
+			"checked_ago": "對上一次檢查係 {minutes, plural, other {# 分鐘}}之前",
 			"old": "這筆 {coin} 付款是在本聊天分享地址之前付的：它不是這筆交易的付款。"
 		}
 	},
@@ -2517,7 +2509,7 @@
 			"viewed_count": "{count} 次查看",
 			"viewed_tooltip": "此報價大致被查看的次數。只有你可見。",
 			"action_relist": "重新發佈",
-			"action_relist_hint": "用原始數值和條款為你預先填好表單。",
+			"action_relist_hint": "用原本嘅數值幫你預先填好表單，你可以改。",
 			"feedback_pick_prompt": "你同邊個完成咗交易？",
 			"not_visible_orderbook": "未在訂單簿中顯示",
 			"state_completed": "已完成",

@@ -68,6 +68,8 @@ export interface VerifyTriggerArgs {
 	readonly orderPermlink: string;
 	/** Chain transaction id from the funds-sent payload. */
 	readonly txid: string;
+	/** The funds-sent payload's block, when it carries one (v1.23.2). */
+	readonly block?: number;
 	/** 'incoming': the local user is the payee (seller) and `sender` is the
 	 *  counterparty. 'outgoing': the local user paid (buyer's self-check) and
 	 *  `recipient` is the counterparty. */
@@ -129,7 +131,8 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 			recipient: args.recipient,
 			sender: args.sender,
 			amountBlurt: expectedAmount,
-			memo: expectedMemo
+			memo: expectedMemo,
+			...(args.block !== undefined ? { block: args.block } : {})
 		})
 			.then((r) => {
 				// not_found / rpc_error right after broadcast just means the tx

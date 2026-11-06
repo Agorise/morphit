@@ -499,17 +499,9 @@
 			"menu_label": "Seguridad del chat",
 			"confirm": {
 				"title": "Seguridad del chat",
-				"body": "¿Quieres dejar de poder releer tus propios mensajes cuando salgas de este chat? Tu contraparte podrá seguir leyéndolos, y su forma cifrada se queda en la cadena. Elige No para seguir leyendo tu propio historial, como en cualquier mensajería.",
-				"yes": "Sí, no guardar mi copia",
-				"no": "No, conservarlos",
-				"current_keep": "Ahora mismo: guardas una copia y puedes releer tus propios mensajes.",
-				"current_destroy": "Ahora mismo: no guardas una copia, así que no puedes releer tus propios mensajes después de salir."
-			},
-			"pdf_reminder": {
-				"title": "No olvides exportar este chat a PDF",
-				"body": "En este modo no podrás releer tus propios mensajes cuando salgas (tu contraparte sí podrá). Guarda un PDF ahora si quieres conservar una copia.",
-				"get_now": "Obtener mi PDF ahora",
-				"later": "Más tarde"
+				"body": "Este chat está cifrado en la cadena, así que nunca se pierde, pero si compartes este ordenador con alguien, podría ver esta copia sin cifrar. ¿Quieres que este chat se borre de este ordenador cuando salgas de él?",
+				"yes": "Sí, bórralo",
+				"no": "No, guárdalo"
 			},
 			"chain_unreachable": "No se pudo contactar con la cadena de bloques para comprobar las claves de este contacto, así que el mensaje no se envió. Es habitual en Tor e I2P, donde las conexiones tardan más en establecerse. No ocurre nada malo: inténtelo de nuevo en un momento.",
 			"pub_pin_key_changed": "No enviado: la clave de esta persona cambió. Ocurre cuando restablece sus claves, o cuando alguien intenta leer tus mensajes. Abre ⋮ → Verificar contacto y compara el nuevo número de seguridad con esa persona por otro canal antes de aceptarlo.",
@@ -839,7 +831,6 @@
 			"load_failed": "No se pudieron cargar los mensajes anteriores."
 		},
 		"legs": {
-			"waiting_payment": "Esperando a que @{peer} te pague en {coins}. No envíes nada hasta que el pago aparezca aquí.",
 			"waiting_address": "Esperando a que @{peer} comparta adónde debes pagar.",
 			"checking_payment": "Comprobando el pago de @{peer}…",
 			"payment_short": "El pago de @{peer} no coincide con lo pedido; mira el recibo de arriba. No envíes nada salvo que tu propio monedero muestre el pago correcto.",
@@ -864,7 +855,8 @@
 			"wrong_address": "Este pago no llegó a la dirección de {coin} compartida en este chat.",
 			"short": "Solo llegaron {amount} {coin} a la dirección compartida: menos de lo pedido.",
 			"seen": "{amount} {coin} recibidos · {n}/{required} confirmaciones",
-			"confirmed": "{amount} {coin} recibidos · confirmado",
+			"confirmed": "{amount} {coin} recibidos · {n, plural, one {# confirmación} other {# confirmaciones}}",
+			"checked_ago": "comprobado por última vez hace {minutes, plural, one {# minuto} other {# minutos}}",
 			"old": "Este pago en {coin} se hizo antes de que se compartiera la dirección en este chat: no es un pago de esta operación."
 		}
 	},
@@ -2517,7 +2509,7 @@
 			"viewed_count": "{count} vistas",
 			"viewed_tooltip": "Conteo aproximado de veces que esta oferta ha sido vista. Solo visible para ti.",
 			"action_relist": "Volver a publicar",
-			"action_relist_hint": "Rellena el formulario por ti con los valores y términos originales.",
+			"action_relist_hint": "Rellena el formulario por ti con los valores originales, que puedes editar.",
 			"feedback_pick_prompt": "¿Con quién realizaste el intercambio?",
 			"not_visible_orderbook": "No visible en el libro de órdenes",
 			"state_completed": "Completado",

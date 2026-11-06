@@ -164,6 +164,12 @@ export interface FederationProbeConfig {
 	 *  while we're still catching up, instead of a misleading 'good'.
 	 *  Returns null when unknown (poller not yet running). */
 	readonly localLagBlocks?: () => number | null;
+	/** v1.23.2 — our own indexed block (from the local poller), written to the
+	 *  self row with the lag: the self row is never network-probed, so its
+	 *  cached_indexed_block / cached_chain_lag_sec were whatever an old probe
+	 *  left there (morphit.io listed itself 1.6 million blocks behind).
+	 *  Null when unknown (that keeps the stored values). */
+	readonly localIndexedBlock?: () => number | null;
 	/** v1.15.3 — the current chain head block (from the local poller). Used to
 	 *  decide whether an operator whose clearnet endpoint is unreachable is still
 	 *  ALIVE on-chain (recent action) → 'clearnet_blocked' (censored, not dead) vs
@@ -869,6 +875,9 @@ export class FederationProbeScheduler {
 		const selfClearnet =
 			selfGate === null ? null : clearnetEliminatedClaimAccepted(inst.origin, selfGate);
 		const branding = this.config.selfBranding?.() ?? null;
+		// v1.23.2: our own block and lag, as a peer's probe would read them.
+		const ownBlock = this.config.localIndexedBlock?.() ?? null;
+		const ownLagSec = lagBlocks !== null ? lagBlocks * 3 : null;
 		if (branding) {
 			await this.db.query(
 				`UPDATE known_instances SET
@@ -880,6 +889,8 @@ export class FederationProbeScheduler {
 					cached_contact_url = $5,
 					cached_alt_networks = $6,
 					cached_clearnet_eliminated = COALESCE($7, cached_clearnet_eliminated),
+					cached_indexed_block = COALESCE($8, cached_indexed_block),
+					cached_chain_lag_sec = COALESCE($9, cached_chain_lag_sec),
 					consecutive_failures = 0
 				 WHERE origin = $1`,
 				[
@@ -889,7 +900,9 @@ export class FederationProbeScheduler {
 					branding.tagline,
 					branding.contactUrl,
 					branding.altNetworks,
-					selfClearnet
+					selfClearnet,
+					ownBlock,
+					ownLagSec
 				]
 			);
 			return;
@@ -899,9 +912,11 @@ export class FederationProbeScheduler {
 				last_probed_at = NOW(),
 				last_probe_status = $2,
 				last_probe_error = NULL,
+				cached_indexed_block = COALESCE($3, cached_indexed_block),
+				cached_chain_lag_sec = COALESCE($4, cached_chain_lag_sec),
 				consecutive_failures = 0
 			 WHERE origin = $1`,
-			[inst.origin, selfStatus]
+			[inst.origin, selfStatus, ownBlock, ownLagSec]
 		);
 	}
 
@@ -1483,7 +1498,7 @@ export async function fetchJson<T>(
  * (which is built on it): https only, hidden-only instances never, no
  * Tor/I2P/Lokinet name to the system resolver, private hosts refused, EVERY
  * DNS record checked public and the connection pinned to the checked address,
- * redirects never followed (v1.23.1: unless the caller allows a few, and then
+ * redirects never followed (v1.23.2: unless the caller allows a few, and then
  * only to the same https origin, each hop checked again, the whole chain within
  * one timeout), the body capped while it streams.
  *
@@ -1506,7 +1521,7 @@ export type FetchPublicBytesOptions = {
 	 *  attacker-chosen host whose name server never answers cannot hold
 	 *  those threads (and with them every other lookup in the process). */
 	readonly resolve?: (hostname: string) => Promise<{ address: string; family: 4 | 6 }>;
-	/** (v1.23.1) Follow up to this many redirects, ONLY to https on the same
+	/** (v1.23.2) Follow up to this many redirects, ONLY to https on the same
 	 *  origin, each hop looked up, checked and pinned again exactly like the
 	 *  first. Default 0: a redirect is a failure (how a hostile peer would
 	 *  bounce the indexer to an address it did not check). Only the witness
@@ -1514,7 +1529,7 @@ export type FetchPublicBytesOptions = {
 	readonly sameOriginRedirects?: number;
 };
 
-/** (v1.23.1) Redirects are never followed more than this many times, whatever
+/** (v1.23.2) Redirects are never followed more than this many times, whatever
  *  a caller asks for. */
 export const FETCH_PUBLIC_MAX_REDIRECTS = 5;
 
@@ -1526,7 +1541,7 @@ export async function fetchPublicBytes(
 	url: string,
 	opts: FetchPublicBytesOptions = {}
 ): Promise<{ readonly bytes: Uint8Array; readonly contentType: string | null }> {
-	// (v1.23.1, review) ONE deadline for the whole chain: a hop gets what is
+	// (v1.23.2, review) ONE deadline for the whole chain: a hop gets what is
 	// left of it, so redirects cannot stretch a fetch past its timeout; and a
 	// hard cap on the hops (Infinity - 1 is Infinity).
 	const asked = Math.floor(opts.sameOriginRedirects ?? 0);

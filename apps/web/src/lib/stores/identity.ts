@@ -1293,12 +1293,45 @@ export async function restoreSessionFromReloadStash(): Promise<void> {
 	}
 }
 
+/** Open chats whose Chat Security says "delete it from this computer after I
+ *  leave" (v1.23.2). While one is open, leaving the page (closing or
+ *  reloading the tab) must not stash the session for a reload, and must lock
+ *  the other tabs too — leaving that chat locks Morphit on this computer. */
+let lockOnLeaveHolds = 0;
+
+/** A lock-on-leaving chat is open: hold until it is left. Returns the
+ *  release (idempotent). ConversationView holds; leaving it in-app calls
+ *  lockAllTabs() itself. */
+export function holdLockOnLeave(): () => void {
+	lockOnLeaveHolds++;
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		lockOnLeaveHolds--;
+	};
+}
+
 /** The `pagehide` handler. Wipes the in-memory keys (reset) on every
  *  pagehide; stashes them for a reload first — but NOT when the page is
- *  going into the back/forward cache (`persisted`), which is never a reload.
- *  Exported for tests. */
-export function handlePageHide(persisted: boolean): void {
-	if (!persisted) stashSessionForReload();
+ *  going into the back/forward cache (`persisted`), which is never a reload,
+ *  and NOT while a lock-on-leaving chat is open (v1.23.2): then the other
+ *  tabs are locked as well. `post` is injectable for tests. Exported for
+ *  tests. */
+export function handlePageHide(
+	persisted: boolean,
+	post: (msg: SessionHandoffMessage) => void = postToOtherTabs
+): void {
+	if (lockOnLeaveHolds > 0) {
+		dropReloadStash();
+		try {
+			post({ t: 'lock' });
+		} catch {
+			// Channel unavailable — this tab still locks below.
+		}
+	} else if (!persisted) {
+		stashSessionForReload();
+	}
 	reset();
 }
 

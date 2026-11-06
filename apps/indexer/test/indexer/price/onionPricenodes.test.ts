@@ -447,4 +447,101 @@ describe('parseAllMarketPrices / consensusOf (the pure parts)', () => {
 		expect(consensusOf([100, 101, 200, 201], { minAgree: 2, tolerance: 0.05 })).toBeNull();
 		expect(consensusOf([100, 200], { minAgree: 2, tolerance: 0.05 })).toBeNull();
 	});
+
+	it('the other coins in USD (v1.23.2): Bisq BTC-per-coin, Haveno <COIN>/XMR; ECX and unknown codes left out', async () => {
+		const { parseAllMarketPrices, PRICENODE_COINS } = await import('$indexer/price/pricenodes');
+		const now = Date.now();
+		const ts = now;
+		const bisq = parseAllMarketPrices(
+			{
+				data: [
+					{ currencyCode: 'USD', price: 75_000, timestampSec: ts },
+					{ currencyCode: 'ETH', price: 0.04, timestampSec: ts },
+					{ currencyCode: 'LTC', price: 0.0012, timestampSec: ts },
+					{ currencyCode: 'XMR', price: 0.0082, timestampSec: ts },
+					{ currencyCode: 'ECX', price: 0.000001, timestampSec: ts },
+					{ currencyCode: 'FOO', price: 0.5, timestampSec: ts },
+					{ currencyCode: 'BLURT', price: 0.00000001, timestampSec: ts },
+					{ currencyCode: 'DOGE', price: 0.000002, timestampSec: now - 7 * 3_600_000 }
+				]
+			},
+			now
+		)!;
+		expect(bisq.coinsUsd.get('ETH')).toBeCloseTo(3000, 9);
+		expect(bisq.coinsUsd.get('LTC')).toBeCloseTo(90, 9);
+		expect(bisq.coinsUsd.has('ECX')).toBe(false);
+		expect(bisq.coinsUsd.has('FOO')).toBe(false);
+		expect(bisq.coinsUsd.has('BLURT')).toBe(false);
+		expect(bisq.coinsUsd.has('XMR')).toBe(false);
+		expect(bisq.coinsUsd.has('DOGE')).toBe(false); // too old
+		const haveno = parseAllMarketPrices(
+			{
+				data: [
+					{ baseCurrencyCode: 'XMR', counterCurrencyCode: 'USD', price: 620, timestampMs: ts },
+					{ baseCurrencyCode: 'ETH', counterCurrencyCode: 'XMR', price: 4.84, timestampMs: ts },
+					{ baseCurrencyCode: 'ECX', counterCurrencyCode: 'XMR', price: 0.001, timestampMs: ts },
+					{ baseCurrencyCode: 'XMR', counterCurrencyCode: 'ETH', price: 0.2, timestampMs: ts }
+				]
+			},
+			now
+		)!;
+		expect(haveno.coinsUsd.get('ETH')).toBeCloseTo(3000.8, 6);
+		expect(haveno.coinsUsd.size).toBe(1);
+		// No USD price for the bridge coin: nothing.
+		const noUsd = parseAllMarketPrices(
+			{ data: [{ currencyCode: 'ETH', price: 0.04, timestampSec: ts }] },
+			now
+		)!;
+		expect(noUsd.coinsUsd.size).toBe(0);
+		expect([...PRICENODE_COINS].sort()).toEqual(
+			[
+				'ARRR',
+				'BCH',
+				'DAI',
+				'DASH',
+				'DCR',
+				'DOGE',
+				'ETH',
+				'LTC',
+				'SOL',
+				'USDC',
+				'USDT',
+				'XRP',
+				'ZEC'
+			].sort()
+		);
+	});
+
+	it("coinUsd: the nodes' consensus per coin; one node alone, or a coin outside the list, says nothing", async () => {
+		const { PricenodeConsensus } = await import('$indexer/price/pricenodes');
+		const ts = Date.now();
+		const bisqOf = (usdPerBtc: number, extra: Record<string, number>) => ({
+			data: [
+				{ currencyCode: 'USD', price: usdPerBtc, timestampSec: ts },
+				...Object.entries(extra).map(([c, p]) => ({ currencyCode: c, price: p, timestampSec: ts }))
+			]
+		});
+		const bodies: Record<string, unknown> = {
+			'http://a.onion': bisqOf(75_000, { ETH: 0.04, LTC: 0.0012 }), // ETH 3000, LTC 90
+			'http://b.onion': bisqOf(75_250, { ETH: 0.04 }), // ETH 3010
+			'http://c.onion': bisqOf(75_000, { ETH: 0.12 }) // ETH 9000: the odd one out
+		};
+		const fetchImpl = (async (url: string) => {
+			const origin = url.replace('/getAllMarketPrices', '');
+			return new Response(JSON.stringify(bodies[origin]), { status: 200 });
+		}) as unknown as typeof fetch;
+		const pn = new PricenodeConsensus({
+			urls: Object.keys(bodies),
+			fetchImpl,
+			refreshIntervalMs: 60_000,
+			tolerance: 0.05
+		});
+		expect(pn.coinUsd('ETH')).toBeNull(); // no round yet
+		await pn.refreshOnce();
+		expect(pn.coinUsd('ETH')).toBeCloseTo(3005, 9);
+		expect(pn.coinUsd('eth')).toBeCloseTo(3005, 9);
+		expect(pn.coinUsd('LTC')).toBeNull();
+		expect(pn.coinUsd('ECX')).toBeNull();
+		expect(pn.coinUsd('BTC')).toBeNull();
+	});
 });

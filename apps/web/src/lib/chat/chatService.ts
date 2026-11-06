@@ -2014,6 +2014,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 								orderOwner,
 								orderPermlink: decoded.payload.orderPermlink,
 								txid: decoded.payload.txid,
+								...(decoded.payload.block !== undefined ? { block: decoded.payload.block } : {}),
 								direction: 'incoming'
 							});
 						}

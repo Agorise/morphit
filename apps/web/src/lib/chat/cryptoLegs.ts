@@ -182,7 +182,6 @@ export interface TwoLegButtons {
 	/** The status line under the buttons, if any. */
 	readonly hint:
 		| 'waiting_address'
-		| 'waiting_payment'
 		| 'checking_payment'
 		| 'payment_short'
 		| 'payment_no_address'
@@ -265,7 +264,9 @@ export function twoLegButtons(
 				: paid && !destinationKnown
 					? 'waiting_asset_address'
 					: paymentState === 'unpaid'
-						? 'waiting_payment'
+						? // v1.23.2: no "Waiting for @x to pay you in …" line here (owner's
+							// call): the share-address button above says what to do.
+							null
 						: paymentState === 'checking'
 							? 'checking_payment'
 							: paymentState === 'no_address'

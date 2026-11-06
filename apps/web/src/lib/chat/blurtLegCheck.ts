@@ -27,6 +27,8 @@ export interface BlurtLegInput {
 	readonly asked?: number;
 	/** The memo he asked for ('' = any). */
 	readonly memo: string;
+	/** The receipt's block, when it carries one (v1.23.2). */
+	readonly block?: number;
 }
 
 export type BlurtLegState =
@@ -67,6 +69,9 @@ export function blurtLegStateOf(r: VerifyResult, input: BlurtLegInput): BlurtLeg
 	const unasked = input.asked === undefined || input.memo === '';
 	switch (r.kind) {
 		case 'verified':
+			// Its block not irreversible yet (v1.23.2 review): a fork could still
+			// drop it, and "seen" releases the other coin — wait.
+			if (r.provisional) return { phase: 'checking' };
 			return { phase: 'seen', unasked };
 		case 'mismatch':
 			return { phase: 'mismatch' };
@@ -97,7 +102,14 @@ const watchers = new Map<string, Readable<BlurtLegState>>();
 
 /** Watch one BLURT payment until the chain says what it is. */
 export function watchBlurtLeg(input: BlurtLegInput): Readable<BlurtLegState> {
-	const key = [input.txid, input.payer, input.payee, input.asked ?? '', input.memo].join('\u0000');
+	const key = [
+		input.txid,
+		input.payer,
+		input.payee,
+		input.asked ?? '',
+		input.memo,
+		input.block ?? ''
+	].join('\u0000');
 	const existing = watchers.get(key);
 	if (existing) return existing;
 	const w = readable<BlurtLegState>({ phase: 'checking' }, (set) => {
@@ -110,7 +122,8 @@ export function watchBlurtLeg(input: BlurtLegInput): Readable<BlurtLegState> {
 					recipient: input.payee,
 					sender: input.payer,
 					amountBlurt,
-					memo: input.memo
+					memo: input.memo,
+					...(input.block !== undefined ? { block: input.block } : {})
 				});
 			let r: VerifyResult;
 			try {
@@ -127,6 +140,10 @@ export function watchBlurtLeg(input: BlurtLegInput): Readable<BlurtLegState> {
 				const now = Date.now();
 				since ??= now;
 				st = { phase: st.phase, long: now - since >= BLURT_LEG_LONG_MS };
+				timer = setTimeout(() => void tick(), BLURT_LEG_INTERVAL_MS);
+			} else if (st.phase === 'checking') {
+				// Found, its block not final yet: look again (not counted as
+				// "not on chain").
 				timer = setTimeout(() => void tick(), BLURT_LEG_INTERVAL_MS);
 			} else {
 				since = null;

@@ -113,6 +113,12 @@ export interface ListingFeeResponse {
 	 *  these numbers as oracle input do so against this explicit
 	 *  recommendation.  See ADR-0039. */
 	readonly price_warning?: string;
+	/** v1.23.2: USD per 1 coin for every coin but BLURT, BTC, XMR and ECX
+	 *  (that is ETH, LTC, BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, USDT,
+	 *  USDC and DAI) this instance has a fresh price for — always USD,
+	 *  whatever `denomination_fiat` says. Display only. Absent when none is
+	 *  fresh. */
+	readonly asset_prices_usd?: Readonly<Record<string, number>>;
 }
 
 // ─── Order view counts ─────────────────────────────────────────────
@@ -1450,6 +1456,9 @@ interface PaymentCheckCommon {
 	 *  the request: a recent answer is reused, and kept while a re-check
 	 *  gets no answer. */
 	readonly checked_at: string;
+	/** (v1.23.2) Seconds since `checked_at`, by this instance's clock — so a
+	 *  browser whose clock is off can still tell how old the answer is. */
+	readonly age_seconds?: number;
 }
 
 /** 200 body, discriminated by `status`:

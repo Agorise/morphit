@@ -1081,6 +1081,12 @@ export interface FundsSentPayload {
 	 *  nothing else: it cannot spend or reveal any other funds. Wire name
 	 *  `tx_key`; an older client ignores it. */
 	readonly txKey?: string;
+	/** (v1.23.2) BLURT only: the block the transfer went into, as the sender's
+	 *  broadcast reported it. Lets both screens check the payment within
+	 *  seconds instead of waiting ~45 s for the block to become irreversible
+	 *  (chat/blurtVerify.ts — the transaction must be IN that block, so a
+	 *  wrong number proves nothing). Older readers ignore it. */
+	readonly block?: number;
 }
 
 /** A Monero transaction key as the chat carries it: 64 hex per key, the main
@@ -1932,6 +1938,12 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		}
 		wire.tx_key = p.txKey;
 	}
+	if (p.block !== undefined) {
+		if (p.method !== 'blurt' || !isBlockNumber(p.block)) {
+			throw new Error('payload: block is a BLURT block number');
+		}
+		wire.block = p.block;
+	}
 	// inline-fix — same latent bug as encodeAddressPayload:
 	// FundsSent USDT messages were dropping the network field on
 	// the wire, breaking the per-network explorer-link rendering
@@ -2508,6 +2520,11 @@ function optionalFieldsAddress(
 	return { ...base, amount, orderPermlink, note, memo, network, payjoinEndpoint };
 }
 
+/** A Blurt block number as a receipt may carry it (v1.23.2). */
+function isBlockNumber(n: unknown): n is number {
+	return typeof n === 'number' && Number.isSafeInteger(n) && n > 0 && n < 2 ** 31;
+}
+
 function optionalFieldsFundsSent(
 	base: FundsSentPayload,
 	o: Record<string, unknown>
@@ -2626,7 +2643,21 @@ function optionalFieldsFundsSent(
 		}
 		txKey = o.tx_key;
 	}
-	return { ...base, amount, orderPermlink, note, memo, network, ...(txKey ? { txKey } : {}) };
+	let block: number | undefined;
+	if (Object.hasOwn(o, 'block')) {
+		if (base.method !== 'blurt' || !isBlockNumber(o.block)) return null;
+		block = o.block;
+	}
+	return {
+		...base,
+		amount,
+		orderPermlink,
+		note,
+		memo,
+		network,
+		...(txKey ? { txKey } : {}),
+		...(block !== undefined ? { block } : {})
+	};
 }
 
 // ─── optionalFields for new payloads ───────────────────

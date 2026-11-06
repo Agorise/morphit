@@ -82,6 +82,10 @@ export type PaymentCheckState =
 			 *  it cannot be dated, so it cannot be checked here — the seller's
 			 *  own call, never "old" on one explorer's word. */
 			readonly disputed?: boolean;
+			/** (v1.23.2) When the explorers were last asked (ms). The instance
+			 *  serves its last answer while re-checks get none, so a count can be
+			 *  older than it looks; the receipt says so (confirmationLine). */
+			readonly checkedAtMs?: number;
 	  };
 
 /** Is `amount` less than `asked`? Decimal strings compared exactly (no
@@ -145,6 +149,13 @@ export async function checkOnce(
 	// not pass while its date is unknown. At 0 confirmations with no time it
 	// is in the mempool for every agreeing explorer: new, not old.
 	const disputed = d.tx_time_disputed === true;
+	// How old the answer is, as the instance measured it (v1.23.2 review): this
+	// device's clock is used only for the time since it arrived, so a device
+	// clock that is off never makes a fresh answer look old. An instance that
+	// does not say (older than v1.23.2): no age claimed.
+	const ageS = d.age_seconds;
+	const checkedAtMs =
+		typeof ageS === 'number' && Number.isFinite(ageS) && ageS >= 0 ? Date.now() - ageS * 1000 : NaN;
 	const undated =
 		input.sharedAtMs !== undefined && d.confirmations > 0 && !Number.isFinite(txMs) && !disputed;
 	return {
@@ -156,7 +167,35 @@ export async function checkOnce(
 		...(old ? { old: true } : {}),
 		...(undated ? { undated: true } : {}),
 		...(disputed ? { disputed: true } : {}),
-		...(input.asked === undefined ? { unasked: true } : {})
+		...(input.asked === undefined ? { unasked: true } : {}),
+		...(Number.isFinite(checkedAtMs) ? { checkedAtMs } : {})
+	};
+}
+
+/** (v1.23.2) Past this age an answer is called old on the receipt. */
+export const PAYMENT_CHECK_STALE_AFTER_MS = 2 * 60_000;
+
+/** (v1.23.2) What the receipt says about depth: the REAL number of
+ *  confirmations, also once enough ("✓ … · 4 confirmations" — it used to jump
+ *  from "0/3" to a bare "confirmed"), and how many minutes old the answer is
+ *  when the explorers have not answered for a while (null: fresh, or no time
+ *  known), so a stale "0/3" does not pass for a live one. */
+export function confirmationLine(
+	c: { readonly confirmations: number; readonly required: number; readonly checkedAtMs?: number },
+	nowMs: number
+): { confirmed: boolean; n: number; required: number; staleMinutes: number | null } {
+	const age = c.checkedAtMs === undefined ? NaN : nowMs - c.checkedAtMs;
+	const confirmed = c.confirmations >= c.required;
+	return {
+		confirmed,
+		n: c.confirmations,
+		required: c.required,
+		// Not for a confirmed answer (review): the instance keeps one for
+		// minutes on purpose, and the page stops asking — it is not stale.
+		staleMinutes:
+			!confirmed && Number.isFinite(age) && age >= PAYMENT_CHECK_STALE_AFTER_MS
+				? Math.floor(age / 60_000)
+				: null
 	};
 }
 

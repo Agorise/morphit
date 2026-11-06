@@ -4,10 +4,12 @@
  * GET /v1/listing-fee carries the USD prices the indexer holds for BLURT, BTC
  * and XMR (`blurt_price_fiat`, `btc_price_fiat`, `xmr_price_fiat`), and only
  * while they are fresh: the indexer omits a price its feed has not refreshed
- * (apps/indexer/src/api/listingFeeBody.ts). Same origin, so the browser
+ * (apps/indexer/src/api/listingFeeBody.ts). Since v1.23.2 it also carries
+ * `asset_prices_usd` — ETH, LTC, DOGE … in USD, display only
+ * (apps/indexer/src/indexer/price/coinQuotes.ts). Same origin, so the browser
  * contacts no price service of its own.
  *
- * Every other asset — and these three when the indexer has no fresh value or
+ * An asset with no fresh value there — and BLURT/BTC/XMR when the indexer
  * quotes in another currency — has no live price here: the result is null
  * ("unknown"), never a bundled constant.
  */
@@ -32,6 +34,26 @@ const FIELD: Partial<
 	XMR: 'xmr_price_fiat'
 };
 
+/** Read from `asset_prices_usd` (USD whatever the denomination). Not BLURT,
+ *  BTC or XMR (their own fields above) and not ECX (no provider is known to
+ *  mean this eCash by that ticker). */
+const OTHER: ReadonlySet<PricedSymbol> = new Set<PricedSymbol>([
+	// every coin but BLURT, BTC, XMR and ECX:
+	'ETH',
+	'LTC',
+	'BCH',
+	'DASH',
+	'DOGE',
+	'ZEC',
+	'ARRR',
+	'DCR',
+	'SOL',
+	'XRP',
+	'USDT',
+	'USDC',
+	'DAI'
+]);
+
 /** `load` reads /v1/listing-fee (null when the read fails). */
 export function createIndexerPriceSource(
 	load: () => Promise<Partial<ListingFeeResponse> | null>
@@ -55,7 +77,13 @@ export function createIndexerPriceSource(
 		name: 'indexer',
 		async getLiveUsd(symbol: PricedSymbol): Promise<PriceQuote | null> {
 			const field = FIELD[symbol];
-			if (field === undefined) return null;
+			if (field === undefined) {
+				if (!OTHER.has(symbol)) return null;
+				const { at, body } = await read();
+				const usd = body?.asset_prices_usd?.[symbol];
+				if (typeof usd !== 'number' || !Number.isFinite(usd) || usd <= 0) return null;
+				return { symbol, usd, fetchedAt: at, source: 'indexer' };
+			}
 			const { at, body } = await read();
 			if (body === null) return null;
 			if (

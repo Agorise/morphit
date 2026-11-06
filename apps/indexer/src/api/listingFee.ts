@@ -52,6 +52,7 @@ import { Hono } from 'hono';
 
 import type { Config } from '$config';
 import type { BlurtPriceSource } from '$indexer/price/source';
+import type { CoinQuoteSource } from '$indexer/price/coinQuotes';
 import { buildListingFeeBody } from '$api/listingFeeBody';
 
 export { buildListingFeeBody };
@@ -60,13 +61,16 @@ export function listingFeeRoute(
 	config: Config,
 	priceSource: BlurtPriceSource | null,
 	btcSource: BlurtPriceSource | null = null,
-	xmrSource: BlurtPriceSource | null = null
+	xmrSource: BlurtPriceSource | null = null,
+	coinQuotes: CoinQuoteSource | null = null
 ): Hono {
 	const app = new Hono();
 
 	app.get('/', (c) => {
 		c.header('cache-control', 'public, max-age=60');
-		return c.json(buildListingFeeBody(config, priceSource, btcSource, xmrSource));
+		return c.json(
+			buildListingFeeBody(config, priceSource, btcSource, xmrSource, new Date(), coinQuotes)
+		);
 	});
 
 	return app;

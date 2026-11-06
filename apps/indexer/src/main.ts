@@ -45,6 +45,7 @@ import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
 import { HeadTailer } from '$indexer/headTailer';
 import { createMultiAssetPriceSources, createDisagreementMonitor } from '$indexer/price/factory';
+import { createCoinQuoteSource } from '$indexer/price/coinQuotes';
 import { createFxRateSource } from '$indexer/fx/factory';
 import type { FxRateSource } from '$indexer/fx/source';
 import { startPeerPriceMonitor, type PeerSampleCycleResult } from '$indexer/price/peerPriceMonitor';
@@ -453,6 +454,11 @@ async function main(): Promise<void> {
 	}
 	const priceSource: BlurtPriceSource | null =
 		multiAssetSources.get('BLURT') ?? null;
+	// v1.23.2: the other coins' USD prices, for display beside amounts only
+	// (the onion pricenodes, plus one CoinGecko and one CryptoCompare request
+	// for all of them where clearnet is allowed). Stopped below.
+	const coinQuotes = createCoinQuoteSource(config);
+	coinQuotes?.start();
 
 	// ─── USD→fiat FX source (FX-aware first-order floor) ────────
 	// Powers the "$1 USD-equivalent" first-buy minimum for users
@@ -695,7 +701,7 @@ async function main(): Promise<void> {
 
 	const listingFeeApp = new Hono();
 	listingFeeApp.use('*', rateLimit('resource', config.resourceRatePerMin));
-	listingFeeApp.route('/', listingFeeRoute(config, priceSource, multiAssetSources.get('BTC') ?? null, multiAssetSources.get('XMR') ?? null));
+	listingFeeApp.route('/', listingFeeRoute(config, priceSource, multiAssetSources.get('BTC') ?? null, multiAssetSources.get('XMR') ?? null, coinQuotes));
 	app.route('/v1/listing-fee', listingFeeApp);
 
 	// GET /v1/payment-check — is a trade's BTC / XMR payment on chain, how much
@@ -1312,6 +1318,7 @@ async function main(): Promise<void> {
 		// Stop the FX source's background refresh (same shape: no
 		// in-flight work to drain, just clear the interval timer).
 		if (fxSource) fxSource.stop();
+		coinQuotes?.stop();
 
 		// Stop the peer-price monitor's recurring tick.
 		// Same shape as priceSource.stop(): no in-flight work to

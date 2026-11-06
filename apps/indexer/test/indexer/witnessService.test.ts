@@ -225,7 +225,7 @@ describe('pictures', () => {
 	});
 
 	it('remembers a failure for an hour', async () => {
-		// v1.23.1: one attempt is the witness's own picture, then the Blurt image
+		// v1.23.2: one attempt is the witness's own picture, then the Blurt image
 		// proxy; a failure of both is remembered for the hour.
 		let n = 0;
 		const { svc, calls, advance } = setup({
@@ -248,7 +248,7 @@ describe('pictures', () => {
 		]);
 	});
 
-	describe("v1.23.1: the Blurt image proxy when the picture's own host fails", () => {
+	describe("v1.23.2: the Blurt image proxy when the picture's own host fails", () => {
 		it('a dead host (no DNS records) → the same picture from imgp.blurt.blog, following its own redirects only', async () => {
 			const { svc, calls } = setup({
 				fetchImage: async (u) => {

@@ -62,14 +62,20 @@
 		type HistoryState,
 		type LocalMessage
 	} from '$lib/chat/chatService';
-	import { liveIdentity, isUnlocked, isPairedReadOnly } from '$stores/identity';
+	import {
+		liveIdentity,
+		isUnlocked,
+		isPairedReadOnly,
+		holdLockOnLeave,
+		lockAllTabs
+	} from '$stores/identity';
 	import { showToast } from '$lib/stores/toast';
 	import { getProfileCached } from '$lib/indexer/profileCache';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { selfProfile } from '$lib/stores/selfProfile';
 	import {
-		writeChatSecurityMode,
-		readChatSecurityMode,
+		readLockOnLeave,
+		writeLockOnLeave,
 		readChatSecurityNudgeSeen,
 		markChatSecurityNudgeSeen
 	} from '$stores/chatSecurity';
@@ -133,6 +139,7 @@
 	import { isGoodsAsset } from '@morphit/asset-registry';
 	import { computeOrderPayAmount } from '$lib/orders/payAmount';
 	import { fetchFxRates } from '$lib/orders/fx';
+	import { fiatPerCoin } from '$lib/orders/coinValue';
 	import { isOrderLive } from '$lib/orders/orderExpiry';
 	import { nowMs } from '$lib/stores/now';
 	import { getPrice, liveUsd, priceStore, type PricedSymbol } from '$lib/prices';
@@ -599,17 +606,43 @@
 		overflowMenuOpen = false;
 	}
 
-	// Chat Security (self-copy / "destroy on leave" opt-in).
+	// Chat Security (v1.23.2): "Do you want this chat deleted from this
+	// computer after you leave the chat?" Yes = lock on leaving: when this chat
+	// is left (another page or chat, closing or reloading the tab), Morphit
+	// locks on this computer in every tab, so the words are gone from memory
+	// and nobody can reopen a chat without the password. Nothing is stored on
+	// disk, and your own messages always keep their on-chain copy
+	// (stores/chatSecurity.ts).
 	/** One-time nudge: a red dot on the kebab until the user opens Chat
 	 *  Security once. Initialised safe (no dot) and corrected from storage in
 	 *  the $effect below, so a seen user never sees a false dot flash. */
 	let chatSecurityNudgeSeen = $state(true);
-	/** Confirm modal ("destroy after you leave this chat?"). */
+	/** Confirm modal ("delete this chat from this computer after you leave?"). */
 	let chatSecurityConfirmOpen = $state(false);
-	/** Follow-up "grab your PDF" reminder, shown only after choosing destroy. */
-	let pdfReminderOpen = $state(false);
+	/** This chat's lock-on-leaving choice, read from this computer. */
+	let lockOnLeave = $state(false);
 	$effect(() => {
 		chatSecurityNudgeSeen = readChatSecurityNudgeSeen(me);
+	});
+	$effect(() => {
+		lockOnLeave = readLockOnLeave(me, peer, orderPermlink ?? null);
+	});
+	// While this chat locks on leaving, closing or reloading the tab keeps no
+	// reload stash and locks the other tabs (identity.handlePageHide).
+	$effect(() => {
+		if (!lockOnLeave) return;
+		return holdLockOnLeave();
+	});
+	// Leaving the chat in the app: this view closes (it is rebuilt for every
+	// partner and order), or the account behind it changes. The choice is read
+	// at that moment, so saying No just before leaving is honoured.
+	$effect(() => {
+		const account = me;
+		const partner = peer;
+		const order = orderPermlink ?? null;
+		return () => {
+			if (account !== '' && readLockOnLeave(account, partner, order)) lockAllTabs();
+		};
 	});
 
 	/** Kebab → "Chat Security": close the menu, clear the one-time dot, and
@@ -620,39 +653,21 @@
 		chatSecurityNudgeSeen = true;
 		chatSecurityConfirmOpen = true;
 	}
-	/** "Yes, destroy them" → PFS mode + the PDF reminder. */
+	/** "Yes, delete it" → lock on leaving this chat. */
 	function onChatSecurityConfirm(): void {
 		chatSecurityConfirmOpen = false;
-		writeChatSecurityMode(me, 'destroy');
-		pdfReminderOpen = true;
+		writeLockOnLeave(me, peer, orderPermlink ?? null, true);
+		lockOnLeave = true;
 	}
-	/** "No, keep them" → the default keep-history mode. */
+	/** "No, keep it" → stay unlocked when leaving (the default). */
 	function onChatSecurityCancel(): void {
 		chatSecurityConfirmOpen = false;
-		writeChatSecurityMode(me, 'keep');
+		writeLockOnLeave(me, peer, orderPermlink ?? null, false);
+		lockOnLeave = false;
 	}
-	/** Escape / backdrop click: close without changing the mode. */
+	/** Escape / backdrop click: close without changing the choice. */
 	function onChatSecurityDismiss(): void {
 		chatSecurityConfirmOpen = false;
-	}
-	/** The mode in force when the dialog opens, said in its body so the
-	 *  choice is made knowing the current one. */
-	const chatSecurityBody = $derived.by(() => {
-		if (!chatSecurityConfirmOpen) return '';
-		const current =
-			readChatSecurityMode(me) === 'destroy'
-				? $_('chat.security.confirm.current_destroy')
-				: $_('chat.security.confirm.current_keep');
-		return `${$_('chat.security.confirm.body') as string}\n\n${current as string}`;
-	});
-	/** "Get my PDF now" → export, then close. */
-	async function onPdfReminderConfirm(): Promise<void> {
-		pdfReminderOpen = false;
-		await exportChatToPdf();
-	}
-	/** "Later" → just close; destroy mode is already saved. */
-	function onPdfReminderCancel(): void {
-		pdfReminderOpen = false;
 	}
 
 	function openVerifyPeer(): void {
@@ -978,6 +993,9 @@
 		/** true when opened from the composer "Pay now"
 		 *  (no pill), so PayBlurtModal shows a validated amount input. */
 		amountEditable?: boolean;
+		/** v1.23.2: what one BLURT is worth in the order's currency, for the
+		 *  "(≈11 BRL)" beside the amount (absent when unknown). */
+		fiatPerUnit?: { readonly value: number; readonly currency: string };
 	} | null>(null);
 
 	async function fetchAdmission(): Promise<void> {
@@ -1215,7 +1233,10 @@
 			// the seller's verification can compare expected vs
 			// actual.  Omit the field entirely if no memo was used
 			// (encoder handles undefined as "field absent").
-			...(stagedArgs.memo !== '' ? { memo: stagedArgs.memo } : {})
+			...(stagedArgs.memo !== '' ? { memo: stagedArgs.memo } : {}),
+			// v1.23.2: the block the transfer went into, so both screens check it
+			// within seconds (chat/blurtVerify.ts).
+			...(Number.isSafeInteger(args.blockNum) && args.blockNum > 0 ? { block: args.blockNum } : {})
 		};
 
 		try {
@@ -1854,6 +1875,8 @@
 		amount?: string;
 		memo?: string;
 		txKey?: string;
+		/** A BLURT receipt's block (v1.23.2: checked from it within seconds). */
+		block?: number;
 		/** When the message was sent (ms; NaN when unknown). */
 		at: number;
 	};
@@ -1890,7 +1913,8 @@
 					orderPermlink: order,
 					txid: d.payload.txid,
 					at,
-					...(d.payload.txKey !== undefined ? { txKey: d.payload.txKey } : {})
+					...(d.payload.txKey !== undefined ? { txKey: d.payload.txKey } : {}),
+					...(d.payload.block !== undefined ? { block: d.payload.block } : {})
 				});
 			}
 		}
@@ -2050,7 +2074,8 @@
 			payer: legPlan.iSendAsset ? peer : me,
 			payee: p.to.address,
 			...(Number.isFinite(asked) && asked > 0 ? { asked } : {}),
-			memo: p.to.memo ?? ''
+			memo: p.to.memo ?? '',
+			...(p.receipt.block !== undefined ? { block: p.receipt.block } : {})
 		};
 	});
 	let legBlurtCheck = $state<BlurtLegState | null>(null);
@@ -2062,7 +2087,8 @@
 					legBlurtInput.payer,
 					legBlurtInput.payee,
 					legBlurtInput.asked ?? '',
-					legBlurtInput.memo
+					legBlurtInput.memo,
+					legBlurtInput.block ?? ''
 				].join('\u0000')
 	);
 	$effect(() => {
@@ -2281,9 +2307,34 @@
 	 *  app itself (broadcast, no manual txid), so it goes to PayBlurtModal with
 	 *  a validated in-modal amount; every other asset records an external
 	 *  payment (amount + txid) via FundsSentModal, locked to the order's asset. */
-	function startPayNow(): void {
+	/** v1.23.2 review: true while "Send …" fetches a fresh price (at most
+	 *  PAY_PREFILL_WAIT_MS): the button shows busy and a second click does
+	 *  nothing. */
+	let payNowPending = $state(false);
+	async function startPayNow(): Promise<void> {
+		if (payNowPending) return;
 		markSentArgs = null;
+		// v1.23.2: a fresh price and FX table first. The pre-fill counts a quote
+		// as live for 10 minutes and the chat fetched one only when it opened, so
+		// a seller who waited for confirmations got an empty amount (0.000).
+		const refreshing = refreshPayPrefill();
+		if (refreshing !== null) {
+			payNowPending = true;
+			try {
+				await refreshing;
+			} finally {
+				payNowPending = false;
+			}
+			// Another pay window opened meanwhile (a card's "Pay"): leave it be.
+			if (payBlurtArgs !== null || showFundsSentModal) return;
+		}
 		if (payNowSendsBlurt) {
+			// v1.23.2 review: when the other side asked for BLURT in this thread
+			// (his account, amount, memo), pay exactly that — it is what both
+			// screens check the transfer against. The share window now fills
+			// that amount in (with its jitter), so the order's own pre-fill
+			// computed here would differ from it and read as a mismatch.
+			if (payPeerBlurtAsk(true)) return;
 			payBlurtArgs = {
 				recipient: peer,
 				// pre-fill the order's fiat-minimum equivalent in BLURT (0 when
@@ -2291,7 +2342,8 @@
 				amount: payPrefillAmount ?? 0,
 				memo: '',
 				orderPermlink: orderPermlink ?? undefined,
-				amountEditable: true
+				amountEditable: true,
+				...(payFiatPerUnit !== null ? { fiatPerUnit: payFiatPerUnit } : {})
 			};
 		} else {
 			showFundsSentModal = true;
@@ -2303,26 +2355,56 @@
 	 *  amount is his to enter: the order's pre-fill is for its asset. */
 	/** Pay the BLURT the asset sender asked for: his newest ask in this
 	 *  thread (account, amount, memo) — what his screen checks it against. */
+	/** The peer's newest BLURT ask for this order in the thread — read from
+	 *  the messages themselves (moneyFacts exists only for two-leg trades),
+	 *  with the same rules: decrypted, from a verified sender, posted. */
+	function newestPeerBlurtAsk(): {
+		address: string;
+		amount?: string;
+		memo?: string;
+	} | null {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const m = messages[i]!;
+			if (m.decryptFailed || m.senderUnverified === true || m.state === 'failed') continue;
+			if (m.sender === me) continue;
+			const d = decodePayload(m.text);
+			if (d.kind !== 'address' || d.payload.method !== 'blurt') continue;
+			const order = d.payload.orderPermlink ?? m.orderPermlink ?? null;
+			if (order !== null && order !== orderPermlink) continue;
+			return {
+				address: d.payload.address,
+				...(d.payload.amount !== undefined ? { amount: d.payload.amount } : {}),
+				...(d.payload.memo !== undefined ? { memo: d.payload.memo } : {})
+			};
+		}
+		return null;
+	}
+
 	function startPayBlurtLeg(): void {
-		const ask = [...moneyFacts]
-			.reverse()
-			.find(
-				(f) =>
-					f.kind === 'address' &&
-					f.method === 'blurt' &&
-					!f.mine &&
-					(f.orderPermlink === null || f.orderPermlink === orderPermlink)
-			);
-		if (ask === undefined || ask.address === undefined) return;
+		payPeerBlurtAsk(false);
+	}
+
+	/** Open PayBlurtModal on the peer's newest BLURT ask for this order;
+	 *  false (nothing opened) when he has not posted one. `orderIsBlurt`: the
+	 *  order's own asset is BLURT, so its pre-fill and "(≈ fiat)" are BLURT's
+	 *  (a two-leg BLURT leg pays for another coin: no pre-fill, no fiat). */
+	function payPeerBlurtAsk(orderIsBlurt: boolean): boolean {
+		const ask = newestPeerBlurtAsk();
+		if (ask === null) return false;
 		const amount = ask.amount !== undefined ? Number(ask.amount) : NaN;
+		const asked = Number.isFinite(amount) && amount > 0;
 		markSentArgs = null;
 		payBlurtArgs = {
 			recipient: ask.address,
-			amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+			// No amount asked: the order's own pre-fill (a BLURT order), still
+			// editable.
+			amount: asked ? amount : orderIsBlurt ? (payPrefillAmount ?? 0) : 0,
 			memo: ask.memo ?? '',
 			orderPermlink: orderPermlink ?? undefined,
-			amountEditable: !(Number.isFinite(amount) && amount > 0)
+			amountEditable: !asked,
+			...(orderIsBlurt && payFiatPerUnit !== null ? { fiatPerUnit: payFiatPerUnit } : {})
 		};
+		return true;
 	}
 
 	/** Open the address window for these coins (a two-leg button), or with the
@@ -2335,6 +2417,41 @@
 	/** Where to be PAID for a two-leg trade, the amount is asked for: without
 	 *  it, any dust payment would pass the check (v1.21.17). */
 	let addressShareRequireAmount = $state(false);
+
+	/** v1.23.2: what the trade is worth, for filling in "Amount you ask to be
+	 *  paid" — the order's amount (its minimum for a range) in its currency. */
+	const addressShareOrderValue = $derived.by(
+		(): { amount: number; currency: string } | undefined => {
+			const o = orderRecord;
+			if (!o || o.amount_min === null || !(o.amount_min > 0)) return undefined;
+			return { amount: o.amount_min, currency: o.fiat_currency };
+		}
+	);
+	/** v1.23.2: what one `coin` is worth in the order's currency right now: at
+	 *  the order's own price for the order's coin (so it matches what is
+	 *  traded), at the live market price for a coin it is paid in. Null when
+	 *  unknown (no live price for that coin on this instance). */
+	async function coinValueNow(coin: ChatAssetTicker): Promise<number | null> {
+		const o = orderRecord;
+		if (!o) return null;
+		if (!isGoodsAsset(o.asset) && chatAssetFromTicker(o.asset) === coin) {
+			const refreshing = refreshPayPrefill();
+			if (refreshing !== null) await refreshing;
+			return payFiatPerUnit?.value ?? null;
+		}
+		const symbol = coin.toUpperCase() as PricedSymbol;
+		const [quote] = await Promise.all([
+			getPrice(symbol).catch(() => null),
+			fxTable === null
+				? fetchFxRates(resolveOrigin(MORPHIT_INDEXER_ORIGIN), fetch)
+						.then((res) => {
+							if (res.kind === 'ok') fxTable = res.table;
+						})
+						.catch(() => {})
+				: Promise.resolve()
+		]);
+		return fiatPerCoin(liveUsd(quote), fxTable, o.fiat_currency);
+	}
 
 	// ─── Pay-now amount pre-fill ──────────────────────────
 	// Seed the "Pay now" modal with the crypto amount equal to the order's fiat
@@ -2363,6 +2480,39 @@
 		}
 	});
 
+	/** v1.23.2: make the pre-fill live right now — the order asset's price
+	 *  (lib/prices caches a read for a minute) and the FX table — so the
+	 *  derived pre-fill below is computed from a fresh quote when a pay
+	 *  window opens. Only a market/spread order needs them (null otherwise:
+	 *  the window opens at once), and the window never waits more than
+	 *  PAY_PREFILL_WAIT_MS for them (a slow Tor/I2P link): past it, it opens
+	 *  with what is known, and an amount that cannot be said stays blank. */
+	const PAY_PREFILL_WAIT_MS = 2_500;
+	function refreshPayPrefill(): Promise<void> | null {
+		const o = orderRecord;
+		if (!o || isGoodsAsset(o.asset)) return null;
+		const pm = o.price_model as Record<string, unknown> | null;
+		if (!pm || pm.kind !== 'spread') return null;
+		const fresh = Promise.all([
+			getPrice(o.asset as PricedSymbol).catch(() => null),
+			fxTable === null
+				? fetchFxRates(resolveOrigin(MORPHIT_INDEXER_ORIGIN), fetch)
+						.then((res) => {
+							if (res.kind === 'ok') fxTable = res.table;
+						})
+						.catch(() => {})
+				: Promise.resolve()
+		]).then(() => {});
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const cap = new Promise<void>((res) => {
+			timer = setTimeout(res, PAY_PREFILL_WAIT_MS);
+		});
+		return Promise.race([fresh, cap]).then(async () => {
+			clearTimeout(timer);
+			await tick();
+		});
+	}
+
 	const payPrefill = $derived.by(() => {
 		const o = orderRecord;
 		if (!o) return null;
@@ -2383,6 +2533,16 @@
 		const decimals = Math.min(getAsset(asset).decimals, 8);
 		const rounded = Number(pre.amount.toFixed(decimals));
 		return Number.isFinite(rounded) && rounded > 0 ? rounded : null;
+	});
+	/** v1.23.2: one unit of the order's asset in the order's currency, at the
+	 *  order's own price (the pre-fill's rate), for the "(≈11 BRL)" beside the
+	 *  amount. Null when there is no pre-fill. */
+	const payFiatPerUnit = $derived.by((): { value: number; currency: string } | null => {
+		const pre = payPrefill;
+		const o = orderRecord;
+		if (pre === null || !o || o.amount_min === null || !(pre.amount > 0)) return null;
+		const value = o.amount_min / pre.amount;
+		return Number.isFinite(value) && value > 0 ? { value, currency: o.fiat_currency } : null;
 	});
 	/** String form for FundsSentModal.initialAmount (empty = no seed). */
 	const payPrefillStr = $derived(payPrefillAmount !== null ? String(payPrefillAmount) : '');
@@ -3105,6 +3265,8 @@
 									type="button"
 									class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
 									onclick={startPayNow}
+									disabled={payNowPending}
+									aria-busy={payNowPending}
 									aria-label={$_(moneyFlowLabels.payNowAria.key, {
 										values: moneyFlowLabels.payNowAria.values
 									}) as string}
@@ -3120,16 +3282,6 @@
 								>
 									{#if legButtons.sendAssetUnchecked}
 										{$_('chat.legs.send_unchecked', { values: { peer } })}
-									{:else if legButtons.hint === 'waiting_payment'}
-										{$_('chat.legs.waiting_payment', {
-											values: {
-												peer,
-												coins: formatDisjunction(
-													legPlan.paymentCoins.map((c) => c.toUpperCase()),
-													currentLang
-												)
-											}
-										})}
 									{:else if legButtons.hint === 'waiting_address'}
 										{$_('chat.legs.waiting_address', { values: { peer } })}
 									{:else if legButtons.hint === 'checking_payment'}
@@ -3188,6 +3340,8 @@
 								type="button"
 								class="min-h-11 w-full rounded-lg border border-morphit-teal/40 px-4 py-2 text-sm font-semibold text-morphit-teal transition-colors hover:border-morphit-teal hover:bg-morphit-teal/5 dark:border-morphit-emerald/40 dark:text-morphit-emerald dark:hover:bg-morphit-emerald/10 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 sm:text-xs"
 								onclick={startPayNow}
+								disabled={payNowPending}
+								aria-busy={payNowPending}
 								aria-label={$_(moneyFlowLabels.payNowAria.key, {
 									values: moneyFlowLabels.payNowAria.values
 								}) as string}
@@ -3237,7 +3391,13 @@
 					</p>
 				</div>
 			{/if}
-			<ChatComposer {peer} {orderPermlink} onSend={handleSend} isLocked={locked} />
+			<ChatComposer
+				{peer}
+				{orderPermlink}
+				onSend={handleSend}
+				isLocked={locked}
+				persistDraft={!lockOnLeave}
+			/>
 		{/if}
 	{:else}
 		<!-- needs_fee (and no order context): show pay-to-message
@@ -3278,6 +3438,8 @@
 			barterAcceptedMethods ??
 			(orderChatAsset ? [orderChatAsset] : undefined)}
 		requireAmount={addressShareRequireAmount}
+		orderValue={addressShareOrderValue}
+		coinValue={coinValueNow}
 		onShare={handleAddressShare}
 		onCancel={() => (showAddressShareModal = false)}
 	/>
@@ -3360,6 +3522,7 @@
 		recipient={payBlurtArgs.recipient}
 		amount={payBlurtArgs.amount}
 		amountEditable={payBlurtArgs.amountEditable ?? false}
+		fiatPerUnit={payBlurtArgs.fiatPerUnit}
 		memo={payBlurtArgs.memo}
 		payHint={payPrefillHint}
 		onPaid={handlePaidBlurt}
@@ -3394,34 +3557,19 @@
 	/>
 {/if}
 
-<!-- Chat Security confirm: "destroy after you leave this chat?".
-     Yes → PFS "destroy" mode + the PDF reminder below; No → the default
-     keep-history mode (self-copy, readable own history); Escape or a
-     backdrop click changes nothing. The body says which mode is on now. -->
+<!-- Chat Security confirm (v1.23.2): "delete this chat from this computer
+     after you leave?" Yes → lock on leaving this chat; No → stay unlocked (the
+     default); Escape or a backdrop click changes nothing. -->
 <ConfirmModal
 	bind:open={chatSecurityConfirmOpen}
 	title={$_('chat.security.confirm.title') as string}
-	body={chatSecurityBody}
+	body={$_('chat.security.confirm.body') as string}
 	confirmLabel={$_('chat.security.confirm.yes') as string}
 	cancelLabel={$_('chat.security.confirm.no') as string}
 	variant="neutral"
 	onConfirm={onChatSecurityConfirm}
 	onCancel={onChatSecurityCancel}
 	onDismiss={onChatSecurityDismiss}
-/>
-
-<!-- follow-up reminder, shown only after choosing destroy: grab a PDF
-     before your own history becomes unrecoverable. "Get my PDF now" exports;
-     "Later" just closes (destroy mode is already saved either way). -->
-<ConfirmModal
-	bind:open={pdfReminderOpen}
-	title={$_('chat.security.pdf_reminder.title') as string}
-	body={$_('chat.security.pdf_reminder.body') as string}
-	confirmLabel={$_('chat.security.pdf_reminder.get_now') as string}
-	cancelLabel={$_('chat.security.pdf_reminder.later') as string}
-	variant="neutral"
-	onConfirm={onPdfReminderConfirm}
-	onCancel={onPdfReminderCancel}
 />
 
 <!-- Backlog item 11 — opt-in OOB fingerprint panel.

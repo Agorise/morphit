@@ -1,12 +1,17 @@
-#!/usr/bin/env tsx
 /**
  * chat-security-preference-smoke.
  *
- * The per-account Chat Security preference (stores/chatSecurity.ts) gates a
- * security-critical decision: whether every sent message carries a self-copy
- * (keep-history) or not (PFS "destroy on leave"). A regression that silently
- * flipped the default, leaked one account's posture into another, or nagged
- * forever would be a real bug — so this pins the store's contract.
+ * The per-chat Chat Security preference (stores/chatSecurity.ts) decides two
+ * security-relevant things, so this pins the store's contract:
+ *
+ *   v1.23.2 — "Do you want this chat deleted from this computer after you
+ *   leave the chat?" Yes = LOCK ON LEAVING that chat (per account, partner
+ *   and order; off by default); and your own messages ALWAYS keep their
+ *   on-chain self-copy, so nothing is ever lost. An account that had chosen
+ *   the old "don't keep my copy" ('destroy') keeps its copy now and gets
+ *   lock-on-leaving in every chat instead, until it says No in one. A
+ *   regression that silently stopped the self-copy, leaked one account's or
+ *   one chat's choice into another, or nagged forever would be a real bug.
  *
  * We shim window.localStorage (node has none) BEFORE importing the store, so
  * safeStorage sees a working backend and the round-trips are exercised for
@@ -32,7 +37,8 @@ const backing = new Map<string, string>();
 
 const {
 	readChatSecurityMode,
-	writeChatSecurityMode,
+	readLockOnLeave,
+	writeLockOnLeave,
 	readChatSecurityNudgeSeen,
 	markChatSecurityNudgeSeen,
 	shouldAttachSelfCopy
@@ -50,70 +56,83 @@ function check(name: string, cond: boolean, detail = ''): void {
 	}
 }
 
-// 1. Default mode is 'keep' for an account with nothing stored.
-check('1 — unset account defaults to keep', readChatSecurityMode('alice') === 'keep');
-
-// 2/3. Round-trip destroy → keep.
-writeChatSecurityMode('alice', 'destroy');
-check('2 — writes + reads back destroy', readChatSecurityMode('alice') === 'destroy');
-writeChatSecurityMode('alice', 'keep');
-check('3 — writes + reads back keep', readChatSecurityMode('alice') === 'keep');
-
-// 4. Per-account isolation — alice's posture must not bleed into bob.
-writeChatSecurityMode('alice', 'destroy');
+// 1. Lock on leaving is off by default.
 check(
-	'4 — mode is per-account (bob unaffected by alice)',
-	readChatSecurityMode('bob') === 'keep' && readChatSecurityMode('alice') === 'destroy'
+	'1 — unset chat does not lock on leaving',
+	readLockOnLeave('alice', 'bob', 'order-x') === false
 );
 
-// 5. Defensive parse — any non-exact value falls back to keep (safe default),
-//    never accidentally to destroy.
-backing.set('morphit.chatSecurity.mode.mallory', 'DESTROY'); // wrong case
-check('5a — non-exact "DESTROY" → keep', readChatSecurityMode('mallory') === 'keep');
-backing.set('morphit.chatSecurity.mode.mallory', 'destroyed'); // superstring
-check('5b — "destroyed" → keep', readChatSecurityMode('mallory') === 'keep');
-backing.set('morphit.chatSecurity.mode.mallory', ''); // empty
-check('5c — empty value → keep', readChatSecurityMode('mallory') === 'keep');
-backing.set('morphit.chatSecurity.mode.mallory', 'destroy'); // exact
-check('5d — exact "destroy" → destroy', readChatSecurityMode('mallory') === 'destroy');
+// 2/3. Round-trip on → off.
+writeLockOnLeave('alice', 'bob', 'order-x', true);
+check('2 — writes + reads back on', readLockOnLeave('alice', 'bob', 'order-x') === true);
+writeLockOnLeave('alice', 'bob', 'order-x', false);
+check('3 — writes + reads back off', readLockOnLeave('alice', 'bob', 'order-x') === false);
 
-// 6. Nudge default — an account that has never opened the item should see the
-//    dot (nudgeSeen === false).
-check('6 — fresh account has NOT seen the nudge (dot shows)', readChatSecurityNudgeSeen('carol') === false);
+// 4. Per chat: another partner, another order, another account are apart.
+writeLockOnLeave('alice', 'bob', 'order-x', true);
+check(
+	'4 — per chat (partner, order) and per account',
+	readLockOnLeave('alice', 'carol', 'order-x') === false &&
+		readLockOnLeave('alice', 'bob', null) === false &&
+		readLockOnLeave('dave', 'bob', 'order-x') === false
+);
 
-// 7. One-time: after marking, it stays seen (dot cleared for good).
+// 5. Only the exact stored values count.
+backing.set('morphit.chatSecurity.lockOnLeave.mallory\u0000bob\u0000', 'yes');
+check('5 — a non-exact value → off', readLockOnLeave('mallory', 'bob', null) === false);
+
+// 6-7. Your own messages always keep their on-chain copy (nothing is lost),
+//      whatever is stored — including the old 'destroy'.
+backing.set('morphit.chatSecurity.mode.frank', 'destroy');
+check('6 — the self-copy mode is always keep', readChatSecurityMode('frank') === 'keep');
+check(
+	'7 — so every message carries its self-copy',
+	shouldAttachSelfCopy(readChatSecurityMode('frank')) === true
+);
+
+// 8. The old 'destroy' becomes lock-on-leaving in every chat, until No.
+check(
+	'8a — legacy destroy → locks on leaving any chat',
+	readLockOnLeave('frank', 'bob', null) === true && readLockOnLeave('frank', 'zoe', 'o') === true
+);
+writeLockOnLeave('frank', 'bob', null, false);
+check(
+	'8b — No in one chat overrides it there only',
+	readLockOnLeave('frank', 'bob', null) === false && readLockOnLeave('frank', 'zoe', 'o') === true
+);
+
+// 9. The one-time nudge.
+check(
+	'9a — fresh account has NOT seen the nudge (dot shows)',
+	readChatSecurityNudgeSeen('carol') === false
+);
 markChatSecurityNudgeSeen('carol');
-check('7a — after mark, nudge is seen', readChatSecurityNudgeSeen('carol') === true);
-markChatSecurityNudgeSeen('carol'); // idempotent
-check('7b — marking again is idempotent', readChatSecurityNudgeSeen('carol') === true);
+check('9b — after mark, nudge is seen', readChatSecurityNudgeSeen('carol') === true);
+check('9c — nudge per-account (dave still sees it)', readChatSecurityNudgeSeen('dave') === false);
 
-// 8. Nudge is per-account too.
-check('8 — nudge per-account (dave still sees it)', readChatSecurityNudgeSeen('dave') === false);
-
-// 9. Empty-account safety — no key to write, safe fallbacks, no nagging.
-check('9a — empty account mode → keep', readChatSecurityMode('') === 'keep');
-writeChatSecurityMode('', 'destroy'); // must be a no-op
-check('9b — writing empty account is a no-op', backing.has('morphit.chatSecurity.mode.') === false);
-check('9c — empty account nudge → seen (never nag)', readChatSecurityNudgeSeen('') === true);
-markChatSecurityNudgeSeen(''); // no-op
-check('9d — marking empty account is a no-op', backing.has('morphit.chatSecurity.nudgeSeen.') === false);
-
-// 10. Keys are namespaced under morphit.chatSecurity.* (no collisions with
-//     other settings, and inspectable).
-writeChatSecurityMode('erin', 'destroy');
-markChatSecurityNudgeSeen('erin');
+// 10. Empty account: safe defaults, nothing written.
+const before = backing.size;
+writeLockOnLeave('', 'bob', null, true);
+markChatSecurityNudgeSeen('');
 check(
-	'10 — namespaced storage keys',
-	backing.get('morphit.chatSecurity.mode.erin') === 'destroy' &&
-		backing.get('morphit.chatSecurity.nudgeSeen.erin') === '1'
+	'10 — empty account: off, never nags, writes nothing',
+	readLockOnLeave('', 'bob', null) === false &&
+		readChatSecurityNudgeSeen('') === true &&
+		backing.size === before
 );
 
-// 11-13. shouldAttachSelfCopy — the pure gate the send + retry paths use to
-//        decide whether a self-copy rides on chain. This is the security
-//        pivot: 'destroy' MUST return false (nothing recoverable after leave).
-check('11 — keep → attach self-copy', shouldAttachSelfCopy('keep') === true);
-check('12 — destroy → do NOT attach self-copy (PFS)', shouldAttachSelfCopy('destroy') === false);
-check('13 — undefined mode → attach (safe keep default)', shouldAttachSelfCopy(undefined) === true);
+// 11. Keys are namespaced under morphit.chatSecurity.* (inspectable).
+check(
+	'11 — namespaced storage keys',
+	backing.get('morphit.chatSecurity.lockOnLeave.alice\u0000bob\u0000order-x') === '1' &&
+		backing.get('morphit.chatSecurity.nudgeSeen.carol') === '1'
+);
+
+// 12. The send path's switch itself is unchanged (chatService still uses it).
+check(
+	'12 — keep / undefined → attach the self-copy',
+	shouldAttachSelfCopy('keep') && shouldAttachSelfCopy(undefined)
+);
 
 console.log(`\n${count} scenarios, ${failures} failed`);
 if (failures > 0) {

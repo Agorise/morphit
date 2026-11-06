@@ -480,6 +480,9 @@ export interface PaymentCheckResponse {
 	/** v1.21.17 — the explorers' times for it cannot both be true: the payment
 	 *  cannot be dated, so it cannot be checked here (the seller's own call). */
 	readonly tx_time_disputed?: true;
+	/** v1.23.2 — seconds since `checked_at` by the instance's clock. Absent
+	 *  from an older instance. */
+	readonly age_seconds?: number;
 }
 
 export function getPaymentCheck(

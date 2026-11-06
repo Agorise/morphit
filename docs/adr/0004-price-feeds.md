@@ -312,3 +312,21 @@ unimported `providers/coingecko.ts` and `providers/composite.ts`, the
 `fallback.ts` constants, `setProvider()` and the `PriceProvider`
 interface were deleted, so the browser has no code path to a price
 API. The amendments above describe the state before this change.
+
+### 2026-11 (v1.23.2) — the other coins, for display
+
+`/v1/listing-fee` now also carries `asset_prices_usd`: USD per coin for
+ETH, LTC, BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, USDT, USDC and DAI,
+while the indexer holds a fresh price for them
+(`apps/indexer/src/indexer/price/coinQuotes.ts`). It is always USD,
+whatever the fee denomination; the browser converts it with the
+instance's FX table. The prices come from the onion pricenodes'
+consensus (the same rounds that price BTC and XMR; Bisq quotes these
+coins in BTC, Haveno as `<COIN>/XMR`) and, only where the instance may
+reach clearnet, one CoinGecko and one CryptoCompare request for all of
+them together. The answers are combined with the median-anchored robust
+mean; a coin with no fresh, plausible answer is absent. They are used
+only to show what an amount is worth and to fill an amount in — never
+for a fee, a check or anything signed. eCash (ECX) is left out: other
+coins use the same ticker, so a provider's "ECX" may not be this eCash.
+The browser still asks no price service of its own.

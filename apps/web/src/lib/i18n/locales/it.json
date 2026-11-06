@@ -499,17 +499,9 @@
 			"menu_label": "Sicurezza della chat",
 			"confirm": {
 				"title": "Sicurezza della chat",
-				"body": "Vuoi smettere di poter rileggere i tuoi messaggi dopo aver lasciato questa chat? La tua controparte potrà ancora leggerli, e la loro forma cifrata resta sulla catena. Scegli No per continuare a leggere la tua cronologia, come in una normale app di messaggistica.",
-				"yes": "Sì, non tenere la mia copia",
-				"no": "No, conservali",
-				"current_keep": "Al momento: conservi una copia e puoi rileggere i tuoi messaggi.",
-				"current_destroy": "Al momento: non conservi una copia, quindi non puoi rileggere i tuoi messaggi dopo essere uscito."
-			},
-			"pdf_reminder": {
-				"title": "Non dimenticare di esportare questa chat in PDF",
-				"body": "In questa modalità non potrai rileggere i tuoi messaggi dopo essere uscito (la tua controparte sì). Salva ora un PDF se vuoi tenerne una copia.",
-				"get_now": "Ottieni il mio PDF ora",
-				"later": "Più tardi"
+				"body": "Questa chat è cifrata sulla blockchain, quindi non va mai persa, ma se condividi questo computer con qualcuno, potrebbe vedere questa copia non cifrata. Vuoi che questa chat venga cancellata da questo computer quando la lasci?",
+				"yes": "Sì, cancellala",
+				"no": "No, tienila"
 			},
 			"chain_unreachable": "Non è stato possibile raggiungere la blockchain per verificare le chiavi di questo contatto, quindi il messaggio non è stato inviato. Su Tor e I2P succede spesso, perché le connessioni impiegano più tempo a stabilirsi. Non c’è nulla che non va: riprova tra un momento.",
 			"pub_pin_key_changed": "Non inviato: la chiave di questa persona è cambiata. Succede quando reimposta le sue chiavi, oppure quando qualcuno cerca di leggere i tuoi messaggi. Apri ⋮ → Verifica contatto e confronta il nuovo numero di sicurezza con questa persona tramite un altro canale prima di accettarlo.",
@@ -839,7 +831,6 @@
 			"load_failed": "Impossibile caricare i messaggi precedenti."
 		},
 		"legs": {
-			"waiting_payment": "In attesa che @{peer} ti paghi in {coins}. Non inviare nulla finché il pagamento non compare qui.",
 			"waiting_address": "In attesa che @{peer} indichi dove pagare.",
 			"checking_payment": "Verifica del pagamento di @{peer}…",
 			"payment_short": "Il pagamento di @{peer} non corrisponde a quanto richiesto: vedi la ricevuta qui sopra. Non inviare nulla a meno che il tuo wallet mostri il pagamento giusto.",
@@ -864,7 +855,8 @@
 			"wrong_address": "Questo pagamento non è arrivato all'indirizzo {coin} condiviso in questa chat.",
 			"short": "Sono arrivati solo {amount} {coin} all'indirizzo condiviso: meno di quanto richiesto.",
 			"seen": "{amount} {coin} ricevuti · {n}/{required} conferme",
-			"confirmed": "{amount} {coin} ricevuti · confermato",
+			"confirmed": "{amount} {coin} ricevuti · {n, plural, one {# conferma} other {# conferme}}",
+			"checked_ago": "ultimo controllo {minutes, plural, one {# minuto} other {# minuti}} fa",
 			"old": "Questo pagamento in {coin} è stato fatto prima che l'indirizzo fosse condiviso in questa chat: non è un pagamento per questo scambio."
 		}
 	},
@@ -2517,7 +2509,7 @@
 			"viewed_count": "{count} visualizzazioni",
 			"viewed_tooltip": "Conteggio approssimativo di quante volte quest'offerta è stata visualizzata. Visibile solo a te.",
 			"action_relist": "Ripubblica ordine",
-			"action_relist_hint": "Precompila il modulo per te con i valori e i termini originali.",
+			"action_relist_hint": "Precompila il modulo per te con i valori originali, che puoi modificare.",
 			"feedback_pick_prompt": "Con chi hai scambiato?",
 			"not_visible_orderbook": "Non visibile nel book ordini",
 			"state_completed": "Completato",

@@ -83,6 +83,8 @@ export interface VerifyEffect {
 	readonly orderOwner: string;
 	readonly orderPermlink: string;
 	readonly txid: string;
+	/** The funds-sent payload's block, when it carries one (v1.23.2). */
+	readonly block?: number;
 	/** Always 'incoming' here: the listener only routes payments TO us. */
 	readonly direction: 'incoming';
 }
@@ -189,6 +191,7 @@ export function planListenerDispatch(
 					orderOwner: ctx.orderOwner,
 					orderPermlink,
 					txid: decoded.payload.txid,
+					...(decoded.payload.block !== undefined ? { block: decoded.payload.block } : {}),
 					direction: 'incoming'
 				};
 			}

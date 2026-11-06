@@ -17,6 +17,7 @@ import {
 	identity,
 	handlePageHide,
 	handleSessionHandoffMessage,
+	holdLockOnLeave,
 	reset,
 	restoreSessionFromReloadStash
 } from './identity';
@@ -149,6 +150,32 @@ describe('what a reload leaves on disk', () => {
 		unlockWith(ENV_A);
 		handlePageHide(false);
 		expect(sessionDump()).toBe('');
+	});
+});
+
+describe('Chat Security: lock on leaving (v1.23.2)', () => {
+	it('closing or reloading the tab of such a chat keeps no stash, and locks the other tabs', () => {
+		remembered(ENV_A);
+		controlledByWorker();
+		unlockWith(ENV_A);
+		const release = holdLockOnLeave();
+		const posted: unknown[] = [];
+		handlePageHide(false, (m) => posted.push(m));
+		release();
+		expect(sessionDump()).toBe('');
+		expect(posted).toEqual([{ t: 'lock' }]);
+		expect(get(identity).state).toBe('locked');
+	});
+
+	it('once that chat is left (released), a reload is stashed as before', () => {
+		remembered(ENV_A);
+		controlledByWorker();
+		unlockWith(ENV_A);
+		holdLockOnLeave()();
+		const posted: unknown[] = [];
+		handlePageHide(false, (m) => posted.push(m));
+		expect(sessionDump()).not.toBe('');
+		expect(posted).toEqual([]);
 	});
 });
 

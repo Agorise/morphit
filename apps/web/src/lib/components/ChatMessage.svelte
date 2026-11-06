@@ -29,7 +29,7 @@
 	 */
 
 	import { _ } from 'svelte-i18n';
-	import type { PaymentCheckState } from '$lib/chat/paymentChecks';
+	import { confirmationLine, type PaymentCheckState } from '$lib/chat/paymentChecks';
 	import type { LocalMessage } from '$lib/chat/chatService';
 	import {
 		CHAT_CONSTANTS,
@@ -575,6 +575,7 @@
 				orderOwner: owner,
 				orderPermlink: p.orderPermlink,
 				txid: p.txid,
+				...(p.block !== undefined ? { block: p.block } : {}),
 				direction: isOutgoing ? 'outgoing' : 'incoming'
 			});
 			// A claim from someone the order is not engaged with records
@@ -605,7 +606,8 @@
 				recipient: chainRecipient,
 				sender: chainSender,
 				amountBlurt: amountNum,
-				memo: p.memo ?? ''
+				memo: p.memo ?? '',
+				...(p.block !== undefined ? { block: p.block } : {})
 			}).then((r) => {
 				if (myGen !== verifyGen) return; // stale — superseded
 				const transient = r.kind === 'not_found' || r.kind === 'rpc_error';
@@ -1179,7 +1181,11 @@
 					{#if p.note}
 						<p class="text-xs italic opacity-80">{p.note}</p>
 					{/if}
-					{#if p.orderPermlink}
+					<!-- v1.23.2: the note now starts as "For order: order-…"; then the
+					     card does not say it twice. Only when the note IS that text
+					     (review): a note that merely mentions the order ("NOT for
+					     order-…") must not hide what the payload says. -->
+					{#if p.orderPermlink && (p.note ?? '').trim() !== `${$_('chat.address.pill_for_order')}: ${p.orderPermlink}`}
 						<p class="text-xs opacity-60">
 							{$_('chat.address.pill_for_order')}:
 							<code class="ml-1 font-mono">{p.orderPermlink}</code>
@@ -1287,12 +1293,30 @@
 								{$_('chat.payment_check.wrong_address', { values: { coin } })}
 							{:else if c.short}
 								{$_('chat.payment_check.short', { values: { amount: c.amount, coin } })}
-							{:else if c.confirmations >= c.required}
-								✓ {$_('chat.payment_check.confirmed', { values: { amount: c.amount, coin } })}
 							{:else}
-								{$_('chat.payment_check.seen', {
-									values: { amount: c.amount, coin, n: c.confirmations, required: c.required }
-								})}
+								<!-- v1.23.2: the real number of confirmations, also once
+								     enough, and how old the answer is when the explorers have
+								     not answered for a while (the instance serves its last
+								     answer meanwhile). -->
+								{@const line = confirmationLine(c, Date.now())}
+								<span>
+									{#if line.confirmed}
+										✓ {$_('chat.payment_check.confirmed', {
+											values: { amount: c.amount, coin, n: line.n }
+										})}
+									{:else}
+										{$_('chat.payment_check.seen', {
+											values: { amount: c.amount, coin, n: line.n, required: line.required }
+										})}
+									{/if}
+									{#if line.staleMinutes !== null}
+										<span class="opacity-75" data-testid="payment-check-age"
+											>· {$_('chat.payment_check.checked_ago', {
+												values: { minutes: line.staleMinutes }
+											})}</span
+										>
+									{/if}
+								</span>
 							{/if}
 						</div>
 					{/if}

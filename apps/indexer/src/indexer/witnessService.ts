@@ -18,7 +18,7 @@
  * only, and the FAQ promises the browser contacts nothing else. So a witness's
  * picture is fetched HERE, by fetchPublicBytes — the federation probe's
  * guarded fetch (https only, every DNS record public, connection pinned,
- * redirects refused, body capped; v1.23.1: when that host fails, the Blurt
+ * redirects refused, body capped; v1.23.2: when that host fails, the Blurt
  * image proxy's copy, which may redirect within its own origin) — checked to BE
  * a PNG, JPEG, GIF or WebP by
  * its first bytes (never SVG: it can carry script), and served from
@@ -86,12 +86,12 @@ export const AVATAR_CACHE_MAX_BYTES = 48 * 1024 * 1024;
 export const AVATAR_FETCH_CONCURRENCY = 4;
 /** One picture fetch, at most — the DNS lookup and (for the Blurt image proxy)
  *  its redirects included. A picture is at most two of them: its own host, then
- *  the proxy (v1.23.1). */
+ *  the proxy (v1.23.2). */
 export const AVATAR_FETCH_TIMEOUT_MS = 10_000;
 /** Largest width or height accepted (a small file can declare a huge image
  *  that a browser would then have to allocate). */
 export const AVATAR_MAX_SIDE = 4096;
-/** (v1.23.1) When a witness's picture cannot be fetched from its own host, the
+/** (v1.23.2) When a witness's picture cannot be fetched from its own host, the
  *  Blurt image proxy's copy of that account's picture. Many pictures were on
  *  hosts that have since gone (on 2026-11-05 img.blurt.world went with the
  *  blurt.world domain, and images.blurt.buzz does not exist); the proxy still
@@ -647,7 +647,7 @@ export class WitnessService {
 							onProxy ? { sameOriginRedirects: AVATAR_PROXY_REDIRECTS } : undefined
 						);
 					} catch (own) {
-						// v1.23.1: the picture's own host failed (gone, down, not an
+						// v1.23.2: the picture's own host failed (gone, down, not an
 						// image): the Blurt image proxy's copy of that account's picture.
 						if (onProxy) throw own;
 						const proxied = avatarProxyUrl(owner);

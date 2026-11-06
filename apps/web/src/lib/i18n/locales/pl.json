@@ -499,17 +499,9 @@
 			"menu_label": "Bezpieczeństwo czatu",
 			"confirm": {
 				"title": "Bezpieczeństwo czatu",
-				"body": "Czy chcesz, by po wyjściu z tego czatu nie dało się już ponownie przeczytać twoich własnych wiadomości? Druga strona nadal będzie mogła je czytać, a ich zaszyfrowana postać zostaje w łańcuchu. Wybierz Nie, by dalej czytać własną historię, jak w zwykłym komunikatorze.",
-				"yes": "Tak, nie zachowuj mojej kopii",
-				"no": "Nie, zachowaj je",
-				"current_keep": "Obecnie: zachowujesz kopię i możesz ponownie czytać własne wiadomości.",
-				"current_destroy": "Obecnie: nie zachowujesz kopii, więc po wyjściu nie możesz ponownie przeczytać własnych wiadomości."
-			},
-			"pdf_reminder": {
-				"title": "Nie zapomnij wyeksportować tego czatu do PDF",
-				"body": "W tym trybie po wyjściu nie przeczytasz ponownie własnych wiadomości (druga strona nadal może). Zapisz teraz PDF, jeśli chcesz zachować kopię.",
-				"get_now": "Pobierz mój PDF teraz",
-				"later": "Później"
+				"body": "Ten czat jest zaszyfrowany w blockchainie, więc nigdy nie przepadnie, ale jeśli dzielisz ten komputer z kimś innym, ta osoba może zobaczyć tę niezaszyfrowaną kopię. Czy chcesz, aby ten czat został usunięty z tego komputera po wyjściu z niego?",
+				"yes": "Tak, usuń go",
+				"no": "Nie, zachowaj go"
 			},
 			"chain_unreachable": "Nie udało się połączyć z blockchainem, aby sprawdzić klucze tego kontaktu, więc wiadomość nie została wysłana. W sieciach Tor i I2P zdarza się to często, bo nawiązanie połączenia trwa dłużej. Nic złego się nie stało — spróbuj ponownie za chwilę.",
 			"pub_pin_key_changed": "Nie wysłano: klucz tej osoby się zmienił. Dzieje się tak, gdy zresetuje swoje klucze — albo gdy ktoś próbuje czytać twoje wiadomości. Otwórz ⋮ → Zweryfikuj rozmówcę i porównaj z tą osobą nowy numer bezpieczeństwa innym kanałem, zanim go zaakceptujesz.",
@@ -839,7 +831,6 @@
 			"load_failed": "Nie udało się wczytać starszych wiadomości."
 		},
 		"legs": {
-			"waiting_payment": "Czekamy, aż @{peer} zapłaci ci w {coins}. Nie wysyłaj nic, dopóki płatność się tu nie pojawi.",
 			"waiting_address": "Czekamy, aż @{peer} poda, dokąd masz zapłacić.",
 			"checking_payment": "Sprawdzanie płatności od @{peer}…",
 			"payment_short": "Płatność od @{peer} nie zgadza się z żądaną — zobacz potwierdzenie powyżej. Nic nie wysyłaj, chyba że twój własny portfel pokazuje właściwą płatność.",
@@ -864,7 +855,8 @@
 			"wrong_address": "Ta płatność nie dotarła na adres {coin} udostępniony na tym czacie.",
 			"short": "Na udostępniony adres dotarło tylko {amount} {coin} — mniej, niż proszono.",
 			"seen": "Otrzymano {amount} {coin} · potwierdzenia: {n}/{required}",
-			"confirmed": "Otrzymano {amount} {coin} · potwierdzone",
+			"confirmed": "Otrzymano {amount} {coin} · {n, plural, one {# potwierdzenie} few {# potwierdzenia} many {# potwierdzeń} other {# potwierdzenia}}",
+			"checked_ago": "ostatnio sprawdzono {minutes, plural, one {# minutę} few {# minuty} many {# minut} other {# minuty}} temu",
 			"old": "Ta płatność {coin} została wykonana, zanim adres udostępniono na tym czacie: to nie jest płatność za tę transakcję."
 		}
 	},
@@ -2517,7 +2509,7 @@
 			"viewed_count": "{count} wyświetleń",
 			"viewed_tooltip": "Przybliżona liczba wyświetleń tej oferty. Widoczna tylko dla Ciebie.",
 			"action_relist": "Opublikuj ponownie",
-			"action_relist_hint": "Wstępnie wypełnia formularz pierwotnymi warunkami; zapłacisz nową opłatę za publikację.",
+			"action_relist_hint": "Wstępnie wypełnia formularz pierwotnymi wartościami, które możesz zmienić.",
 			"feedback_pick_prompt": "Z kim handlowałeś?",
 			"not_visible_orderbook": "Niewidoczne w księdze zleceń",
 			"state_completed": "Zakończone",

@@ -62,10 +62,37 @@ const FIAT: ReadonlySet<string> = new Set([
 	'USD'
 ]);
 
-/** What one node's answer says: units of each fiat per 1 BTC and per 1 XMR. */
+/**
+ * The other coins morphit trades whose USD price a pricenode answer can give
+ * (v1.23.2, display only: the "(≈11 BRL)" beside an amount). Bisq quotes them
+ * as BTC per coin, Haveno as `<COIN>/XMR` (XMR per coin); either is turned
+ * into USD through that node's own BTC or XMR price. Left out on purpose:
+ * BLURT (its own sources), BTC and XMR (above), and ECX, whose ticker other
+ * coins also use, so a node's "ECX" may not be this eCash.
+ */
+export const PRICENODE_COINS: ReadonlySet<string> = new Set([
+	// every coin but BLURT, BTC, XMR and ECX:
+	'ETH',
+	'LTC',
+	'BCH',
+	'DASH',
+	'DOGE',
+	'ZEC',
+	'ARRR',
+	'DCR',
+	'SOL',
+	'XRP',
+	'USDT',
+	'USDC',
+	'DAI'
+]);
+
+/** What one node's answer says: units of each fiat per 1 BTC and per 1 XMR,
+ *  and USD per 1 of each of PRICENODE_COINS it quotes. */
 export interface PricenodeQuote {
 	readonly btc: ReadonlyMap<string, number>;
 	readonly xmr: ReadonlyMap<string, number>;
+	readonly coinsUsd: ReadonlyMap<string, number>;
 }
 
 const positive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
@@ -89,6 +116,8 @@ export function parseAllMarketPrices(body: unknown, now: number): PricenodeQuote
 	const xmrFiat = new Map<string, number>();
 	let btcPerXmr: number | null = null;
 	let xmrPerBtc: number | null = null;
+	const btcPerCoin = new Map<string, number>();
+	const xmrPerCoin = new Map<string, number>();
 	for (const item of data) {
 		if (typeof item !== 'object' || item === null) continue;
 		const e = item as Record<string, unknown>;
@@ -98,6 +127,7 @@ export function parseAllMarketPrices(body: unknown, now: number): PricenodeQuote
 			const code = e.currencyCode.toUpperCase();
 			if (FIAT.has(code)) btcFiat.set(code, e.price);
 			else if (code === 'XMR') btcPerXmr = e.price;
+			else if (PRICENODE_COINS.has(code)) btcPerCoin.set(code, e.price);
 		} else if (
 			typeof e.baseCurrencyCode === 'string' &&
 			typeof e.counterCurrencyCode === 'string'
@@ -107,6 +137,7 @@ export function parseAllMarketPrices(body: unknown, now: number): PricenodeQuote
 			const counter = e.counterCurrencyCode.toUpperCase();
 			if (base === 'XMR' && FIAT.has(counter)) xmrFiat.set(counter, e.price);
 			else if (base === 'BTC' && counter === 'XMR') xmrPerBtc = e.price;
+			else if (counter === 'XMR' && PRICENODE_COINS.has(base)) xmrPerCoin.set(base, e.price);
 		}
 	}
 	// Each shape quotes one coin directly and the other through the BTC/XMR rate.
@@ -116,7 +147,14 @@ export function parseAllMarketPrices(body: unknown, now: number): PricenodeQuote
 	if (xmrPerBtc !== null) {
 		for (const [f, v] of xmrFiat) if (!btcFiat.has(f)) btcFiat.set(f, v * xmrPerBtc);
 	}
-	return { btc: btcFiat, xmr: xmrFiat };
+	const coinsUsd = new Map<string, number>();
+	const btcUsd = btcFiat.get('USD');
+	const xmrUsd = xmrFiat.get('USD');
+	if (positive(btcUsd)) for (const [c, v] of btcPerCoin) coinsUsd.set(c, v * btcUsd);
+	if (positive(xmrUsd)) {
+		for (const [c, v] of xmrPerCoin) if (!coinsUsd.has(c)) coinsUsd.set(c, v * xmrUsd);
+	}
+	return { btc: btcFiat, xmr: xmrFiat, coinsUsd };
 }
 
 export interface Consensus {
@@ -273,6 +311,19 @@ export class PricenodeConsensus {
 		const f = fiat.toUpperCase();
 		const vals = this.currentQuotes()
 			.map((q) => (asset === 'BTC' ? q.btc : q.xmr).get(f))
+			.filter(positive);
+		return (
+			consensusOf(vals, { minAgree: this.minAgree, tolerance: this.opts.tolerance })?.value ?? null
+		);
+	}
+
+	/** Consensus USD price of 1 `code` (one of PRICENODE_COINS), or null.
+	 *  Display only (v1.23.2). No I/O. */
+	coinUsd(code: string): number | null {
+		const c = code.toUpperCase();
+		if (!PRICENODE_COINS.has(c)) return null;
+		const vals = this.currentQuotes()
+			.map((q) => q.coinsUsd.get(c))
 			.filter(positive);
 		return (
 			consensusOf(vals, { minAgree: this.minAgree, tolerance: this.opts.tolerance })?.value ?? null

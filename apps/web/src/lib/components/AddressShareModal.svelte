@@ -31,7 +31,15 @@
 	import { untrack } from 'svelte';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { _, locale } from 'svelte-i18n';
-	import { parseAmountInput } from '$lib/orders/amountInput';
+	import {
+		filterAmountTyping,
+		formatAmountForInput,
+		parseAmountInput
+	} from '$lib/orders/amountInput';
+	import { coinAmountForFiat } from '$lib/orders/coinValue';
+	import { getAsset } from '$lib/assets/registry';
+	import { formatFiatCode } from '$i18n/formatters';
+	import { get } from 'svelte/store';
 	import {
 		encodeAddressPayload,
 		fitsChatMessage,
@@ -81,9 +89,25 @@
 		 *  seller of a crypto-for-crypto trade is paid, and the payment check
 		 *  compares what arrives with what he asked. */
 		requireAmount?: boolean;
+		/** (v1.23.2) What the trade is worth (the order's amount and currency):
+		 *  the amount asked is filled in for the chosen coin, so nobody has to
+		 *  ask "how much BTC is 11 BRL?". */
+		orderValue?: { readonly amount: number; readonly currency: string };
+		/** (v1.23.2) What one coin is worth in `orderValue.currency` right now
+		 *  (null when unknown): the order's own price for the order's coin,
+		 *  the live market price for a payment coin. */
+		coinValue?: (coin: ChatAssetTicker) => Promise<number | null>;
 	}
 
-	let { orderPermlink, onShare, onCancel, allowedMethods, requireAmount = false }: Props = $props();
+	let {
+		orderPermlink,
+		onShare,
+		onCancel,
+		allowedMethods,
+		requireAmount = false,
+		orderValue,
+		coinValue
+	}: Props = $props();
 
 	/** every method tab in on-screen order. `visibleMethods` filters
 	 *  this to `allowedMethods` when the modal is restricted (barter). */
@@ -148,7 +172,63 @@
 	 *  the shape checks below still fail it). */
 	const amountParse = $derived(parseAmountInput(amount, $locale));
 	const canonicalAmount = $derived(amountParse.ok ? amountParse.value : amount.trim());
-	let note = $state('');
+	/** v1.23.2: the note starts as "For order: order-…" (it used to sit in a box
+	 *  of its own above the address); it travels in the encrypted address
+	 *  message, so both partners can read it there, later too. */
+	let note = $state(
+		untrack(() =>
+			orderPermlink ? `${get(_)('chat.address.pill_for_order')}: ${orderPermlink}` : ''
+		)
+	);
+
+	/** v1.23.2: what one of the chosen coin is worth in the order's currency
+	 *  (null: unknown), and whether the person has typed an amount of their
+	 *  own (then it is never overwritten — for that coin: picking another coin
+	 *  fills in that coin's amount, since a figure typed for BTC is no amount
+	 *  of XMR). */
+	let fiatPerOne = $state<number | null>(null);
+	let amountTouched = $state(false);
+	let filledFor: string | null = null;
+	$effect(() => {
+		const coin = method;
+		const valueOf = coinValue;
+		const value = orderValue;
+		if (filledFor !== null && filledFor !== coin) amountTouched = false;
+		filledFor = coin;
+		fiatPerOne = null;
+		if (!untrack(() => amountTouched)) amount = '';
+		if (!valueOf) return;
+		let current = true;
+		void valueOf(coin)
+			.catch(() => null)
+			.then((per) => {
+				if (!current) return;
+				fiatPerOne = per;
+				if (untrack(() => amountTouched) || !value || per === null) return;
+				// At most 8 decimals, like the Send pre-fill: 0.003233107016 XMR is
+				// exact but no one's idea of an amount to ask.
+				const n = coinAmountForFiat(value.amount, per, Math.min(getAsset(coin).decimals, 8));
+				if (n !== null) amount = formatAmountForInput(n, get(locale));
+			});
+		return () => {
+			current = false;
+		};
+	});
+	/** Numbers only (either decimal mark, native digits): a typed amount is
+	 *  the person's own from then on. */
+	function onAmountInput(e: Event): void {
+		const el = e.currentTarget as HTMLInputElement;
+		const v = filterAmountTyping(el.value);
+		amount = v;
+		amountTouched = true;
+		if (el.value !== v) el.value = v;
+	}
+	/** "(≈11 BRL)" for the amount as it stands ('' when unknown). */
+	const fiatEquivalent = $derived(
+		fiatPerOne !== null && orderValue !== undefined && amountParse.ok && amountParse.number > 0
+			? formatFiatCode(amountParse.number * fiatPerOne, orderValue.currency)
+			: ''
+	);
 	/** USDT sub-network (ERC-20/TRC-20/SPL/BEP-20).
 	 *  Null when method !== 'usdt' OR when user hasn't picked
 	 *  yet.  When method === 'usdt', the form REQUIRES a non-null
@@ -640,15 +720,6 @@
 			</div>
 		{/if}
 
-		{#if orderPermlink}
-			<div
-				class="mt-4 rounded-lg border border-ink-200 bg-ink-50 px-3 py-2 text-xs text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
-			>
-				<span class="font-semibold">{$_('chat.address.pill_for_order')}:</span>
-				<code class="ml-1 break-all font-mono">{orderPermlink}</code>
-			</div>
-		{/if}
-
 		<!-- Address input -->
 		<label class="mt-5 block">
 			<span class="text-sm font-semibold">{$_('chat.address.address_label')}</span>
@@ -794,14 +865,24 @@
 					? $_('chat.address.amount_label_required')
 					: $_('chat.address.amount_label')}</span
 			>
-			<input
-				type="text"
-				bind:value={amount}
-				maxlength="32"
-				inputmode="decimal"
-				autocomplete="off"
-				class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
-			/>
+			<!-- v1.23.2: field, ticker and the fiat it is worth: [0.0000266] BTC (≈11 BRL) -->
+			<span class="mt-1 flex items-center gap-2">
+				<input
+					type="text"
+					value={amount}
+					oninput={onAmountInput}
+					maxlength="32"
+					inputmode="decimal"
+					autocomplete="off"
+					class="w-44 min-w-0 flex-none rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
+				/>
+				<span class="flex-none text-sm font-semibold">{method.toUpperCase()}</span>
+				{#if fiatEquivalent !== ''}
+					<span class="min-w-0 truncate text-sm text-ink-600 dark:text-ink-300"
+						>(≈<bdi>{fiatEquivalent}</bdi>)</span
+					>
+				{/if}
+			</span>
 			{#if !amountParse.ok && amountParse.reason === 'ambiguous' && amountParse.readings}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 					{$_('common.amount_input.ambiguous', {

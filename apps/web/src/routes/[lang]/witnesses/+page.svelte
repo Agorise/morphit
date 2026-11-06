@@ -68,7 +68,7 @@
 	// the notification banner below it, while that shows) as the rows scroll
 	// beneath it. The menu's height changes with the language, a branded logo
 	// and zoom, so it is measured, not hard-coded; and keyboard focus is kept
-	// clear of the stuck row (utils/stickyTableHead.ts, v1.23.1 review).
+	// clear of the stuck row (utils/stickyTableHead.ts, v1.23.2 review).
 	let tableCard = $state<HTMLElement>();
 	$effect(() => {
 		const card = tableCard;

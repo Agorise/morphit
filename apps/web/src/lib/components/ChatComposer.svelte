@@ -62,9 +62,21 @@
 		 *  `{onkeydown}` shorthand below would shadow with the
 		 *  window's built-in onkeydown handler. */
 		onkeydown?: (event: KeyboardEvent) => void;
+		/** v1.23.2: false for a chat set to lock on leaving (Chat Security
+		 *  "Yes, delete it"): no draft is written to storage, and one saved
+		 *  earlier is wiped (its text stays in the box while the chat is open).
+		 *  Drafts are plain text in localStorage, so they would outlive leaving. */
+		persistDraft?: boolean;
 	}
 
-	let { peer, orderPermlink, onSend, isLocked = false, onkeydown }: Props = $props();
+	let {
+		peer,
+		orderPermlink,
+		onSend,
+		isLocked = false,
+		onkeydown,
+		persistDraft = true
+	}: Props = $props();
 
 	/** Maximum plaintext codepoints per message. Matches the
 	 *  design-doc budget; the indexer enforces a ciphertext-level
@@ -164,9 +176,16 @@
 		text = saved && typeof saved.text === 'string' ? saved.text : '';
 	});
 
-	// Debounced save on every change.
+	// Debounced save on every change (and when persistDraft turns off).
 	$effect(() => {
 		void text;
+		if (!persistDraft) {
+			// At once, not debounced: leaving right after answering "Yes" must
+			// not leave the old draft behind (an unmount cancels the timer).
+			if (draftSaveTimeout) clearTimeout(draftSaveTimeout);
+			clearDraft(draftKey);
+			return;
+		}
 		if (sending) return;
 		if (draftSaveTimeout) clearTimeout(draftSaveTimeout);
 		draftSaveTimeout = setTimeout(() => {

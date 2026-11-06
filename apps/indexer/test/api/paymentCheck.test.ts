@@ -241,7 +241,8 @@ describe('the answer', () => {
 			confirmations: 1,
 			tx_time: MINED,
 			required_confirmations: 3,
-			checked_at: '2026-10-26T12:00:00.000Z'
+			checked_at: '2026-10-26T12:00:00.000Z',
+			age_seconds: 0
 		});
 		expect(s.calls).toEqual([{ asset: 'btc', txid: TXID, address: BTC, txKey: null }]);
 	});
@@ -332,6 +333,8 @@ describe('the cache', () => {
 		const stale = (await (await get(app, btcQs())).json()) as Record<string, unknown>;
 		expect(stale.confirmations).toBe(1);
 		expect(stale.checked_at).toBe(new Date(1_000_000).toISOString());
+		// v1.23.2: its age by this instance's clock, for browsers whose clock is off.
+		expect(stale.age_seconds).toBe(Math.floor((PAYMENT_CHECK_FRESH_MS.confirming + 5) / 1000));
 		expect(s.calls).toHaveLength(2);
 		gate.resolve();
 		await new Promise((r) => setTimeout(r, 0));

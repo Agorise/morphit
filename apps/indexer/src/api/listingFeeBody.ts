@@ -37,7 +37,11 @@
 
 import type { Config } from '$config';
 import type { BlurtPriceSource } from '$indexer/price/source';
-import { listingFeeBlurtBase, listingFeeSatoshis, listingFeePiconero } from '@morphit/asset-registry';
+import {
+	listingFeeBlurtBase,
+	listingFeeSatoshis,
+	listingFeePiconero
+} from '@morphit/asset-registry';
 import { consensusV2Active } from '$indexer/consensusActivation';
 import { FEDERATION_BLURT_BASE, featureFeeBlurtPerHourAt } from '$indexer/fee/feeRulesAtBlock';
 
@@ -48,7 +52,9 @@ export function buildListingFeeBody(
 	xmrSource: BlurtPriceSource | null = null,
 	/** When the block the quoted order lands in is stamped — about now. A
 	 *  display quote, not a verdict: the order handler judges by its block. */
-	nextBlockTime: Date = new Date()
+	nextBlockTime: Date = new Date(),
+	/** v1.23.2: the other coins' USD prices (price/coinQuotes.ts), display only. */
+	coinQuotes: { currentUsd(): Record<string, number> } | null = null
 ): Record<string, unknown> {
 	// Model A (canonical): `base_fee_blurt` is the amount the UI
 	// quotes and the user pays.  It tracks the CANONICAL USD target
@@ -80,7 +86,10 @@ export function buildListingFeeBody(
 		// From the consensus activation time every instance charges the
 		// federation's featured-slot price (feeRulesAtBlock), whatever this
 		// node's MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR says.
-		feature_fee_blurt_per_hour: featureFeeBlurtPerHourAt(nextBlockTime, config.featureFeeBlurtPerHour),
+		feature_fee_blurt_per_hour: featureFeeBlurtPerHourAt(
+			nextBlockTime,
+			config.featureFeeBlurtPerHour
+		),
 		// UI consults this to refresh its quote when the TTL
 		// elapses. Keep it in sync with the frontend's quote
 		// freshness constant.
@@ -116,8 +125,7 @@ export function buildListingFeeBody(
 			// are explicitly on notice; Morphit accepts no
 			// responsibility for losses from such misuse.  See
 			// ADR-0039 and /v1/price/morphit-native/receipt.
-			body.price_warning =
-				'NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle.';
+			body.price_warning = 'NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle.';
 		}
 	}
 
@@ -150,8 +158,7 @@ export function buildListingFeeBody(
 				body.btc_price_fiat = d.price;
 				body.btc_fee_live = true;
 				body.denomination_fiat = config.priceFeedDenominationFiat;
-				body.price_warning =
-					'NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle.';
+				body.price_warning = 'NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle.';
 			}
 		}
 	}
@@ -168,9 +175,21 @@ export function buildListingFeeBody(
 				body.xmr_price_fiat = d.price;
 				body.xmr_fee_live = true;
 				body.denomination_fiat = config.priceFeedDenominationFiat;
-				body.price_warning =
-					'NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle.';
+				body.price_warning = 'NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle.';
 			}
+		}
+	}
+
+	// ── v1.23.2: the other coins (ETH, LTC, DOGE …) in USD ──
+	// Display only — the "(≈11 BRL)" beside an amount, and the amount filled
+	// in for a fiat value. Always USD whatever the fee denomination (the
+	// browser converts with this instance's FX table). Only fresh prices; a
+	// coin without one is simply absent.
+	if (coinQuotes !== null) {
+		const prices = coinQuotes.currentUsd();
+		if (Object.keys(prices).length > 0) {
+			body.asset_prices_usd = prices;
+			body.price_warning = 'NOT-AN-ORACLE: For Morphit UI display only. Do NOT use as oracle.';
 		}
 	}
 

@@ -296,7 +296,10 @@ export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
 			asset: q.asset,
 			txid: q.txid,
 			required_confirmations: PAYMENT_REQUIRED_CONFIRMATIONS,
-			checked_at: new Date(checkedAt).toISOString()
+			checked_at: new Date(checkedAt).toISOString(),
+			// v1.23.2: its age by this instance's clock, so a browser whose own
+			// clock is off can still tell a kept answer from a fresh one.
+			age_seconds: Math.max(0, Math.floor((clock() - checkedAt) / 1000))
 		};
 		// Typed against the client package, so the two cannot drift apart.
 		const body: PaymentCheckResponse =

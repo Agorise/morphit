@@ -188,8 +188,13 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	{ key: 'morphit.streamingUrl', tier: 'account', protection: 'suffixed' },
 	// As above.
 	{ key: 'morphit.nostrUrl', tier: 'account', protection: 'suffixed' },
-	// Per-account chat key-change policy.
+	// Per-account Chat Security choice before v1.23.2; read only now, as the
+	// fallback of lockOnLeave below (an old 'destroy' means lock on leaving).
 	{ key: 'morphit.chatSecurity.mode', tier: 'account', protection: 'suffixed' },
+	// v1.23.2: per chat (account, partner, order), lock Morphit when leaving it.
+	// Suffixed `.<account>\0<partner>\0<order>`; this computer's concern only,
+	// never mirrored (publishing it would tell who guards which chat).
+	{ key: 'morphit.chatSecurity.lockOnLeave', tier: 'account', protection: 'suffixed' },
 	// Per-account one-shot nudge.
 	{ key: 'morphit.chatSecurity.nudgeSeen', tier: 'account', protection: 'suffixed' },
 	// One-shot milestone marker, per account.

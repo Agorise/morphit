@@ -39,10 +39,20 @@ vi.mock('svelte-i18n', async (orig) => ({
 	locale: readable('en')
 }));
 const live = { posting: { privateKey: new Uint8Array(32).fill(1) } };
+const lockSpy = vi.hoisted(() => ({ locks: 0, holds: 0, released: 0 }));
 vi.mock('$stores/identity', () => ({
 	liveIdentity: readable(live),
 	isUnlocked: readable(true),
-	isPairedReadOnly: readable(false)
+	isPairedReadOnly: readable(false),
+	lockAllTabs: () => {
+		lockSpy.locks++;
+	},
+	holdLockOnLeave: () => {
+		lockSpy.holds++;
+		return () => {
+			lockSpy.released++;
+		};
+	}
 }));
 
 interface FakeDeps {
@@ -107,11 +117,68 @@ vi.mock('$components/VerifyPeerPanel.svelte', () => ({
 		panel.props = props;
 	}
 }));
+/** What "Send BLURT" opened its window with (v1.23.2). */
+const payBlurtOpened = vi.hoisted(
+	() =>
+		[] as {
+			amount?: number;
+			amountEditable?: boolean;
+			recipient?: string;
+			memo?: string;
+		}[]
+);
 vi.mock('$components/PayBlurtModal.svelte', () => ({
-	default: (_anchor: unknown, props: { onPaid: (a: unknown) => void }) => {
+	default: (
+		_anchor: unknown,
+		props: {
+			onPaid: (a: unknown) => void;
+			amount?: number;
+			amountEditable?: boolean;
+			recipient?: string;
+			memo?: string;
+		}
+	) => {
+		payBlurtOpened.push({
+			amount: props.amount,
+			amountEditable: props.amountEditable,
+			recipient: props.recipient,
+			memo: props.memo
+		});
 		queueMicrotask(() => props.onPaid({ trxId: 'c'.repeat(40), blockNum: 1, amount: 5 }));
 	}
 }));
+/** The instance's live prices and FX, as /v1/listing-fee and /v1/fx serve them. */
+const market = vi.hoisted(() => ({
+	blurtUsd: 0.00072966 as number | null,
+	brlPerUsd: 5.477830612916686,
+	/** While set, the FX read waits for it (a slow Tor/I2P link). */
+	gate: null as Promise<void> | null
+}));
+vi.mock('$lib/orders/listingFee', async (orig) => ({
+	...((await orig()) as object),
+	fetchListingFee: async () =>
+		market.blurtUsd === null
+			? { kind: 'error', message: 'x' }
+			: { kind: 'ok', quote: { blurt_price_fiat: market.blurtUsd, denomination_fiat: 'USD' } }
+}));
+vi.mock('$lib/orders/fx', async (orig) => ({
+	...((await orig()) as object),
+	fetchFxRates: async () => {
+		if (market.gate !== null) await market.gate;
+		return {
+			kind: 'ok',
+			table: {
+				base: 'USD',
+				rates: { BRL: market.brlPerUsd, MXN: 18 },
+				updated_at: new Date().toISOString(),
+				stale: false,
+				source: 'pricenodes'
+			}
+		};
+	}
+}));
+/** Fields this test's order differs in (v1.23.2). */
+let orderOverrides: Record<string, unknown> = {};
 
 let served: { owner: string; item: Record<string, unknown> } | null = null;
 /** This many order reads fail (a timeout, as on a slow Tor/I2P link) first. */
@@ -188,7 +255,8 @@ function order(owner: string, side: 'buy' | 'sell', asset = 'XMR') {
 		created_at: new Date().toISOString(),
 		updated_at: new Date().toISOString(),
 		expires_at: null,
-		status: orderStatus
+		status: orderStatus,
+		...orderOverrides
 	};
 }
 
@@ -269,6 +337,71 @@ async function render(owner: string, side: 'buy' | 'sell', asset = 'XMR', failRe
 	openViews.push(destroy);
 	return { target, deps, push, button, settle, flushSync, destroy };
 }
+
+describe('v1.23.2 Chat Security: "delete this chat from this computer after you leave"', () => {
+	beforeEach(() => {
+		// jsdom has no <dialog> modal API.
+		const D = HTMLDialogElement.prototype as unknown as Record<string, unknown>;
+		D.showModal ??= function (this: HTMLDialogElement) {
+			this.setAttribute('open', '');
+		};
+		D.close ??= function (this: HTMLDialogElement) {
+			this.removeAttribute('open');
+		};
+		window.localStorage.clear();
+		lockSpy.locks = 0;
+		lockSpy.holds = 0;
+		lockSpy.released = 0;
+	});
+
+	it('Yes, delete it → leaving this chat locks Morphit in every tab', async () => {
+		const v = await render(PEER, 'buy');
+		// An unsent message is saved as a plain-text draft while the chat keeps.
+		const box = v.target.querySelector('textarea') as HTMLTextAreaElement;
+		box.value = 'half a message';
+		box.dispatchEvent(new Event('input', { bubbles: true }));
+		v.flushSync();
+		const drafts = () =>
+			Object.keys(window.localStorage).filter((k) => k.startsWith('morphit.draft.chat.'));
+		await vi.waitFor(() => expect(drafts()).toHaveLength(1), { timeout: 2000 });
+		const menu = v.target.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+		menu?.click();
+		v.flushSync();
+		const item = v.button((b) => b.textContent?.includes('chat.security.menu_label') ?? false);
+		expect(item).toBeDefined();
+		item!.click();
+		v.flushSync();
+		const yes = v.button((b) => b.textContent?.trim() === 'chat.security.confirm.yes');
+		expect(yes).toBeDefined();
+		yes!.click();
+		v.flushSync();
+		// v1.23.2 review: and no draft stays on this computer.
+		expect(drafts()).toEqual([]);
+		// While the chat is open, a tab close or reload must not stash the session.
+		expect(lockSpy.holds).toBe(1);
+		expect(lockSpy.locks).toBe(0);
+		v.destroy();
+		expect(lockSpy.locks).toBe(1);
+		expect(lockSpy.released).toBe(1);
+	});
+
+	it('No, keep it (the default) → leaving locks nothing', async () => {
+		const v = await render(PEER, 'buy');
+		v.destroy();
+		expect(lockSpy.holds).toBe(0);
+		expect(lockSpy.locks).toBe(0);
+	});
+
+	it('a chat set to lock earlier holds from the start, and saying No before leaving is honoured', async () => {
+		const { writeLockOnLeave } = await import('$stores/chatSecurity');
+		writeLockOnLeave(ME, PEER, ORDER, true);
+		const v = await render(PEER, 'buy');
+		expect(lockSpy.holds).toBe(1);
+		writeLockOnLeave(ME, PEER, ORDER, false);
+		v.destroy();
+		expect(lockSpy.locks).toBe(0);
+	});
+});
 
 describe('W-H1: the thread reads the trade with ITS peer', () => {
 	it('another inquirer’s "paid" claim about the same order leaves this thread’s row', async () => {
@@ -536,7 +669,9 @@ describe('v1.21.17: a crypto-for-crypto trade, one step at a time', () => {
 			amount,
 			confirmations,
 			required_confirmations: 3,
-			checked_at: '2026-10-26T18:06:00Z',
+			// A fresh answer (v1.23.2: an old one is called old on the receipt).
+			checked_at: new Date().toISOString(),
+			age_seconds: 0,
 			tx_time: txTime
 		}
 	});
@@ -554,7 +689,8 @@ describe('v1.21.17: a crypto-for-crypto trade, one step at a time', () => {
 		const v = await render(PEER, 'buy', 'BLURT');
 		expect(has(v, 'chat.address.share_button_aria_asset')).toBe(true);
 		expect(has(v, 'chat.funds_sent.button_aria')).toBe(false);
-		expect(hint(v)).toBe('chat.legs.waiting_payment');
+		// v1.23.2: no "Waiting for @x to pay you in …" line under the button.
+		expect(hint(v)).toBe('');
 	});
 
 	it('the buyer’s payment seen at 0 confirmations: "Send BLURT"; the receipt shows the check', async () => {
@@ -575,6 +711,110 @@ describe('v1.21.17: a crypto-for-crypto trade, one step at a time', () => {
 		expect(v.target.querySelector('[data-testid="payment-check"]')?.textContent?.trim()).toBe(
 			'chat.payment_check.seen'
 		);
+	});
+
+	it('v1.23.2: "Send BLURT" opens with the BLURT worth the order (11 BRL at the market price), also long after the chat was opened', async () => {
+		// josiemoto's real order: buying exactly 11 BRL of BLURT at the market
+		// price; BLURT $0.00072966, 1 USD = 5.4778 BRL → 2752.096 BLURT.
+		orderOverrides = {
+			fiat_currency: 'BRL',
+			amount_min: 11,
+			amount_max: 11,
+			price_model: { kind: 'spread', percent: 0 }
+		};
+		payBlurtOpened.length = 0;
+		paymentCheckAnswer = found('0.05', 3);
+		let clock: { mockRestore(): void } | null = null;
+		try {
+			const v = await render(PEER, 'buy', 'BLURT');
+			await v.push(await msgs(txidN(16)));
+			await vi.waitFor(() => {
+				v.flushSync();
+				expect(has(v, 'chat.funds_sent.button_aria_asset')).toBe(true);
+			});
+			// The seller waits for confirmations: well past the price's 10-minute
+			// freshness, and the thread moves on (a new message) meanwhile.
+			const realNow = Date.now;
+			const later = realNow() + 34 * 60_000;
+			clock = vi.spyOn(Date, 'now').mockImplementation(() => later);
+			await v.push([...(await msgs(txidN(16))), { id: 9, text: 'ok', sender: PEER }]);
+			await v.settle();
+			const send = v.button(
+				(b) => b.getAttribute('aria-label')?.includes('chat.funds_sent.button_aria_asset') ?? false
+			);
+			send!.click();
+			await vi.waitFor(() => expect(payBlurtOpened.length).toBe(1));
+			expect(payBlurtOpened[0]!.amount).toBeCloseTo(2752.096, 3);
+			// The receipt names the block the transfer went into (the mock's 1),
+			// so both screens check it within seconds.
+			await vi.waitFor(() =>
+				expect(
+					ctl.sent.some((w) => /"kind":"morphit_funds_sent"/.test(w) && /"block":1\b/.test(w))
+				).toBe(true)
+			);
+		} finally {
+			orderOverrides = {};
+			clock?.mockRestore();
+		}
+	});
+
+	it('v1.23.2 review: while "Send BLURT" fetches a fresh price it is busy, and a second click opens nothing more', async () => {
+		orderOverrides = {
+			fiat_currency: 'BRL',
+			amount_min: 11,
+			amount_max: 11,
+			price_model: { kind: 'spread', percent: 0 }
+		};
+		payBlurtOpened.length = 0;
+		paymentCheckAnswer = found('0.05', 3);
+		let open!: () => void;
+		market.gate = new Promise<void>((res) => {
+			open = res;
+		});
+		try {
+			const v = await render(PEER, 'buy', 'BLURT');
+			await v.push(await msgs(txidN(18)));
+			await vi.waitFor(() => {
+				v.flushSync();
+				expect(has(v, 'chat.funds_sent.button_aria_asset')).toBe(true);
+			});
+			const send = () =>
+				v.button(
+					(b) =>
+						b.getAttribute('aria-label')?.includes('chat.funds_sent.button_aria_asset') ?? false
+				)!;
+			send().click();
+			v.flushSync();
+			expect(send().getAttribute('aria-busy')).toBe('true');
+			expect(send().disabled).toBe(true);
+			send().click();
+			open();
+			await vi.waitFor(() => expect(payBlurtOpened.length).toBe(1));
+			await v.settle();
+			expect(payBlurtOpened.length).toBe(1);
+		} finally {
+			market.gate = null;
+			orderOverrides = {};
+		}
+	});
+
+	it('v1.23.2: an answer the explorers have not refreshed for a while says how old it is', async () => {
+		paymentCheckAnswer = {
+			...(found('0.05', 0) as { ok: true; data: Record<string, unknown> }),
+			data: {
+				...(found('0.05', 0) as { ok: true; data: Record<string, unknown> }).data,
+				checked_at: new Date(Date.now() - 12 * 60_000).toISOString(),
+				age_seconds: 12 * 60
+			}
+		};
+		const v = await render(PEER, 'buy', 'BLURT');
+		await v.push(await msgs(txidN(17)));
+		await vi.waitFor(() => {
+			v.flushSync();
+			expect(v.target.querySelector('[data-testid="payment-check-age"]')?.textContent).toContain(
+				'chat.payment_check.checked_ago'
+			);
+		});
 	});
 
 	it('his BLURT receipt failed to post: "Send BLURT" does not come back', async () => {
@@ -1294,6 +1534,41 @@ describe('v1.21.17: a crypto-for-crypto trade, one step at a time', () => {
 		expect(has(v, 'chat.address.share_button')).toBe(false);
 		expect(has(v, 'chat.funds_sent.button')).toBe(false);
 		expect(hint(v)).toBe('chat.legs.waiting_address');
+	});
+
+	it('v1.23.2 review: a one-leg BLURT trade — "Send BLURT" pays the buyer\'s ask (account, amount, memo), exactly what his screen checks', async () => {
+		orderMethods = ['paypal'];
+		payBlurtOpened.length = 0;
+		const { encodeAddressPayload } = await import('$lib/chat/payload');
+		const v = await render(PEER, 'buy', 'BLURT');
+		await v.push([
+			{
+				id: 1,
+				sender: PEER,
+				createdAt: new Date('2026-10-26T18:00:00Z'),
+				text: encodeAddressPayload({
+					v: 1,
+					kind: 'morphit_addr',
+					method: 'blurt',
+					address: 'bob-savings',
+					amount: '2724.551',
+					memo: 'm8m8tafb2t',
+					orderPermlink: ORDER
+				})
+			}
+		]);
+		await v.settle();
+		const send = v.button(
+			(b) => b.getAttribute('aria-label')?.includes('chat.funds_sent.button_aria_asset') ?? false
+		);
+		send!.click();
+		await vi.waitFor(() => expect(payBlurtOpened.length).toBe(1));
+		expect(payBlurtOpened[0]).toMatchObject({
+			recipient: 'bob-savings',
+			amount: 2724.551,
+			memo: 'm8m8tafb2t',
+			amountEditable: false
+		});
 	});
 
 	it('an order paid by PayPal keeps the one-leg buttons', async () => {

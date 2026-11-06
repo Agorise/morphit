@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	FULL_TIME_WEEKS,
+	MISSES_PER_WEEK_HALVING,
+	RECENT_MISSES_HALVING,
 	PRODUCING_WINDOW_BLOCKS,
 	isDisabledSigningKey,
 	isProducingWitness,
@@ -136,14 +138,38 @@ describe('stars', () => {
 	it('multiply time × reliability × version, so missing a lot is never outweighed by age', () => {
 		const r = byOwner();
 		// 260 weeks, 1.65 missed a week, 0.9.0 (same major.minor as 0.9.1): 4⅔.
-		expect(r.get('joviansummer').weeks).toBe(FULL_TIME_WEEKS);
+		expect(r.get('joviansummer').weeks).toBe(260);
 		expect(r.get('joviansummer').stars).toBeCloseTo(4 + 2 / 3, 10);
-		// 213 weeks, ~66 missed a week: 1⅔ although it is rank 1.
-		expect(r.get('khrom').stars).toBeCloseTo(1 + 2 / 3, 10);
+		// 213 weeks, ~66 missed a week: 1⅓ although it is rank 1.
+		expect(r.get('khrom').stars).toBeCloseTo(1 + 1 / 3, 10);
 		// The case an additive formula got wrong: 323 weeks but ~456 missed a week.
 		expect(r.get('zahidsun').weeks).toBe(323);
-		expect(r.get('zahidsun').stars).toBeCloseTo(1 / 3, 10);
+		expect(r.get('zahidsun').stars).toBe(0);
 		expect(r.get('zahidsun').score).toBeLessThan(r.get('agorise-witness').score);
+	});
+
+	it('v1.23.2: merit over age — two years of producing is full time, and a clean record shows within the first year', () => {
+		const clean = (weeks: number) =>
+			starsFromScore(
+				witnessScore({ weeks, totalMissed: 0, producing: true, versionBehind: false })
+			);
+		expect(FULL_TIME_WEEKS).toBe(104);
+		expect(clean(13)).toBeCloseTo(1 + 2 / 3, 10);
+		expect(clean(26)).toBeCloseTo(2 + 1 / 3, 10);
+		expect(clean(52)).toBeCloseTo(3 + 1 / 3, 10);
+		expect(clean(78)).toBe(4);
+		expect(clean(104)).toBe(5);
+		expect(clean(330)).toBe(5); // age past two years adds nothing
+		// Missing 25 blocks a week, on average, halves the stars.
+		expect(MISSES_PER_WEEK_HALVING).toBe(25);
+		expect(
+			witnessScore({ weeks: 200, totalMissed: 25 * 200, producing: true, versionBehind: false })
+		).toBeCloseTo(2.5, 10);
+		// The owner's example (2026-11-05 chain): 108 weeks, 419 missed (3.9 a week)
+		// had 1⅔ stars behind witnesses missing thousands; now 4, above them.
+		const r = byOwner();
+		expect(r.get('agorise-witness').stars).toBe(4);
+		expect(r.get('agorise-witness').score).toBeGreaterThan(r.get('khrom').score);
 	});
 
 	it('0.9.0 counts the same as 0.9.1; a whole version behind costs a quarter', () => {
@@ -163,6 +189,40 @@ describe('stars', () => {
 			versionBehind: true
 		});
 		expect(behind / same).toBeCloseTo(0.75, 10);
+	});
+
+	it('v1.23.2: blocks missed lately cost stars at once (20 in the last day halve them); none lately costs nothing', () => {
+		const base = { weeks: 300, totalMissed: 0, producing: true, versionBehind: false };
+		expect(RECENT_MISSES_HALVING).toBe(20);
+		expect(witnessScore({ ...base, recentMissed: null })).toBe(5);
+		expect(witnessScore({ ...base, recentMissed: 0 })).toBe(5);
+		expect(witnessScore({ ...base, recentMissed: 20 })).toBeCloseTo(2.5, 10);
+		expect(starsFromScore(witnessScore({ ...base, recentMissed: 1 }))).toBeCloseTo(4 + 2 / 3, 10);
+		expect(starsFromScore(witnessScore({ ...base, recentMissed: 5 }))).toBe(4);
+		expect(starsFromScore(witnessScore({ ...base, recentMissed: 10 }))).toBeCloseTo(3 + 1 / 3, 10);
+	});
+
+	it('v1.23.2: a witness starting to miss loses stars on the page the same day, and gets them back once he stops', () => {
+		const H = 3_600_000;
+		const stars = (missedSince: number) =>
+			rankWitnesses(
+				RAW,
+				CHAIN,
+				new Map([
+					[
+						'joviansummer',
+						{
+							atOrBefore24h: { sampledAtMs: NOW - 24 * H, totalMissed: 429 - missedSince },
+							oldest: null
+						}
+					]
+				]),
+				NOW
+			).witnesses.find((w) => w.owner === 'joviansummer')!.stars;
+		expect(stars(0)).toBeCloseTo(4 + 2 / 3, 10); // the lifetime record alone
+		expect(stars(1)).toBeCloseTo(4 + 1 / 3, 10); // one missed today: a third less
+		expect(stars(5)).toBeCloseTo(3 + 2 / 3, 10);
+		expect(stars(20)).toBeCloseTo(2 + 1 / 3, 10);
 	});
 
 	it('only a producing witness gets stars', () => {
@@ -209,13 +269,15 @@ describe('producing', () => {
 describe('order and numbers', () => {
 	it('producing witnesses first by stars, whatever their rank; the rest by rank', () => {
 		const r = byOwner();
+		// v1.23.2 (merit over age): the half-year-old node01 with a clean record
+		// and agorise-witness pass saboin, a founder missing ~30 blocks a week.
 		expect(r.witnesses.map((w) => w.owner)).toEqual([
 			'joviansummer',
-			'saboin',
 			'agorise-witness',
+			'node01',
+			'saboin',
 			'khrom',
 			'zahidsun',
-			'node01',
 			'eastmael',
 			'etainclub'
 		]);

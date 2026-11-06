@@ -12,12 +12,26 @@
  * ordered by them.
  *
  * THE STARS
- *     stars = 5 × time × reliability × version, rounded DOWN to a third
- *   - time        = weeks since the witness was created ÷ 260 (five years),
- *                   at most 1;
- *   - reliability = 1 ÷ (1 + missed blocks per week ÷ 50): a witness missing
- *                   50 blocks a week keeps half, one missing 456 (seen on the
- *                   chain) about a tenth;
+ *     stars = 5 × time × reliability × lately × version, rounded DOWN to a third
+ *   - time        = √(weeks since the witness was created ÷ 104), at most 1:
+ *                   full after two years, and a clean record shows within the
+ *                   first (a year: 3⅓ stars at most, 18 months: 4) — v1.23.2,
+ *                   was weeks ÷ 260, linear over five years. The owner wants a
+ *                   meritocracy: past two years a witness is judged on how
+ *                   well it does the job, not on how long ago it started (a
+ *                   two-year witness missing 4 blocks a week sat at 1⅔ stars,
+ *                   below founders missing thousands);
+ *   - reliability = 1 ÷ (1 + missed blocks per week ÷ 25): a witness missing
+ *                   25 blocks a week keeps half (v1.23.2, was 50), one
+ *                   missing 456 (seen on the chain) about a twentieth;
+ *   - lately      = 1 ÷ (1 + blocks missed in the last 24 h ÷ 20) (v1.23.2):
+ *                   the owner looks at the stars first when deciding his
+ *                   votes, and wants a witness STARTING to miss to show it the
+ *                   same day — over the lifetime average alone, a day's misses
+ *                   barely move a long record. One miss today costs about a
+ *                   third of a star, 20 halve the stars; once he stops missing
+ *                   they come back within a day. 1 while this instance has not
+ *                   watched for an hour yet (nothing known);
  *   - version     = 1 on the newest major.minor any producing witness runs
  *                   (0.9.0 counts the same as 0.9.1 — the owner: "nearly the
  *                   same thing"), 0.75 a whole version behind (0.8.x).
@@ -36,10 +50,12 @@
 
 /** Most stars a witness can have. */
 export const STARS_MAX = 5;
-/** Weeks of producing that earn the full time factor (five years). */
-export const FULL_TIME_WEEKS = 260;
-/** Missed blocks per week that halve the reliability factor. */
-export const MISSES_PER_WEEK_HALVING = 50;
+/** Weeks of producing that earn the full time factor (two years, v1.23.2). */
+export const FULL_TIME_WEEKS = 104;
+/** Missed blocks per week that halve the reliability factor (v1.23.2: 25). */
+export const MISSES_PER_WEEK_HALVING = 25;
+/** Blocks missed in the last 24 h that halve the stars (v1.23.2). */
+export const RECENT_MISSES_HALVING = 20;
 /** Version factor for a witness a whole major.minor behind the newest. */
 export const OLDER_VERSION_FACTOR = 0.75;
 /** A witness is "producing" when its last block is at most this many blocks
@@ -192,14 +208,22 @@ export function witnessScore(args: {
 	readonly totalMissed: number;
 	readonly producing: boolean;
 	readonly versionBehind: boolean;
+	/** Blocks missed in the last 24 h (or as long as this instance has
+	 *  watched); null/absent when nothing is known yet. */
+	readonly recentMissed?: number | null;
 }): number {
 	if (!args.producing) return 0;
 	const weeks = Math.max(0, args.weeks);
-	const time = Math.min(weeks / FULL_TIME_WEEKS, 1);
+	const time = Math.sqrt(Math.min(weeks / FULL_TIME_WEEKS, 1));
 	const perWeek = Math.max(0, args.totalMissed) / Math.max(weeks, 1);
 	const reliability = 1 / (1 + perWeek / MISSES_PER_WEEK_HALVING);
 	const version = args.versionBehind ? OLDER_VERSION_FACTOR : 1;
-	return STARS_MAX * time * reliability * version;
+	const recent =
+		typeof args.recentMissed === 'number' && Number.isFinite(args.recentMissed)
+			? Math.max(0, args.recentMissed)
+			: 0;
+	const lately = 1 / (1 + recent / RECENT_MISSES_HALVING);
+	return STARS_MAX * time * reliability * lately * version;
 }
 
 /** An http(s) link a witness gave, safe to put in an href, or null. */
@@ -308,7 +332,6 @@ export function rankWitnesses(
 			(v[0] < newest[0] || (v[0] === newest[0] && v[1] < newest[1]));
 		const producing = producingOf(w);
 		const totalMissed = Number.isFinite(w.total_missed) ? Math.max(0, w.total_missed) : 0;
-		const score = witnessScore({ weeks, totalMissed, producing, versionBehind });
 		const recent = producing
 			? missedRecently(
 					samples.get(w.owner) ?? { atOrBefore24h: null, oldest: null },
@@ -316,6 +339,13 @@ export function rankWitnesses(
 					nowMs
 				)
 			: null;
+		const score = witnessScore({
+			weeks,
+			totalMissed,
+			producing,
+			versionBehind,
+			recentMissed: recent?.missed ?? null
+		});
 		return {
 			owner: w.owner,
 			rank: i + 1,

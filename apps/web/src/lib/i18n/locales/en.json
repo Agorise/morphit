@@ -499,17 +499,9 @@
 			"menu_label": "Chat Security",
 			"confirm": {
 				"title": "Chat Security",
-				"body": "Do you want to stop being able to reread your own messages after you leave this chat? Your partner can still read them, and their encrypted form stays on the chain. Choose No to keep reading your own history, like a normal messenger.",
-				"yes": "Yes, don't keep my copy",
-				"no": "No, keep them",
-				"current_keep": "Right now: you keep a copy and can reread your own messages.",
-				"current_destroy": "Right now: you don't keep a copy, so you can't reread your own messages after you leave."
-			},
-			"pdf_reminder": {
-				"title": "Don't forget to export this chat to PDF",
-				"body": "In this mode you can't reread your own messages after you leave (your partner still can). Save a PDF now if you want to keep a copy.",
-				"get_now": "Get my PDF now",
-				"later": "Later"
+				"body": "This chat is encrypted on-chain so it's never lost, but if you share this computer with someone, they might be able to see this unencrypted copy. Do you want this chat deleted from this computer after you leave the chat?",
+				"yes": "Yes, delete it",
+				"no": "No, keep it"
 			},
 			"chain_unreachable": "We couldn't reach the blockchain to check this person's keys, so the message wasn't sent. This is common on Tor and I2P, where connections take a while to build. Nothing is wrong — try again in a moment.",
 			"pub_pin_key_changed": "Not sent: this person's key changed. That happens when they reset their keys — or when someone is trying to read your messages. Open ⋮ → Verify peer and compare the new safety number with them over another channel before you accept it.",
@@ -839,7 +831,6 @@
 			"load_failed": "Couldn't load older messages."
 		},
 		"legs": {
-			"waiting_payment": "Waiting for @{peer} to pay you in {coins}. Send nothing until the payment shows up here.",
 			"waiting_address": "Waiting for @{peer} to share where you should pay.",
 			"checking_payment": "Checking @{peer}'s payment…",
 			"payment_short": "@{peer}'s payment doesn't match what was asked — see the receipt above. Send nothing unless your own wallet shows the right payment.",
@@ -864,7 +855,8 @@
 			"wrong_address": "This payment did not reach the {coin} address shared in this chat.",
 			"short": "Only {amount} {coin} reached the shared address — less than was asked.",
 			"seen": "{amount} {coin} received · {n}/{required} confirmations",
-			"confirmed": "{amount} {coin} received · confirmed",
+			"confirmed": "{amount} {coin} received · {n, plural, one {# confirmation} other {# confirmations}}",
+			"checked_ago": "last checked {minutes, plural, one {# minute} other {# minutes}} ago",
 			"old": "This {coin} payment was made before the address was shared in this chat: it is not a payment for this trade."
 		}
 	},
@@ -2517,7 +2509,7 @@
 			"viewed_count": "{count} views",
 			"viewed_tooltip": "Approximate count of times this offer has been viewed. Visible only to you.",
 			"action_relist": "Re-list this order",
-			"action_relist_hint": "Pre-fills the form for you with the original values and terms.",
+			"action_relist_hint": "Pre-fills the form for you with original values that you can edit.",
 			"feedback_pick_prompt": "Who did you trade with?",
 			"not_visible_orderbook": "Not visible in orderbook",
 			"state_completed": "Completed",

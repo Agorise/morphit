@@ -327,9 +327,13 @@ minute for all callers together (while the chain cannot be read, the last list i
 its `generated_at` says how old it is). Witnesses that are *producing* (signing key set, a block in
 the last 30 days) come first, by `score`; the rest follow by vote rank.
 
-The stars: `score = 5 × time × reliability × version`, `stars` = the score rounded down to a
-third. `time` = weeks since the witness was created ÷ 260, at most 1; `reliability` =
-1 ÷ (1 + missed blocks per week ÷ 50); `version` = 1 on the newest major.minor at least three
+The stars: `score = 5 × time × reliability × lately × version`, `stars` = the score rounded
+down to a third. `time` = √(weeks since the witness was created ÷ 104), at most 1 (v1.23.2; was
+weeks ÷ 260): full after two years, so past that a witness is judged on how well it does
+the job; `reliability` = 1 ÷ (1 + missed blocks per week ÷ 25) (v1.23.2; was ÷ 50); `lately` (v1.23.2) = 1 ÷ (1 + `missed_recent` ÷ 20) —
+blocks missed in the last 24 h as this instance counted them, so a witness starting to miss
+loses stars the same day and gets them back a day after he stops (1 while `missed_recent` is
+null); `version` = 1 on the newest major.minor at least three
 producing witnesses run (the chain records whatever version a witness's blocks claim, so one
 witness cannot move it), 0.75 a whole version behind. A witness that is not producing has no stars.
 
@@ -900,6 +904,17 @@ for the full derivation transparency.
 > shipped during pre-launch hardening before any instance went
 > live.
 
+`asset_prices_usd` (v1.23.2) is a map of USD per coin for the coins this
+instance has a fresh price for, out of every coin but BLURT, BTC, XMR and ECX
+(that is ETH, LTC, BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, USDT, USDC and
+DAI), e.g.
+`{"ETH": 3005.2, "LTC": 89.5, "USDT": 1.0001}`. It is always USD,
+whatever `denomination_fiat` says, and comes from the onion pricenodes
+plus (where the instance may reach clearnet) one CoinGecko and one
+CryptoCompare request for all coins together. Display only, under the
+same NOT-AN-ORACLE warning; a coin without a fresh price is absent, and
+the field is absent when no coin has one. eCash (ECX) is never listed.
+
 `quote_ttl_seconds` is how long a frontend should cache its quote
 before re-fetching.  The frontend renders fee amounts using this
 window; once it elapses, the next page render re-fetches.
@@ -1148,7 +1163,8 @@ value → `400 bad_request` (the message never repeats the input).
   "confirmations":          1,
   "tx_time":                "2026-10-26T11:50:00.000Z",
   "required_confirmations": 3,
-  "checked_at":             "2026-10-26T12:00:00.000Z"
+  "checked_at":             "2026-10-26T12:00:00.000Z",
+  "age_seconds":            0
 }
 ```
 
@@ -1190,6 +1206,11 @@ value → `400 bad_request` (the message never repeats the input).
   once 3 deep, 30 s for `not_found`, 15 s for `unavailable`), a stale
   one is served while it is re-checked, and a re-check that gets no
   answer keeps the last verdict for up to 30 min.
+- `age_seconds` (v1.23.2): seconds since `checked_at`, by the instance's
+  clock, so a browser whose own clock is off can still tell how old the
+  answer is. The web app says "last checked N minutes ago" on a payment
+  not confirmed yet whose answer is 2 minutes old or more. Absent from
+  older instances (then no age is shown).
 
 Agreement: the instance's BTC / XMR quorum
 (`MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES` /

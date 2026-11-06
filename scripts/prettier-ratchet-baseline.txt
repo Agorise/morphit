@@ -103,7 +103,6 @@ apps/indexer/src/api/featuredBids.ts
 apps/indexer/src/api/feedback.ts
 apps/indexer/src/api/instance.ts
 apps/indexer/src/api/instancesStreamHelpers.ts
-apps/indexer/src/api/listingFeeBody.ts
 apps/indexer/src/api/operationalHealth.ts
 apps/indexer/src/api/orderbookStream.ts
 apps/indexer/src/api/priceReceipt.ts
@@ -335,7 +334,6 @@ apps/web/scripts/chat-notification-wiring-smoke.ts
 apps/web/scripts/chat-pdf-export-smoke.ts
 apps/web/scripts/chat-realtime-cadence-smoke.ts
 apps/web/scripts/chat-scroll-to-newest-smoke.ts
-apps/web/scripts/chat-security-preference-smoke.ts
 apps/web/scripts/chat-shippable-gating-smoke.ts
 apps/web/scripts/chat-unread-count-wired-smoke.ts
 apps/web/scripts/claim-reward-balance-smoke.ts

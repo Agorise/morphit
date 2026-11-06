@@ -14,7 +14,9 @@ vi.mock('$lib/indexer/client', () => ({
 
 import {
 	checkOnce,
+	confirmationLine,
 	isLess,
+	PAYMENT_CHECK_STALE_AFTER_MS,
 	PAYMENT_CHECK_FIRST_INTERVAL_MS,
 	PAYMENT_CHECK_INTERVAL_MS,
 	PAYMENT_CHECK_TIME_SLACK_MS,
@@ -37,7 +39,8 @@ const found = (amount: string, confirmations: number) => ({
 		amount,
 		confirmations,
 		required_confirmations: 3,
-		checked_at: '2026-10-26T00:00:00Z'
+		checked_at: '2026-10-26T00:00:00Z',
+		age_seconds: 0
 	}
 });
 const notFound = {
@@ -299,5 +302,57 @@ describe('watchPaymentCheck', () => {
 		const n = asks.length;
 		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_INTERVAL_MS * 3);
 		expect(asks.length).toBe(n);
+	});
+});
+
+describe('v1.23.2: the real number of confirmations, and how old the answer is', () => {
+	const btc: PaymentCheckInput = { asset: 'btc', txid: TXID, address: 'bc1qx', asked: '0.001' };
+	it("the answer carries how old it is, by the instance's clock (review: never this device's against the server's)", async () => {
+		const before = Date.now();
+		answers.push({ ...found('0.001', 1), data: { ...found('0.001', 1).data, age_seconds: 300 } });
+		const st = (await checkOnce(btc)) as { checkedAtMs?: number };
+		const after = Date.now();
+		// A device clock that is hours off changes nothing: only the time since
+		// the answer arrived is counted here.
+		expect(st.checkedAtMs).toBeGreaterThanOrEqual(before - 300_000);
+		expect(st.checkedAtMs).toBeLessThanOrEqual(after - 300_000);
+		// An older instance that does not say: no age claimed.
+		answers.length = 0;
+		const { age_seconds: _drop, ...noAge } = found('0.001', 1).data;
+		void _drop;
+		answers.push({ ok: true, data: noAge });
+		expect((await checkOnce(btc)) as { checkedAtMs?: number }).not.toHaveProperty('checkedAtMs');
+	});
+
+	it('confirmed shows its count too, not just "confirmed"', () => {
+		const now = Date.parse('2026-11-06T16:40:00Z');
+		expect(
+			confirmationLine({ confirmations: 4, required: 3, checkedAtMs: now - 20_000 }, now)
+		).toEqual({ confirmed: true, n: 4, required: 3, staleMinutes: null });
+		expect(
+			confirmationLine({ confirmations: 1, required: 3, checkedAtMs: now - 20_000 }, now)
+		).toEqual({ confirmed: false, n: 1, required: 3, staleMinutes: null });
+	});
+
+	it('an answer older than a couple of minutes says so (the explorers are not answering)', () => {
+		const now = Date.parse('2026-11-06T16:40:00Z');
+		expect(
+			confirmationLine({ confirmations: 0, required: 3, checkedAtMs: now - 12 * 60_000 }, now)
+		).toEqual({ confirmed: false, n: 0, required: 3, staleMinutes: 12 });
+		expect(PAYMENT_CHECK_STALE_AFTER_MS).toBe(2 * 60_000);
+		expect(
+			confirmationLine(
+				{ confirmations: 0, required: 3, checkedAtMs: now - PAYMENT_CHECK_STALE_AFTER_MS + 1 },
+				now
+			).staleMinutes
+		).toBeNull();
+		// No time known: nothing claimed.
+		expect(confirmationLine({ confirmations: 2, required: 3 }, now).staleMinutes).toBeNull();
+		// Confirmed: no age (review) — the instance keeps a confirmed answer for
+		// minutes on purpose and the page stops asking.
+		expect(
+			confirmationLine({ confirmations: 5, required: 3, checkedAtMs: now - 12 * 60_000 }, now)
+				.staleMinutes
+		).toBeNull();
 	});
 });

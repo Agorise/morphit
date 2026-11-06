@@ -45,6 +45,7 @@
 	 */
 
 	import { _, locale } from 'svelte-i18n';
+	import { formatFiatCode } from '$i18n/formatters';
 	import { get } from 'svelte/store';
 	import {
 		filterAmountTyping,
@@ -108,6 +109,9 @@
 		 *  pre-filled amount (e.g. "The order's minimum is 500 MXN (≈ 588 BLURT)").
 		 *  Empty string renders nothing. */
 		payHint?: string;
+		/** (v1.23.2) What one BLURT is worth in the order's currency: shows
+		 *  "BLURT (≈11 BRL)" beside the amount, following what is typed. */
+		fiatPerUnit?: { readonly value: number; readonly currency: string };
 	}
 
 	let {
@@ -117,7 +121,8 @@
 		memo,
 		onPaid,
 		onCancel,
-		payHint = ''
+		payHint = '',
+		fiatPerUnit
 	}: Props = $props();
 
 	type Phase =
@@ -187,6 +192,12 @@
 	const enteredCanonical = $derived(enteredParse.ok ? enteredParse.value : '');
 	const effectiveAmount = $derived(
 		amountEditable ? (enteredParse.ok ? enteredParse.number : Number.NaN) : amount
+	);
+	/** v1.23.2: "(≈11 BRL)" for the amount as it stands ('' when unknown). */
+	const fiatEquivalent = $derived(
+		fiatPerUnit !== undefined && Number.isFinite(effectiveAmount) && effectiveAmount > 0
+			? formatFiatCode(effectiveAmount * fiatPerUnit.value, fiatPerUnit.currency)
+			: ''
 	);
 	const formattedAmount = $derived(
 		formatBlurtAmount(Number.isFinite(effectiveAmount) && effectiveAmount > 0 ? effectiveAmount : 0)
@@ -443,19 +454,28 @@
 			     stays fixed to @peer — only the amount is user-entered. -->
 			<label class="mt-5 block">
 				<span class="text-sm font-semibold">{$_('chat.pay_blurt.amount_label')}</span>
-				<input
-					type="text"
-					value={enteredAmount}
-					oninput={sanitizeAmount}
-					maxlength="20"
-					inputmode="decimal"
-					autocomplete="off"
-					disabled={phase.kind === 'paying'}
-					placeholder={$_('chat.pay_blurt.amount_placeholder') as string}
-					class="mt-1 w-full rounded-lg border bg-white px-3 py-2 font-mono text-sm dark:bg-ink-900 {amountFieldInvalid
-						? 'border-red-500 dark:border-red-500'
-						: 'border-ink-300 dark:border-ink-700'}"
-				/>
+				<!-- v1.23.2: field, ticker and the fiat it is worth: [2752.096] BLURT (≈11 BRL) -->
+				<span class="mt-1 flex items-center gap-2">
+					<input
+						type="text"
+						value={enteredAmount}
+						oninput={sanitizeAmount}
+						maxlength="20"
+						inputmode="decimal"
+						autocomplete="off"
+						disabled={phase.kind === 'paying'}
+						placeholder={$_('chat.pay_blurt.amount_placeholder') as string}
+						class="w-40 min-w-0 flex-none rounded-lg border bg-white px-3 py-2 font-mono text-sm dark:bg-ink-900 {amountFieldInvalid
+							? 'border-red-500 dark:border-red-500'
+							: 'border-ink-300 dark:border-ink-700'}"
+					/>
+					<span class="flex-none text-sm font-semibold">BLURT</span>
+					{#if fiatEquivalent !== ''}
+						<span class="min-w-0 truncate text-sm text-ink-600 dark:text-ink-300"
+							>(≈<bdi>{fiatEquivalent}</bdi>)</span
+						>
+					{/if}
+				</span>
 				{#if payHint}
 					<p class="mt-1 text-xs text-morphit-teal dark:text-morphit-emerald">{payHint}</p>
 				{/if}
