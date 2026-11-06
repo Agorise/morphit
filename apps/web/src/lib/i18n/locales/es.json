@@ -2028,7 +2028,8 @@
 		"col_media": "Medios",
 		"col_support": "Soporte",
 		"licenses": "Licencias",
-		"licenses_title": "Licencias y avisos del código de terceros que este sitio envía a tu navegador"
+		"licenses_title": "Licencias y avisos del código de terceros que este sitio envía a tu navegador",
+		"witnesses": "Testigos"
 	},
 	"glossary": {
 		"active_key": {
@@ -4247,6 +4248,10 @@
 		"stats": {
 			"title": "Estadísticas de la red",
 			"description": "Estadísticas de actividad en vivo y solo agregadas de este mercado entre pares {brand}."
+		},
+		"witnesses": {
+			"title": "Nodos de Blurt — vota por los testigos más fiables",
+			"description": "Todos los testigos de Blurt, ordenados por cuánto tiempo llevan produciendo bloques, cuán pocos han perdido y cuán actual es su versión. Vota directamente desde la lista."
 		}
 	},
 	"settings": {
@@ -5093,7 +5098,8 @@
 			"empty": "Introduce tu clave Active.",
 			"lookup_failed": "No se pudo contactar con la blockchain para comprobar tu clave. Inténtalo de nuevo en un momento.",
 			"bad_device_password": "Esa contraseña de {brand} es incorrecta. Tu clave activa no se guardó.",
-			"keep_failed": "No se pudo guardar tu clave activa en este dispositivo. No se cambió nada: inténtalo de nuevo o elige «Olvidarla»."
+			"keep_failed": "No se pudo guardar tu clave activa en este dispositivo. No se cambió nada: inténtalo de nuevo o elige «Olvidarla».",
+			"is_posting_key_vote": "Esa es tu clave de publicación, que no puede firmar votos a testigos. Pega tu clave activa."
 		},
 		"retention_heading": "Después de este pago",
 		"retention_once": "Olvidarla (recomendado)",
@@ -5101,7 +5107,11 @@
 		"retention_keep": "Guardarla en este dispositivo, cifrada",
 		"retention_keep_help": "A partir de ahora se desbloquea con tu contraseña de {brand}. Quien conozca esa contraseña podría gastar tus BLURT, así que hazlo solo en un dispositivo que controles.",
 		"device_password_label": "Tu contraseña de {brand} de @{account}",
-		"device_password_help": "La contraseña con la que ya desbloqueas {brand}. Cifra tu clave activa en este dispositivo."
+		"device_password_help": "La contraseña con la que ya desbloqueas {brand}. Cifra tu clave activa en este dispositivo.",
+		"vote_title": "Un voto a un testigo necesita tu clave activa",
+		"vote_body": "Has iniciado sesión en @{account} solo con tu clave de publicación, que no puede firmar votos a testigos. Pega tu clave activa en el campo para continuar.",
+		"vote_retention_heading": "Después de este voto",
+		"vote_body_paired": "Este voto se firma con tu clave activa. Pégala en el campo para continuar."
 	},
 	"notifications": {},
 	"trust_score": {
@@ -5168,5 +5178,59 @@
 		"top_up_body": "Si publicaste una orden aquí en la última semana y tu saldo baja de 0,5 BLURT, recibes 1 BLURT (como máximo cada 3 días).",
 		"lent_note": "El Blurt Power prestado aumenta tu peso de voto en Blurt y sigue siendo del relay.",
 		"learn_more": "Cómo funcionan las recompensas"
+	},
+	"witnesses": {
+		"title": "Nodos de Blurt",
+		"intro": "La red Blurt la mantienen cientos de personas independientes. Cada una ejecuta lo que se llama un «nodo testigo» (Witness), y producen los bloques que forman la cadena de bloques. Vota por algunos que veas que llevan un tiempo produciendo bloques con éxito. Están ordenados así, y las estrellas indican los testigos más fiables.",
+		"col_avatar": "Avatar",
+		"display": "mostrar",
+		"hide": "ocultar",
+		"col_producer_for": "Produce desde hace",
+		"col_missed": "Bloques perdidos",
+		"col_rank": "Puesto",
+		"sort_stars_aria": "Ordenar por estrellas",
+		"col_needs": "Le faltan",
+		"col_running": "Versión",
+		"col_vote": "Voto",
+		"votes_left": "{count, plural, one {queda #} other {quedan #}}",
+		"weeks": "{count, plural, one {# semana} other {# semanas}}",
+		"weeks_short": "{count, plural, other {# sem.}}",
+		"announcement": "anuncio",
+		"announcement_aria": "Anuncio de {owner} (se abre en una pestaña nueva)",
+		"since": "desde {date}",
+		"missed_since": "{count, plural, one {# perdido desde {date}} other {# perdidos desde {date}}}",
+		"to_level_up": "para subir de puesto",
+		"needs_short": "le faltan {amount}",
+		"number_one": "n.º 1 ahora mismo",
+		"missed_recent": "{count, plural, one {# perdido en {hours} h} other {# perdidos en {hours} h}}",
+		"not_producing": "no produce",
+		"switched_off": "apagado",
+		"stars_aria": "{stars} de 5 estrellas",
+		"vote_aria": "Votar por {owner}",
+		"unvote_aria": "Retirar tu voto por {owner}",
+		"producing_count": "{count, plural, one {# testigo produjo un bloque en los últimos 30 días.} other {# testigos produjeron un bloque en los últimos 30 días.}}",
+		"show_others": "{count, plural, one {Mostrar el otro (no produce o está apagado)} other {Mostrar los otros # (no producen o están apagados)}}",
+		"hide_others": "{count, plural, one {Ocultar el otro} other {Ocultar los otros #}}",
+		"sort_label": "Ordenar",
+		"sort_stars": "★ Estrellas",
+		"loading": "Cargando los testigos…",
+		"load_error": "No se pudieron cargar los testigos. Inténtalo de nuevo en un minuto.",
+		"proxy_note": "Tu cuenta vota a través de @{proxy}, así que no puedes votar por testigos tú mismo hasta que se quite ese proxy.",
+		"max_reached": "Ya votas por {max} testigos, el máximo que permite Blurt. Retira un voto para dar otro.",
+		"modal_vote_title": "¿Votar por {owner}?",
+		"modal_unvote_title": "¿Retirar tu voto por {owner}?",
+		"modal_body": "Los votos a testigos se firman con tu clave activa. Un voto no mueve BLURT; tu Blurt Power se reparte a partes iguales entre los testigos por los que votas.",
+		"modal_vote_action": "Votar",
+		"modal_unvote_action": "Retirar voto",
+		"tied_with": "empatado con el n.º {rank}",
+		"sign_in_to_vote_for": "Inicia sesión para votar por {owner}",
+		"votes_load_error": "No se pudieron cargar tus votos, así que los botones de voto esperan.",
+		"sort_name": "Nombre",
+		"sort_name_aria": "Ordenar por nombre",
+		"sort_votes": "Tus votos primero",
+		"sort_votes_aria": "Ordenar con tus votos primero",
+		"sort_reverse": "Invertir el orden",
+		"table_caption": "Testigos de Blurt",
+		"missed_short": "{count, plural, one {# perdido} other {# perdidos}}"
 	}
 }

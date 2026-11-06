@@ -86,6 +86,8 @@ import { orderViewsRoute } from '$api/orderViews';
 import { orderCounterpartiesRoute } from '$api/orderCounterparties';
 import { profilesRoute } from '$api/profiles';
 import { accountBalanceRoute } from '$api/accountBalance';
+import { witnessesRoute } from '$api/witnesses';
+import { WitnessService } from '$indexer/witnessService';
 import { accountHistoryRoute } from '$api/accountHistory';
 import { accountKeysRoute } from '$api/accountKeys';
 import { chainExplorerRoute } from '$api/chainExplorer';
@@ -1149,6 +1151,19 @@ async function main(): Promise<void> {
 	// Measures only while the stats card is read (v1.21.7, see rpcHealth.ts).
 	const rpcProber = new RpcHealthProber(publishedRpcUrls);
 	rpcProber.start();
+
+	// The /witnesses page (v1.23.0): the ranked list, each producing witness's
+	// missed blocks written down every 10 minutes (the "missed in 24 h" flag),
+	// and the pictures, fetched by this instance only when a visitor asks.
+	const witnessService = new WitnessService({ blurt, db, apiDb });
+	witnessService.start();
+	app.route(
+		'/v1/witnesses',
+		witnessesRoute(witnessService, {
+			listRatePerMin: config.listRatePerMin,
+			resourceRatePerMin: config.resourceRatePerMin
+		})
+	);
 	app.route(
 		'/v1/rpc-endpoints',
 		rpcEndpointsApp(
@@ -1250,6 +1265,7 @@ async function main(): Promise<void> {
 		// The RPC card's background prober: no more rounds (one already in
 		// flight ends on its own timeout).
 		rpcProber.stop();
+		witnessService.stop();
 		stopPostingKeyRetry?.();
 		// The federation fast path's sender side: stop the warm-up interval and
 		// close the pooled hidden-service connections. Both are deliberately

@@ -11,6 +11,7 @@
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import LoginNameField from '$components/LoginNameField.svelte';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import { safeNextPath, withNext } from '$lib/utils/safeNext';
 	import {
 		bootFromEnvelope,
 		bootFromEnvelopeWithYubikey,
@@ -73,7 +74,8 @@
 		// If the user is already unlocked (e.g. navigated to /login by
 		// mistake while signed in), send them home.
 		if ($isUnlocked) {
-			void gotoLocale('/');
+			// (v1.23.0) …or, when a page sent them here (`?next=`), back to it.
+			void gotoLocale(postUnlockDestination());
 			return;
 		}
 
@@ -98,7 +100,7 @@
 			// User previously chose seed-only — they explicitly opted
 			// out of persistent unlock. Send straight to the import
 			// route, which handles seed-phrase entry.
-			void gotoLocale('/onboarding/import');
+			void gotoLocale(importPath);
 		} else {
 			// No mode recorded at all → this is a fresh device or
 			// someone who signed out completely. Offer import + new
@@ -116,7 +118,7 @@
 	 *  follow to upgrade. */
 	function upgradeWithKeys(): void {
 		reset({ clearDisk: true });
-		void gotoLocale('/onboarding/import');
+		void gotoLocale(importPath);
 	}
 
 	/** Handler for the "continue" affordance on the paired-readonly
@@ -215,21 +217,22 @@
 	 *  redirect tricks in one check; anything off-origin or malformed falls
 	 *  back to the homepage. */
 	function postUnlockDestination(): string {
-		const raw = $page.url.searchParams.get('next');
-		if (raw) {
-			try {
-				const u = new URL(raw, $page.url.origin);
-				if (u.origin === $page.url.origin) {
-					// Same-origin internal path; already locale-prefixed, and
-					// gotoLocale is idempotent on an existing prefix.
-					return u.pathname + u.search + u.hash;
-				}
-			} catch {
-				// malformed `next` — fall through to the homepage
-			}
-		}
-		return '/';
+		// Same-origin internal path; already locale-prefixed, and gotoLocale is
+		// idempotent on an existing prefix. (v1.23.0: the check lives in
+		// safeNextPath, shared with the import flow.)
+		return safeNextPath($page.url.searchParams.get('next'), $page.url.origin) ?? '/';
 	}
+
+	/** The import flow, carrying `next` along (v1.23.0): a visitor sent here by
+	 *  a page's action — a vote on /witnesses — goes back to it after importing
+	 *  a key on this device, as an unlock already did. */
+	const importPath = $derived(
+		withNext('/onboarding/import', $page.url.searchParams.get('next'), $page.url.origin)
+	);
+	/** Pairing with a phone carries `next` along too (v1.23.0). */
+	const qrPairPath = $derived(
+		withNext('/login/qr-pair', $page.url.searchParams.get('next'), $page.url.origin)
+	);
 
 	/** Lock-out check: if the user has burned through 5 invalid TOTP
 	 *  attempts, refuse further submissions for 30s. This is a
@@ -378,7 +381,7 @@
 	}
 
 	function switchToImport(): void {
-		void gotoLocale('/onboarding/import');
+		void gotoLocale(importPath);
 	}
 
 	async function handleUnlockYubikey(): Promise<void> {
@@ -762,7 +765,7 @@
 				     Width (not pointer:coarse) is the reliable guard — some
 				     phones don't report coarse, and a touch-laptop is
 				     desktop-class and should keep this. -->
-				<a href={lp('/login/qr-pair')} class="btn-secondary max-md:hidden">
+				<a href={lp(qrPairPath)} class="btn-secondary max-md:hidden">
 					<svg
 						viewBox="-1 -1 2002 2002"
 						fill="currentColor"
@@ -789,8 +792,8 @@
 
 		<div class="mt-8 flex flex-col gap-4 sm:flex-row">
 			<a
-				href={lp('/onboarding/import')}
-				onclick={(e) => guardSwitch(e, '/onboarding/import')}
+				href={lp(importPath)}
+				onclick={(e) => guardSwitch(e, importPath)}
 				class="btn-primary flex-1 text-center"
 			>
 				<span
@@ -823,8 +826,8 @@
 		     inherits the button text colour in both light + dark. -->
 		<div class="mt-4">
 			<a
-				href={lp('/login/qr-pair')}
-				onclick={(e) => guardSwitch(e, '/login/qr-pair')}
+				href={lp(qrPairPath)}
+				onclick={(e) => guardSwitch(e, qrPairPath)}
 				class="btn-secondary flex w-full"
 			>
 				<span class="inline-flex w-6 flex-none items-center justify-center" aria-hidden="true">

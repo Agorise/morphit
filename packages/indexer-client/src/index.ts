@@ -1015,6 +1015,64 @@ export interface RpcEndpointsResponse {
 	readonly endpoints: readonly RpcEndpointHealth[];
 }
 
+// ─── Witnesses (v1.23.0, the /witnesses page) ──────────────────────
+
+/** One Blurt witness as GET /v1/witnesses ranks it
+ *  (apps/indexer/src/indexer/witnessRanking.ts has the rules). */
+export interface WitnessRow {
+	readonly owner: string;
+	/** Vote rank, 1 = most votes. */
+	readonly rank: number;
+	/** The witness's own link (announcement, site), http(s) only; null when absent or unsafe. */
+	readonly url: string | null;
+	readonly created: string;
+	/** Weeks since the witness was created. */
+	readonly weeks: number;
+	readonly total_missed: number;
+	/** Blocks missed in the last `missed_window_hours` (24, or less when this
+	 *  instance has watched for less); null when not known yet. */
+	readonly missed_recent: number | null;
+	readonly missed_window_hours: number | null;
+	readonly version: string;
+	/** A whole major.minor behind the newest a producing witness runs. */
+	readonly version_behind: boolean;
+	/** Votes received, in BLURT Power. */
+	readonly votes_bp: number;
+	/** BP more needed to pass the witness one rank up; null for rank 1. */
+	readonly needs_bp: number | null;
+	/** Signing key set and a block produced in the last 30 days. */
+	readonly producing: boolean;
+	/** The witness switched itself off (signing key cleared). */
+	readonly disabled: boolean;
+	readonly score: number;
+	/** 0..5 in thirds. */
+	readonly stars: number;
+	/** This instance's path to the witness's picture; null when none. */
+	readonly avatar: string | null;
+}
+
+export interface WitnessesResponse {
+	readonly network: 'morphit';
+	readonly generated_at: string;
+	readonly head_block: number;
+	readonly newest_version: string | null;
+	/** This instance serves the pictures (false on a zero-clearnet one: no "display" link). */
+	readonly avatars: boolean;
+	readonly max_votes: number;
+	readonly producing_window_days: number;
+	readonly missed_window_hours: number;
+	/** Producing witnesses first, by stars; then the rest by rank. */
+	readonly witnesses: readonly WitnessRow[];
+}
+
+export interface WitnessVotesResponse {
+	readonly account: string;
+	readonly votes: readonly string[];
+	/** Votes through this proxy; the account's own votes do not count then. */
+	readonly proxy: string | null;
+	readonly max_votes: number;
+}
+
 // ─── Chat ciphertext ───────────────────────────────────────────────
 
 export interface ChatMessageRecord {

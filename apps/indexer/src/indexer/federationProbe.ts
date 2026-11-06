@@ -37,6 +37,7 @@
 import type pg from 'pg';
 
 import { lookup as dnsLookup } from 'node:dns/promises';
+import dnsPromises from 'node:dns/promises';
 import { Agent } from 'undici';
 
 import {
@@ -1317,6 +1318,43 @@ export async function resolveAndValidatePublicIp(
 }
 
 /**
+ * (v1.23.0) Like {@link resolveAndValidatePublicIp}, but through c-ares
+ * (`dns.Resolver`) with its own timeout and retries, so it never takes one of
+ * libuv's thread-pool threads (4 by default, shared with every `dns.lookup`
+ * and file operation in the process). For hosts an attacker chooses — a
+ * witness's picture — where a name server that never answers must cost
+ * nothing but this one request. Reads no /etc/hosts (a public host never
+ * needs it); A and AAAA both asked, EVERY record must be public.
+ */
+export async function resolvePublicIpCares(
+	hostname: string,
+	resolver: {
+		resolve4(hostname: string): Promise<string[]>;
+		resolve6(hostname: string): Promise<string[]>;
+	} = new dnsPromises.Resolver({ timeout: 2_500, tries: 2 })
+): Promise<{ address: string; family: 4 | 6 }> {
+	const [v4, v6] = await Promise.allSettled([
+		resolver.resolve4(hostname),
+		resolver.resolve6(hostname)
+	]);
+	const records: Array<{ address: string; family: 4 | 6 }> = [
+		...(v4.status === 'fulfilled' ? v4.value.map((a) => ({ address: a, family: 4 as const })) : []),
+		...(v6.status === 'fulfilled' ? v6.value.map((a) => ({ address: a, family: 6 as const })) : [])
+	];
+	if (records.length === 0) {
+		throw new Error(`fetchJson: hostname ${hostname} has no DNS records`);
+	}
+	for (const r of records) {
+		if (isPrivateIp(r.address)) {
+			throw new Error(
+				`fetchJson: refusing to probe ${hostname} — resolves to private IP ${r.address}`
+			);
+		}
+	}
+	return records[0]!;
+}
+
+/**
  * Test-only hook for injecting a stub resolver.  Production code
  * MUST NOT set this; it's `null` at runtime in normal operation.
  * Smokes that stub `globalThis.fetch` also stub this so the test
@@ -1436,6 +1474,39 @@ export async function fetchJson<T>(
 		readonly userAgent?: string;
 	} = {}
 ): Promise<T> {
+	const { bytes } = await fetchPublicBytes(url, { ...opts, accept: 'application/json' });
+	return JSON.parse(new TextDecoder('utf-8').decode(bytes)) as T;
+}
+
+/**
+ * The bytes of a public https URL, with every defence of {@link fetchJson}
+ * (which is built on it): https only, hidden-only instances never, no
+ * Tor/I2P/Lokinet name to the system resolver, private hosts refused, EVERY
+ * DNS record checked public and the connection pinned to the checked address,
+ * redirects never followed, the body capped while it streams.
+ *
+ * (v1.23.0) Lifted out of fetchJson unchanged so the witness avatars
+ * (indexer/witnessService.ts) — a URL each witness chose, so attacker-
+ * controlled — go through the very same code, not a copy of it. Returns the
+ * body and the Content-Type the server claimed (callers that care check the
+ * bytes themselves).
+ */
+export async function fetchPublicBytes(
+	url: string,
+	opts: {
+		readonly timeoutMs?: number;
+		readonly maxBytes?: number;
+		readonly userAgent?: string;
+		/** The Accept header (default JSON). */
+		readonly accept?: string;
+		/** (v1.23.0) How to resolve and check the host. Default: the system
+		 *  resolver (`dns.lookup`, which honours /etc/hosts, on libuv's small
+		 *  thread pool). The witness pictures pass `resolvePublicIpCares`, so an
+		 *  attacker-chosen host whose name server never answers cannot hold
+		 *  those threads (and with them every other lookup in the process). */
+		readonly resolve?: (hostname: string) => Promise<{ address: string; family: 4 | 6 }>;
+	} = {}
+): Promise<{ readonly bytes: Uint8Array; readonly contentType: string | null }> {
 	// Audit 2026-05 finding 5-5: defense-in-depth re-validation
 	// of the origin host before firing.  Even if a malicious
 	// origin slipped past registration (older row, manual DB
@@ -1475,17 +1546,39 @@ export async function fetchJson<T>(
 	// IP, and pin the resolved IP via a custom undici dispatcher
 	// so the connection can't land on a different IP than the
 	// one we validated.
-	const resolver = _dnsResolverForTesting ?? resolveAndValidatePublicIp;
-	const { address: pinnedIp, family: pinnedFamily } = await resolver(hostname);
-	const pinnedAgent = buildPinnedAgent(hostname, pinnedIp, pinnedFamily);
-
+	const resolver = _dnsResolverForTesting ?? opts.resolve ?? resolveAndValidatePublicIp;
+	// (v1.23.0) The deadline starts BEFORE the lookup and covers it: a name
+	// server that never answers used to hold the caller past its timeout.
 	const ctrl = new AbortController();
 	const timeout = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? FETCH_TIMEOUT_MS);
+	let pinned: { address: string; family: 4 | 6 };
+	try {
+		pinned = await new Promise<{ address: string; family: 4 | 6 }>((resolve, reject) => {
+			if (ctrl.signal.aborted) return reject(new Error('fetchJson: DNS lookup timed out'));
+			const onAbort = (): void => reject(new Error('fetchJson: DNS lookup timed out'));
+			ctrl.signal.addEventListener('abort', onAbort, { once: true });
+			resolver(hostname).then(
+				(r) => {
+					ctrl.signal.removeEventListener('abort', onAbort);
+					resolve(r);
+				},
+				(e: unknown) => {
+					ctrl.signal.removeEventListener('abort', onAbort);
+					reject(e);
+				}
+			);
+		});
+	} catch (err) {
+		clearTimeout(timeout);
+		throw err;
+	}
+	const { address: pinnedIp, family: pinnedFamily } = pinned;
+	const pinnedAgent = buildPinnedAgent(hostname, pinnedIp, pinnedFamily);
 	try {
 		const resp = await fetch(url, {
 			method: 'GET',
 			headers: {
-				accept: 'application/json',
+				accept: opts.accept ?? 'application/json',
 				'user-agent': 'morphit-indexer/federation-probe',
 				// (v1.20.2) a caller that names itself (the /compare fetch)
 				...(opts.userAgent !== undefined ? { 'user-agent': opts.userAgent } : {})
@@ -1555,8 +1648,7 @@ export async function fetchJson<T>(
 			buf.set(chunk, offset);
 			offset += chunk.byteLength;
 		}
-		const text = new TextDecoder('utf-8').decode(buf);
-		return JSON.parse(text) as T;
+		return { bytes: buf, contentType: resp.headers.get('content-type') };
 	} finally {
 		clearTimeout(timeout);
 		// The pinned agent is this probe's alone and is

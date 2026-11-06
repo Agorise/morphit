@@ -41,6 +41,7 @@ import { operatorRegistrationRoute } from '$api/operatorRegistration';
 import { operatorBlocksRoute } from '$api/operatorBlocks';
 import { featuredBidsRoute } from '$api/featuredBids';
 import { chainExplorerRoute } from '$api/chainExplorer';
+import { witnessesRoute } from '$api/witnesses';
 
 /** Answers every query with no rows. */
 const db = { query: async () => ({ rows: [], rowCount: 0 }) } as never;
@@ -87,7 +88,21 @@ const MOUNTED: [string, string, Hono][] = [
 	],
 	['operatorRegistration.ts', '/v1/operator-registration', operatorRegistrationRoute(db)],
 	['operatorBlocks.ts', '/v1/operator-blocks', operatorBlocksRoute(db, 'operator')],
-	['featuredBids.ts', '/v1/orderbook/featured/bids', featuredBidsRoute(db, 'operator')]
+	['featuredBids.ts', '/v1/orderbook/featured/bids', featuredBidsRoute(db, 'operator')],
+	// (v1.23.0) whom an account votes for (/votes/:account). Its pictures are
+	// /avatar/:witness — a public picture, not an account's answer.
+	[
+		'witnesses.ts',
+		'/v1/witnesses',
+		witnessesRoute(
+			{
+				getList: async () => ({}) as never,
+				getVotes: async (account: string) => ({ account, votes: [], proxy: null, max_votes: 30 }),
+				getAvatar: async () => null
+			},
+			{ listRatePerMin: 1_000_000, resourceRatePerMin: 1_000_000 }
+		)
+	]
 ];
 
 /** Not requested here: the streams (chatStream, chatActivityStream) set no-store

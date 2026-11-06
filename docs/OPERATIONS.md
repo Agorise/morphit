@@ -98,6 +98,7 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 52. [Fast-sync and the federation snapshot mirror](#52-fast-sync-and-the-federation-snapshot-mirror)
 53. [Per-instance branding — your logo, icons and site name](#53-per-instance-branding--your-logo-icons-and-site-name)
 54. [Offline notifications — the accounts your users' notes come from](#54-offline-notifications--the-accounts-your-users-notes-come-from)
+55. [The Blurt Nodes page (/witnesses) — what your instance does for it](#55-the-blurt-nodes-page-witnesses--what-your-instance-does-for-it)
 
 ---
 
@@ -14920,3 +14921,38 @@ address comes back, so a change never leaves her without notes.
 - "Too many codes today": the limits above; they reset at midnight UTC.
 - A Telegram chat that sends the bot five wrong codes is ignored for a day
   (a relay restart forgets this); the bot never answers a wrong code.
+
+---
+
+## 55. The Blurt Nodes page (/witnesses) — what your instance does for it
+
+Since v1.23.0 every instance has a **Blurt Nodes** page (`/witnesses`, linked at the
+bottom of the footer's Federation list): every Blurt witness, ordered by stars — how
+long it has produced blocks, how few it has missed and whether its version is current
+— with vote buttons for signed-in users (a witness vote is signed with the user's
+Active key in their browser, like Power Up; your indexer relays it, `/v1/broadcast`).
+Nothing to set up. What it costs your server:
+
+- **Chain reads.** The list (`get_witnesses_by_vote`, about 200 KB) at most once a
+  minute while people look at the page, and once every 10 minutes whatever happens, to
+  write down each producing witness's total of missed blocks (the page's "missed in
+  24 h" flag; the chain keeps only the running total). On a clearnet instance, also the
+  producing witnesses' accounts (one read of about 80 KB) at most once an hour, for their
+  picture addresses.
+- **A small local table**, `witness_missed_samples` (schema v72): about 30 rows every
+  10 minutes, kept 26 hours. Never in a snapshot.
+- **The witnesses' pictures**, only on a clearnet instance and only after a visitor
+  clicks "display": your indexer fetches each producing witness's picture from the host
+  the witness chose, at most once a day per picture, and serves it from your own address — the browser
+  still contacts nothing but your site. Each fetch goes through the same guarded
+  fetch as the federation probe (https only, every DNS answer checked public and the
+  connection pinned to it, no redirects, at most 1 MiB and 4096 px a side, and only a
+  PNG, JPEG, GIF or WebP is kept; its DNS lookup has its own timeout and does not use
+  the system resolver's shared threads). The picture host sees your server's address and
+  `User-Agent: morphit-indexer/witness-avatar`. If you firewall the indexer's outbound
+  traffic, pictures simply stay the plain head. A zero-clearnet (Tor/I2P-only)
+  instance never fetches them and shows no "display" link.
+- **Logs:** `journalctl -u morphit-indexer | grep witnesses` — `sample_failed` (a
+  10-minute sample could not be read; the flag waits for the next),
+  `avatar_unavailable` (a picture could not be fetched or was not an image; tried
+  again after an hour).

@@ -9,7 +9,8 @@
  * "operation type not permitted", which the wallet surfaced as a generic
  * "couldn't be completed on-chain" error.
  *
- * These four self-only ops MUST pass the allowlist (reach the mocked broadcast
+ * These self-only ops (and, since v1.23.0, the /witnesses page's
+ * account_witness_vote) MUST pass the allowlist (reach the mocked broadcast
  * → 200), and a genuinely disallowed op MUST still be refused with 400.
  */
 import { broadcastRoute } from '../src/api/broadcast.ts';
@@ -59,6 +60,8 @@ async function post(op: [string, Record<string, unknown>]): Promise<{ status: nu
 const SELF_OPS: Array<[string, Record<string, unknown>]> = [
 	['transfer_to_vesting', { from: 'bob', to: 'bob', amount: '100.000 BLURT' }],
 	['withdraw_vesting', { account: 'bob', vesting_shares: '0.000000 VESTS' }],
+	// (v1.23.0) the /witnesses page's vote buttons.
+	['account_witness_vote', { account: 'bob', witness: 'khrom', approve: true }],
 	['transfer', { from: 'bob', to: 'alice', amount: '5.000 BLURT', memo: '' }],
 	['custom_json', { required_auths: [], required_posting_auths: ['bob'], id: 'morphit_feedback_v1', json: '{}' }]
 ];

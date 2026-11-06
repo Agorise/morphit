@@ -66,6 +66,7 @@ const ROUTES = [
 	{ path: '/about-this-instance', priority: 0.5, changefreq: 'weekly' },
 	{ path: '/instances', priority: 0.5, changefreq: 'weekly' },
 	{ path: '/compare', priority: 0.5, changefreq: 'weekly' },
+	{ path: '/witnesses', priority: 0.5, changefreq: 'daily' },
 	{ path: '/stats', priority: 0.4, changefreq: 'daily' },
 	{ path: '/backup-keys', priority: 0.5, changefreq: 'monthly' },
 	{ path: '/privacy-terms', priority: 0.4, changefreq: 'yearly' },

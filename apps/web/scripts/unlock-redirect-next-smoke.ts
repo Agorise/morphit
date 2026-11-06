@@ -19,6 +19,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { safeNextPath } from '../src/lib/utils/safeNext';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
@@ -74,14 +75,20 @@ check(
 );
 
 // ─── 3. open-redirect guard ──────────────────────────────────────────────────
+// (v1.23.0) The check moved into lib/utils/safeNext.ts, shared with the import
+// flow and the QR sign-in: login must call it, and the helper must hold —
+// exercised here, not pattern-matched.
 check(
-	'postUnlockDestination resolves next against our own origin (same-origin only)',
-	/new URL\(\s*raw\s*,\s*\$page\.url\.origin\s*\)/.test(login) &&
-		/\.origin === \$page\.url\.origin/.test(login)
+	'postUnlockDestination resolves next through safeNextPath against our own origin',
+	/safeNextPath\(\s*\$page\.url\.searchParams\.get\('next'\)\s*,\s*\$page\.url\.origin\s*\)/.test(login)
 );
 check(
 	'an off-origin or malformed next falls back to the homepage',
-	/return '\/';/.test(login)
+	/safeNextPath\(.*\)\s*\?\?\s*'\/'/.test(login) &&
+		safeNextPath('/en/witnesses?x=1', 'https://morphit.io') === '/en/witnesses?x=1' &&
+		['//evil.example', 'https://evil.example/', '/\\evil.example', '/.//evil.example', 'javascript:x'].every(
+			(bad) => safeNextPath(bad, 'https://morphit.io') === null
+		)
 );
 
 console.log('');

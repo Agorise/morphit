@@ -33,8 +33,11 @@
  * private key; it only forwards bytes the user already authorized.
  *
  * NOT AN OPEN RELAY. Each operation must be one Morphit actually broadcasts
- * (custom_json with a `morphit_*` id, transfer, comment, comment_options, or
- * vote); anything else (account_update, witness ops, …) is refused up front.
+ * (ALLOWED_OP_TYPES below: custom_json with a `morphit_*` id, transfer,
+ * comment, comment_options, vote, claim_reward_balance, Power Up/Down, and —
+ * since v1.23.0 — account_witness_vote, the signer's own witness vote);
+ * anything else (account_update, witness_update, account_witness_proxy, …) is
+ * refused up front.
  * The chain itself charges the SIGNER's resource credits, so even within the
  * whitelist this can't be used to spam the chain — the cost lands on whoever
  * signed, not the operator.
@@ -74,7 +77,12 @@ const ALLOWED_OP_TYPES = new Set([
 	// "operation type not permitted", surfacing to the user as a generic
 	// on-chain error even though the signed op was perfectly valid.
 	'transfer_to_vesting',
-	'withdraw_vesting'
+	'withdraw_vesting',
+	// (v1.23.0) the /witnesses page's vote buttons. `account_witness_vote`
+	// approves or withdraws the SIGNER's own vote for a witness (active
+	// authority). It moves no funds and acts on no one else's account, the
+	// same safety class as the ops above.
+	'account_witness_vote'
 ]);
 
 /** A signed transaction, validated STRUCTURALLY only — the chain is the

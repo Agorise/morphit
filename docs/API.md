@@ -318,6 +318,61 @@ Each `endpoints[]` row: `url`, `transport` (`clearnet`|`tor`|`i2p`|`local`), `he
 or null), `http_status`, `checked_at` (ISO, or null before the first measurement),
 optional `name` (directory handle). Top level: `network`, `generated_at`.
 
+#### `GET /v1/witnesses`
+
+Tier: `list`
+
+Every Blurt witness for the `/witnesses` page (v1.23.0), read from the chain at most once a
+minute for all callers together (while the chain cannot be read, the last list is served —
+its `generated_at` says how old it is). Witnesses that are *producing* (signing key set, a block in
+the last 30 days) come first, by `score`; the rest follow by vote rank.
+
+The stars: `score = 5 × time × reliability × version`, `stars` = the score rounded down to a
+third. `time` = weeks since the witness was created ÷ 260, at most 1; `reliability` =
+1 ÷ (1 + missed blocks per week ÷ 50); `version` = 1 on the newest major.minor at least three
+producing witnesses run (the chain records whatever version a witness's blocks claim, so one
+witness cannot move it), 0.75 a whole version behind. A witness that is not producing has no stars.
+
+Top level: `network`, `generated_at`, `head_block`, `newest_version`, `avatars` (this instance
+serves the pictures; always false on a zero-clearnet instance, which reaches no clearnet
+host), `max_votes` (30), `producing_window_days` (30), `missed_window_hours` (24).
+
+Each `witnesses[]` row: `owner`, `rank` (vote rank), `url` (the witness's own link, http(s)
+only, or null), `created`, `weeks`, `total_missed`, `missed_recent` and `missed_window_hours`
+(blocks missed in the last 24 h — or in fewer hours when this instance has watched for less;
+null under an hour, or for a witness not producing), `version`, `version_behind`, `votes_bp`,
+`needs_bp` (BP more needed to pass the witness one rank up; null for rank 1), `producing`,
+`disabled` (signing key cleared), `score`, `stars`, `avatar` (this instance's path to the
+picture, or null; only producing witnesses have one).
+
+`missed_recent` comes from this instance's own record: every 10 minutes it writes down each
+producing witness's running total of missed blocks (the chain keeps only that total) and keeps
+26 hours of them (`witness_missed_samples`, never in a snapshot).
+
+#### `GET /v1/witnesses/votes/:account`
+
+Tier: `list`
+
+Whom `account` votes for: `account`, `votes` (witness names), `proxy` (when set, the account
+votes through it and cannot vote itself), `max_votes`. `404` for no such account. Not cached.
+
+#### `GET /v1/witnesses/avatar/:witness`
+
+Tier: `witness-avatar` (its own bucket, at the `resource` rate, so a page of pictures never
+holds up a broadcast)
+
+A witness's picture, fetched by **this instance** — the browser never contacts the picture's
+host. Only for a producing witness in the current list, only when this instance may reach
+clearnet, and only a PNG, JPEG, GIF or WebP (checked by its first bytes; never SVG) of at most
+1 MiB and 4096 px a side (read from its header). The fetch has every defence of the
+federation probe's (https only, every DNS record public, the connection pinned to it, no
+redirects, the body capped); its DNS lookup goes through c-ares with its own timeout (not the
+system resolver's shared threads) and counts toward the fetch's 10 s. Cached for a day per
+picture URL, a failure for an hour; the `?v=` in the path the list gives changes when the
+witness sets a new picture URL. Served with `Cache-Control: public, max-age=3600`,
+`X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'`. `404` when
+there is no picture to show.
+
 ---
 
 ### Orderbook

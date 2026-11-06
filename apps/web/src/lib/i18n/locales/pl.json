@@ -2028,7 +2028,8 @@
 		"col_media": "Media",
 		"col_support": "Wsparcie",
 		"licenses": "Licencje",
-		"licenses_title": "Licencje i informacje o kodzie zewnętrznym, który ta strona wysyła do twojej przeglądarki"
+		"licenses_title": "Licencje i informacje o kodzie zewnętrznym, który ta strona wysyła do twojej przeglądarki",
+		"witnesses": "Witnessi"
 	},
 	"glossary": {
 		"active_key": {
@@ -4247,6 +4248,10 @@
 		"stats": {
 			"title": "Statystyki sieci",
 			"description": "Aktualne, wyłącznie zbiorcze statystyki aktywności tego rynku peer-to-peer {brand}."
+		},
+		"witnesses": {
+			"title": "Węzły Blurt — głosuj na najbardziej niezawodnych witnessów",
+			"description": "Wszyscy witnessi Blurt, uporządkowani według tego, jak długo produkują bloki, jak mało ich pominęli i jak aktualna jest ich wersja. Głosuj prosto z listy."
 		}
 	},
 	"settings": {
@@ -5093,7 +5098,8 @@
 			"empty": "Wpisz swój klucz Active.",
 			"lookup_failed": "Nie udało się połączyć z blockchainem, aby sprawdzić klucz. Spróbuj za chwilę.",
 			"bad_device_password": "To hasło {brand} jest nieprawidłowe. Twój klucz aktywny nie został zapisany.",
-			"keep_failed": "Nie udało się zapisać klucza aktywnego na tym urządzeniu. Nic nie zostało zmienione — spróbuj ponownie lub wybierz „Zapomnij”."
+			"keep_failed": "Nie udało się zapisać klucza aktywnego na tym urządzeniu. Nic nie zostało zmienione — spróbuj ponownie lub wybierz „Zapomnij”.",
+			"is_posting_key_vote": "To Twój klucz postujący, który nie może podpisywać głosów na witnessów. Wklej zamiast niego klucz aktywny."
 		},
 		"retention_heading": "Po tej płatności",
 		"retention_once": "Zapomnij (zalecane)",
@@ -5101,7 +5107,11 @@
 		"retention_keep": "Zachowaj na tym urządzeniu, zaszyfrowany",
 		"retention_keep_help": "Od teraz odblokowywany hasłem {brand}. Kto pozna to hasło, będzie mógł wydać twoje BLURT — rób to tylko na urządzeniu, które kontrolujesz.",
 		"device_password_label": "Twoje hasło {brand} dla @{account}",
-		"device_password_help": "Hasło, którym już odblokowujesz {brand}. Szyfruje twój klucz aktywny na tym urządzeniu."
+		"device_password_help": "Hasło, którym już odblokowujesz {brand}. Szyfruje twój klucz aktywny na tym urządzeniu.",
+		"vote_title": "Głos na witnessa wymaga klucza aktywnego",
+		"vote_body": "Jesteś zalogowany na @{account} tylko kluczem postującym, który nie może podpisywać głosów na witnessów. Wklej klucz aktywny w pole, aby kontynuować.",
+		"vote_retention_heading": "Po tym głosie",
+		"vote_body_paired": "Ten głos podpisuje się kluczem aktywnym. Wklej go w pole, aby kontynuować."
 	},
 	"notifications": {},
 	"trust_score": {
@@ -5168,5 +5178,59 @@
 		"top_up_body": "Jeśli opublikowałeś tu zlecenie w ostatnim tygodniu, a twoje saldo spadnie poniżej 0.5 BLURT, otrzymujesz 1 BLURT (najwyżej raz na 3 dni).",
 		"lent_note": "Pożyczony Blurt Power zwiększa twoją wagę głosu w Blurt i pozostaje własnością relaya.",
 		"learn_more": "Jak działają nagrody"
+	},
+	"witnesses": {
+		"title": "Węzły Blurt",
+		"intro": "Sieć Blurt prowadzą setki niezależnych ludzi. Każdy z nich uruchamia tak zwany „węzeł Witness”, a oni produkują bloki, z których składa się blockchain. Zagłosuj na kilku, którzy, jak widzisz, od dłuższego czasu z powodzeniem produkują bloki. Właśnie tak są tu uporządkowani, a gwiazdki wskazują najbardziej niezawodnych witnessów.",
+		"col_avatar": "Awatar",
+		"display": "pokaż",
+		"hide": "ukryj",
+		"col_producer_for": "Produkuje od",
+		"col_missed": "Pominięte bloki",
+		"col_rank": "Miejsce",
+		"sort_stars_aria": "Sortuj według gwiazdek",
+		"col_needs": "Brakuje",
+		"col_running": "Wersja",
+		"col_vote": "Głos",
+		"votes_left": "{count, plural, one {został #} few {zostały #} many {zostało #} other {zostało #}}",
+		"weeks": "{count, plural, one {# tygodnia} few {# tygodni} many {# tygodni} other {# tygodnia}}",
+		"weeks_short": "{count, plural, other {# tyg.}}",
+		"announcement": "ogłoszenie",
+		"announcement_aria": "Ogłoszenie {owner} (otwiera się w nowej karcie)",
+		"since": "od {date}",
+		"missed_since": "{count, plural, one {# pominięty od {date}} few {# pominięte od {date}} many {# pominiętych od {date}} other {# pominiętego od {date}}}",
+		"to_level_up": "do awansu",
+		"needs_short": "brakuje {amount}",
+		"number_one": "teraz nr 1",
+		"missed_recent": "{count, plural, one {# pominięty w {hours} godz.} few {# pominięte w {hours} godz.} many {# pominiętych w {hours} godz.} other {# pominiętego w {hours} godz.}}",
+		"not_producing": "nie produkuje",
+		"switched_off": "wyłączony",
+		"stars_aria": "{stars} z 5 gwiazdek",
+		"vote_aria": "Zagłosuj na {owner}",
+		"unvote_aria": "Wycofaj swój głos na {owner}",
+		"producing_count": "{count, plural, one {# witness wyprodukował blok w ciągu ostatnich 30 dni.} few {# witnessi wyprodukowali blok w ciągu ostatnich 30 dni.} many {# witnessów wyprodukowało blok w ciągu ostatnich 30 dni.} other {# witnessa wyprodukowało blok w ciągu ostatnich 30 dni.}}",
+		"show_others": "{count, plural, one {Pokaż pozostałego (nie produkuje lub wyłączony)} other {Pokaż pozostałych # (nie produkują lub wyłączeni)}}",
+		"hide_others": "{count, plural, one {Ukryj pozostałego} other {Ukryj pozostałych #}}",
+		"sort_label": "Sortuj",
+		"sort_stars": "★ Gwiazdki",
+		"loading": "Wczytywanie witnessów…",
+		"load_error": "Nie udało się wczytać witnessów. Spróbuj ponownie za minutę.",
+		"proxy_note": "Twoje konto głosuje przez @{proxy}, więc nie możesz sam głosować na witnessów, dopóki ten proxy nie zostanie usunięty.",
+		"max_reached": "Głosujesz już na {max} witnessów, najwięcej, ile pozwala Blurt. Wycofaj jeden głos, aby oddać inny.",
+		"modal_vote_title": "Zagłosować na {owner}?",
+		"modal_unvote_title": "Wycofać swój głos na {owner}?",
+		"modal_body": "Głosy na witnessów podpisuje się kluczem aktywnym. Głos nie przenosi żadnego BLURT; Twój Blurt Power dzieli się po równo między witnessów, na których głosujesz.",
+		"modal_vote_action": "Głosuj",
+		"modal_unvote_action": "Wycofaj głos",
+		"tied_with": "remis z nr {rank}",
+		"sign_in_to_vote_for": "Zaloguj się, aby zagłosować na {owner}",
+		"votes_load_error": "Nie udało się wczytać Twoich głosów, więc przyciski głosowania czekają.",
+		"sort_name": "Nazwa",
+		"sort_name_aria": "Sortuj według nazwy",
+		"sort_votes": "Najpierw Twoje głosy",
+		"sort_votes_aria": "Sortuj z Twoimi głosami na początku",
+		"sort_reverse": "Odwróć kolejność",
+		"table_caption": "Witnessi Blurt",
+		"missed_short": "{count, plural, one {# pominięty} few {# pominięte} many {# pominiętych} other {# pominiętego}}"
 	}
 }

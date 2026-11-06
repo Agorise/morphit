@@ -3641,3 +3641,20 @@ CREATE TABLE IF NOT EXISTS offline_notify_matrix_rooms (
 ALTER TABLE offline_notify_leave ADD COLUMN IF NOT EXISTS address_mac BYTEA;
 COMMENT ON TABLE offline_notify_matrix_rooms IS
     'Offline notices: each Matrix address (keyed hash) and its one room with the bot (sealed). Local only.';
+
+-- ─── v72: witness_missed_samples (the /witnesses "missed in 24 h" flag) ───
+-- The chain keeps only each witness's running total of missed blocks. Every
+-- ten minutes the indexer writes down the total of every producing witness
+-- here and deletes rows over 26 hours old; the page's flag is the current
+-- total minus the one a day ago (indexer/witnessService.ts). Local only: this
+-- instance's own observations, never in a snapshot.
+CREATE TABLE IF NOT EXISTS witness_missed_samples (
+    owner        TEXT        NOT NULL,
+    sampled_at   TIMESTAMPTZ NOT NULL,
+    total_missed BIGINT      NOT NULL CHECK (total_missed >= 0),
+    PRIMARY KEY (owner, sampled_at)
+);
+CREATE INDEX IF NOT EXISTS witness_missed_samples_sampled_at
+    ON witness_missed_samples (sampled_at);
+COMMENT ON TABLE witness_missed_samples IS
+    'Each producing witness''s total missed blocks every 10 minutes, kept 26 hours: the /witnesses page''s missed-in-24h flag. Local only.';

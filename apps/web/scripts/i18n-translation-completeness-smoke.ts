@@ -839,6 +839,13 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'chat.address.pill_method_dcr', locale: 'es', reason: `(c) "Decred (DCR)" is the proper brand name; no translation` },
 	{ key: 'chat.address.pill_method_dcr', locale: 'fr', reason: `(c) "Decred (DCR)" is the proper brand name; no translation` },
 	{ key: 'chat.address.pill_method_dcr', locale: 'de', reason: `(c) "Decred (DCR)" is the proper brand name; no translation` },
+	// v1.23.0 — the /witnesses page (Blurt Nodes).
+	{ key: 'footer.witnesses', locale: 'de', reason: '(b) loanword — German Blurt/Steem communities say "Witnesses", as de already does for witness_label' },
+	{ key: 'witnesses.col_avatar', locale: 'de', reason: '(a) same-word — German "Avatar" is spelled as in English' },
+	{ key: 'witnesses.col_avatar', locale: 'es', reason: '(a) same-word — Spanish "avatar" is spelled as in English' },
+	{ key: 'witnesses.col_avatar', locale: 'fr', reason: '(a) same-word — French "avatar" is spelled as in English' },
+	{ key: 'witnesses.col_vote', locale: 'fr', reason: '(a) same-word — French "vote" is spelled as in English' },
+	{ key: 'witnesses.sort_name', locale: 'de', reason: '(a) same-word — German "Name" is spelled as in English' },
 	{ key: 'chat.address.pill_method_ecx', locale: 'es', reason: `(c) "eCash (ECX)" is the proper brand name; no translation` },
 	{ key: 'chat.address.pill_method_ecx', locale: 'fr', reason: `(c) "eCash (ECX)" is the proper brand name; no translation` },
 	{ key: 'chat.address.pill_method_ecx', locale: 'de', reason: `(c) "eCash (ECX)" is the proper brand name; no translation` },

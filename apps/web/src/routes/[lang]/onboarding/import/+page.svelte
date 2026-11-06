@@ -3,6 +3,7 @@
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
 	import { page } from '$app/stores';
+	import { safeNextPath } from '$lib/utils/safeNext';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import Head from '$components/Head.svelte';
@@ -818,7 +819,11 @@
 					// explanatory banner is skipped.
 				}
 			}
-			const dest = pendingDestination;
+			// (v1.23.0) Back to the page that sent the visitor to sign in (a vote on
+			// /witnesses), once the account name is known; a seed or keyfile import
+			// still goes to /settings first, where that name is set.
+			const next = safeNextPath($page.url.searchParams.get('next'), $page.url.origin);
+			const dest = !pendingNeedsAccountName && next !== null ? next : pendingDestination;
 			pendingEnvelope = null;
 			pendingSessionPassword = '';
 			rememberPassword = '';

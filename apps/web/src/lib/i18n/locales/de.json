@@ -2028,7 +2028,8 @@
 		"col_media": "Medien",
 		"col_support": "Support",
 		"licenses": "Lizenzen",
-		"licenses_title": "Lizenzen und Hinweise des Fremdcodes, den diese Seite an deinen Browser sendet"
+		"licenses_title": "Lizenzen und Hinweise des Fremdcodes, den diese Seite an deinen Browser sendet",
+		"witnesses": "Witnesses"
 	},
 	"glossary": {
 		"active_key": {
@@ -4247,6 +4248,10 @@
 		"stats": {
 			"title": "Netzwerkstatistiken",
 			"description": "Live-Aktivitätsstatistiken dieses {brand}-Peer-to-Peer-Marktplatzes, ausschließlich aggregiert."
+		},
+		"witnesses": {
+			"title": "Blurt-Nodes — stimme für die zuverlässigsten Witnesses",
+			"description": "Alle Blurt-Witnesses, geordnet danach, wie lange sie Blöcke produzieren, wie wenige sie verpasst haben und wie aktuell ihre Version ist. Direkt aus der Liste abstimmen."
 		}
 	},
 	"settings": {
@@ -5093,7 +5098,8 @@
 			"empty": "Gib deinen Active-Key ein.",
 			"lookup_failed": "Die Blockchain konnte nicht erreicht werden, um deinen Schlüssel zu prüfen. Versuche es gleich noch einmal.",
 			"bad_device_password": "Dieses {brand}-Passwort ist falsch. Dein Active key wurde nicht gespeichert.",
-			"keep_failed": "Dein Active key konnte auf diesem Gerät nicht gespeichert werden. Es wurde nichts geändert — versuche es erneut oder wähle „Vergessen“."
+			"keep_failed": "Dein Active key konnte auf diesem Gerät nicht gespeichert werden. Es wurde nichts geändert — versuche es erneut oder wähle „Vergessen“.",
+			"is_posting_key_vote": "Das ist dein Posting key, der keine Witness-Stimmen signieren kann. Füge stattdessen deinen Active key ein."
 		},
 		"retention_heading": "Nach dieser Zahlung",
 		"retention_once": "Vergessen (empfohlen)",
@@ -5101,7 +5107,11 @@
 		"retention_keep": "Auf diesem Gerät behalten, verschlüsselt",
 		"retention_keep_help": "Wird künftig mit deinem {brand}-Passwort entsperrt. Wer dieses Passwort kennt, könnte dann deine BLURT ausgeben — mach das nur auf einem Gerät, das du kontrollierst.",
 		"device_password_label": "Dein {brand}-Passwort für @{account}",
-		"device_password_help": "Das Passwort, mit dem du {brand} bereits entsperrst. Es verschlüsselt deinen Active key auf diesem Gerät."
+		"device_password_help": "Das Passwort, mit dem du {brand} bereits entsperrst. Es verschlüsselt deinen Active key auf diesem Gerät.",
+		"vote_title": "Eine Witness-Stimme benötigt deinen Active key",
+		"vote_body": "Du bist bei @{account} nur mit deinem Posting key angemeldet, der keine Witness-Stimmen signieren kann. Füge deinen Active key in das Feld ein, um fortzufahren.",
+		"vote_retention_heading": "Nach dieser Stimme",
+		"vote_body_paired": "Diese Stimme wird mit deinem Active key signiert. Füge ihn in das Feld ein, um fortzufahren."
 	},
 	"notifications": {},
 	"trust_score": {
@@ -5168,5 +5178,59 @@
 		"top_up_body": "Wenn du in der letzten Woche hier eine Order gepostet hast und dein Guthaben unter 0,5 BLURT fällt, bekommst du 1 BLURT (höchstens alle 3 Tage).",
 		"lent_note": "Geliehene Blurt Power erhöht dein Stimmgewicht auf Blurt und bleibt Eigentum des Relays.",
 		"learn_more": "So funktionieren die Belohnungen"
+	},
+	"witnesses": {
+		"title": "Blurt-Nodes",
+		"intro": "Das Blurt-Netzwerk wird von Hunderten unabhängiger Menschen betrieben. Jeder betreibt einen sogenannten „Witness-Node“, und sie produzieren die Blöcke, aus denen die Blockchain besteht. Stimme für ein paar, die schon eine Weile erfolgreich Blöcke produzieren. Genau so sind sie hier geordnet, und die Sterne zeigen die zuverlässigsten Witnesses.",
+		"col_avatar": "Avatar",
+		"display": "anzeigen",
+		"hide": "ausblenden",
+		"col_producer_for": "Produziert seit",
+		"col_missed": "Verpasste Blöcke",
+		"col_rank": "Rang",
+		"sort_stars_aria": "Nach Sternen sortieren",
+		"col_needs": "Fehlt",
+		"col_running": "Version",
+		"col_vote": "Stimme",
+		"votes_left": "{count, plural, other {# übrig}}",
+		"weeks": "{count, plural, one {# Woche} other {# Wochen}}",
+		"weeks_short": "{count, plural, other {# Wo.}}",
+		"announcement": "Ankündigung",
+		"announcement_aria": "Ankündigung von {owner} (öffnet in einem neuen Tab)",
+		"since": "seit {date}",
+		"missed_since": "{count, plural, other {# verpasst seit {date}}}",
+		"to_level_up": "bis zum nächsten Rang",
+		"needs_short": "fehlt {amount}",
+		"number_one": "gerade #1",
+		"missed_recent": "{count, plural, other {# verpasst in {hours} Std.}}",
+		"not_producing": "produziert nicht",
+		"switched_off": "abgeschaltet",
+		"stars_aria": "{stars} von 5 Sternen",
+		"vote_aria": "Für {owner} stimmen",
+		"unvote_aria": "Deine Stimme für {owner} zurückziehen",
+		"producing_count": "{count, plural, one {# Witness hat in den letzten 30 Tagen einen Block produziert.} other {# Witnesses haben in den letzten 30 Tagen einen Block produziert.}}",
+		"show_others": "{count, plural, one {Den anderen zeigen (produziert nicht oder abgeschaltet)} other {Die anderen # zeigen (produzieren nicht oder abgeschaltet)}}",
+		"hide_others": "{count, plural, one {Den anderen ausblenden} other {Die anderen # ausblenden}}",
+		"sort_label": "Sortieren",
+		"sort_stars": "★ Sterne",
+		"loading": "Witnesses werden geladen…",
+		"load_error": "Die Witnesses konnten nicht geladen werden. Versuche es in einer Minute noch einmal.",
+		"proxy_note": "Dein Konto stimmt über @{proxy} ab. Du kannst erst selbst für Witnesses stimmen, wenn dieser Proxy entfernt ist.",
+		"max_reached": "Du stimmst bereits für {max} Witnesses, das Maximum bei Blurt. Ziehe eine Stimme zurück, um eine neue zu vergeben.",
+		"modal_vote_title": "Für {owner} stimmen?",
+		"modal_unvote_title": "Deine Stimme für {owner} zurückziehen?",
+		"modal_body": "Witness-Stimmen werden mit deinem Active key signiert. Eine Stimme bewegt kein BLURT; deine Blurt Power wird gleichmäßig auf die Witnesses verteilt, für die du stimmst.",
+		"modal_vote_action": "Abstimmen",
+		"modal_unvote_action": "Stimme zurückziehen",
+		"tied_with": "gleichauf mit #{rank}",
+		"sign_in_to_vote_for": "Zum Abstimmen für {owner} anmelden",
+		"votes_load_error": "Deine Stimmen konnten nicht geladen werden, daher warten die Stimm-Buttons.",
+		"sort_name": "Name",
+		"sort_name_aria": "Nach Name sortieren",
+		"sort_votes": "Deine Stimmen zuerst",
+		"sort_votes_aria": "Mit deinen Stimmen zuerst sortieren",
+		"sort_reverse": "Reihenfolge umkehren",
+		"table_caption": "Blurt-Witnesses",
+		"missed_short": "{count, plural, other {# verpasst}}"
 	}
 }

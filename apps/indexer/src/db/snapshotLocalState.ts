@@ -44,6 +44,8 @@ export const LOCAL_ONLY_TABLES: readonly string[] = [
 	// This instance's own price observations (its peers, its feeds).
 	'price_drift_baseline',
 	'price_peer_observations',
+	// This instance's own record of the witnesses' missed blocks (v72).
+	'witness_missed_samples',
 	// This operator's moderation decisions.
 	'moderation_flag_clearances',
 	// The RPC directory row is chain-derived, but the RELAY merges it into its

@@ -56,6 +56,7 @@
 	import { startPairingSession, type PairingState } from '$lib/auth/pairingClient';
 	import { bootFromPairedSession } from '$stores/identity';
 	import { setUserBlurtAccount } from '$blurt/ops/profile';
+	import { safeNextPath } from '$lib/utils/safeNext';
 
 	let pairingState = $state<PairingState>({ kind: 'starting' });
 	let qrSvg = $state<string | null>(null);
@@ -199,8 +200,11 @@
 			// Defer the nav slightly so the success card has a moment
 			// to render.  Cleared on unmount so a fast page-leave
 			// doesn't fire a navigation after we've gone.
+			// (v1.23.0) Back to the page that sent the user to sign in (a vote on
+			// /witnesses), when one did; the orderbook otherwise.
+			const next = safeNextPath($page.url.searchParams.get('next'), $page.url.origin);
 			const t = setTimeout(() => {
-				void goto(lp('/orderbook'));
+				void goto(next ?? lp('/orderbook'));
 			}, 1200);
 			return () => clearTimeout(t);
 		}

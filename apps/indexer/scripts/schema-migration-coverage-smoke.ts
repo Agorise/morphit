@@ -105,7 +105,10 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // Next release: 70 → 71. v71 = offline_notify_matrix_rooms (one Matrix room per
 // address) + offline_notify_leave.address_mac, in BOTH schema.sql (banner at the
 // end) and MIGRATIONS[] — checked.
-const SCHEMA_HEAD_VERSION = 71;
+// v1.23.0: 71 → 72. v72 = witness_missed_samples (the /witnesses page's
+// missed-in-24h flag; local only), in BOTH schema.sql (banner at the end) and
+// MIGRATIONS[] — checked.
+const SCHEMA_HEAD_VERSION = 72;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  bumped 27 → 35 when
@@ -125,7 +128,8 @@ const SCHEMA_HEAD_VERSION = 71;
 // Next release: 68 → 69, in lockstep with SCHEMA_HEAD_VERSION above.
 // Next release: 69 → 70, in lockstep with SCHEMA_HEAD_VERSION above.
 // Next release: 70 → 71, in lockstep with SCHEMA_HEAD_VERSION above.
-const MIGRATIONS_COVERAGE_HIGH = 71;
+// v1.23.0: 71 → 72, in lockstep with SCHEMA_HEAD_VERSION above.
+const MIGRATIONS_COVERAGE_HIGH = 72;
 
 interface ScenarioResult {
 	readonly name: string;

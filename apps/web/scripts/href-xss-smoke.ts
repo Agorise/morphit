@@ -59,6 +59,7 @@ const SAFE_BUILDER_NAMES = [
 	'safeContactUrl',
 	'safeInstanceOrigin',
 	'safeBlurtImageUrl', // TermsText builder; https + exact host img.blurt.blog + image-ext + no userinfo/odd-port, returns string|null
+	'safeWitnessLinkUrl', // /witnesses (v1.23.0): http/https only, no userinfo, ≤512 chars; returns string|null
 	'validateContactUrl', // local /operators function returning string|null
 	'canonicalFor', // Head.svelte canonical builder
 	'shareUrl', // FaqSearch builder

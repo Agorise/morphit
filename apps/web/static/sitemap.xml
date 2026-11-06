@@ -1923,6 +1923,166 @@
 		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/compare"/>
 	</url>
 	<url>
+		<loc>https://morphit.io/de/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/en/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/es/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/fa/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/fr/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/it/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/pl/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/ru/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/zh-CN/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/zh-HK/witnesses</loc>
+		<changefreq>daily</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/witnesses"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/witnesses"/>
+	</url>
+	<url>
 		<loc>https://morphit.io/de/stats</loc>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>

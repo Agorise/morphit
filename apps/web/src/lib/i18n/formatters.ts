@@ -487,3 +487,31 @@ export function formatMonthYear(input: string | Date | null | undefined): string
 	const year = getDateFormat(loc, { year: 'numeric', timeZone: 'UTC' }).format(d);
 	return `${month}, ${year}`;
 }
+
+/**
+ * "Nov '25" — the locale's short month name, an apostrophe and the 2-digit
+ * year, in UTC (v1.23.0, the /witnesses page's "since Nov '25"; the owner's
+ * own wording). The month comes from Intl's own short form, never a clipped
+ * long name: clipping turned fr juin and juillet both into "jui". Chinese
+ * takes Intl's own year-and-month form ("21年7月"); Persian, whose calendar
+ * Intl uses for it, the full month name and the full year ("تیر ۱۴۰۰"),
+ * since clipped Persian months are other words and "'۰۰" is ambiguous.
+ * Returns '' for a missing or bogus date so the caller can drop the "since …".
+ */
+export function formatMonthYearShort(input: string | Date | null | undefined): string {
+	if (input === null || input === undefined || input === '') return '';
+	const d = typeof input === 'string' ? new Date(input) : input;
+	if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '';
+	const loc = activeLocale();
+	if (loc.startsWith('zh')) {
+		return getDateFormat(loc, { year: '2-digit', month: 'short', timeZone: 'UTC' }).format(d);
+	}
+	if (loc === 'fa') {
+		const month = getDateFormat(loc, { month: 'long', timeZone: 'UTC' }).format(d);
+		const year = getDateFormat(loc, { year: 'numeric', timeZone: 'UTC' }).format(d);
+		return `${month} ${year}`;
+	}
+	const month = getDateFormat(loc, { month: 'short', timeZone: 'UTC' }).format(d);
+	const year = getDateFormat(loc, { year: '2-digit', timeZone: 'UTC' }).format(d);
+	return `${month} '${year}`;
+}

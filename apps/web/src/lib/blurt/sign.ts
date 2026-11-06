@@ -321,6 +321,38 @@ export async function prepareUnsignedWithdrawVesting(
 	};
 }
 
+/** (v1.23.0) Assemble the unsigned `account_witness_vote` Transaction for the
+ *  /witnesses page — async, no key needed. Requires ACTIVE authority (dblurt:
+ *  "should be the Active key at least"), so sign it with `signTransferWithKey`
+ *  inside runWithActiveKey, or with the ephemeral key UnlockActiveKeyModal
+ *  hands over, then `broadcastSignedTransaction`. `approve: false` withdraws
+ *  the vote. It moves no funds and changes only the signer's own vote. */
+export async function prepareUnsignedAccountWitnessVote(
+	account: string,
+	witness: string,
+	approve: boolean
+): Promise<Transaction> {
+	if (!BROADCAST_ACCOUNT_RE.test(account)) {
+		throw new Error('prepareUnsignedAccountWitnessVote: account is not a valid account name');
+	}
+	if (!BROADCAST_ACCOUNT_RE.test(witness)) {
+		throw new Error('prepareUnsignedAccountWitnessVote: witness is not a valid account name');
+	}
+	if (typeof approve !== 'boolean') {
+		throw new Error('prepareUnsignedAccountWitnessVote: approve must be true or false');
+	}
+
+	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
+
+	return {
+		ref_block_num,
+		ref_block_prefix,
+		expiration,
+		operations: [['account_witness_vote', { account, witness, approve }]],
+		extensions: []
+	};
+}
+
 /** Phase F.5 audit fix (F-18) — sign a transfer transaction
  *  with the active key.  Pure, sync, ~10ms.  Caller invokes from
  *  inside a runWithActiveKey closure so the key wipe happens

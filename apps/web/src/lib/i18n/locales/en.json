@@ -2028,7 +2028,8 @@
 		"col_media": "Media",
 		"col_support": "Support",
 		"licenses": "Licenses",
-		"licenses_title": "Licenses and notices of the third-party code this site sends to your browser"
+		"licenses_title": "Licenses and notices of the third-party code this site sends to your browser",
+		"witnesses": "Witnesses"
 	},
 	"glossary": {
 		"active_key": {
@@ -4247,6 +4248,10 @@
 		"stats": {
 			"title": "Network statistics",
 			"description": "Live, aggregate-only activity statistics for this {brand} peer-to-peer marketplace."
+		},
+		"witnesses": {
+			"title": "Blurt Nodes — vote for the most reliable witnesses",
+			"description": "Every Blurt witness, in order of how long it has produced blocks, how few it has missed and how current its version is. Vote right from the list."
 		}
 	},
 	"settings": {
@@ -5093,7 +5098,8 @@
 			"empty": "Enter your Active key.",
 			"lookup_failed": "Couldn't reach the blockchain to check your key. Try again in a moment.",
 			"bad_device_password": "That {brand} password is wrong. Your Active key was not saved.",
-			"keep_failed": "Couldn't save your Active key on this device. Nothing was changed — try again, or choose “Forget it”."
+			"keep_failed": "Couldn't save your Active key on this device. Nothing was changed — try again, or choose “Forget it”.",
+			"is_posting_key_vote": "That's your Posting key, which can't sign witness votes. Paste your Active key instead."
 		},
 		"retention_heading": "After this payment",
 		"retention_once": "Forget it (recommended)",
@@ -5101,7 +5107,11 @@
 		"retention_keep": "Keep it on this device, encrypted",
 		"retention_keep_help": "Unlocked with your {brand} password from now on. Anyone who learns that password could then spend your BLURT, so only do this on a device you control.",
 		"device_password_label": "Your @{account} {brand} password",
-		"device_password_help": "The password you already unlock {brand} with. It encrypts your Active key on this device."
+		"device_password_help": "The password you already unlock {brand} with. It encrypts your Active key on this device.",
+		"vote_title": "A witness vote needs your Active key",
+		"vote_body": "You're signed in to @{account} with your Posting key only, which can't sign witness votes. Paste your Active key into the field to continue.",
+		"vote_retention_heading": "After this vote",
+		"vote_body_paired": "This vote is signed with your Active key. Paste it into the field to continue."
 	},
 	"notifications": {},
 	"trust_score": {
@@ -5168,5 +5178,59 @@
 		"top_up_body": "If you posted an order here in the last week and your balance drops below 0.5 BLURT, you receive 1 BLURT (at most every 3 days).",
 		"lent_note": "Lent Blurt Power adds to your voting weight on Blurt and stays the relay's.",
 		"learn_more": "How rewards work"
+	},
+	"witnesses": {
+		"title": "Blurt Nodes",
+		"intro": "The Blurt network is run by hundreds of independent people. Each runs what's called a \"Witness node\" and they produce the blocks that comprise the blockchain. Vote for a few that you see have been successfully producing blocks for a while. They are ranked this way and the stars indicate the most reliable Witnesses.",
+		"col_avatar": "Avatar",
+		"display": "display",
+		"hide": "hide",
+		"col_producer_for": "Producer for",
+		"col_missed": "Blocks missed",
+		"col_rank": "Rank",
+		"sort_stars_aria": "Sort by stars",
+		"col_needs": "Needs",
+		"col_running": "Running",
+		"col_vote": "Vote",
+		"votes_left": "{count, plural, other {# left}}",
+		"weeks": "{count, plural, one {# week} other {# weeks}}",
+		"weeks_short": "{count, plural, one {# wk} other {# wks}}",
+		"announcement": "announcement",
+		"announcement_aria": "{owner}'s announcement (opens in a new tab)",
+		"since": "since {date}",
+		"missed_since": "{count, plural, other {# missed since {date}}}",
+		"to_level_up": "to level up",
+		"needs_short": "needs {amount}",
+		"number_one": "#1 right now",
+		"missed_recent": "{count, plural, other {# missed in {hours} h}}",
+		"not_producing": "not producing",
+		"switched_off": "switched off",
+		"stars_aria": "{stars} of 5 stars",
+		"vote_aria": "Vote for {owner}",
+		"unvote_aria": "Remove your vote for {owner}",
+		"producing_count": "{count, plural, one {# witness produced a block in the last 30 days.} other {# witnesses produced a block in the last 30 days.}}",
+		"show_others": "{count, plural, one {Show the other one (not producing or switched off)} other {Show the other # (not producing or switched off)}}",
+		"hide_others": "{count, plural, one {Hide the other one} other {Hide the other #}}",
+		"sort_label": "Sort",
+		"sort_stars": "★ Stars",
+		"loading": "Loading the witnesses…",
+		"load_error": "Couldn't load the witnesses. Try again in a minute.",
+		"proxy_note": "Your account votes through @{proxy}, so you can't vote for witnesses yourself until that proxy is removed.",
+		"max_reached": "You already vote for {max} witnesses, the most Blurt allows. Remove a vote to add another.",
+		"modal_vote_title": "Vote for {owner}?",
+		"modal_unvote_title": "Remove your vote for {owner}?",
+		"modal_body": "Witness votes are signed with your Active key. A vote moves no BLURT; your Blurt Power is split evenly across the witnesses you vote for.",
+		"modal_vote_action": "Vote",
+		"modal_unvote_action": "Remove vote",
+		"tied_with": "tied with #{rank}",
+		"sign_in_to_vote_for": "Sign in to vote for {owner}",
+		"votes_load_error": "Couldn't load your votes, so the vote buttons are waiting.",
+		"sort_name": "Name",
+		"sort_name_aria": "Sort by name",
+		"sort_votes": "Your votes first",
+		"sort_votes_aria": "Sort with your votes first",
+		"sort_reverse": "Reverse the order",
+		"table_caption": "Blurt witnesses",
+		"missed_short": "{count, plural, other {# missed}}"
 	}
 }

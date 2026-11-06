@@ -2028,7 +2028,8 @@
 		"col_media": "Media",
 		"col_support": "Supporto",
 		"licenses": "Licenze",
-		"licenses_title": "Licenze e avvisi del codice di terze parti che questo sito invia al tuo browser"
+		"licenses_title": "Licenze e avvisi del codice di terze parti che questo sito invia al tuo browser",
+		"witnesses": "Witness"
 	},
 	"glossary": {
 		"active_key": {
@@ -4247,6 +4248,10 @@
 		"stats": {
 			"title": "Statistiche della rete",
 			"description": "Statistiche di attività in tempo reale e solo aggregate di questo marketplace peer-to-peer {brand}."
+		},
+		"witnesses": {
+			"title": "Nodi Blurt — vota per i witness più affidabili",
+			"description": "Tutti i witness di Blurt, ordinati per da quanto tempo producono blocchi, quanti pochi ne hanno mancati e quanto è aggiornata la loro versione. Vota direttamente dalla lista."
 		}
 	},
 	"settings": {
@@ -5093,7 +5098,8 @@
 			"empty": "Inserisci la tua chiave Active.",
 			"lookup_failed": "Impossibile raggiungere la blockchain per verificare la chiave. Riprova tra poco.",
 			"bad_device_password": "Quella password {brand} non è corretta. La tua chiave attiva non è stata salvata.",
-			"keep_failed": "Impossibile salvare la chiave attiva su questo dispositivo. Nulla è stato modificato: riprova o scegli «Dimenticala»."
+			"keep_failed": "Impossibile salvare la chiave attiva su questo dispositivo. Nulla è stato modificato: riprova o scegli «Dimenticala».",
+			"is_posting_key_vote": "Questa è la tua chiave di pubblicazione, che non può firmare voti ai witness. Incolla invece la tua chiave attiva."
 		},
 		"retention_heading": "Dopo questo pagamento",
 		"retention_once": "Dimenticala (consigliato)",
@@ -5101,7 +5107,11 @@
 		"retention_keep": "Conservala su questo dispositivo, cifrata",
 		"retention_keep_help": "D'ora in poi si sblocca con la tua password di {brand}. Chi conosce quella password potrebbe spendere i tuoi BLURT: fallo solo su un dispositivo che controlli.",
 		"device_password_label": "La tua password {brand} di @{account}",
-		"device_password_help": "La password con cui già sblocchi {brand}. Cifra la tua chiave attiva su questo dispositivo."
+		"device_password_help": "La password con cui già sblocchi {brand}. Cifra la tua chiave attiva su questo dispositivo.",
+		"vote_title": "Un voto a un witness richiede la tua chiave attiva",
+		"vote_body": "Hai effettuato l'accesso a @{account} solo con la chiave di pubblicazione, che non può firmare voti ai witness. Incolla la tua chiave attiva nel campo per continuare.",
+		"vote_retention_heading": "Dopo questo voto",
+		"vote_body_paired": "Questo voto si firma con la tua chiave attiva. Incollala nel campo per continuare."
 	},
 	"notifications": {},
 	"trust_score": {
@@ -5168,5 +5178,59 @@
 		"top_up_body": "Se hai pubblicato un ordine qui nell'ultima settimana e il tuo saldo scende sotto 0.5 BLURT, ricevi 1 BLURT (al massimo una volta ogni 3 giorni).",
 		"lent_note": "Il Blurt Power prestato si aggiunge al tuo peso di voto su Blurt e resta del relay.",
 		"learn_more": "Come funzionano le ricompense"
+	},
+	"witnesses": {
+		"title": "Nodi Blurt",
+		"intro": "La rete Blurt è gestita da centinaia di persone indipendenti. Ognuna fa girare quello che si chiama un \"nodo Witness\" e producono i blocchi che compongono la blockchain. Vota per alcuni che vedi produrre blocchi con successo da un po' di tempo. Sono ordinati proprio così, e le stelle indicano i Witness più affidabili.",
+		"col_avatar": "Avatar",
+		"display": "mostra",
+		"hide": "nascondi",
+		"col_producer_for": "Produce da",
+		"col_missed": "Blocchi mancati",
+		"col_rank": "Posizione",
+		"sort_stars_aria": "Ordina per stelle",
+		"col_needs": "Mancano",
+		"col_running": "Versione",
+		"col_vote": "Voto",
+		"votes_left": "{count, plural, one {ne resta #} other {ne restano #}}",
+		"weeks": "{count, plural, one {# settimana} other {# settimane}}",
+		"weeks_short": "{count, plural, other {# sett.}}",
+		"announcement": "annuncio",
+		"announcement_aria": "Annuncio di {owner} (si apre in una nuova scheda)",
+		"since": "dal {date}",
+		"missed_since": "{count, plural, one {# mancato dal {date}} other {# mancati dal {date}}}",
+		"to_level_up": "per salire di posizione",
+		"needs_short": "mancano {amount}",
+		"number_one": "n. 1 in questo momento",
+		"missed_recent": "{count, plural, one {# mancato in {hours} h} other {# mancati in {hours} h}}",
+		"not_producing": "non produce",
+		"switched_off": "spento",
+		"stars_aria": "{stars} stelle su 5",
+		"vote_aria": "Vota per {owner}",
+		"unvote_aria": "Ritira il tuo voto per {owner}",
+		"producing_count": "{count, plural, one {# witness ha prodotto un blocco negli ultimi 30 giorni.} other {# witness hanno prodotto un blocco negli ultimi 30 giorni.}}",
+		"show_others": "{count, plural, one {Mostra l’altro (non produce o spento)} other {Mostra gli altri # (non producono o spenti)}}",
+		"hide_others": "{count, plural, one {Nascondi l’altro} other {Nascondi gli altri #}}",
+		"sort_label": "Ordina",
+		"sort_stars": "★ Stelle",
+		"loading": "Caricamento dei witness…",
+		"load_error": "Impossibile caricare i witness. Riprova tra un minuto.",
+		"proxy_note": "Il tuo account vota tramite @{proxy}, quindi non puoi votare tu stesso per i witness finché quel proxy non viene rimosso.",
+		"max_reached": "Voti già per {max} witness, il massimo consentito da Blurt. Ritira un voto per darne un altro.",
+		"modal_vote_title": "Votare per {owner}?",
+		"modal_unvote_title": "Ritirare il tuo voto per {owner}?",
+		"modal_body": "I voti ai witness si firmano con la tua chiave attiva. Un voto non sposta BLURT; il tuo Blurt Power viene diviso in parti uguali tra i witness per cui voti.",
+		"modal_vote_action": "Vota",
+		"modal_unvote_action": "Ritira il voto",
+		"tied_with": "a pari con il n. {rank}",
+		"sign_in_to_vote_for": "Accedi per votare per {owner}",
+		"votes_load_error": "Impossibile caricare i tuoi voti, quindi i pulsanti di voto restano in attesa.",
+		"sort_name": "Nome",
+		"sort_name_aria": "Ordina per nome",
+		"sort_votes": "Prima i tuoi voti",
+		"sort_votes_aria": "Ordina con i tuoi voti per primi",
+		"sort_reverse": "Inverti l’ordine",
+		"table_caption": "Witness di Blurt",
+		"missed_short": "{count, plural, one {# mancato} other {# mancati}}"
 	}
 }

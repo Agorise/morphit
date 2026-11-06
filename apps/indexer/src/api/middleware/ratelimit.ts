@@ -98,7 +98,15 @@ import { logger } from '$log';
 
 const log = logger('ratelimit');
 
-type Tier = 'list' | 'resource' | 'federation' | 'rpc-endpoints' | 'payment-check';
+type Tier =
+	| 'list'
+	| 'resource'
+	| 'federation'
+	| 'rpc-endpoints'
+	| 'payment-check'
+	// (v1.23.0) the /witnesses page's pictures: a page shows dozens at once, and
+	// sharing the `resource` bucket let a few reloads push a vote broadcast to 429.
+	| 'witness-avatar';
 
 interface Bucket {
 	/** Unix-ms timestamps of requests still within the window. */

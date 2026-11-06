@@ -607,6 +607,7 @@
 						<li><a href={lp('/instances')} class={footLink}>{$_('footer.instances')}</a></li>
 						<li><a href={lp('/run-a-node')} class={footLink}>{$_('footer.run_a_node')}</a></li>
 						<li><a href={lp('/compare')} class={footLink} title={$_('footer.compare_title')}>{$_('footer.compare')}</a></li>
+						<li><a href={lp('/witnesses')} class={footLink}>{$_('footer.witnesses')}</a></li>
 					</ul>
 				</div>
 				<div>

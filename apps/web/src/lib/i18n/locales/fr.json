@@ -2028,7 +2028,8 @@
 		"col_media": "Médias",
 		"col_support": "Assistance",
 		"licenses": "Licences",
-		"licenses_title": "Licences et mentions du code tiers que ce site envoie à votre navigateur"
+		"licenses_title": "Licences et mentions du code tiers que ce site envoie à votre navigateur",
+		"witnesses": "Témoins"
 	},
 	"glossary": {
 		"active_key": {
@@ -4247,6 +4248,10 @@
 		"stats": {
 			"title": "Statistiques du réseau",
 			"description": "Statistiques d'activité en direct et uniquement agrégées de cette place de marché pair-à-pair {brand}."
+		},
+		"witnesses": {
+			"title": "Nœuds Blurt — votez pour les témoins les plus fiables",
+			"description": "Tous les témoins Blurt, classés selon depuis combien de temps ils produisent des blocs, combien peu ils en ont manqué et à quel point leur version est à jour. Votez directement depuis la liste."
 		}
 	},
 	"settings": {
@@ -5093,7 +5098,8 @@
 			"empty": "Saisissez votre clé Active.",
 			"lookup_failed": "Impossible de joindre la blockchain pour vérifier votre clé. Réessayez dans un instant.",
 			"bad_device_password": "Ce mot de passe {brand} est incorrect. Votre clé active n'a pas été enregistrée.",
-			"keep_failed": "Impossible d'enregistrer votre clé active sur cet appareil. Rien n'a été modifié — réessayez, ou choisissez « L'oublier »."
+			"keep_failed": "Impossible d'enregistrer votre clé active sur cet appareil. Rien n'a été modifié — réessayez, ou choisissez « L'oublier ».",
+			"is_posting_key_vote": "C’est votre clé de publication, qui ne peut pas signer de votes pour les témoins. Collez plutôt votre clé active."
 		},
 		"retention_heading": "Après ce paiement",
 		"retention_once": "L'oublier (recommandé)",
@@ -5101,7 +5107,11 @@
 		"retention_keep": "La conserver sur cet appareil, chiffrée",
 		"retention_keep_help": "Déverrouillée désormais avec votre mot de passe {brand}. Quiconque connaît ce mot de passe pourrait alors dépenser vos BLURT : ne le faites que sur un appareil que vous contrôlez.",
 		"device_password_label": "Votre mot de passe {brand} @{account}",
-		"device_password_help": "Le mot de passe avec lequel vous déverrouillez déjà {brand}. Il chiffre votre clé active sur cet appareil."
+		"device_password_help": "Le mot de passe avec lequel vous déverrouillez déjà {brand}. Il chiffre votre clé active sur cet appareil.",
+		"vote_title": "Un vote pour un témoin nécessite votre clé active",
+		"vote_body": "Vous êtes connecté à @{account} uniquement avec votre clé de publication, qui ne peut pas signer de votes pour les témoins. Collez votre clé active dans le champ pour continuer.",
+		"vote_retention_heading": "Après ce vote",
+		"vote_body_paired": "Ce vote est signé avec votre clé active. Collez-la dans le champ pour continuer."
 	},
 	"notifications": {},
 	"trust_score": {
@@ -5168,5 +5178,59 @@
 		"top_up_body": "Si vous avez publié un ordre ici au cours de la dernière semaine et que votre solde passe sous 0,5 BLURT, vous recevez 1 BLURT (au plus tous les 3 jours).",
 		"lent_note": "Le Blurt Power prêté augmente votre poids de vote sur Blurt et reste la propriété du relais.",
 		"learn_more": "Comment fonctionnent les récompenses"
+	},
+	"witnesses": {
+		"title": "Nœuds Blurt",
+		"intro": "Le réseau Blurt est géré par des centaines de personnes indépendantes. Chacune fait tourner ce qu'on appelle un « nœud témoin » (Witness), et ils produisent les blocs qui composent la blockchain. Votez pour quelques-uns qui produisent des blocs avec succès depuis un moment. Ils sont classés ainsi, et les étoiles indiquent les témoins les plus fiables.",
+		"col_avatar": "Avatar",
+		"display": "afficher",
+		"hide": "masquer",
+		"col_producer_for": "Produit depuis",
+		"col_missed": "Blocs manqués",
+		"col_rank": "Rang",
+		"sort_stars_aria": "Trier par étoiles",
+		"col_needs": "Manque",
+		"col_running": "Version",
+		"col_vote": "Vote",
+		"votes_left": "{count, plural, one {# restant} other {# restants}}",
+		"weeks": "{count, plural, one {# semaine} other {# semaines}}",
+		"weeks_short": "{count, plural, other {# sem.}}",
+		"announcement": "annonce",
+		"announcement_aria": "Annonce de {owner} (s'ouvre dans un nouvel onglet)",
+		"since": "depuis {date}",
+		"missed_since": "{count, plural, one {# manqué depuis {date}} other {# manqués depuis {date}}}",
+		"to_level_up": "pour monter d’un rang",
+		"needs_short": "manque {amount}",
+		"number_one": "n° 1 en ce moment",
+		"missed_recent": "{count, plural, one {# manqué en {hours} h} other {# manqués en {hours} h}}",
+		"not_producing": "ne produit pas",
+		"switched_off": "éteint",
+		"stars_aria": "{stars} étoiles sur 5",
+		"vote_aria": "Voter pour {owner}",
+		"unvote_aria": "Retirer votre vote pour {owner}",
+		"producing_count": "{count, plural, one {# témoin a produit un bloc ces 30 derniers jours.} other {# témoins ont produit un bloc ces 30 derniers jours.}}",
+		"show_others": "{count, plural, one {Afficher l’autre (ne produit pas ou éteint)} other {Afficher les # autres (ne produisent pas ou éteints)}}",
+		"hide_others": "{count, plural, one {Masquer l’autre} other {Masquer les # autres}}",
+		"sort_label": "Trier",
+		"sort_stars": "★ Étoiles",
+		"loading": "Chargement des témoins…",
+		"load_error": "Impossible de charger les témoins. Réessayez dans une minute.",
+		"proxy_note": "Votre compte vote via @{proxy} : vous ne pouvez pas voter vous-même pour des témoins tant que ce proxy n'est pas retiré.",
+		"max_reached": "Vous votez déjà pour {max} témoins, le maximum autorisé par Blurt. Retirez un vote pour en donner un autre.",
+		"modal_vote_title": "Voter pour {owner} ?",
+		"modal_unvote_title": "Retirer votre vote pour {owner} ?",
+		"modal_body": "Les votes pour les témoins sont signés avec votre clé active. Un vote ne déplace aucun BLURT ; votre Blurt Power est réparti à parts égales entre les témoins pour lesquels vous votez.",
+		"modal_vote_action": "Voter",
+		"modal_unvote_action": "Retirer le vote",
+		"tied_with": "à égalité avec le n° {rank}",
+		"sign_in_to_vote_for": "Connectez-vous pour voter pour {owner}",
+		"votes_load_error": "Impossible de charger vos votes : les boutons de vote attendent.",
+		"sort_name": "Nom",
+		"sort_name_aria": "Trier par nom",
+		"sort_votes": "Vos votes d’abord",
+		"sort_votes_aria": "Trier avec vos votes d’abord",
+		"sort_reverse": "Inverser l’ordre",
+		"table_caption": "Témoins Blurt",
+		"missed_short": "{count, plural, one {# manqué} other {# manqués}}"
 	}
 }

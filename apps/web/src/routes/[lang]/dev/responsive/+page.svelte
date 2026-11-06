@@ -43,6 +43,7 @@
 		{ path: '/chat', label: 'Chat inbox' },
 		{ path: '/faq', label: 'FAQ' },
 		{ path: '/operators', label: 'Operators directory' },
+		{ path: '/witnesses', label: 'Blurt witnesses (Blurt Nodes)' },
 		{ path: '/instances', label: 'Instances' },
 		{ path: '/run-a-node', label: 'Run a node' },
 		{ path: '/explorer', label: 'Explorer' },

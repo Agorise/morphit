@@ -43,6 +43,8 @@ import type {
 	ReputationReceiptResponse,
 	StatsResponse,
 	RpcEndpointsResponse,
+	WitnessesResponse,
+	WitnessVotesResponse,
 	StrangerFeeQuoteResponse,
 	ErrorResponse,
 	ErrorCode,
@@ -264,6 +266,36 @@ export function getRpcEndpoints(opts?: {
 		});
 	}
 	return request<RpcEndpointsResponse>('/v1/rpc-endpoints', { signal: opts?.signal });
+}
+
+/** GET /v1/witnesses — every Blurt witness, ranked by stars (the /witnesses
+ *  page, v1.23.0). The indexer reads the chain at most once a minute for
+ *  everyone; a cold read is two large RPC answers (plus the witnesses'
+ *  accounts, for the pictures), which over Tor can take a while, hence the
+ *  longer budget. */
+export function getWitnesses(signal?: AbortSignal): Promise<Result<WitnessesResponse>> {
+	return request<WitnessesResponse>('/v1/witnesses', { signal, minTimeoutMs: 30_000 });
+}
+
+/** GET /v1/witnesses/votes/:account — whom an account votes for, and its proxy. */
+export function getWitnessVotes(
+	account: string,
+	signal?: AbortSignal
+): Promise<Result<WitnessVotesResponse>> {
+	return request<WitnessVotesResponse>(`/v1/witnesses/votes/${encodeURIComponent(account)}`, {
+		signal,
+		cache: 'no-store'
+	});
+}
+
+/** The absolute URL of a witness picture path the list gave
+ *  (`/v1/witnesses/avatar/<owner>?v=…`): served by this instance's indexer. */
+export function witnessAvatarUrl(path: string): string | undefined {
+	// Only this instance's own picture paths: an indexer that answered anything
+	// else (an absolute URL elsewhere) gets no picture (the CSP would refuse it
+	// anyway).
+	if (!/^\/v1\/witnesses\/avatar\/[a-z0-9.-]+(\?v=[0-9a-f]{1,64})?$/.test(path)) return undefined;
+	return new URL(path, resolveOrigin(MORPHIT_INDEXER_ORIGIN)).href;
 }
 
 /** GET /v1/instances — federation directory (all known peer

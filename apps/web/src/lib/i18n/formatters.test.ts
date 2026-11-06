@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { locale } from 'svelte-i18n';
 
 import { formatRating } from './formatters';
+import { SUPPORTED_LOCALES } from './locales';
 
 describe('formatRating (G12)', () => {
 	afterAll(() => locale.set('en'));
@@ -24,4 +25,43 @@ describe('formatRating (G12)', () => {
 			if (loc !== 'en' && loc !== 'zh-CN') expect((4.5).toFixed(2)).not.toBe(want);
 		});
 	}
+});
+
+describe('formatMonthYearShort (v1.23.0, the /witnesses "since Nov \'25")', () => {
+	afterAll(() => locale.set('en'));
+	it('the short month, an apostrophe and the 2-digit year, in UTC', async () => {
+		const { formatMonthYearShort } = await import('./formatters');
+		locale.set('en');
+		expect(formatMonthYearShort('2025-11-30T23:59:59Z')).toBe("Nov '25");
+		// UTC: the first of the month just after midnight UTC is that month everywhere.
+		expect(formatMonthYearShort('2022-10-01T00:30:00Z')).toBe("Oct '22");
+		locale.set('de');
+		expect(formatMonthYearShort('2022-10-01T21:41:42Z')).toBe("Okt '22");
+		expect(formatMonthYearShort('')).toBe('');
+		expect(formatMonthYearShort('1970-01-01T00:00:00Z')).toBe('');
+		expect(formatMonthYearShort('nonsense')).toBe('');
+	});
+
+	it('June and July stay apart in every locale (a clipped long name made both "jui" in fr)', async () => {
+		const { formatMonthYearShort } = await import('./formatters');
+		for (const { code: loc } of SUPPORTED_LOCALES) {
+			locale.set(loc);
+			const june = formatMonthYearShort('2021-06-15T12:00:00Z');
+			const july = formatMonthYearShort('2021-07-15T12:00:00Z');
+			expect(june, loc).not.toBe(july);
+			expect(june.length, loc).toBeGreaterThan(0);
+		}
+		locale.set('fr');
+		expect(formatMonthYearShort('2021-07-15T12:00:00Z')).toBe("juil. '21");
+	});
+
+	it('Chinese uses its own year-month form; Persian the full month and year', async () => {
+		const { formatMonthYearShort } = await import('./formatters');
+		locale.set('zh-CN');
+		expect(formatMonthYearShort('2021-07-15T12:00:00Z')).toBe('21年7月');
+		locale.set('fa');
+		const fa = formatMonthYearShort('2021-07-15T12:00:00Z');
+		expect(fa).toBe('تیر ۱۴۰۰');
+		expect(fa).not.toContain("'");
+	});
 });

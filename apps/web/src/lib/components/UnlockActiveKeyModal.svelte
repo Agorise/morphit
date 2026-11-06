@@ -40,6 +40,7 @@
 	import { fetchAccountKeysForSigning } from '$blurt/accountKeys';
 	import PasswordScope from '$components/PasswordScope.svelte';
 	import { keyField } from '$lib/ui/keyField';
+	import { isPairedReadOnly } from '$stores/identity';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 
 	interface Props {
@@ -52,9 +53,13 @@
 		 *  The CTA stays disabled with the reason visible above — we never enable
 		 *  a button first and explain afterwards. */
 		canProceed?: boolean;
+		/** What the key signs (v1.23.0): 'payment' (the default — Pay, Power Up/Down)
+		 *  or 'vote' (a witness vote on /witnesses, which is no payment and moves no
+		 *  money, so the box says so). */
+		purpose?: 'payment' | 'vote';
 	}
 
-	let { account, onUnlocked, onCancel, canProceed = true }: Props = $props();
+	let { account, onUnlocked, onCancel, canProceed = true, purpose = 'payment' }: Props = $props();
 
 	let secret = $state('');
 	let busy = $state(false);
@@ -101,7 +106,10 @@
 			};
 			const result = await resolveActiveKey(account, secret, authorities);
 			if (!result.ok) {
-				errorKey = REASON_KEY[result.reason] ?? 'unlock_active.error.not_this_account';
+				errorKey =
+					purpose === 'vote' && result.reason === 'is_posting_key'
+						? 'unlock_active.error.is_posting_key_vote'
+						: (REASON_KEY[result.reason] ?? 'unlock_active.error.not_this_account');
 				return;
 			}
 			// Clear the typed secret from component state before doing anything
@@ -141,8 +149,16 @@
 		class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
 		role="note"
 	>
-		<p class="font-semibold">{$_('unlock_active.title')}</p>
-		<p class="mt-1">{$_('unlock_active.body', { values: { account } })}</p>
+		<p class="font-semibold">
+			{purpose === 'vote' ? $_('unlock_active.vote_title') : $_('unlock_active.title')}
+		</p>
+		<p class="mt-1">
+			{purpose !== 'vote'
+				? $_('unlock_active.body', { values: { account } })
+				: $isPairedReadOnly
+					? $_('unlock_active.vote_body_paired')
+					: $_('unlock_active.vote_body', { values: { account } })}
+		</p>
 	</div>
 
 	<label class="block">
@@ -186,7 +202,11 @@
 	<!-- The choice the maintainer insisted on. 'once' is preselected: never promote a
 	     posting-only account behind the user's back. -->
 	<fieldset class="space-y-2">
-		<legend class="text-sm font-semibold">{$_('unlock_active.retention_heading')}</legend>
+		<legend class="text-sm font-semibold"
+			>{purpose === 'vote'
+				? $_('unlock_active.vote_retention_heading')
+				: $_('unlock_active.retention_heading')}</legend
+		>
 
 		<label class="flex cursor-pointer items-start gap-2 text-sm">
 			<input type="radio" bind:group={retention} value="once" class="mt-1" disabled={busy} />

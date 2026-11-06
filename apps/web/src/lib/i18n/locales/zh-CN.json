@@ -2028,7 +2028,8 @@
 		"col_media": "媒体",
 		"col_support": "支持",
 		"licenses": "许可证",
-		"licenses_title": "本网站发送到你浏览器的第三方代码的许可证与声明"
+		"licenses_title": "本网站发送到你浏览器的第三方代码的许可证与声明",
+		"witnesses": "见证人"
 	},
 	"glossary": {
 		"active_key": {
@@ -4247,6 +4248,10 @@
 		"stats": {
 			"title": "网络统计",
 			"description": "此 {brand} 点对点市场的实时聚合活动统计。"
+		},
+		"witnesses": {
+			"title": "Blurt 节点 — 为最可靠的见证人投票",
+			"description": "所有 Blurt 见证人，按出块时间长短、丢块多少和版本新旧排列。直接在列表中投票。"
 		}
 	},
 	"settings": {
@@ -5093,7 +5098,8 @@
 			"empty": "请输入你的 Active 密钥。",
 			"lookup_failed": "无法连接区块链以核对你的密钥。请稍后重试。",
 			"bad_device_password": "该 {brand} 密码不正确。你的活跃密钥未被保存。",
-			"keep_failed": "无法在本设备上保存你的活跃密钥。没有任何更改——请重试，或选择“随后忘记”。"
+			"keep_failed": "无法在本设备上保存你的活跃密钥。没有任何更改——请重试，或选择“随后忘记”。",
+			"is_posting_key_vote": "这是你的发帖密钥，它无法签署见证人投票。请改为粘贴你的活跃密钥。"
 		},
 		"retention_heading": "本次付款之后",
 		"retention_once": "随后忘记（推荐）",
@@ -5101,7 +5107,11 @@
 		"retention_keep": "加密保存在本设备上",
 		"retention_keep_help": "此后用你的 {brand} 密码解锁。知道该密码的人就能花掉你的 BLURT，所以只在你自己掌控的设备上这样做。",
 		"device_password_label": "你的 @{account} {brand} 密码",
-		"device_password_help": "你解锁 {brand} 时使用的密码。它会在本设备上加密你的活跃密钥。"
+		"device_password_help": "你解锁 {brand} 时使用的密码。它会在本设备上加密你的活跃密钥。",
+		"vote_title": "见证人投票需要你的活跃密钥",
+		"vote_body": "你目前仅用发帖密钥登录 @{account}，它无法签署见证人投票。请将你的活跃密钥粘贴到输入框以继续。",
+		"vote_retention_heading": "本次投票之后",
+		"vote_body_paired": "这次投票使用你的活跃密钥签名。请将其粘贴到输入框以继续。"
 	},
 	"notifications": {},
 	"trust_score": {
@@ -5168,5 +5178,59 @@
 		"top_up_body": "如果你在过去一周内在这里发布过订单，且余额低于 0.5 BLURT，你会收到 1 BLURT（最多每 3 天一次）。",
 		"lent_note": "借给你的 Blurt Power 会增加你在 Blurt 上的投票权重，但仍归中继所有。",
 		"learn_more": "奖励如何运作"
+	},
+	"witnesses": {
+		"title": "Blurt 节点",
+		"intro": "Blurt 网络由数百位独立的人运行。每个人运行一个所谓的“见证人节点”（Witness），他们生产构成区块链的区块。请为几个你看到已经成功出块一段时间的见证人投票。列表正是按这个顺序排列的，星级表示最可靠的见证人。",
+		"col_avatar": "头像",
+		"display": "显示",
+		"hide": "隐藏",
+		"col_producer_for": "出块时长",
+		"col_missed": "丢失区块",
+		"col_rank": "排名",
+		"sort_stars_aria": "按星级排序",
+		"col_needs": "还差",
+		"col_running": "版本",
+		"col_vote": "投票",
+		"votes_left": "{count, plural, other {剩余 #}}",
+		"weeks": "{count, plural, other {# 周}}",
+		"weeks_short": "{count, plural, other {# 周}}",
+		"announcement": "公告",
+		"announcement_aria": "{owner} 的公告（在新标签页中打开）",
+		"since": "自 {date}",
+		"missed_since": "{count, plural, other {自 {date} 丢失 # 个}}",
+		"to_level_up": "可升一名",
+		"needs_short": "还差 {amount}",
+		"number_one": "目前第 1 名",
+		"missed_recent": "{count, plural, other {{hours} 小时内丢失 # 个}}",
+		"not_producing": "未出块",
+		"switched_off": "已关闭",
+		"stars_aria": "{stars} / 5 星",
+		"vote_aria": "为 {owner} 投票",
+		"unvote_aria": "撤回你对 {owner} 的投票",
+		"producing_count": "{count, plural, other {# 位见证人在过去 30 天内生产过区块。}}",
+		"show_others": "{count, plural, other {显示其余 # 位（未出块或已关闭）}}",
+		"hide_others": "{count, plural, other {隐藏其余 # 位}}",
+		"sort_label": "排序",
+		"sort_stars": "★ 星级",
+		"loading": "正在加载见证人…",
+		"load_error": "无法加载见证人。请一分钟后再试。",
+		"proxy_note": "你的账户通过 @{proxy} 代理投票，在移除该代理之前，你无法自己为见证人投票。",
+		"max_reached": "你已为 {max} 位见证人投票，这是 Blurt 允许的上限。撤回一票才能再投。",
+		"modal_vote_title": "为 {owner} 投票？",
+		"modal_unvote_title": "撤回你对 {owner} 的投票？",
+		"modal_body": "见证人投票使用你的活跃密钥签名。投票不会转移任何 BLURT；你的 Blurt Power 会平均分配给你投票的见证人。",
+		"modal_vote_action": "投票",
+		"modal_unvote_action": "撤回投票",
+		"tied_with": "与第 {rank} 名持平",
+		"sign_in_to_vote_for": "登录后为 {owner} 投票",
+		"votes_load_error": "无法加载你的投票，投票按钮暂停使用。",
+		"sort_name": "名称",
+		"sort_name_aria": "按名称排序",
+		"sort_votes": "你的投票优先",
+		"sort_votes_aria": "将你的投票排在前面",
+		"sort_reverse": "反转顺序",
+		"table_caption": "Blurt 见证人",
+		"missed_short": "{count, plural, other {丢失 # 个}}"
 	}
 }

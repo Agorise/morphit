@@ -769,6 +769,8 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 350. **eCash (ECX) peer-to-peer, with the two eCash traps spelled out.** Trade eCash (ECX), the 2026 Bitcoin hard fork with drivechains (BIP300/301) associated with LayerTwo Labs, non-custodial and without KYC, always shown as "eCash (ECX)" so nobody confuses it with XEC. An eCash address is also a Bitcoin address, so the chat card names the chain and no "pay with wallet" link can open a Bitcoin wallet; replay protection is opt-in (the node's own wallet adds none), so every place ECX is paid says to split coins from before the fork (or received from them). Explorer links go only to eCash explorers, and ECX is trade-only (`docs/adr/0053-ecash-addition.md`).
 
+351. **Vote for the Blurt witnesses that actually keep the chain running.** The Blurt Nodes page (`/witnesses`) orders every witness by stars, not by vote rank: how long it has produced blocks, how few it has missed per week and whether its version is current, multiplied so a witness that misses a lot cannot ride its age to the top. Gold stars in thirds, a flag for blocks missed in the last day, every column sortable, and votes signed with your Active key in your browser. Witness pictures stay off until you ask, and then come through your own instance, so your browser still contacts nobody else (`apps/indexer/src/indexer/witnessRanking.ts`).
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
@@ -787,4 +789,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*350 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 2 November, 2026.*
+*351 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 5 November, 2026.*
