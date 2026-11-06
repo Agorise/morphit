@@ -14943,16 +14943,38 @@ Nothing to set up. What it costs your server:
   10 minutes, kept 26 hours. Never in a snapshot.
 - **The witnesses' pictures**, only on a clearnet instance and only after a visitor
   clicks "display": your indexer fetches each producing witness's picture from the host
-  the witness chose, at most once a day per picture, and serves it from your own address — the browser
+  the witness chose, at most once a day per picture (a failed one is tried again after an
+  hour), and serves it from your own address — the browser
   still contacts nothing but your site. Each fetch goes through the same guarded
   fetch as the federation probe (https only, every DNS answer checked public and the
   connection pinned to it, no redirects, at most 1 MiB and 4096 px a side, and only a
   PNG, JPEG, GIF or WebP is kept; its DNS lookup has its own timeout and does not use
-  the system resolver's shared threads). The picture host sees your server's address and
+  the system resolver's shared threads). If the witness's own host fails (gone from DNS,
+  down, or not an image), v1.23.1 asks the Blurt image proxy instead,
+  `https://imgp.blurt.blog/profileimage/<witness>/64x64`, through the same guarded fetch
+  (it may redirect at most three times, only within `imgp.blurt.blog`, all within the one
+  10-second timeout) — but only for a
+  witness that set a picture; the log then says `avatar_via_proxy`. The picture host sees your server's address and
   `User-Agent: morphit-indexer/witness-avatar`. If you firewall the indexer's outbound
   traffic, pictures simply stay the plain head. A zero-clearnet (Tor/I2P-only)
   instance never fetches them and shows no "display" link.
 - **Logs:** `journalctl -u morphit-indexer | grep witnesses` — `sample_failed` (a
   10-minute sample could not be read; the flag waits for the next),
   `avatar_unavailable` (a picture could not be fetched or was not an image; tried
-  again after an hour).
+  again after an hour; since v1.23.1 that means both the witness's own host and the
+  Blurt image proxy failed, and the reason names both). `… has no DNS records` means the
+  picture's host name does not exist in DNS any more — not a fault of your server (on
+  2026-11-05 `img.blurt.world` went with the `blurt.world` domain's move to parking
+  nameservers, and `images.blurt.buzz` does not exist; most witnesses' pictures were on
+  one of the two). Since v1.23.1 those pictures come from the proxy
+  (`avatar_via_proxy`).
+- **The first hour (v1.23.1).** A fresh install, or the first upgrade to v1.23, shows
+  no "missed" flags for an hour: the instance has only just started writing the totals
+  down. Then it counts the misses since it started watching, and after 24 hours a full
+  day. Upgrades and restarts keep the table; restoring an indexer snapshot empties it
+  (it is this instance's own record, never shared), so the hour starts again then. To see it working
+  (about 30 rows more every 10 minutes, `first` = when it started):
+
+  ```sh
+  sudo -u postgres psql -d morphit_indexer -c "SELECT COUNT(*) AS samples, COUNT(DISTINCT owner) AS witnesses, MIN(sampled_at) AS first, MAX(sampled_at) AS last FROM witness_missed_samples"
+  ```

@@ -42,6 +42,8 @@
 	import { formatCount, formatCountCompact, formatMonthYearShort } from '$lib/i18n/formatters';
 	import { safeWitnessLinkUrl } from '$lib/utils/safeWitnessLinkUrl';
 	import { showToast } from '$lib/stores/toast';
+	import { stickyBannerBottom } from '$lib/stores/stickyBanner';
+	import { stickyTableHead } from '$lib/utils/stickyTableHead';
 
 	type SortKey = 'name' | 'stars' | 'weeks' | 'missed' | 'rank' | 'needs' | 'version' | 'vote';
 	/** Each column's natural first direction: best first. */
@@ -61,6 +63,38 @@
 	let sortKey = $state<SortKey>('stars');
 	let sortDesc = $state(true);
 	let showAvatars = $state(false);
+
+	// The table's header row sticks just under the site's sticky main menu (or
+	// the notification banner below it, while that shows) as the rows scroll
+	// beneath it. The menu's height changes with the language, a branded logo
+	// and zoom, so it is measured, not hard-coded; and keyboard focus is kept
+	// clear of the stuck row (utils/stickyTableHead.ts, v1.23.1 review).
+	let tableCard = $state<HTMLElement>();
+	$effect(() => {
+		const card = tableCard;
+		const bannerBottom = $stickyBannerBottom;
+		const menu = document.querySelector<HTMLElement>('[data-site-header]');
+		if (!card || !menu) return;
+		const head = card.querySelector<HTMLElement>('thead');
+		const root = document.documentElement;
+		const place = () => {
+			const r = stickyTableHead({
+				menuHeight: menu.getBoundingClientRect().height,
+				bannerBottom,
+				rowHeight: head?.getBoundingClientRect().height ?? 0
+			});
+			card.style.setProperty('--wit-sticky-top', `${r.top}px`);
+			root.style.scrollPaddingTop = r.scrollPaddingTop === null ? '' : `${r.scrollPaddingTop}px`;
+		};
+		place();
+		const ro = new ResizeObserver(place);
+		ro.observe(menu);
+		if (head) ro.observe(head);
+		return () => {
+			ro.disconnect();
+			root.style.scrollPaddingTop = '';
+		};
+	});
 	let showOthers = $state(false);
 	/** Pictures that failed to load fall back to the plain head. */
 	let brokenAvatars = $state(new Set<string>());
@@ -462,16 +496,16 @@
 		</div>
 	{:else}
 		<!-- Desktop: the table (it needs about 1000 px; below that the compact list). -->
-		<div class="card mt-10 hidden overflow-hidden p-0 lg:block">
+		<div bind:this={tableCard} class="card mt-10 hidden overflow-clip p-0 lg:block">
 			<table class="w-full text-start text-sm leading-5">
 				<caption class="sr-only">{$_('witnesses.table_caption')}</caption>
 				<thead
-					class="border-b border-ink-200 bg-ink-50 text-[11px] font-semibold text-ink-600 dark:border-ink-800 dark:bg-ink-950/40 dark:text-ink-500"
+					class="bg-ink-50 text-[11px] font-semibold text-ink-600 dark:bg-ink-950/40 dark:text-ink-500"
 				>
 					<tr>
 						<th
 							scope="col"
-							class="py-3 pe-3 ps-5 text-start font-semibold"
+							class="wit-th py-3 pe-3 ps-5 text-start font-semibold"
 							aria-sort={ariaSort('name')}
 						>
 							{@render sortHead(
@@ -491,36 +525,42 @@
 								</button>
 							{/if}
 						</th>
-						<th scope="col" class="px-3 py-3 text-start font-semibold" aria-sort={ariaSort('weeks')}
+						<th
+							scope="col"
+							class="wit-th px-3 py-3 text-start font-semibold"
+							aria-sort={ariaSort('weeks')}
 							>{@render sortHead('weeks', $_('witnesses.col_producer_for') as string)}</th
 						>
 						<th
 							scope="col"
-							class="px-3 py-3 text-start font-semibold"
+							class="wit-th px-3 py-3 text-start font-semibold"
 							aria-sort={ariaSort('missed')}
 							>{@render sortHead('missed', $_('witnesses.col_missed') as string)}</th
 						>
 						<th
 							scope="col"
-							class="px-3 py-3 text-start font-semibold"
+							class="wit-th px-3 py-3 text-start font-semibold"
 							aria-sort={ariaSort('rank', 'stars')}
 						>
 							{@render sortHead('rank', $_('witnesses.col_rank') as string)}
 							<span class="mx-1 text-ink-300 dark:text-ink-700" aria-hidden="true">·</span>
 							{@render sortHead('stars', '★', $_('witnesses.sort_stars_aria') as string)}
 						</th>
-						<th scope="col" class="px-3 py-3 text-start font-semibold" aria-sort={ariaSort('needs')}
+						<th
+							scope="col"
+							class="wit-th px-3 py-3 text-start font-semibold"
+							aria-sort={ariaSort('needs')}
 							>{@render sortHead('needs', $_('witnesses.col_needs') as string)}</th
 						>
 						<th
 							scope="col"
-							class="px-3 py-3 text-start font-semibold"
+							class="wit-th px-3 py-3 text-start font-semibold"
 							aria-sort={ariaSort('version')}
 							>{@render sortHead('version', $_('witnesses.col_running') as string)}</th
 						>
 						<th
 							scope="col"
-							class="py-3 pe-5 ps-3 text-end font-semibold"
+							class="wit-th py-3 pe-5 ps-3 text-end font-semibold"
 							aria-sort={ariaSort('vote')}
 						>
 							{@render sortHead(
@@ -816,3 +856,52 @@
 		onCancel={() => (voting = null)}
 	/>
 {/if}
+
+<style>
+	/* The header row of the table: sticks just under the main menu
+	   (--wit-sticky-top, measured above) while the rows scroll beneath it, and
+	   settles back into the table when the page is scrolled back up. Each cell
+	   sticks (a sticky <thead> is not supported everywhere), so each needs an
+	   opaque background the rows can pass under: the same colours the header
+	   row has always had, made solid. Theme tokens, so branded instances keep
+	   their own colours. */
+	.wit-th {
+		position: sticky;
+		top: var(--wit-sticky-top, 0px);
+		z-index: 10;
+		background-color: rgb(var(--surface-50-rgb));
+		box-shadow: inset 0 -1px 0 rgb(var(--surface-200-rgb));
+	}
+	:global(.dark) .wit-th {
+		background-color: rgb(var(--surface-900-rgb));
+		background-image: linear-gradient(
+			rgb(var(--surface-950-rgb) / 0.4),
+			rgb(var(--surface-950-rgb) / 0.4)
+		);
+		box-shadow: inset 0 -1px 0 rgb(var(--surface-800-rgb));
+	}
+	/* High-contrast (forced colours) drops box shadows: keep a visible line
+	   under the heading row. */
+	@media (forced-colors: active) {
+		.wit-th {
+			outline: 1px solid CanvasText;
+			outline-offset: -1px;
+		}
+	}
+	/* A browser without overflow: clip (Safari before 16) does not round the
+	   card's corners off the cells: round the corner cells themselves. */
+	@supports not (overflow: clip) {
+		.wit-th:first-child {
+			border-start-start-radius: 1rem;
+		}
+		.wit-th:last-child {
+			border-start-end-radius: 1rem;
+		}
+		tbody tr:last-child > td:first-child {
+			border-end-start-radius: 1rem;
+		}
+		tbody tr:last-child > td:last-child {
+			border-end-end-radius: 1rem;
+		}
+	}
+</style>

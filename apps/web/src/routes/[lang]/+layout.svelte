@@ -267,6 +267,7 @@
 	</a>
 
 	<header
+		data-site-header
 		class="sticky top-0 z-40 border-b border-ink-100 bg-white/80 backdrop-blur-md dark:border-ink-800 dark:bg-ink-950/80"
 	>
 		<div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">

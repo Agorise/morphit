@@ -22,6 +22,7 @@
 		shouldShowPermissionBanner,
 		permission
 	} from '$lib/notifications/native';
+	import { stickyBannerBottom } from '$lib/stores/stickyBanner';
 
 	interface Props {
 		/** The category of the event that triggered this banner —
@@ -35,6 +36,25 @@
 	let { category, onClose }: Props = $props();
 
 	let requesting = $state(false);
+
+	// v1.23.1: publish where this banner ends while it sticks under the menu, so
+	// a sticky element further down (the /witnesses heading row) sticks below it.
+	let root = $state<HTMLElement>();
+	$effect(() => {
+		const el = root;
+		if (!el) return;
+		const publish = () =>
+			stickyBannerBottom.set(
+				(parseFloat(getComputedStyle(el).top) || 0) + el.getBoundingClientRect().height
+			);
+		publish();
+		const ro = new ResizeObserver(publish);
+		ro.observe(el);
+		return () => {
+			ro.disconnect();
+			stickyBannerBottom.set(0);
+		};
+	});
 
 	async function onEnable(): Promise<void> {
 		if (requesting) return;
@@ -68,6 +88,7 @@
 
 {#if shouldShow}
 	<div
+		bind:this={root}
 		role="region"
 		aria-label={$_('settings.notifications.permission_banner_title')}
 		class="sticky top-[64px] z-30 mx-auto max-w-7xl px-4 py-3 md:px-6"

@@ -1483,7 +1483,9 @@ export async function fetchJson<T>(
  * (which is built on it): https only, hidden-only instances never, no
  * Tor/I2P/Lokinet name to the system resolver, private hosts refused, EVERY
  * DNS record checked public and the connection pinned to the checked address,
- * redirects never followed, the body capped while it streams.
+ * redirects never followed (v1.23.1: unless the caller allows a few, and then
+ * only to the same https origin, each hop checked again, the whole chain within
+ * one timeout), the body capped while it streams.
  *
  * (v1.23.0) Lifted out of fetchJson unchanged so the witness avatars
  * (indexer/witnessService.ts) — a URL each witness chose, so attacker-
@@ -1491,22 +1493,68 @@ export async function fetchJson<T>(
  * body and the Content-Type the server claimed (callers that care check the
  * bytes themselves).
  */
+/** The options of {@link fetchPublicBytes}. */
+export type FetchPublicBytesOptions = {
+	readonly timeoutMs?: number;
+	readonly maxBytes?: number;
+	readonly userAgent?: string;
+	/** The Accept header (default JSON). */
+	readonly accept?: string;
+	/** (v1.23.0) How to resolve and check the host. Default: the system
+	 *  resolver (`dns.lookup`, which honours /etc/hosts, on libuv's small
+	 *  thread pool). The witness pictures pass `resolvePublicIpCares`, so an
+	 *  attacker-chosen host whose name server never answers cannot hold
+	 *  those threads (and with them every other lookup in the process). */
+	readonly resolve?: (hostname: string) => Promise<{ address: string; family: 4 | 6 }>;
+	/** (v1.23.1) Follow up to this many redirects, ONLY to https on the same
+	 *  origin, each hop looked up, checked and pinned again exactly like the
+	 *  first. Default 0: a redirect is a failure (how a hostile peer would
+	 *  bounce the indexer to an address it did not check). Only the witness
+	 *  pictures' fallback, the Blurt image proxy, turns it on. */
+	readonly sameOriginRedirects?: number;
+};
+
+/** (v1.23.1) Redirects are never followed more than this many times, whatever
+ *  a caller asks for. */
+export const FETCH_PUBLIC_MAX_REDIRECTS = 5;
+
+type HopResult =
+	| { readonly bytes: Uint8Array; readonly contentType: string | null }
+	| { readonly redirect: string };
+
 export async function fetchPublicBytes(
 	url: string,
-	opts: {
-		readonly timeoutMs?: number;
-		readonly maxBytes?: number;
-		readonly userAgent?: string;
-		/** The Accept header (default JSON). */
-		readonly accept?: string;
-		/** (v1.23.0) How to resolve and check the host. Default: the system
-		 *  resolver (`dns.lookup`, which honours /etc/hosts, on libuv's small
-		 *  thread pool). The witness pictures pass `resolvePublicIpCares`, so an
-		 *  attacker-chosen host whose name server never answers cannot hold
-		 *  those threads (and with them every other lookup in the process). */
-		readonly resolve?: (hostname: string) => Promise<{ address: string; family: 4 | 6 }>;
-	} = {}
+	opts: FetchPublicBytesOptions = {}
 ): Promise<{ readonly bytes: Uint8Array; readonly contentType: string | null }> {
+	// (v1.23.1, review) ONE deadline for the whole chain: a hop gets what is
+	// left of it, so redirects cannot stretch a fetch past its timeout; and a
+	// hard cap on the hops (Infinity - 1 is Infinity).
+	const asked = Math.floor(opts.sameOriginRedirects ?? 0);
+	let hopsLeft = Number.isFinite(asked)
+		? Math.max(0, Math.min(asked, FETCH_PUBLIC_MAX_REDIRECTS))
+		: asked > 0
+			? FETCH_PUBLIC_MAX_REDIRECTS
+			: 0;
+	const deadlineAt = Date.now() + (opts.timeoutMs ?? FETCH_TIMEOUT_MS);
+	let current = url;
+	for (;;) {
+		// Each hop's own pinned connection is closed when the hop returns,
+		// before the next one starts.
+		const r = await fetchPublicBytesHop(current, opts, hopsLeft > 0, deadlineAt);
+		if (!('redirect' in r)) return r;
+		hopsLeft--;
+		current = r.redirect;
+	}
+}
+
+/** One request of {@link fetchPublicBytes}: every check, a pinned connection,
+ *  and either the body or (only when `mayRedirect`) a same-origin redirect. */
+async function fetchPublicBytesHop(
+	url: string,
+	opts: FetchPublicBytesOptions,
+	mayRedirect: boolean,
+	deadlineAt: number
+): Promise<HopResult> {
 	// Audit 2026-05 finding 5-5: defense-in-depth re-validation
 	// of the origin host before firing.  Even if a malicious
 	// origin slipped past registration (older row, manual DB
@@ -1550,7 +1598,7 @@ export async function fetchPublicBytes(
 	// (v1.23.0) The deadline starts BEFORE the lookup and covers it: a name
 	// server that never answers used to hold the caller past its timeout.
 	const ctrl = new AbortController();
-	const timeout = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? FETCH_TIMEOUT_MS);
+	const timeout = setTimeout(() => ctrl.abort(), Math.max(0, deadlineAt - Date.now()));
 	let pinned: { address: string; family: 4 | 6 };
 	try {
 		pinned = await new Promise<{ address: string; family: 4 | 6 }>((resolve, reject) => {
@@ -1598,6 +1646,24 @@ export async function fetchPublicBytes(
 			// Cancel the unread body: left alone it kept
 			// the connection to the peer open after we had given up on it.
 			await resp.body?.cancel().catch(() => {});
+			const location = resp.headers.get('location');
+			if (resp.status >= 300 && resp.status < 400 && mayRedirect && location !== null) {
+				let next: URL;
+				try {
+					next = new URL(location, parsed);
+				} catch {
+					throw new Error('fetchJson: malformed redirect');
+				}
+				// Same origin = same scheme (https), host and port: never another
+				// host, never down to http. The next hop goes through every check
+				// above again (fresh lookup, public-address check, pinning).
+				if (next.origin !== parsed.origin) {
+					throw new Error(`fetchJson: redirect to another origin refused (${next.origin})`);
+				}
+				// Returned, not followed here: `finally` closes this hop's
+				// connection first, and the caller starts the next hop.
+				return { redirect: next.href };
+			}
 			throw new Error(`HTTP ${resp.status}`);
 		}
 		// Audit 2026-05 finding NEW-9-11: cap response body size so a

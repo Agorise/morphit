@@ -18,7 +18,9 @@
  * only, and the FAQ promises the browser contacts nothing else. So a witness's
  * picture is fetched HERE, by fetchPublicBytes — the federation probe's
  * guarded fetch (https only, every DNS record public, connection pinned,
- * redirects refused, body capped) — checked to BE a PNG, JPEG, GIF or WebP by
+ * redirects refused, body capped; v1.23.1: when that host fails, the Blurt
+ * image proxy's copy, which may redirect within its own origin) — checked to BE
+ * a PNG, JPEG, GIF or WebP by
  * its first bytes (never SVG: it can carry script), and served from
  * /v1/witnesses/avatar/<owner>. Nobody but this instance learns who looked.
  *   - Only for an account in the current witness list: the endpoint is no
@@ -82,11 +84,27 @@ export const AVATAR_MAX_BYTES = 1024 * 1024;
 export const AVATAR_CACHE_MAX_BYTES = 48 * 1024 * 1024;
 /** Pictures fetched at once, at most. */
 export const AVATAR_FETCH_CONCURRENCY = 4;
-/** One picture fetch, at most — the DNS lookup included. */
+/** One picture fetch, at most — the DNS lookup and (for the Blurt image proxy)
+ *  its redirects included. A picture is at most two of them: its own host, then
+ *  the proxy (v1.23.1). */
 export const AVATAR_FETCH_TIMEOUT_MS = 10_000;
 /** Largest width or height accepted (a small file can declare a huge image
  *  that a browser would then have to allocate). */
 export const AVATAR_MAX_SIDE = 4096;
+/** (v1.23.1) When a witness's picture cannot be fetched from its own host, the
+ *  Blurt image proxy's copy of that account's picture. Many pictures were on
+ *  hosts that have since gone (on 2026-11-05 img.blurt.world went with the
+ *  blurt.world domain, and images.blurt.buzz does not exist); the proxy still
+ *  serves them. Asked only for a witness that set a picture (so a witness with
+ *  none keeps the plain head, not the proxy's default), through the same
+ *  guarded fetch, and allowed to redirect only within its own origin. */
+export const AVATAR_PROXY_ORIGIN = 'https://imgp.blurt.blog';
+/** The proxy answers with its resized copy, possibly through a redirect or two
+ *  (its imagehoster's /profileimage → /<size>/<url> → /p/<id> shape); one more
+ *  for room. The whole chain shares one timeout (fetchPublicBytes). */
+export const AVATAR_PROXY_REDIRECTS = 3;
+export const avatarProxyUrl = (owner: string): string =>
+	`${AVATAR_PROXY_ORIGIN}/profileimage/${owner}/64x64`;
 
 export interface WitnessListBody {
 	readonly network: 'morphit';
@@ -242,13 +260,19 @@ export interface WitnessServiceDeps {
 	readonly now?: () => number;
 	/** Whether this instance may reach clearnet (false on a hidden-only one). */
 	readonly avatarsAllowed?: () => boolean;
-	readonly fetchImage?: (url: string) => Promise<{ readonly bytes: Uint8Array }>;
+	readonly fetchImage?: (
+		url: string,
+		opts?: { readonly sameOriginRedirects?: number }
+	) => Promise<{ readonly bytes: Uint8Array }>;
 }
 
 export class WitnessService {
 	private readonly now: () => number;
 	private readonly avatarsAllowed: () => boolean;
-	private readonly fetchImage: (url: string) => Promise<{ readonly bytes: Uint8Array }>;
+	private readonly fetchImage: (
+		url: string,
+		opts?: { readonly sameOriginRedirects?: number }
+	) => Promise<{ readonly bytes: Uint8Array }>;
 	private list: { readonly at: number; readonly body: WitnessListBody } | null = null;
 	private listInFlight: Promise<WitnessListBody> | null = null;
 	private pictures = new Map<string, string>(); // owner → picture URL
@@ -268,8 +292,9 @@ export class WitnessService {
 		this.avatarsAllowed = deps.avatarsAllowed ?? (() => !clearnetRefused());
 		this.fetchImage =
 			deps.fetchImage ??
-			((url) =>
+			((url, o) =>
 				fetchPublicBytes(url, {
+					...(o?.sameOriginRedirects ? { sameOriginRedirects: o.sameOriginRedirects } : {}),
 					timeoutMs: AVATAR_FETCH_TIMEOUT_MS,
 					maxBytes: AVATAR_MAX_BYTES,
 					accept: 'image/png,image/jpeg,image/gif,image/webp',
@@ -596,15 +621,47 @@ export class WitnessService {
 			p = (async () => {
 				await this.acquire();
 				try {
-					const { bytes } = await this.fetchImage(url);
-					const type = sniffImageType(bytes);
-					if (type === null) throw new Error('not a PNG, JPEG, GIF or WebP');
-					const dims = imageDimensions(bytes, type);
-					if (dims === null) throw new Error('unreadable image header');
-					if (dims.w < 1 || dims.h < 1 || dims.w > AVATAR_MAX_SIDE || dims.h > AVATAR_MAX_SIDE) {
-						throw new Error(`image ${dims.w}×${dims.h} is larger than ${AVATAR_MAX_SIDE}px a side`);
+					const load = async (
+						from: string,
+						o?: { readonly sameOriginRedirects?: number }
+					): Promise<{ bytes: Uint8Array; type: ImageType }> => {
+						const { bytes } = await this.fetchImage(from, o);
+						const type = sniffImageType(bytes);
+						if (type === null) throw new Error('not a PNG, JPEG, GIF or WebP');
+						const dims = imageDimensions(bytes, type);
+						if (dims === null) throw new Error('unreadable image header');
+						if (dims.w < 1 || dims.h < 1 || dims.w > AVATAR_MAX_SIDE || dims.h > AVATAR_MAX_SIDE) {
+							throw new Error(
+								`image ${dims.w}×${dims.h} is larger than ${AVATAR_MAX_SIDE}px a side`
+							);
+						}
+						return { bytes, type };
+					};
+					let got: { bytes: Uint8Array; type: ImageType };
+					// A picture already on the proxy (in any form) gets the proxy's
+					// redirects at once, and no second try from the same proxy.
+					const onProxy = new URL(url).origin === AVATAR_PROXY_ORIGIN;
+					try {
+						got = await load(
+							url,
+							onProxy ? { sameOriginRedirects: AVATAR_PROXY_REDIRECTS } : undefined
+						);
+					} catch (own) {
+						// v1.23.1: the picture's own host failed (gone, down, not an
+						// image): the Blurt image proxy's copy of that account's picture.
+						if (onProxy) throw own;
+						const proxied = avatarProxyUrl(owner);
+						const ownWhy = own instanceof Error ? own.message : String(own);
+						try {
+							got = await load(proxied, { sameOriginRedirects: AVATAR_PROXY_REDIRECTS });
+						} catch (px) {
+							throw new Error(
+								`${ownWhy}; ${AVATAR_PROXY_ORIGIN}: ${px instanceof Error ? px.message : String(px)}`
+							);
+						}
+						log.info('avatar_via_proxy', { owner, reason: ownWhy });
 					}
-					const v: CachedAvatar = { bytes, type, at: this.now() };
+					const v: CachedAvatar = { bytes: got.bytes, type: got.type, at: this.now() };
 					this.remember(key, v);
 					this.avatarFailed.delete(key);
 					return v;

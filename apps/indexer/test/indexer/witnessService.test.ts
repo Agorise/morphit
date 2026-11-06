@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	ACCOUNTS_TTL_MS,
 	AVATAR_FAIL_TTL_MS,
+	AVATAR_PROXY_REDIRECTS,
 	AVATAR_TTL_MS,
 	LIST_TTL_MS,
 	SAMPLE_KEEP_MS,
@@ -48,7 +49,10 @@ function setup(
 		witnesses?: Array<Record<string, unknown>>;
 		pictures?: Record<string, string>;
 		avatarsAllowed?: boolean | (() => boolean);
-		fetchImage?: (url: string) => Promise<{ bytes: Uint8Array }>;
+		fetchImage?: (
+			url: string,
+			o?: { readonly sameOriginRedirects?: number }
+		) => Promise<{ bytes: Uint8Array }>;
 		pageOf?: (start: string) => unknown;
 	} = {}
 ) {
@@ -60,6 +64,7 @@ function setup(
 		accounts: 0,
 		dgp: 0,
 		fetch: [] as string[],
+		fetchOpts: [] as Array<{ readonly sameOriginRedirects?: number } | undefined>,
 		sql: [] as Array<{ text: string; params?: unknown[] }>
 	};
 	const blurt = {
@@ -111,9 +116,10 @@ function setup(
 			typeof opts.avatarsAllowed === 'function'
 				? opts.avatarsAllowed()
 				: (opts.avatarsAllowed ?? true),
-		fetchImage: async (u) => {
+		fetchImage: async (u, o) => {
 			if (opts.fetchImage) calls.fetch.push(u);
-			return fetchImage(u);
+			calls.fetchOpts.push(o);
+			return fetchImage(u, o);
 		}
 	});
 	return { svc, calls, pictures, advance: (ms: number) => (now += ms), blurt };
@@ -219,6 +225,8 @@ describe('pictures', () => {
 	});
 
 	it('remembers a failure for an hour', async () => {
+		// v1.23.1: one attempt is the witness's own picture, then the Blurt image
+		// proxy; a failure of both is remembered for the hour.
 		let n = 0;
 		const { svc, calls, advance } = setup({
 			fetchImage: async () => {
@@ -228,11 +236,86 @@ describe('pictures', () => {
 		});
 		expect(await svc.getAvatar('khrom')).toBeNull();
 		expect(await svc.getAvatar('khrom')).toBeNull();
-		expect(n).toBe(1);
+		expect(n).toBe(2);
 		advance(AVATAR_FAIL_TTL_MS + 1);
 		await svc.getAvatar('khrom');
-		expect(n).toBe(2);
-		expect(calls.fetch).toHaveLength(2);
+		expect(n).toBe(4);
+		expect(calls.fetch).toEqual([
+			'https://img.blurt.world/khrom.png',
+			'https://imgp.blurt.blog/profileimage/khrom/64x64',
+			'https://img.blurt.world/khrom.png',
+			'https://imgp.blurt.blog/profileimage/khrom/64x64'
+		]);
+	});
+
+	describe("v1.23.1: the Blurt image proxy when the picture's own host fails", () => {
+		it('a dead host (no DNS records) → the same picture from imgp.blurt.blog, following its own redirects only', async () => {
+			const { svc, calls } = setup({
+				fetchImage: async (u) => {
+					if (u.startsWith('https://img.blurt.world/'))
+						throw new Error('fetchJson: hostname img.blurt.world has no DNS records');
+					return { bytes: PNG };
+				}
+			});
+			const pic = await svc.getAvatar('khrom');
+			expect(pic!.type).toBe('image/png');
+			expect(calls.fetch).toEqual([
+				'https://img.blurt.world/khrom.png',
+				'https://imgp.blurt.blog/profileimage/khrom/64x64'
+			]);
+			// The witness's own host: no redirects (as before). The proxy: up to two,
+			// and only on its own origin (fetchPublicBytes enforces that).
+			expect(calls.fetchOpts).toEqual([undefined, { sameOriginRedirects: AVATAR_PROXY_REDIRECTS }]);
+			expect(AVATAR_PROXY_REDIRECTS).toBe(3);
+			// Served from the cache afterwards, like any picture.
+			await svc.getAvatar('khrom');
+			expect(calls.fetch).toHaveLength(2);
+		});
+
+		it('the proxy is not asked when the own picture works', async () => {
+			const { svc, calls } = setup();
+			await svc.getAvatar('khrom');
+			expect(calls.fetch).toEqual(['https://img.blurt.world/khrom.png']);
+		});
+
+		it("nor for a witness that set no picture (it keeps the plain head, not the proxy's default)", async () => {
+			const { svc, calls } = setup();
+			expect(await svc.getAvatar('saboin')).toBeNull();
+			expect(calls.fetch).toHaveLength(0);
+		});
+
+		it('what the proxy sends must pass the same checks (a raster image, sane size)', async () => {
+			const { svc } = setup({
+				fetchImage: async (u) => {
+					if (u.startsWith('https://img.blurt.world/')) throw new Error('HTTP 404');
+					return { bytes: HTML };
+				}
+			});
+			expect(await svc.getAvatar('khrom')).toBeNull();
+		});
+
+		it('a picture already hosted on the proxy is not fetched twice', async () => {
+			const own = 'https://imgp.blurt.blog/profileimage/khrom/64x64';
+			let n = 0;
+			const { svc, calls } = setup({
+				pictures: { khrom: own },
+				fetchImage: async () => {
+					n++;
+					throw new Error('HTTP 502');
+				}
+			});
+			expect(await svc.getAvatar('khrom')).toBeNull();
+			expect(n).toBe(1);
+			expect(calls.fetch).toEqual([own]);
+		});
+
+		it("a picture on the proxy in another form is fetched once, with the proxy's redirects allowed (review)", async () => {
+			const own = 'https://imgp.blurt.blog/64x64/https://img.blurt.world/khrom.png';
+			const { svc, calls } = setup({ pictures: { khrom: own } });
+			expect((await svc.getAvatar('khrom'))!.type).toBe('image/png');
+			expect(calls.fetch).toEqual([own]);
+			expect(calls.fetchOpts).toEqual([{ sameOriginRedirects: AVATAR_PROXY_REDIRECTS }]);
+		});
 	});
 
 	it('a new picture URL is picked up at the next accounts read', async () => {
