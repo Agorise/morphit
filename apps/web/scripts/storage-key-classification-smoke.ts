@@ -66,7 +66,9 @@ const deviceTier = [...registrySrc.matchAll(/\{\s*key:\s*'([^']+)',\s*tier:\s*'d
 );
 check(
 	`the device tier is small and deliberate (${deviceTier.length})`,
-	deviceTier.length > 0 && deviceTier.length <= 10,
+	// 11 since v1.23.3: morphit.showBlurtPictures (a display choice like the
+	// language; names nobody), examined and added on purpose.
+	deviceTier.length > 0 && deviceTier.length <= 11,
 	'a large device tier means keys are surviving sign-out unexamined'
 );
 

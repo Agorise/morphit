@@ -66,7 +66,7 @@
 		>
 			<span aria-hidden="true">✓</span>
 			{$_('trade_status.paid_by')}
-			<IdentityLabel account={state.peer} avatarSize={16} weight="bold" />
+			<IdentityLabel hydrate account={state.peer} avatarSize={16} weight="bold" />
 		</span>
 	{:else if state.phase === 'paid_mismatch'}
 		<span
@@ -105,6 +105,6 @@
 	>
 		<span aria-hidden="true">✓</span>
 		{$_('trade_status.paid_by')}
-		<IdentityLabel account={completedCounterparty} avatarSize={16} weight="bold" />
+		<IdentityLabel hydrate account={completedCounterparty} avatarSize={16} weight="bold" />
 	</span>
 {/if}

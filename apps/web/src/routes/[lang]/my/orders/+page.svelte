@@ -1406,7 +1406,7 @@
 													class="flex w-full items-center px-3 py-2 text-left text-sm transition-colors hover:bg-morphit-emerald/10 focus:outline-none focus-visible:bg-morphit-emerald/10"
 													onclick={() => openFeedback(o.permlink, peer)}
 												>
-													<IdentityLabel account={peer} />
+													<IdentityLabel hydrate account={peer} />
 												</button>
 											{/each}
 										</div>

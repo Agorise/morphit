@@ -44,6 +44,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
+/** How much one workspace's vitest may print (32 MiB; MORPHIT_VITEST_OUTPUT_MAX_BYTES
+ *  overrides it). */
+const VITEST_OUTPUT_MAX_BYTES = /^\d+$/.test(process.env.MORPHIT_VITEST_OUTPUT_MAX_BYTES ?? '')
+	? Number(process.env.MORPHIT_VITEST_OUTPUT_MAX_BYTES)
+	: 32 * 1024 * 1024;
 /** How long one workspace's vitest may run (20 minutes; MORPHIT_VITEST_WORKSPACE_TIMEOUT_MS
  *  overrides it, in milliseconds). */
 const WORKSPACE_TIMEOUT_MS = /^\d+$/.test(process.env.MORPHIT_VITEST_WORKSPACE_TIMEOUT_MS ?? '')
@@ -181,6 +186,10 @@ function runVitest(workspacePath: string): {
 				// smoke is still bounded by the runner's slow-smoke cap.
 				// A backstop only: `timeout` above ends the run first.
 				timeout: WORKSPACE_TIMEOUT_MS + 60_000,
+				// Node's default is 1 MiB: apps/indexer's suite printed 1.03 MiB
+				// in v1.23.3, the summary line was cut off, and a passing suite
+				// read as "could not parse".
+				maxBuffer: VITEST_OUTPUT_MAX_BYTES,
 				// CI=1 forces the basic reporter (defensive — `--reporter=basic` on
 				// the CLI takes precedence but VITEST_REPORTERS in env could override it).
 				env: childEnv
@@ -198,6 +207,11 @@ function runVitest(workspacePath: string): {
 		};
 		// Cut off by the time limit (`timeout` exits 124): say so, not "could
 		// not parse".
+		if (errObj.code === 'ENOBUFS') {
+			throw new Error(
+				`vitest for ${workspacePath} printed more than ${VITEST_OUTPUT_MAX_BYTES} bytes, and the output was cut off: find the test printing that much`
+			);
+		}
 		if (errObj.code === 'ETIMEDOUT' || errObj.status === 124) {
 			throw new Error(
 				`vitest for ${workspacePath} did not finish within ${Math.round(WORKSPACE_TIMEOUT_MS / 1000)} s and was stopped`

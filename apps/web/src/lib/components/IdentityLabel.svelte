@@ -46,6 +46,16 @@
 	import { selfProfile } from '$lib/stores/selfProfile';
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
 	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
+	import {
+		blurtPicturesActive,
+		blurtPicturesUnknown,
+		notePictureMissing,
+		pictureKnownMissing
+	} from '$lib/avatar/blurtPicture';
+	import { accountPictureUrl } from '$indexer/client';
+	import { profileSoon } from '$lib/indexer/profileSoon';
+	import { blurtAccountName } from '$blurt/ops/profile';
+	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 
 	interface Props {
 		/**
@@ -152,6 +162,16 @@
 		 *  profile hero shows the name as an <h1>), so repeating it would
 		 *  be redundant — but the link glyphs are still worth surfacing. */
 		hideHandle?: boolean;
+		/** v1.23.3 — never ask this instance for the account's Blurt picture
+		 *  here: a list that must not reach the operator (the Settings page's
+		 *  hidden accounts, kept private) shows the identicon. */
+		noPicture?: boolean;
+		/** v1.23.3 — read the account's Morphit avatar here, from the shared
+		 *  profile cache, for a surface that passes no avatar of its own (a
+		 *  payment badge, a reminder banner): until it is read the label shows
+		 *  the quiet "not known yet" circle, so a Morphit avatar is never
+		 *  preceded by the identicon or the Blurt picture. */
+		hydrate?: boolean;
 		class?: string;
 	}
 
@@ -169,6 +189,8 @@
 		avatarSize = 28,
 		hideAvatar = false,
 		hideHandle = false,
+		noPicture = false,
+		hydrate = false,
 		class: cls = ''
 	}: Props = $props();
 
@@ -179,8 +201,30 @@
 	// their public profile page. selfProfile.account is populated by the
 	// always-mounted AvatarMenu, so no auth-store import is needed here.
 	const isSelf = $derived(!!account && $selfProfile.account === account);
-	const effAvatarSvg = $derived(avatarSvg ?? (isSelf ? $selfProfile.avatarSvg : null));
-	const effAvatarDataUri = $derived(avatarDataUri ?? (isSelf ? $selfProfile.avatarDataUri : null));
+
+	// v1.23.3 — `hydrate`: this label reads the account's profile itself.
+	let hydrated = $state<{
+		readonly account: string;
+		readonly svg: string | null;
+		readonly dataUri: string | null;
+	} | null>(null);
+	$effect(() => {
+		if (!hydrate || !account || isSelf) return;
+		const a = account;
+		void profileSoon(a).then((profile) => {
+			const p = extractLabelPropsFromProfile(profile);
+			hydrated = { account: a, svg: p.avatarSvg, dataUri: p.avatarDataUri };
+		});
+	});
+	const hydratedHere = $derived(
+		hydrate && account && hydrated?.account === account ? hydrated : null
+	);
+	const effAvatarSvg = $derived(
+		avatarSvg ?? (isSelf ? $selfProfile.avatarSvg : (hydratedHere?.svg ?? null))
+	);
+	const effAvatarDataUri = $derived(
+		avatarDataUri ?? (isSelf ? $selfProfile.avatarDataUri : (hydratedHere?.dataUri ?? null))
+	);
 	// v1.8.15 — the display-name twin of the avatar fallback above.
 	// When this label's subject is the logged-in user and the caller passed no
 	// explicit display name, fall back to the shared self-profile name so the
@@ -227,6 +271,39 @@
 	});
 
 	const avatarSrc = $derived(identiconDataUri(seedBytes, avatarSize));
+
+	// v1.23.3 — the account's picture from this instance (/v1/avatars: its
+	// Morphit avatar, else its Blurt profile picture) when the visitor turned
+	// pictures on, this instance can serve them, and no Morphit avatar is in
+	// hand here. A miss (404, unreachable) draws the identicon and is
+	// remembered, so the next label of this account does not ask again.
+	let pictureFailed = $state<string | null>(null);
+	const pictureSrc = $derived.by(() => {
+		if (!$blurtPicturesActive || !account || noPicture) return undefined;
+		if (pictureFailed === account || pictureKnownMissing(account)) return undefined;
+		return accountPictureUrl(account);
+	});
+	// Not known yet whether a picture other than the identicon shows (review,
+	// v1.23.3): the account's profile (hydrate, or your own) is still being
+	// read, or pictures are on and this instance's answer about them is still
+	// on its way. The quiet circle meanwhile — never one picture then another.
+	const effPending = $derived.by(() => {
+		if (pending) return true;
+		if (!account) return false;
+		if (hydrate && !isSelf && hydratedHere === null) return true;
+		// Your own account before your profile is read (the avatar menu reads
+		// it): your Morphit avatar may be about to show.
+		if ($blurtAccountName === account && !isSelf && avatarSvg == null && avatarDataUri == null) {
+			return true;
+		}
+		if (noPicture) return false;
+		return $blurtPicturesUnknown;
+	});
+	function onPictureError(): void {
+		if (!account) return;
+		notePictureMissing(account);
+		pictureFailed = account;
+	}
 
 	// The existing formatIdentity() helper returns {name, fingerprint}
 	// only — the `full` BLT-canonical key requires dblurt (a 2 MB
@@ -444,7 +521,9 @@
 		  1. User-uploaded sanitized SVG, shown as an <img> (see
 		     svgAvatarImgSrc: inlined, it could escape its frame).
 		  2. User-uploaded raster data URI (<img src="data:...">).
-		  3. Deterministic heart identicon from the seed bytes.
+		  3. (v1.23.3) The account's Blurt profile picture, from this
+		     instance, when the visitor turned pictures on.
+		  4. Deterministic heart identicon from the seed bytes.
 		All three render at the same size and circular crop so the
 		surrounding layout doesn't shift based on which avatar the
 		user has set.
@@ -474,7 +553,7 @@
 				class="flex-none rounded-full bg-ink-200/50 object-cover ring-1 ring-ink-300 dark:bg-ink-800/50 dark:ring-ink-700"
 				aria-hidden="true"
 			/>
-		{:else if pending}
+		{:else if effPending}
 			<!-- v1.8.13 — profile still loading: show a neutral placeholder,
 			     NOT the identicon. The identicon is a real answer ("this account
 			     has no custom avatar"), and asserting it before we know produces
@@ -486,6 +565,22 @@
 				class="flex-none animate-pulse rounded-full bg-ink-200 ring-1 ring-ink-300 dark:bg-ink-800 dark:ring-ink-700"
 				aria-hidden="true"
 			></span>
+		{:else if pictureSrc !== undefined}
+			<!-- v1.23.3: the account's picture, from this instance; until it
+			     loads, the same quiet circle as "not known yet"; a miss draws the
+			     identicon. -->
+			<img
+				src={pictureSrc}
+				alt=""
+				width={avatarSize}
+				height={avatarSize}
+				loading="lazy"
+				decoding="async"
+				onerror={onPictureError}
+				data-testid="account-picture"
+				class="flex-none rounded-full bg-ink-200/50 object-cover ring-1 ring-ink-300 dark:bg-ink-800/50 dark:ring-ink-700"
+				aria-hidden="true"
+			/>
 		{:else}
 			<img
 				src={avatarSrc}

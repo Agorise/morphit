@@ -4656,6 +4656,12 @@
 			"clear_confirm_yes": "Ja, löschen",
 			"clear_confirm_cancel": "Behalten"
 		},
+		"blurt_pictures": {
+			"heading": "Profilbilder",
+			"explain": "Zeigt die Profilbilder, die Leute auf Blurt festgelegt haben, auf jeder Seite. Diese Instanz lädt sie für dich, sodass die Seiten, auf denen sie liegen, dich nie sehen. Ein Morphit-Avatar, den jemand in seinen Einstellungen festgelegt hat, wird so oder so immer angezeigt.",
+			"label": "Blurt-Profilbilder anzeigen",
+			"help": "Aus, bis du es einschaltest. Der Link „anzeigen“ auf der Seite „Blurt-Nodes“ setzt dieselbe Wahl. Sie wird nur auf diesem Gerät gespeichert."
+		},
 		"totp": {
 			"heading": "Zwei-Faktor-Authentifizierung (2FA)",
 			"subtitle": "Füge eine Authenticator-App als zweiten Faktor nach deinem Passwort hinzu. Schützt vor Schulterblicken, geliehenen Geräten und gelegentlicher lokaler Malware.",

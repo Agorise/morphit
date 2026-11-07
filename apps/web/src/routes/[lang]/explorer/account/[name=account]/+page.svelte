@@ -43,7 +43,14 @@
 		blurtWalletExplorerFallbackUrl
 	} from '$lib/explorer/urls';
 	import { identiconDataUriFromString } from '$crypto/identicon';
+	import { accountPictureUrl } from '$indexer/client';
 	import { getProfilesBatch } from '$lib/indexer/profileCache';
+	import {
+		blurtPicturesActive,
+		blurtPicturesUnknown,
+		notePictureMissing,
+		pictureKnownMissing
+	} from '$lib/avatar/blurtPicture';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import Head from '$components/Head.svelte';
 	import LoadingDots from '$components/LoadingDots.svelte';
@@ -76,6 +83,15 @@
 	// name-seeded identicon. Best-effort — a fetch failure keeps the identicon.
 	let avatarSvg = $state<string | null>(null);
 	let avatarDataUri = $state<string | null>(null);
+	// v1.23.3: the profile has been read (or could not be): only then may the
+	// Blurt picture show, so a Morphit avatar is never preceded by it.
+	let avatarKnownFor = $state<string | null>(null);
+	let pictureFailedFor = $state<string | null>(null);
+	const picture = $derived.by(() => {
+		if (!$blurtPicturesActive || avatarKnownFor !== account) return undefined;
+		if (pictureFailedFor === account || pictureKnownMissing(account)) return undefined;
+		return accountPictureUrl(account);
+	});
 
 	// mobile exact-amount popovers (parity with MyBalanceCard). On
 	// phones the balances render as floored integers to fit the 3-column card;
@@ -219,6 +235,7 @@
 		keys = null;
 		avatarSvg = null;
 		avatarDataUri = null;
+		avatarKnownFor = null;
 		blurt = NaN;
 		bp = NaN;
 		voting = NaN;
@@ -259,6 +276,7 @@
 				avatarSvg = props.avatarSvg;
 				avatarDataUri = props.avatarDataUri;
 			}
+			if (current()) avatarKnownFor = acct;
 		});
 
 		// First page of history — non-fatal, with its own loading/error state so
@@ -555,6 +573,26 @@
 					class="h-16 w-16 rounded-xl object-cover"
 					loading="lazy"
 					decoding="async"
+				/>
+			{:else if $blurtPicturesUnknown || ($blurtPicturesActive && avatarKnownFor !== account)}
+				<span
+					class="block h-16 w-16 flex-none animate-pulse rounded-xl bg-ink-200 dark:bg-ink-800"
+					aria-hidden="true"
+				></span>
+			{:else if picture !== undefined}
+				<!-- v1.23.3: the account's Blurt picture, from this instance, for
+				     a visitor who turned pictures on. -->
+				<img
+					src={picture}
+					alt=""
+					width="64"
+					height="64"
+					class="h-16 w-16 rounded-xl object-cover"
+					decoding="async"
+					onerror={() => {
+						notePictureMissing(account);
+						pictureFailedFor = account;
+					}}
 				/>
 			{:else}
 				<!-- Fallback identicon: the account's heart, seeded from the

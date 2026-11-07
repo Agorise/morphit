@@ -106,7 +106,10 @@ type Tier =
 	| 'payment-check'
 	// (v1.23.0) the /witnesses page's pictures: a page shows dozens at once, and
 	// sharing the `resource` bucket let a few reloads push a vote broadcast to 429.
-	| 'witness-avatar';
+	| 'witness-avatar'
+	// (v1.23.3) accounts' pictures on every other page (/v1/avatars): an
+	// orderbook page shows dozens too; its own bucket for the same reason.
+	| 'account-avatar';
 
 interface Bucket {
 	/** Unix-ms timestamps of requests still within the window. */

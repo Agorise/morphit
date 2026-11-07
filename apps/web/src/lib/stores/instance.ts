@@ -182,6 +182,10 @@ export interface InstanceState {
 	 *  node is hidden-only; the indexer refuses such fees). null = unknown
 	 *  (not loaded, or an older indexer without the field). */
 	readonly fee_methods: { readonly btc: boolean | null; readonly xmr: boolean | null };
+	/** v1.23.3: this instance fetches accounts' Blurt profile pictures
+	 *  (/v1/avatars). false on a hidden-only instance, on an older indexer,
+	 *  and until loaded: the "show pictures" switch is offered only when true. */
+	readonly blurt_pictures: boolean;
 	readonly loaded: boolean;
 }
 
@@ -249,6 +253,7 @@ const FALLBACK: InstanceState = {
 	disabled_payment_methods: [],
 	operator_matrix_room: null,
 	fee_methods: { btc: null, xmr: null },
+	blurt_pictures: false,
 	loaded: false
 };
 
@@ -393,6 +398,7 @@ export function initInstance(): Promise<void> {
 					disabled_assets: result.data.disabled_assets ?? [],
 					disabled_payment_methods: result.data.disabled_payment_methods ?? [],
 					operator_matrix_room: result.data.operator_matrix_room ?? null,
+					blurt_pictures: result.data.blurt_pictures === true,
 					loaded: true
 				});
 			} else {

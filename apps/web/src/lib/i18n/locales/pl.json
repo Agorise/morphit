@@ -4656,6 +4656,12 @@
 			"clear_confirm_yes": "Tak, wyczyść",
 			"clear_confirm_cancel": "Zachowaj"
 		},
+		"blurt_pictures": {
+			"heading": "Zdjęcia profilowe",
+			"explain": "Pokazuje na każdej stronie zdjęcia profilowe, które ludzie ustawili na Blurt. Ta instancja pobiera je za ciebie, więc strony, na których leżą, nigdy cię nie widzą. Awatar Morphit, który ktoś ustawił w swoich ustawieniach, jest zawsze widoczny, tak czy inaczej.",
+			"label": "Pokazuj zdjęcia profilowe z Blurt",
+			"help": "Wyłączone, dopóki tego nie włączysz. Link „pokaż” na stronie Węzły Blurt ustawia ten sam wybór. Jest zapisany tylko na tym urządzeniu."
+		},
 		"totp": {
 			"heading": "Uwierzytelnianie dwuskładnikowe (2FA)",
 			"subtitle": "Dodaj aplikację uwierzytelniającą jako drugi składnik po haśle. Chroni przed podglądaniem przez ramię, pożyczonymi urządzeniami i przypadkowym lokalnym malware.",

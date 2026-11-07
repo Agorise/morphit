@@ -143,6 +143,10 @@
 		/** the sender's raster avatar data URI (mutually
 		 *  exclusive with senderAvatarSvg). */
 		senderAvatarDataUri?: string | null;
+		/** v1.23.3 — the sender's profile is still being read: the whoami
+		 *  avatar shows the quiet "not known yet" circle meanwhile, never the
+		 *  identicon or the Blurt picture before a Morphit avatar. */
+		senderPending?: boolean;
 		/** v1.21.14 full chat audit, W-M2: a message refused over a changed key
 		 *  offers Verify peer — where the new safety number is shown and Accept
 		 *  pins exactly the key it was made from — instead of accepting
@@ -175,6 +179,7 @@
 		showWhoami = false,
 		senderAvatarSvg = null,
 		senderAvatarDataUri = null,
+		senderPending = false,
 		senderPostingKey = null
 	}: Props = $props();
 
@@ -778,6 +783,7 @@
 					publicKeyString={senderPostingKey ?? undefined}
 					avatarSvg={senderAvatarSvg}
 					avatarDataUri={senderAvatarDataUri}
+					pending={senderPending}
 					avatarSize={34}
 					weight="normal"
 				/>

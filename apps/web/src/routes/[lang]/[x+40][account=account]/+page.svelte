@@ -47,6 +47,12 @@
 	import BusyButton from '$components/BusyButton.svelte';
 	import ReciprocityPill from '$components/ReciprocityPill.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
+	import {
+		blurtPicturesActive,
+		blurtPicturesUnknown,
+		notePictureMissing,
+		pictureKnownMissing
+	} from '$lib/avatar/blurtPicture';
 	import RatingChip from '$components/RatingChip.svelte';
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import { validateNostrUrlForRender } from '$utils/nostrUrl';
@@ -73,7 +79,8 @@
 		getFeedbackGiven,
 		getAccountOrderPages,
 		getAccountTrades,
-		getReputationReceipt
+		getReputationReceipt,
+		accountPictureUrl
 	} from '$lib/indexer/client';
 	import { getProfilesBatch, isSoftMiss } from '$lib/indexer/profileCache';
 
@@ -571,6 +578,17 @@
 	 *  so this page showed a different heart than the rest of the app. */
 	const heroAvatar = $derived(account ? identiconDataUriFromString(account, 96) : '');
 
+	// v1.23.3: the account's Blurt profile picture (from this instance) when
+	// the visitor turned pictures on and the account set no Morphit avatar —
+	// only once the profile is read, so a Morphit avatar is never preceded by
+	// it. A miss draws the identicon.
+	let heroPictureFailed = $state<string | null>(null);
+	const heroPicture = $derived.by(() => {
+		if (!$blurtPicturesActive || !account || !subjectProfileResolved) return undefined;
+		if (heroPictureFailed === account || pictureKnownMissing(account)) return undefined;
+		return accountPictureUrl(account);
+	});
+
 	/** Rating histogram: max count across 1-5 so bars scale relative
 	 *  to the highest bucket (not the total). Gives a more readable
 	 *  shape when one rating dominates. */
@@ -766,6 +784,26 @@
 					class="rounded-2xl object-cover"
 					loading="lazy"
 					decoding="async"
+				/>
+			{:else if $blurtPicturesUnknown || (!subjectProfileResolved && $blurtPicturesActive)}
+				<!-- Not known yet which picture shows: a quiet square, never one
+				     picture and then another (v1.23.3). -->
+				<span
+					class="block h-24 w-24 animate-pulse rounded-2xl bg-ink-200 dark:bg-ink-800"
+					aria-hidden="true"
+				></span>
+			{:else if heroPicture !== undefined}
+				<img
+					src={heroPicture}
+					alt=""
+					width="96"
+					height="96"
+					class="h-24 w-24 rounded-2xl bg-ink-800/10 object-cover dark:bg-ink-800/50"
+					decoding="async"
+					onerror={() => {
+						notePictureMissing(account);
+						heroPictureFailed = account;
+					}}
 				/>
 			{:else}
 				<img

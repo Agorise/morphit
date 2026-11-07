@@ -234,6 +234,7 @@ Per-instance branding and metadata as configured by the operator.
   "relay_account":   "acme-relay",
   "operator_tag":    "acme",
   "clearnet_eliminated": false,
+  "blurt_pictures":  true,
   "treasury":        { "btc": { "…": "…" }, "xmr": { "…": "…" } },
   "seo": {
     "title":       null,
@@ -284,6 +285,12 @@ registered at an onion/I2P/Lokinet origin, and nobody verifies it
 leg by leg; directories show it with the badge "Zero use of clearnet
 internet". The list of failing legs (`clearnet_eliminated_missing`)
 is returned only to the operator's local tools.
+
+`blurt_pictures` (v1.23.3) says whether this instance fetches accounts'
+Blurt profile pictures for its pages (`GET /v1/avatars/:who`): `false`
+on a hidden-only instance, which never reaches clearnet. The web app
+offers its "Show Blurt profile pictures" switch only when it is `true`;
+absent on older instances (treated as `false`).
 
 `treasury.btc` / `treasury.xmr` are the listing-fee addresses this
 node uses; `null` means that fee method is not taken here (an
@@ -376,6 +383,25 @@ picture URL, a failure for an hour; the `?v=` in the path the list gives changes
 witness sets a new picture URL. Served with `Cache-Control: public, max-age=3600`,
 `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'`. `404` when
 there is no picture to show.
+
+#### `GET /v1/avatars/:who` (v1.23.3)
+
+Tier: `account-avatar` (its own bucket, at the `resource` rate: an orderbook page shows
+dozens of accounts)
+
+An account's **Blurt profile picture** (`profile.profile_image` in its `posting_json_metadata`
+or `json_metadata`), fetched by **this instance** with every defence of the witness pictures
+above (and, when that host fails, the Blurt image proxy's copy); never on a hidden-only
+instance. `404` when the account has a **Morphit avatar** — the page shows that one from the
+account's profile (`/v1/profiles`), sanitized in the browser; this endpoint never serves the
+stored avatar itself — and `404` when there is no picture (the page draws the identicon). The
+account's picture URL is read from the chain with the requests of a moment batched into one
+`get_accounts` call and kept an hour (so is "no picture"); the witness list's own read is
+shared with it. At most 4 fetches run at once and 64 wait; beyond that the answer is `404`
+for now (nothing is remembered as failed). Pages ask only after the visitor turned Blurt
+pictures on, and only once they know the account has no Morphit avatar. Both the picture and
+the `404` are served with `Cache-Control: public, max-age=900`; the picture with
+`X-Content-Type-Options: nosniff`.
 
 ---
 

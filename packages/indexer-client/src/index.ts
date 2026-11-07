@@ -1546,6 +1546,10 @@ export interface InstanceResponse {
 	/** v1.16.1 — legs still preventing elimination (empty ⇔ eliminated). Operator
 	 *  diagnostic, sent only to a local caller (X-Morphit-Local-Health: 1). */
 	readonly clearnet_eliminated_missing?: readonly string[];
+	/** v1.23.3 — this instance fetches accounts' Blurt profile pictures for its
+	 *  pages (/v1/avatars); false on a hidden-only instance. Absent on older
+	 *  indexers (then treated as false). */
+	readonly blurt_pictures?: boolean;
 	/** Backlog item 5 — operator earnings.  When non-null,
 	 *  the frontend includes this on every order op as
 	 *  `operator_tag`, and the indexer credits 90% of BLURT-paid

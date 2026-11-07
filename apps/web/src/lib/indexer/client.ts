@@ -12,6 +12,7 @@
 
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import { indexerTimeoutMs, rpcProbeTimeoutMs } from '$net/transportBudget';
+import { ACCOUNT_NAME_RE } from '$lib/explorer/urlsCore';
 
 import type {
 	AccountFeedbackResponse,
@@ -296,6 +297,14 @@ export function witnessAvatarUrl(path: string): string | undefined {
 	// anyway).
 	if (!/^\/v1\/witnesses\/avatar\/[a-z0-9.-]+(\?v=[0-9a-f]{1,64})?$/.test(path)) return undefined;
 	return new URL(path, resolveOrigin(MORPHIT_INDEXER_ORIGIN)).href;
+}
+
+/** v1.23.3 — this instance's picture for an account (/v1/avatars/<name>):
+ *  its Morphit avatar, else its Blurt profile picture, else 404. Only a valid
+ *  account name makes a URL. */
+export function accountPictureUrl(account: string): string | undefined {
+	if (!ACCOUNT_NAME_RE.test(account)) return undefined;
+	return new URL(`/v1/avatars/${account}`, resolveOrigin(MORPHIT_INDEXER_ORIGIN)).href;
 }
 
 /** GET /v1/instances — federation directory (all known peer

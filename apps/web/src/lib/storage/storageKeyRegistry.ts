@@ -114,6 +114,9 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	// Idle-lock timing is a property of the machine you are sitting at, not of you. Syncing a laptop
 	// value onto a phone would be wrong.
 	{ key: 'morphit.autoLock.timeoutMinutes', tier: 'device' },
+	// v1.23.3: whether THIS browser shows accounts' Blurt profile pictures ('1'; off when
+	// absent). A display choice like the language: names nobody.
+	{ key: 'morphit.showBlurtPictures', tier: 'device' },
 	// A Blurt RPC node list older builds let a user edit. Nothing writes or reads it any more (the
 	// browser contacts no node); kept so a value an older build left is still classified.
 	{ key: 'morphit.rpcEndpoints', tier: 'device' },

@@ -3051,6 +3051,7 @@
 						showWhoami={visibleMessages[i - 1]?.sender !== m.sender}
 						senderAvatarSvg={m.sender === me ? myAvatarSvg : peerLabelProps.avatarSvg}
 						senderAvatarDataUri={m.sender === me ? myAvatarDataUri : peerLabelProps.avatarDataUri}
+						senderPending={m.sender !== me && !peerProfileResolved}
 						senderPostingKey={m.sender === me ? myPostingKey : peerPostingKey}
 					/>
 				{/each}

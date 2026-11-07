@@ -36,6 +36,7 @@ import type { NativeCoinTicker, SameTickerSet } from '@morphit/asset-registry';
 import type { Config } from '$config';
 import { computeClearnetEliminated, clearnetEliminationMissing, clearnetLegsFromConfig } from '$indexer/clearnetGate';
 import { relayReportsHiddenOnly } from '$indexer/relayPosture';
+import { clearnetRefused } from '$indexer/hiddenServiceDispatcher';
 import { getOperationalSnapshot } from '$api/operationalHealth';
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
 import { cachedInstanceFeeRecipientStatus, type Queryable } from '$indexer/feeRecipients';
@@ -118,6 +119,11 @@ export interface InstanceResponse {
 	 *  stripped at every public edge): which private legs a node still lacks
 	 *  is a map of where it still touches clearnet. */
 	clearnet_eliminated_missing?: string[];
+	/** v1.23.3: this instance fetches accounts' Blurt profile pictures for its
+	 *  pages (/v1/avatars) — false on a hidden-only one, which never reaches
+	 *  clearnet. The frontend offers "Show Blurt profile pictures" only when
+	 *  true. Morphit avatars are served either way. */
+	blurt_pictures: boolean;
 	/** the RESOLVED treasury fee addresses this instance
 	 *  verifies fee payments against (chain-pin > env > canonical
 	 *  default).  PUBLIC receiving addresses — safe to expose.  Lets
@@ -386,6 +392,7 @@ export function instanceRoute(
 			// TRUE the moment a node satisfies them all; `clearnet_eliminated_missing`
 			// (local callers only) lists any gap.
 			clearnet_eliminated: computeClearnetEliminated(clearnetLegs),
+			blurt_pictures: !clearnetRefused(),
 			...(localCaller ? { clearnet_eliminated_missing: clearnetEliminationMissing(clearnetLegs) } : {}),
 			treasury: getTreasuryAddresses(),
 			seo: {

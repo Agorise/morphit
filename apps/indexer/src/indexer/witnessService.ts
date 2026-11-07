@@ -43,7 +43,7 @@ import { createHash } from 'node:crypto';
 import type { BlurtClient, ChainAccount } from '$blurt/client';
 import type { Database } from '$db/pool';
 import { clearnetRefused } from '$indexer/hiddenServiceDispatcher';
-import { fetchPublicBytes, resolvePublicIpCares } from '$indexer/federationProbe';
+import { AccountPictures, type ImageType } from '$indexer/accountPictures';
 import {
 	MAX_WITNESS_VOTES,
 	MISSED_WINDOW_MS,
@@ -74,37 +74,23 @@ export const WITNESS_PAGE = 1000;
 export const WITNESS_PAGES_MAX = 5;
 /** Accounts per get_accounts call (100 ≈ 240 KB). */
 export const ACCOUNTS_BATCH = 100;
-/** A picture is fetched again after this. */
-export const AVATAR_TTL_MS = 24 * 60 * 60_000;
-/** A failed picture is not tried again before this. */
-export const AVATAR_FAIL_TTL_MS = 60 * 60_000;
-/** Largest picture accepted. */
-export const AVATAR_MAX_BYTES = 1024 * 1024;
-/** All cached pictures together, at most (oldest dropped first). */
-export const AVATAR_CACHE_MAX_BYTES = 48 * 1024 * 1024;
-/** Pictures fetched at once, at most. */
-export const AVATAR_FETCH_CONCURRENCY = 4;
-/** One picture fetch, at most — the DNS lookup and (for the Blurt image proxy)
- *  its redirects included. A picture is at most two of them: its own host, then
- *  the proxy (v1.23.2). */
-export const AVATAR_FETCH_TIMEOUT_MS = 10_000;
-/** Largest width or height accepted (a small file can declare a huge image
- *  that a browser would then have to allocate). */
-export const AVATAR_MAX_SIDE = 4096;
-/** (v1.23.2) When a witness's picture cannot be fetched from its own host, the
- *  Blurt image proxy's copy of that account's picture. Many pictures were on
- *  hosts that have since gone (on 2026-11-05 img.blurt.world went with the
- *  blurt.world domain, and images.blurt.buzz does not exist); the proxy still
- *  serves them. Asked only for a witness that set a picture (so a witness with
- *  none keeps the plain head, not the proxy's default), through the same
- *  guarded fetch, and allowed to redirect only within its own origin. */
-export const AVATAR_PROXY_ORIGIN = 'https://imgp.blurt.blog';
-/** The proxy answers with its resized copy, possibly through a redirect or two
- *  (its imagehoster's /profileimage → /<size>/<url> → /p/<id> shape); one more
- *  for room. The whole chain shares one timeout (fetchPublicBytes). */
-export const AVATAR_PROXY_REDIRECTS = 3;
-export const avatarProxyUrl = (owner: string): string =>
-	`${AVATAR_PROXY_ORIGIN}/profileimage/${owner}/64x64`;
+// The pictures' limits and helpers live with the shared picture fetcher
+// (accountPictures.ts, v1.23.3); re-exported for the existing importers.
+export {
+	AVATAR_CACHE_MAX_BYTES,
+	AVATAR_FAIL_TTL_MS,
+	AVATAR_FETCH_CONCURRENCY,
+	AVATAR_FETCH_TIMEOUT_MS,
+	AVATAR_MAX_BYTES,
+	AVATAR_MAX_SIDE,
+	AVATAR_PROXY_ORIGIN,
+	AVATAR_PROXY_REDIRECTS,
+	AVATAR_TTL_MS,
+	avatarProxyUrl,
+	imageDimensions,
+	sniffImageType,
+	type ImageType
+} from '$indexer/accountPictures';
 
 export interface WitnessListBody {
 	readonly network: 'morphit';
@@ -131,103 +117,6 @@ export interface WitnessVotesBody {
 	readonly max_votes: number;
 }
 
-export type ImageType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
-
-/** The picture's real type, from its first bytes; null when it is not a PNG,
- *  JPEG, GIF or WebP (an SVG, an HTML error page, anything else). PURE. */
-export function sniffImageType(b: Uint8Array): ImageType | null {
-	if (
-		b.length >= 8 &&
-		b[0] === 0x89 &&
-		b[1] === 0x50 &&
-		b[2] === 0x4e &&
-		b[3] === 0x47 &&
-		b[4] === 0x0d &&
-		b[5] === 0x0a &&
-		b[6] === 0x1a &&
-		b[7] === 0x0a
-	)
-		return 'image/png';
-	if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
-	if (
-		b.length >= 6 &&
-		b[0] === 0x47 &&
-		b[1] === 0x49 &&
-		b[2] === 0x46 &&
-		b[3] === 0x38 &&
-		(b[4] === 0x37 || b[4] === 0x39) &&
-		b[5] === 0x61
-	)
-		return 'image/gif';
-	if (
-		b.length >= 12 &&
-		b[0] === 0x52 &&
-		b[1] === 0x49 &&
-		b[2] === 0x46 &&
-		b[3] === 0x46 &&
-		b[8] === 0x57 &&
-		b[9] === 0x45 &&
-		b[10] === 0x42 &&
-		b[11] === 0x50
-	)
-		return 'image/webp';
-	return null;
-}
-
-/** The width and height a picture declares in its header, or null when the
- *  header cannot be read (then the picture is refused). PURE. */
-export function imageDimensions(b: Uint8Array, type: ImageType): { w: number; h: number } | null {
-	const u16be = (i: number) => (b[i]! << 8) | b[i + 1]!;
-	const u16le = (i: number) => b[i]! | (b[i + 1]! << 8);
-	const u24le = (i: number) => b[i]! | (b[i + 1]! << 8) | (b[i + 2]! << 16);
-	const u32be = (i: number) =>
-		((b[i]! << 24) | (b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!) >>> 0;
-	if (type === 'image/png') {
-		// The first chunk is IHDR: width and height, 4 bytes each.
-		if (b.length < 24 || String.fromCharCode(b[12]!, b[13]!, b[14]!, b[15]!) !== 'IHDR')
-			return null;
-		return { w: u32be(16), h: u32be(20) };
-	}
-	if (type === 'image/gif') {
-		if (b.length < 10) return null;
-		return { w: u16le(6), h: u16le(8) };
-	}
-	if (type === 'image/webp') {
-		if (b.length < 30) return null;
-		const chunk = String.fromCharCode(b[12]!, b[13]!, b[14]!, b[15]!);
-		if (chunk === 'VP8 ') return { w: u16le(26) & 0x3fff, h: u16le(28) & 0x3fff };
-		if (chunk === 'VP8L') {
-			if (b[20] !== 0x2f) return null;
-			return {
-				w: 1 + (((b[22]! & 0x3f) << 8) | b[21]!),
-				h: 1 + (((b[24]! & 0x0f) << 10) | (b[23]! << 2) | ((b[22]! & 0xc0) >> 6))
-			};
-		}
-		if (chunk === 'VP8X') return { w: 1 + u24le(24), h: 1 + u24le(27) };
-		return null;
-	}
-	// JPEG: walk the segments to the first start-of-frame.
-	let i = 2;
-	while (i + 9 < b.length) {
-		if (b[i] !== 0xff) return null;
-		const m = b[i + 1]!;
-		if (m === 0xff) {
-			i++;
-			continue;
-		}
-		if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) {
-			i += 2;
-			continue;
-		}
-		if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
-			return { w: u16be(i + 7), h: u16be(i + 5) };
-		}
-		if (m === 0xd9 || m === 0xda) return null;
-		i += 2 + u16be(i + 2);
-	}
-	return null;
-}
-
 /** The version tag in a picture's path: changes when the witness's picture URL does. PURE. */
 export function avatarVersion(url: string): string {
 	return createHash('sha256').update(url).digest('hex').slice(0, 12);
@@ -245,12 +134,6 @@ function isRawWitness(v: unknown): v is RawWitness {
 	);
 }
 
-interface CachedAvatar {
-	readonly bytes: Uint8Array;
-	readonly type: ImageType;
-	readonly at: number;
-}
-
 export interface WitnessServiceDeps {
 	readonly blurt: Pick<BlurtClient, 'callCondenser' | 'getDynamicGlobalProperties' | 'getAccounts'>;
 	/** Writes the samples. */
@@ -264,45 +147,34 @@ export interface WitnessServiceDeps {
 		url: string,
 		opts?: { readonly sameOriginRedirects?: number }
 	) => Promise<{ readonly bytes: Uint8Array }>;
+	/** The instance's shared picture fetcher (v1.23.3; one cache for the
+	 *  witnesses page and every other page). Made here when not given. */
+	readonly pictures?: AccountPictures;
 }
 
 export class WitnessService {
 	private readonly now: () => number;
 	private readonly avatarsAllowed: () => boolean;
-	private readonly fetchImage: (
-		url: string,
-		opts?: { readonly sameOriginRedirects?: number }
-	) => Promise<{ readonly bytes: Uint8Array }>;
+	private readonly accountPictures: AccountPictures;
 	private list: { readonly at: number; readonly body: WitnessListBody } | null = null;
 	private listInFlight: Promise<WitnessListBody> | null = null;
 	private pictures = new Map<string, string>(); // owner → picture URL
 	private picturesAt = 0;
 	private picturesInFlight: Promise<void> | null = null;
-	private readonly avatars = new Map<string, CachedAvatar>(); // `${owner}\n${url}`
-	private avatarBytes = 0;
-	private readonly avatarFailed = new Map<string, number>();
-	private readonly avatarInFlight = new Map<string, Promise<CachedAvatar | null>>();
-	private avatarActive = 0;
-	private readonly avatarQueue: Array<() => void> = [];
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private stopped = false;
 
 	constructor(private readonly deps: WitnessServiceDeps) {
 		this.now = deps.now ?? Date.now;
 		this.avatarsAllowed = deps.avatarsAllowed ?? (() => !clearnetRefused());
-		this.fetchImage =
-			deps.fetchImage ??
-			((url, o) =>
-				fetchPublicBytes(url, {
-					...(o?.sameOriginRedirects ? { sameOriginRedirects: o.sameOriginRedirects } : {}),
-					timeoutMs: AVATAR_FETCH_TIMEOUT_MS,
-					maxBytes: AVATAR_MAX_BYTES,
-					accept: 'image/png,image/jpeg,image/gif,image/webp',
-					userAgent: 'morphit-indexer/witness-avatar',
-					// c-ares with its own timeout: a host the witness chose must not
-					// hold the thread pool every other lookup needs (review, v1.23.0).
-					resolve: (host) => resolvePublicIpCares(host)
-				}));
+		this.accountPictures =
+			deps.pictures ??
+			new AccountPictures({
+				blurt: deps.blurt,
+				now: this.now,
+				allowed: this.avatarsAllowed,
+				...(deps.fetchImage ? { fetchImage: deps.fetchImage } : {})
+			});
 	}
 
 	/** Write the missed totals every SAMPLE_EVERY_MS (first one shortly after start). */
@@ -449,18 +321,12 @@ export class WitnessService {
 						);
 						if (url !== null) next.set(name, url);
 					}
+					// The same read serves every other page's pictures of these
+					// accounts (v1.23.3).
+					for (const name of batch) this.accountPictures.noteUrl(name, next.get(name) ?? null);
 				}
 				this.pictures = next;
 				this.picturesAt = this.now();
-				// Forget pictures and failures of URLs no longer current.
-				const current = new Set([...next].map(([o, u]) => `${o}\n${u}`));
-				for (const [k, c] of this.avatars) {
-					if (!current.has(k)) {
-						this.avatarBytes -= c.bytes.byteLength;
-						this.avatars.delete(k);
-					}
-				}
-				for (const k of this.avatarFailed.keys()) if (!current.has(k)) this.avatarFailed.delete(k);
 			} catch (err) {
 				log.warn('pictures_read_failed', {}, err);
 			} finally {
@@ -555,47 +421,6 @@ export class WitnessService {
 		return { account, votes, proxy, max_votes: MAX_WITNESS_VOTES };
 	}
 
-	private async acquire(): Promise<void> {
-		if (this.avatarActive < AVATAR_FETCH_CONCURRENCY) {
-			this.avatarActive++;
-			return;
-		}
-		// The releasing fetch hands its slot straight over (the count stays):
-		// counting down and then up a microtask later let a new caller in
-		// between, one over the limit (review, v1.23.0).
-		await new Promise<void>((resolve) => this.avatarQueue.push(resolve));
-	}
-
-	private release(): void {
-		const next = this.avatarQueue.shift();
-		if (next) next();
-		else this.avatarActive--;
-	}
-
-	private remember(key: string, v: CachedAvatar): void {
-		const old = this.avatars.get(key);
-		if (old) {
-			this.avatarBytes -= old.bytes.byteLength;
-			this.avatars.delete(key);
-		}
-		// Drop every older picture of this witness (a changed URL).
-		const owner = key.slice(0, key.indexOf('\n'));
-		for (const [k, c] of this.avatars) {
-			if (k.startsWith(`${owner}\n`)) {
-				this.avatarBytes -= c.bytes.byteLength;
-				this.avatars.delete(k);
-			}
-		}
-		this.avatars.set(key, v);
-		this.avatarBytes += v.bytes.byteLength;
-		for (const [k, c] of this.avatars) {
-			if (this.avatarBytes <= AVATAR_CACHE_MAX_BYTES) break;
-			if (k === key) continue;
-			this.avatarBytes -= c.bytes.byteLength;
-			this.avatars.delete(k);
-		}
-	}
-
 	/** A witness's picture (cached a day), or null when there is none to show. */
 	async getAvatar(
 		owner: string
@@ -605,85 +430,6 @@ export class WitnessService {
 		if (!list.witnesses.some((w) => w.owner === owner && w.producing)) return null;
 		const url = this.pictures.get(owner);
 		if (url === undefined) return null;
-		const key = `${owner}\n${url}`;
-		const now = this.now();
-		const hit = this.avatars.get(key);
-		if (hit && now - hit.at < AVATAR_TTL_MS) {
-			// Most recently used last (the cache drops the oldest first).
-			this.avatars.delete(key);
-			this.avatars.set(key, hit);
-			return hit;
-		}
-		const failedAt = this.avatarFailed.get(key);
-		if (failedAt !== undefined && now - failedAt < AVATAR_FAIL_TTL_MS) return hit ?? null;
-		let p = this.avatarInFlight.get(key);
-		if (!p) {
-			p = (async () => {
-				await this.acquire();
-				try {
-					const load = async (
-						from: string,
-						o?: { readonly sameOriginRedirects?: number }
-					): Promise<{ bytes: Uint8Array; type: ImageType }> => {
-						const { bytes } = await this.fetchImage(from, o);
-						const type = sniffImageType(bytes);
-						if (type === null) throw new Error('not a PNG, JPEG, GIF or WebP');
-						const dims = imageDimensions(bytes, type);
-						if (dims === null) throw new Error('unreadable image header');
-						if (dims.w < 1 || dims.h < 1 || dims.w > AVATAR_MAX_SIDE || dims.h > AVATAR_MAX_SIDE) {
-							throw new Error(
-								`image ${dims.w}×${dims.h} is larger than ${AVATAR_MAX_SIDE}px a side`
-							);
-						}
-						return { bytes, type };
-					};
-					let got: { bytes: Uint8Array; type: ImageType };
-					// A picture already on the proxy (in any form) gets the proxy's
-					// redirects at once, and no second try from the same proxy.
-					const onProxy = new URL(url).origin === AVATAR_PROXY_ORIGIN;
-					try {
-						got = await load(
-							url,
-							onProxy ? { sameOriginRedirects: AVATAR_PROXY_REDIRECTS } : undefined
-						);
-					} catch (own) {
-						// v1.23.2: the picture's own host failed (gone, down, not an
-						// image): the Blurt image proxy's copy of that account's picture.
-						if (onProxy) throw own;
-						const proxied = avatarProxyUrl(owner);
-						const ownWhy = own instanceof Error ? own.message : String(own);
-						try {
-							got = await load(proxied, { sameOriginRedirects: AVATAR_PROXY_REDIRECTS });
-						} catch (px) {
-							throw new Error(
-								`${ownWhy}; ${AVATAR_PROXY_ORIGIN}: ${px instanceof Error ? px.message : String(px)}`
-							);
-						}
-						log.info('avatar_via_proxy', { owner, reason: ownWhy });
-					}
-					const v: CachedAvatar = { bytes: got.bytes, type: got.type, at: this.now() };
-					this.remember(key, v);
-					this.avatarFailed.delete(key);
-					return v;
-				} catch (err) {
-					log.info('avatar_unavailable', {
-						owner,
-						reason: err instanceof Error ? err.message : String(err)
-					});
-					const at = this.now();
-					// Expired failures go when a new one is noted, so the map stays small.
-					for (const [k, t] of this.avatarFailed)
-						if (at - t >= AVATAR_FAIL_TTL_MS) this.avatarFailed.delete(k);
-					this.avatarFailed.set(key, at);
-					// A picture that fetched before keeps showing until it fetches again.
-					return hit ?? null;
-				} finally {
-					this.release();
-					this.avatarInFlight.delete(key);
-				}
-			})();
-			this.avatarInFlight.set(key, p);
-		}
-		return p;
+		return this.accountPictures.picture(owner, url);
 	}
 }

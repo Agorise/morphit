@@ -89,6 +89,8 @@ import { profilesRoute } from '$api/profiles';
 import { accountBalanceRoute } from '$api/accountBalance';
 import { witnessesRoute } from '$api/witnesses';
 import { WitnessService } from '$indexer/witnessService';
+import { AccountPictures } from '$indexer/accountPictures';
+import { accountPicturesRoute } from '$api/accountPictures';
 import { accountHistoryRoute } from '$api/accountHistory';
 import { accountKeysRoute } from '$api/accountKeys';
 import { chainExplorerRoute } from '$api/chainExplorer';
@@ -1161,7 +1163,10 @@ async function main(): Promise<void> {
 	// The /witnesses page (v1.23.0): the ranked list, each producing witness's
 	// missed blocks written down every 10 minutes (the "missed in 24 h" flag),
 	// and the pictures, fetched by this instance only when a visitor asks.
-	const witnessService = new WitnessService({ blurt, db, apiDb });
+	// v1.23.3: one picture fetcher (and cache) for the witnesses page and every
+	// other page's Blurt profile pictures.
+	const accountPictures = new AccountPictures({ blurt });
+	const witnessService = new WitnessService({ blurt, db, apiDb, pictures: accountPictures });
 	witnessService.start();
 	app.route(
 		'/v1/witnesses',
@@ -1169,6 +1174,12 @@ async function main(): Promise<void> {
 			listRatePerMin: config.listRatePerMin,
 			resourceRatePerMin: config.resourceRatePerMin
 		})
+	);
+	// v1.23.3: the picture to show for any account — its Morphit avatar, else
+	// its Blurt profile picture (fetched here), else 404 (the identicon).
+	app.route(
+		'/v1/avatars',
+		accountPicturesRoute(accountPictures, apiDb, { resourceRatePerMin: config.resourceRatePerMin })
 	);
 	app.route(
 		'/v1/rpc-endpoints',

@@ -210,7 +210,7 @@
 						<div class="min-w-0 flex-1">
 							<p class="text-sm text-ink-700 dark:text-ink-200">
 								{$_('feedback_reminder.row_intro')}
-								<IdentityLabel account={reminder.counterpartyAccount} />
+								<IdentityLabel hydrate account={reminder.counterpartyAccount} />
 								{$_('feedback_reminder.row_after_name', {
 									values: { hours: elapsedHours(reminder) }
 								})}

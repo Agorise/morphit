@@ -4656,6 +4656,12 @@
 			"clear_confirm_yes": "Yes, clear",
 			"clear_confirm_cancel": "Keep them"
 		},
+		"blurt_pictures": {
+			"heading": "Profile pictures",
+			"explain": "Show the profile pictures people set on Blurt, on every page. This instance fetches them for you, so the sites that host them never see you. A Morphit avatar someone set in their settings always shows, either way.",
+			"label": "Show Blurt profile pictures",
+			"help": "Off until you turn it on. The “display” link on the Blurt Nodes page sets the same choice. It is kept on this device only."
+		},
 		"totp": {
 			"heading": "Two-factor authentication (2FA)",
 			"subtitle": "Add an authenticator app as a second factor after your password. Protects against shoulder-surfing, borrowed devices, and casual local malware.",

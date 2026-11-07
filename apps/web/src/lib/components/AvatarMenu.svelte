@@ -1,4 +1,11 @@
 <script lang="ts">
+	import {
+		blurtPicturesActive,
+		blurtPicturesUnknown,
+		notePictureMissing,
+		pictureKnownMissing
+	} from '$lib/avatar/blurtPicture';
+	import { accountPictureUrl } from '$indexer/client';
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -161,6 +168,26 @@
 			? { svg: $selfProfile.avatarSvg, dataUri: $selfProfile.avatarDataUri }
 			: { svg: null, dataUri: null }
 	);
+
+	// v1.23.3: your own Blurt profile picture (from this instance) when you
+	// turned pictures on and set no Morphit avatar — as on every other page.
+	let ownPictureFailed = $state<string | null>(null);
+	const ownPicture = $derived.by(() => {
+		const a = activeAccount;
+		// Only once your profile is read: a Morphit avatar must not be
+		// preceded by the Blurt picture (an avatar that changes on its own
+		// reads as a swap).
+		if (
+			!$blurtPicturesActive ||
+			!a ||
+			$selfProfile.account !== a ||
+			ownPictureFailed === a ||
+			pictureKnownMissing(a)
+		) {
+			return undefined;
+		}
+		return accountPictureUrl(a);
+	});
 
 	const total = $derived(totalUnread($unreadCount));
 	const badgeText = $derived(total > 9 ? '9+' : String(total));
@@ -389,6 +416,25 @@
 					class="rounded-full bg-ink-200/50 object-cover dark:bg-ink-800/50"
 					aria-hidden="true"
 					decoding="async"
+				/>
+			{:else if activeAccount && ($blurtPicturesUnknown || ($blurtPicturesActive && $selfProfile.account !== activeAccount))}
+				<span
+					class="block h-10 w-10 animate-pulse rounded-full bg-ink-200/50 dark:bg-ink-800/50"
+					aria-hidden="true"
+				></span>
+			{:else if ownPicture !== undefined}
+				<img
+					src={ownPicture}
+					alt=""
+					width="40"
+					height="40"
+					class="rounded-full bg-ink-200/50 object-cover dark:bg-ink-800/50"
+					aria-hidden="true"
+					decoding="async"
+					onerror={() => {
+						if (activeAccount) notePictureMissing(activeAccount);
+						ownPictureFailed = activeAccount;
+					}}
 				/>
 			{:else}
 				<img

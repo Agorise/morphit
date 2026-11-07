@@ -224,7 +224,9 @@ describe('failures are forgotten', () => {
 		await svc.getAvatar('bbb');
 		advance(AVATAR_FAIL_TTL_MS + 1);
 		await svc.getAvatar('ccc');
-		const failed = (svc as unknown as { avatarFailed: Map<string, number> }).avatarFailed;
+		// v1.23.3: the failures live in the shared picture fetcher.
+		const failed = (svc as unknown as { accountPictures: { failed: Map<string, number> } })
+			.accountPictures.failed;
 		expect([...failed.keys()]).toEqual(['ccc\nhttps://img.example/ccc.png']);
 	});
 });

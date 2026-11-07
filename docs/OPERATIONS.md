@@ -100,6 +100,7 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 54. [Offline notifications — the accounts your users' notes come from](#54-offline-notifications--the-accounts-your-users-notes-come-from)
 55. [The Blurt Nodes page (/witnesses) — what your instance does for it](#55-the-blurt-nodes-page-witnesses--what-your-instance-does-for-it)
 56. [Prices for the other coins (v1.23.2)](#56-prices-for-the-other-coins-v1232)
+57. [Profile pictures across the site (v1.23.3)](#57-profile-pictures-across-the-site-v1233)
 
 ---
 
@@ -14959,12 +14960,14 @@ Nothing to set up. What it costs your server:
   (it may redirect at most three times, only within `imgp.blurt.blog`, all within the one
   10-second timeout) — but only for a
   witness that set a picture; the log then says `avatar_via_proxy`. The picture host sees your server's address and
-  `User-Agent: morphit-indexer/witness-avatar`. If you firewall the indexer's outbound
+  `User-Agent: morphit-indexer/account-picture` (`…/witness-avatar` before v1.23.3,
+  which shares this fetch with every page's pictures: §57). If you firewall the indexer's outbound
   traffic, pictures simply stay the plain head. A zero-clearnet (Tor/I2P-only)
   instance never fetches them and shows no "display" link.
 - **Logs:** `journalctl -u morphit-indexer | grep witnesses` — `sample_failed` (a
   10-minute sample could not be read; the flag waits for the next),
-  `avatar_unavailable` (a picture could not be fetched or was not an image; tried
+  `avatar_unavailable` (since v1.23.3 under `account-pictures`: `grep -E
+  'witnesses|account-pictures'`; a picture could not be fetched or was not an image; tried
   again after an hour; since v1.23.2 that means both the witness's own host and the
   Blurt image proxy failed, and the reason names both). `… has no DNS records` means the
   picture's host name does not exist in DNS any more — not a fault of your server (on
@@ -15018,3 +15021,36 @@ curl -s http://127.0.0.1:8080/v1/listing-fee | jq .asset_prices_usd
 
 Users' browsers read them from your own instance, as before; they ask no
 price service themselves.
+
+## 57. Profile pictures across the site (v1.23.3)
+
+Since v1.23.3 every page shows an account's picture the same way, in this order:
+
+1. its **Morphit avatar** (set in Settings; on chain, so on every instance) — always, as
+   before;
+2. its **Blurt profile picture** — only for a visitor who turned pictures on (the
+   "display" link on the Blurt Nodes page, or Settings → Profile pictures; off until
+   then, remembered in that browser only);
+3. the identicon.
+
+What your server does for it, only on a clearnet instance:
+
+- **`GET /v1/avatars/<account>`** fetches the account's Blurt picture exactly as your
+  server fetches the witnesses' pictures (§55: the same guarded fetch, the same limits,
+  the Blurt image proxy when the picture's own host fails). It answers `404` for an
+  account with a Morphit avatar (the page shows that one from the profile) and for one
+  with no picture. At most 4 fetches run at once and 64 wait; beyond that, `404` for
+  now. The browser still contacts nothing but your site.
+- **The picture addresses** come from the chain: the accounts a page asks about within a
+  moment are read together (one `get_accounts`), and each answer is kept an hour.
+  Pictures are kept a day (48 MiB at most, oldest first out), a failure an hour.
+- **Nothing is fetched while nobody looks**, and nothing at all for visitors who left
+  pictures off. A visitor's private list of hidden accounts (Settings) never asks.
+- **Logs:** `journalctl -u morphit-indexer | grep account-pictures` — `avatar_via_proxy`,
+  `avatar_unavailable`, `picture_urls_read_failed` (the chain could not be read; asked
+  again next time).
+
+A zero-clearnet (Tor/I2P-only) instance never fetches Blurt pictures: `/v1/instance`
+says `"blurt_pictures": false`, and the pages offer no switch. Morphit avatars show there
+as everywhere.
+

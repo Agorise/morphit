@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
+	import { instance } from '$lib/stores/instance';
+	import { setShowBlurtPictures, showBlurtPictures } from '$lib/stores/blurtPictures';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode, SUPPORTED_LOCALES } from '$i18n/locales';
@@ -2546,7 +2548,7 @@
 			>
 				{#each hiddenList as account (account)}
 					<li class="flex items-center justify-between gap-3 bg-ink-50 px-4 py-3 dark:bg-ink-900">
-						<IdentityLabel {account} weight="semibold" showCopy={false} />
+						<IdentityLabel noPicture {account} weight="semibold" showCopy={false} />
 						<button
 							type="button"
 							onclick={() => unhideAccount(account)}
@@ -2652,7 +2654,7 @@
 			>
 				{#each blockedList as account (account)}
 					<li class="flex items-center justify-between gap-3 bg-ink-50 px-4 py-3 dark:bg-ink-900">
-						<IdentityLabel {account} weight="semibold" showCopy={false} />
+						<IdentityLabel hydrate {account} weight="semibold" showCopy={false} />
 						<button
 							type="button"
 							onclick={() => onUnblock(account)}
@@ -2752,6 +2754,38 @@
 			</div>
 		{/if}
 	</section>
+
+	<!-- v1.23.3: accounts' Blurt profile pictures, site-wide (off until turned
+	     on; the witnesses page's "display" sets the same choice). Offered only
+	     where this instance can fetch them — never on a hidden-only one. -->
+	{#if $instance.blurt_pictures}
+		<section class="card mt-6" aria-labelledby="blurt-pictures-heading">
+			<h2 id="blurt-pictures-heading" class="font-display text-xl font-bold">
+				{$_('settings.blurt_pictures.heading')}
+			</h2>
+			<div class="mt-1"><VisibilityBadge scope="device" /></div>
+			<p class="mt-2 text-ink-600 dark:text-ink-300">
+				{$_('settings.blurt_pictures.explain')}
+			</p>
+			<label
+				class="mt-4 flex items-start gap-3 rounded-xl border border-ink-200 p-4 dark:border-ink-700"
+			>
+				<input
+					type="checkbox"
+					checked={$showBlurtPictures}
+					onchange={(e) => setShowBlurtPictures(e.currentTarget.checked)}
+					class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
+					data-testid="blurt-pictures-switch"
+				/>
+				<div class="min-w-0">
+					<p class="font-semibold">{$_('settings.blurt_pictures.label')}</p>
+					<p class="mt-1 text-sm text-ink-600 dark:text-ink-300">
+						{$_('settings.blurt_pictures.help')}
+					</p>
+				</div>
+			</label>
+		</section>
+	{/if}
 
 	<!-- ─── Session control ─── -->
 	{#if $isUnlocked}

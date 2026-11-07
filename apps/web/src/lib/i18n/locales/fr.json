@@ -4656,6 +4656,12 @@
 			"clear_confirm_yes": "Oui, effacer",
 			"clear_confirm_cancel": "Les conserver"
 		},
+		"blurt_pictures": {
+			"heading": "Photos de profil",
+			"explain": "Affiche sur toutes les pages les photos de profil que les gens ont choisies sur Blurt. Cette instance les récupère pour vous, donc les sites qui les hébergent ne vous voient jamais. Un avatar Morphit que quelqu’un a défini dans ses paramètres s’affiche toujours, dans tous les cas.",
+			"label": "Afficher les photos de profil Blurt",
+			"help": "Désactivé tant que vous ne l’activez pas. Le lien « afficher » de la page Nœuds Blurt règle ce même choix. Il est gardé sur cet appareil uniquement."
+		},
 		"totp": {
 			"heading": "Authentification à deux facteurs (2FA)",
 			"subtitle": "Ajoutez une application d’authentification comme second facteur après votre mot de passe. Protège contre le regard par-dessus l’épaule, les appareils empruntés et les logiciels malveillants locaux occasionnels.",

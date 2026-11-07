@@ -72,7 +72,8 @@ const EXPECTED: ReadonlyArray<readonly [string, 'public' | 'private' | 'device']
 	['preferences-heading', 'private'],
 	// Never leaves the browser.
 	['account-name-heading', 'device'],
-	['session-heading', 'device'] // auto-lock + TOTP enrolment are bound to THIS browser
+	['session-heading', 'device'], // auto-lock + TOTP enrolment are bound to THIS browser
+	['blurt-pictures-heading', 'device'] // v1.23.3: morphit.showBlurtPictures, this browser only
 ];
 
 for (const [headingId, scope] of EXPECTED) {

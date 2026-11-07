@@ -32,7 +32,12 @@
 	import Head from '$components/Head.svelte';
 	import PartialStars from '$components/PartialStars.svelte';
 	import WitnessVoteModal from '$components/WitnessVoteModal.svelte';
-	import { getWitnesses, getWitnessVotes, witnessAvatarUrl } from '$indexer/client';
+	import {
+		accountPictureUrl,
+		getWitnesses,
+		getWitnessVotes,
+		witnessAvatarUrl
+	} from '$indexer/client';
 	import type { WitnessRow, WitnessesResponse } from '@morphit/indexer-client';
 	import { hasAnySession, pairedReadOnly } from '$stores/identity';
 	import { blurtAccountName } from '$blurt/ops/profile';
@@ -44,6 +49,10 @@
 	import { showToast } from '$lib/stores/toast';
 	import { stickyBannerBottom } from '$lib/stores/stickyBanner';
 	import { stickyTableHead } from '$lib/utils/stickyTableHead';
+	import { setShowBlurtPictures, showBlurtPictures } from '$lib/stores/blurtPictures';
+	import { getProfilesBatch } from '$lib/indexer/profileCache';
+	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
+	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
 
 	type SortKey = 'name' | 'stars' | 'weeks' | 'missed' | 'rank' | 'needs' | 'version' | 'vote';
 	/** Each column's natural first direction: best first. */
@@ -62,7 +71,46 @@
 	let loadFailed = $state(false);
 	let sortKey = $state<SortKey>('stars');
 	let sortDesc = $state(true);
-	let showAvatars = $state(false);
+	// v1.23.3: the site-wide choice (stores/blurtPictures.ts) — "display" here
+	// turns the Blurt pictures on for every page, and Settings can too.
+	const showAvatars = $derived($showBlurtPictures);
+	function toggleAvatars(): void {
+		setShowBlurtPictures(!$showBlurtPictures);
+	}
+
+	// v1.23.3: a witness's Morphit avatar (its on-chain Morphit profile) shows
+	// always, like on every page, and wins over the Blurt picture. Read from
+	// this instance in batches once the list is in.
+	let morphitAvatars = $state(new Map<string, string>());
+	let morphitAvatarsFor = '';
+	// The batch for the current list has been answered (or failed): only then
+	// do Blurt pictures show (review, v1.23.3: before it, a witness with a
+	// Morphit avatar showed his Blurt picture first, then switched).
+	let morphitAvatarsReady = $state(false);
+	let brokenMorphit = $state(new Set<string>());
+	$effect(() => {
+		const owners = (data?.witnesses ?? []).map((w) => w.owner);
+		const key = owners.join(',');
+		if (owners.length === 0 || key === morphitAvatarsFor) return;
+		morphitAvatarsFor = key;
+		morphitAvatarsReady = false;
+		void getProfilesBatch(owners)
+			.then((profiles) => {
+				const next = new Map<string, string>();
+				for (const [owner, profile] of profiles) {
+					const p = extractLabelPropsFromProfile(profile);
+					if (p.avatarSvg) next.set(owner, svgAvatarImgSrc(p.avatarSvg));
+					else if (p.avatarDataUri) next.set(owner, p.avatarDataUri);
+				}
+				morphitAvatars = next;
+			})
+			.catch(() => {
+				// No Morphit avatars known: the Blurt pictures (when on) or heads.
+			})
+			.finally(() => {
+				if (morphitAvatarsFor === key) morphitAvatarsReady = true;
+			});
+	});
 
 	// The table's header row sticks just under the site's sticky main menu (or
 	// the notification banner below it, while that shows) as the rows scroll
@@ -287,10 +335,14 @@
 <Head routeKey="witnesses" />
 
 {#snippet avatar(w: WitnessRow, size: number)}
+	{@const morphit = brokenMorphit.has(w.owner) ? undefined : morphitAvatars.get(w.owner)}
 	{@const src =
-		showAvatars && data?.avatars && w.avatar !== null && !brokenAvatars.has(w.owner)
-			? witnessAvatarUrl(w.avatar)
-			: undefined}
+		morphit ??
+		(showAvatars && data?.avatars && morphitAvatarsReady && !brokenAvatars.has(w.owner)
+			? w.avatar !== null
+				? witnessAvatarUrl(w.avatar)
+				: accountPictureUrl(w.owner)
+			: undefined)}
 	{#if src !== undefined}
 		<img
 			{src}
@@ -299,7 +351,10 @@
 			height={size}
 			loading="lazy"
 			decoding="async"
-			onerror={() => (brokenAvatars = new Set([...brokenAvatars, w.owner]))}
+			onerror={() => {
+				if (morphit !== undefined) brokenMorphit = new Set([...brokenMorphit, w.owner]);
+				else brokenAvatars = new Set([...brokenAvatars, w.owner]);
+			}}
 			class="flex-none rounded-full object-cover ring-1 ring-ink-300 dark:ring-ink-700"
 			style="width:{size}px;height:{size}px"
 		/>
@@ -518,7 +573,7 @@
 								<button
 									type="button"
 									class="font-semibold normal-case tracking-normal text-morphit-teal underline decoration-morphit-teal/40 underline-offset-2 hover:decoration-current dark:text-morphit-emerald dark:decoration-morphit-emerald/40"
-									onclick={() => (showAvatars = !showAvatars)}
+									onclick={toggleAvatars}
 									aria-pressed={showAvatars}
 								>
 									{showAvatars ? $_('witnesses.hide') : $_('witnesses.display')}
@@ -699,7 +754,7 @@
 						<button
 							type="button"
 							class="font-semibold normal-case tracking-normal text-morphit-teal underline underline-offset-2 dark:text-morphit-emerald"
-							onclick={() => (showAvatars = !showAvatars)}
+							onclick={toggleAvatars}
 							aria-pressed={showAvatars}
 						>
 							{showAvatars ? $_('witnesses.hide') : $_('witnesses.display')}
