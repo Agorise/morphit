@@ -483,6 +483,7 @@ SMOKES=(
 	"apps/ops-cli:ansible-lint-smoke"
 	"apps/matrix-bot:deps-pin-check"
 	"apps/matrix-bot:sidecar-envelope-smoke"
+	"apps/matrix-bot:certbot-monitor-renewal-due-smoke"
 	"apps/matrix-bot:emit-routing-smoke"
 	"apps/matrix-bot:self-test-route-smoke"
 	"apps/matrix-bot:json-str-injection-smoke"

@@ -84,8 +84,10 @@ export const PAYMENT_CHECK_RATE_PER_MIN = 30;
 export const PAYMENT_CHECK_WAIT_MS = 5_000;
 /** How long an answer is reused before the explorers are asked again. */
 export const PAYMENT_CHECK_FRESH_MS = {
-	/** Found, fewer than PAYMENT_REQUIRED_CONFIRMATIONS deep: the depth moves. */
-	confirming: 30_000,
+	/** Found, fewer than PAYMENT_REQUIRED_CONFIRMATIONS deep: the depth moves.
+	 *  v1.23.4: 15 s (was 30): the chat showed 0/3 for about a minute after
+	 *  both wallets showed 1/3 (owner, a live BTC trade). */
+	confirming: 15_000,
 	/** Found and confirmed: only a reorg changes it. */
 	confirmed: 10 * 60_000,
 	/** Not seen yet: it may appear any moment. */
@@ -93,6 +95,10 @@ export const PAYMENT_CHECK_FRESH_MS = {
 	/** No answer: do not hammer explorers that are down. */
 	unavailable: 15_000
 } as const;
+/** How long a request holding a stale answer waits for its re-check before
+ *  serving the stale one (v1.23.4): an explorer that answers quickly brings
+ *  the new depth back on this request, not on the browser's next poll. */
+export const PAYMENT_CHECK_STALE_WAIT_MS = 3_000;
 /** How long a verdict is still served (with its own checked_at) while
  *  re-checks get no answer. Past it the question is asked afresh. */
 export const PAYMENT_CHECK_KEEP_MS = 30 * 60_000;
@@ -153,6 +159,8 @@ export interface PaymentCheckRouteDeps {
 	readonly waitMs?: number;
 	/** Test seam: PAYMENT_CHECK_ROUND_MS by default. */
 	readonly roundMs?: number;
+	/** Test seam: PAYMENT_CHECK_STALE_WAIT_MS by default. */
+	readonly staleWaitMs?: number;
 	/** Test seam: who is asking (requestClient by default). */
 	readonly clientOf?: (c: Context) => { readonly key: string; readonly shared: boolean };
 }
@@ -186,6 +194,7 @@ export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
 	const clock = deps.clock ?? (() => Date.now());
 	const waitMs = deps.waitMs ?? PAYMENT_CHECK_WAIT_MS;
 	const roundMs = deps.roundMs ?? PAYMENT_CHECK_ROUND_MS;
+	const staleWaitMs = deps.staleWaitMs ?? PAYMENT_CHECK_STALE_WAIT_MS;
 	const clientOf = deps.clientOf ?? requestClient;
 	const cache = new Map<string, Entry>();
 	const inFlight = new Map<string, Promise<void>>();
@@ -335,8 +344,23 @@ export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
 			return answer(c, q, known.verdict, known.checkedAt);
 		}
 		const round = start(key, q, clientOf(c));
-		// Stale but recent: serve it while the re-check runs.
+		// Stale but recent: serve it while the re-check runs — after waiting a
+		// moment for that re-check, whose answer then comes back at once.
 		if (known !== undefined && now - known.checkedAt < PAYMENT_CHECK_KEEP_MS) {
+			if (round !== null && staleWaitMs > 0) {
+				let wait: ReturnType<typeof setTimeout> | undefined;
+				await Promise.race([
+					round,
+					new Promise<void>((resolve) => {
+						wait = setTimeout(resolve, staleWaitMs);
+					})
+				]);
+				clearTimeout(wait);
+				const got = cache.get(key);
+				if (got !== undefined && got.checkedAt >= now) {
+					return answer(c, q, got.verdict, got.checkedAt);
+				}
+			}
 			return answer(c, q, known.verdict, known.checkedAt);
 		}
 		if (round === null) return answer(c, q, UNAVAILABLE, now);

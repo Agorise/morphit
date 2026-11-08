@@ -52,7 +52,7 @@
 		lockAllTabs
 	} from '$stores/identity';
 	import { persistedKeystorePresent } from '$crypto/persistentKeystore';
-	import { unreadCount, totalUnread, markRead } from '$lib/notifications';
+	import { unreadCount, totalUnread, markRead, type EventCategory } from '$lib/notifications';
 	import { markAllChatRead } from '$lib/notifications/chatUnread';
 	import { portal } from '$lib/ui/portal';
 	import { backupMaterialPending } from '$stores/backupPending';
@@ -336,7 +336,11 @@
 	 *
 	 *  Feedback lives on /my/orders (the pending-feedback banner sits at the top
 	 *  of that page), so both Orders and Feedback route there. */
-	function openCategory(path: string): void {
+	/** v1.23.4 (owner: the badge stayed after clicking Orders): opening an
+	 *  event-based category marks it read at once; My orders then keeps it so
+	 *  while shown (keepReadWhileShown). Chat clears by reading. */
+	function openCategory(path: string, category?: EventCategory): void {
+		if (category !== undefined) markRead(category);
 		open = false;
 		showNotifications = false;
 		void gotoLocale(path);
@@ -578,7 +582,7 @@
 						<li>
 							<button
 								type="button"
-								onclick={() => openCategory('/my/orders')}
+								onclick={() => openCategory('/my/orders', 'order')}
 								class="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-start transition-colors hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800"
 							>
 								<div class="min-w-0">
@@ -620,7 +624,7 @@
 						<li>
 							<button
 								type="button"
-								onclick={() => openCategory('/my/orders')}
+								onclick={() => openCategory('/my/orders', 'feedback')}
 								class="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-start transition-colors hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:hover:bg-ink-800"
 							>
 								<div class="min-w-0">

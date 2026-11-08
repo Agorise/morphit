@@ -25,6 +25,7 @@
 
 import type { NativeCoinTicker } from '@morphit/asset-registry';
 import { getInstanceSnapshot } from '$lib/stores/instance';
+import { isBlockNumber } from './blockNumber';
 import {
 	BTC_TXID_RE,
 	XMR_TXID_RE,
@@ -364,10 +365,14 @@ export function externalExplorerUrls(asset: ExternalAsset, txid: string): readon
 }
 
 /** Builds the Morphit explorer URL for a Blurt transaction.
- *  Returns null on validation failure. */
-export function morphitExplorerTxUrl(trxId: string): string | null {
+ *  Returns null on validation failure. `block` (v1.23.4): the block it is in,
+ *  when known (a chat receipt knows it) — the page then finds a transaction
+ *  a node's index does not hold yet (`?block=N`); anything but a block number
+ *  is left out. */
+export function morphitExplorerTxUrl(trxId: string, block?: number): string | null {
 	if (typeof trxId !== 'string' || !BLURT_TRXID_RE.test(trxId)) return null;
-	return `/explorer/tx/${trxId.toLowerCase()}`;
+	const path = `/explorer/tx/${trxId.toLowerCase()}`;
+	return isBlockNumber(block) ? `${path}?block=${block}` : path;
 }
 
 /** Builds a USDT explorer URL for the given network + txid.

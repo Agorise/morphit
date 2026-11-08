@@ -28,6 +28,7 @@ import {
 	PAYMENT_CHECK_ROUND_MS,
 	PAYMENT_CHECK_RATE_PER_MIN,
 	PAYMENT_CHECK_ROUNDS_PER_MIN,
+	PAYMENT_CHECK_STALE_WAIT_MS,
 	PAYMENT_CHECK_WAIT_MS,
 	type PaymentCheckRouteDeps
 } from '$api/paymentCheck';
@@ -316,7 +317,7 @@ describe('the cache', () => {
 		expect(s.calls).toHaveLength(1);
 		expect(PAYMENT_CHECK_FRESH_MS.confirmed).toBeGreaterThan(PAYMENT_CHECK_FRESH_MS.confirming);
 	});
-	it('a stale answer is served at once while it is re-checked, with its own checked_at', async () => {
+	it('a stale answer whose re-check is slow is served after a short wait, with its own checked_at', async () => {
 		let now = 1_000_000;
 		let verdict: PaymentVerdict = FOUND;
 		const gate = deferred<void>();
@@ -325,7 +326,7 @@ describe('the cache', () => {
 			if (gated) await gate.promise;
 			return verdict;
 		});
-		const app = mount({ check: s.check, clock: () => now });
+		const app = mount({ check: s.check, clock: () => now, staleWaitMs: 20 });
 		await get(app, btcQs());
 		now += PAYMENT_CHECK_FRESH_MS.confirming + 5;
 		gated = true;
@@ -341,6 +342,26 @@ describe('the cache', () => {
 		const fresh = (await (await get(app, btcQs())).json()) as Record<string, unknown>;
 		expect(fresh.confirmations).toBe(3);
 		expect(s.calls).toHaveLength(2);
+	});
+	it('v1.23.4: a stale answer whose re-check is quick: the new depth on the same request', async () => {
+		let now = 1_000_000;
+		let verdict: PaymentVerdict = FOUND;
+		const s = stub(async () => verdict);
+		const app = mount({ check: s.check, clock: () => now });
+		expect(
+			((await (await get(app, btcQs())).json()) as Record<string, unknown>).confirmations
+		).toBe(1);
+		now += PAYMENT_CHECK_FRESH_MS.confirming + 5;
+		verdict = DEEP;
+		const r = (await (await get(app, btcQs())).json()) as Record<string, unknown>;
+		expect(r.confirmations).toBe(3);
+		expect(r.checked_at).toBe(new Date(now).toISOString());
+		expect(s.calls).toHaveLength(2);
+	});
+	it('v1.23.4: still confirming, a payment is asked about again within 15 s', () => {
+		expect(PAYMENT_CHECK_FRESH_MS.confirming).toBeLessThanOrEqual(15_000);
+		expect(PAYMENT_CHECK_STALE_WAIT_MS).toBeGreaterThan(0);
+		expect(PAYMENT_CHECK_STALE_WAIT_MS).toBeLessThan(PAYMENT_CHECK_WAIT_MS);
 	});
 	it('a re-check with no answer keeps the last verdict, until KEEP_MS', async () => {
 		let now = 1_000_000;
@@ -583,6 +604,9 @@ describe('docs/API.md says what the code does', () => {
 			`reused for ${PAYMENT_CHECK_FRESH_MS.confirming / 1000} s while confirming (${PAYMENT_CHECK_FRESH_MS.confirmed / 60_000} min`
 		);
 		expect(section).toContain(`${PAYMENT_CHECK_FRESH_MS.notFound / 1000} s for \`not_found\``);
+		expect(section).toContain(
+			`after waiting up to ${PAYMENT_CHECK_STALE_WAIT_MS / 1000} s for that re-check`
+		);
 		expect(section).toContain(`${PAYMENT_CHECK_FRESH_MS.unavailable / 1000} s for \`unavailable\``);
 		expect(section).toContain(`for up to ${PAYMENT_CHECK_KEEP_MS / 60_000} min`);
 	});

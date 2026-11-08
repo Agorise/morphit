@@ -73,7 +73,9 @@ for (const rel of SURFACES) {
 scenario('urls.ts helpers return bare /explorer/ paths (locale applied by lp, not the helper)', () => {
 	const src = readFileSync(join(REPO, 'apps/web/src/lib/explorer/urls.ts'), 'utf8');
 	for (const ret of [
-		"return `/explorer/tx/${trxId.toLowerCase()}`;",
+		// v1.23.4: the tx helper builds the bare path first, then may add `?block=N`.
+		"const path = `/explorer/tx/${trxId.toLowerCase()}`;",
+		'return isBlockNumber(block) ? `${path}?block=${block}` : path;',
 		'return `/explorer/account/${account}`;',
 		'return `/explorer/block/${blockNumber}`;'
 	]) {

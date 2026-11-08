@@ -4198,24 +4198,47 @@ sudo systemctl enable --now morphit-postfix-monitor.timer
 
 #### TLS cert expiry + renewal-stall detector — `morphit-certbot-monitor`
 
-Daily check of TLS cert expiry combined with a **renewal-stall
-detector** that catches the killer pattern: cert is about to
-expire AND certbot has not had a successful renewal in N days.
-A cert renewing fine 6 months ago can silently start failing for
-weeks before it actually expires; this sidecar finds that gap.
+Daily check that certbot is keeping each TLS certificate renewed.
+certbot renews by itself: its timer runs twice a day and renews a
+certificate once it is due (for Let's Encrypt's 90-day certificates,
+when fewer than 30 days are left). So 30 days left is normal and
+says nothing. This sidecar warns when a renewal is **overdue** — due
+for a week and still not done — which means renewal broke (DNS
+change, port 80 firewall, rate limit, a stopped timer), with more
+than three weeks left to fix it. Whatever the settings, it is
+CRITICAL with a day left and once the certificate has expired.
 
-Events emitted:
+When certbot is due comes from the certificate's renewal file
+(`renew_before_expiry`: a number of days, weeks or months), else the
+earlier of certbot 2.x's 30 days (Ubuntu 24.04 ships 2.9) and certbot
+4 and later's third of the lifetime (half, for a certificate shorter
+than 10 days); for Let's Encrypt's 90-day certificates both are 30
+days. The grace is at most half of that window. The certificate's age
+comes from the certificate itself (its issue date), not from
+certbot's log, which certbot starts afresh on every run.
+
+Events emitted (90-day certificate):
 
 | Event | Tier | Trigger |
 |---|---|---|
-| `cert_expiry_critical` | CRITICAL | Cert expires in ≤ 7 days |
-| `cert_expiry_warn` | WARN | Cert expires in ≤ 30 days |
-| `renewal_stalled` | CRITICAL | Cert expiring AND last successful renewal > 14 days ago |
+| `cert_expiry_warn` | WARN | Renewal overdue by the grace days (7): 23 days left |
+| `renewal_stalled` | CRITICAL | 7 days left (or 1, or expired), not renewed in 14+ days |
+| `cert_expiry_critical` | CRITICAL | The same, issued under 14 days ago (a short-lived certificate) |
 | `certbot_unavailable` | INFO | openssl or `/etc/letsencrypt/live/` missing |
 
-All thresholds env-tunable.  Reads `/var/log/letsencrypt/letsencrypt.log`
-for the "Renewal was successful" line timestamps; falls back
-gracefully if the log is rotated or unreadable.
+All thresholds env-tunable (whole numbers; anything else falls back
+to the default). `MORPHIT_CERTBOT_EXPIRY_WARN_DAYS`
+(optional) warns at that many days left instead, but only when it is
+lower than the renewal point minus the grace: a warning before
+certbot is due can only be a false alarm.
+
+To see for yourself that renewal works (a test renewal against Let's
+Encrypt's test server; it changes nothing):
+
+```sh
+sudo certbot renew --dry-run
+systemctl list-timers certbot.timer
+```
 
 Setup:
 
@@ -4228,7 +4251,7 @@ test -d /etc/letsencrypt/live || echo "certbot not configured yet"
 sudo install -m 0644 -o root -g root /dev/stdin \
      /etc/morphit/certbot-monitor.env <<'ENV'
 MORPHIT_CERTBOT_EXPIRY_CRITICAL_DAYS=7
-MORPHIT_CERTBOT_EXPIRY_WARN_DAYS=30
+MORPHIT_CERTBOT_RENEWAL_GRACE_DAYS=7
 MORPHIT_CERTBOT_RENEWAL_STALL_DAYS=14
 ENV
 

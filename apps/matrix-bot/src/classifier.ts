@@ -792,35 +792,39 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 	},
 
 	// ─── certbot sidecar ──────────────────────────────────
+	// v1.23.4: the monitor speaks only when a renewal is overdue (certbot
+	// renews by itself once {renew_due_days_left} days are left), and the age
+	// comes from the certificate's own issue date, not certbot's log.
 	'certbot:cert_expiry_critical': {
 		title: 'TLS cert expires very soon: {cert}',
 		advice:
 			'{cert} has only {days_left} days until expiry (threshold ' +
-			'{threshold_days} days). Last successful renewal was ' +
-			'{last_renewal_success_age_days} days ago. Run `sudo certbot ' +
-			'renew --force-renewal` to issue a new cert immediately. If that ' +
-			'fails, see `sudo journalctl -u snap.certbot.renew` (or your ' +
-			'certbot cron log) for the failure reason.'
+			'{threshold_days} days); it was issued {issued_days_ago} days ago. ' +
+			'Run `sudo certbot renew --dry-run` to see what fails, then ' +
+			'`sudo certbot renew` to issue a new cert now. ' +
+			'`sudo journalctl -u certbot.service` shows the timer runs.'
 	},
 	'certbot:cert_expiry_warn': {
-		title: 'TLS cert expires soon: {cert}',
+		title: 'TLS cert renewal overdue: {cert}',
 		advice:
-			'{cert} expires in {days_left} days (threshold {threshold_days} ' +
-			'days). Last successful renewal {last_renewal_success_age_days} ' +
-			'days ago. Normal certbot renewal should handle this; this WARN ' +
-			'just makes sure you have weeks of headroom to act if it does not.'
+			'{cert} expires in {days_left} days and has not been renewed: ' +
+			'certbot renews it once {renew_due_days_left} days are left and ' +
+			'tries twice a day, so it is {overdue_days} days overdue (the ' +
+			'certificate in use was issued {issued_days_ago} days ago). ' +
+			'`sudo certbot renew --dry-run` shows what fails without using up ' +
+			'attempts; `sudo journalctl -u certbot.service` shows the timer ' +
+			'runs. There are still {days_left} days to fix it.'
 	},
 	'certbot:renewal_stalled': {
 		title: 'TLS cert expiring AND renewal has been silently failing: {cert}',
 		advice:
-			'{cert} expires in {days_left} days AND certbot has not had a ' +
-			'successful renewal in {last_renewal_success_age_days} days ' +
-			'(stall threshold {stall_threshold_days} days). This is the ' +
-			'killer pattern: renewal was working fine for months then ' +
-			'silently broke (DNS change, port 80 firewall, ACME provider ' +
-			'limits, rate-limit). Fix the renewal NOW — `sudo certbot renew ' +
-			'--dry-run` first to see what is failing without burning ' +
-			'attempts, then a real renewal.'
+			'{cert} expires in {days_left} days AND certbot has not renewed ' +
+			'it: renewal has been due for {overdue_days} days, and the ' +
+			'certificate in use was issued {issued_days_ago} days ago (stall ' +
+			'threshold {stall_threshold_days} days). Renewal broke somewhere ' +
+			'(DNS change, port 80 firewall, ACME provider limits, rate-limit). ' +
+			'Fix the renewal NOW — `sudo certbot renew --dry-run` first to see ' +
+			'what is failing without burning attempts, then `sudo certbot renew`.'
 	},
 	'certbot:certbot_unavailable': {
 		title: 'certbot sidecar enabled but openssl or cert dir missing',

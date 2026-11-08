@@ -31,6 +31,7 @@
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
+	import { keepReadWhileShown } from '$lib/notifications';
 	// byte-budget: 3 disclosure/modal components below are
 	// lazy-imported.  None render on first paint; all are gated by
 	// state that toggles only after a user action.  Combined the
@@ -444,6 +445,11 @@
 		loadStarted = true;
 		void load();
 	});
+
+	// v1.23.4 (owner: the avatar badge stayed after opening Orders): this page
+	// shows the order events and the leave-feedback reminders, so while it is
+	// open and in view those counts stay read.
+	onMount(() => keepReadWhileShown(['order', 'feedback']));
 
 	onMount(() => {
 		// Deep-link support: if URL is /my/orders#feedback=<permlink>,

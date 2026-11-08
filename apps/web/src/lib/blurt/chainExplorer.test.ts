@@ -56,3 +56,25 @@ describe('fetchChainTx is bounded', () => {
 		});
 	});
 });
+
+describe('fetchChainTx with the block it is in (v1.23.4)', () => {
+	const urls = async (block: unknown) => {
+		const seen: string[] = [];
+		const ok = vi.fn(async (u: unknown) => {
+			seen.push(String(u));
+			return new Response(JSON.stringify({ tx: { ref_block_num: 1 } }), { status: 200 });
+		}) as unknown as typeof fetch;
+		await fetchChainTx('https://idx.example', 'c'.repeat(40), ok, 5_000, block as number);
+		return seen;
+	};
+	it('asks with ?block=N, so the instance can read it from its block', async () => {
+		expect(await urls(65148473)).toEqual([
+			`https://idx.example/v1/chain/tx/${'c'.repeat(40)}?block=65148473`
+		]);
+	});
+	it('anything but a block number is left out', async () => {
+		for (const b of [undefined, 0, -1, 1.5, Number.NaN, 2_147_483_648, '7']) {
+			expect(await urls(b)).toEqual([`https://idx.example/v1/chain/tx/${'c'.repeat(40)}`]);
+		}
+	});
+});

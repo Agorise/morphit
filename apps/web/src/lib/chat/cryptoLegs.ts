@@ -179,6 +179,11 @@ export interface TwoLegButtons {
 	readonly payBlurt: boolean;
 	/** Asset receiver: share an address to receive the asset (not for BLURT). */
 	readonly shareAssetAddress: boolean;
+	/** v1.23.4 (independent review): once his address is shared the button
+	 *  goes, but a different or corrected one must still be possible (another
+	 *  of the accepted coins, a typo): a small "Share a different address".
+	 *  Which address it shares, or null. */
+	readonly shareAgain: 'payment' | 'asset' | null;
 	/** The status line under the buttons, if any. */
 	readonly hint:
 		| 'waiting_address'
@@ -251,9 +256,16 @@ export function twoLegButtons(
 					f.kind === 'address' && about(f) && f.method === plan.asset && f.mine !== plan.iSendAsset
 			);
 		return {
+			// v1.23.4 (owner: "the 'Share your BTC address' button didn't disappear
+			// immediately like it should"): gone once he has shared one — back only
+			// when a payment arrives in a coin he shared no address for.
 			sharePaymentAddress:
-				(paymentState === 'unpaid' || paymentState === 'no_address') &&
+				((paymentState === 'unpaid' && !paymentAddressShared) || paymentState === 'no_address') &&
 				plan.paymentAddressCoins.length > 0,
+			shareAgain:
+				paymentState === 'unpaid' && paymentAddressShared && plan.paymentAddressCoins.length > 0
+					? 'payment'
+					: null,
 			sendAsset: paid && destinationKnown && !assetReceipt,
 			sendAssetUnchecked: vouched && destinationKnown && !assetReceipt,
 			confirmInWallet: ownCall && !walletConfirmed && !assetReceipt,
@@ -285,6 +297,9 @@ export function twoLegButtons(
 		};
 	}
 	// The asset receiver.
+	const assetAddressShared = facts.some(
+		(f) => f.kind === 'address' && about(f) && f.method === plan.asset && f.mine
+	);
 	const blurtAsked = facts.some(
 		(f) => f.kind === 'address' && about(f) && f.method === 'blurt' && f.mine === plan.iSendAsset
 	);
@@ -294,7 +309,38 @@ export function twoLegButtons(
 		sendAssetUnchecked: false,
 		confirmInWallet: false,
 		payBlurt: plan.paymentCoins.includes('blurt') && blurtAsked && paymentReceipt === undefined,
-		shareAssetAddress: plan.asset !== 'blurt' && !assetReceipt,
+		// v1.23.4: gone once he has shared his address for it, as above.
+		shareAssetAddress: plan.asset !== 'blurt' && !assetReceipt && !assetAddressShared,
+		shareAgain: plan.asset !== 'blurt' && !assetReceipt && assetAddressShared ? 'asset' : null,
 		hint: paymentReceipt === undefined && !paymentAddressShared ? 'waiting_address' : null
 	};
+}
+
+/** One decoded money message of a thread, as `iSharedAddress` reads it. */
+export interface SharedAddressFact {
+	readonly kind: 'address' | 'funds_sent';
+	readonly mine: boolean;
+	readonly method: ChatAssetTicker;
+	readonly orderPermlink: string | null;
+}
+
+/**
+ * Whether I already shared a receiving address for this order in this thread
+ * (v1.23.4): the one-coin "Share your … address" button goes the moment the
+ * address card is in the chat, not only once the payment arrives. `coin`: the
+ * order's coin (null — a barter order — any coin counts). A message about
+ * another order does not count; one about no order does (older apps). PURE.
+ */
+export function iSharedAddress(
+	facts: readonly SharedAddressFact[],
+	orderPermlink: string,
+	coin: ChatAssetTicker | null
+): boolean {
+	return facts.some(
+		(f) =>
+			f.kind === 'address' &&
+			f.mine &&
+			(f.orderPermlink === null || f.orderPermlink === orderPermlink) &&
+			(coin === null || f.method === coin)
+	);
 }

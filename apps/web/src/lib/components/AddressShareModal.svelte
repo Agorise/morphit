@@ -67,6 +67,11 @@
 	import DaiNetworkPicker from './DaiNetworkPicker.svelte';
 	import { wasSharedBefore, shareAddress } from '$lib/privacy/addressHistory';
 
+	/** 3 pulses × 2 s, cleared a hair after the last (as on the Instances page). */
+	const ADDRESS_FLASH_MS = 6200;
+	/** How much of the address field must be on screen for its flash to start. */
+	const ADDRESS_IN_VIEW = 0.9;
+
 	interface Props {
 		/** Pre-filled order permlink — when the modal was opened
 		 *  from an order page (or via ?order= query param), this is
@@ -149,6 +154,66 @@
 		}
 	});
 	let address = $state('');
+	/** v1.23.4: the address field's border flashes 3 times — the same pulse
+	 *  as the Instances page's ?highlight=current — so the eye goes straight to
+	 *  where the receiving address is pasted. It starts the moment the field is
+	 *  on screen: as the modal opens for most coins; for USDT, USDC and DAI,
+	 *  whose warning and network picker sit above it on purpose (seen and
+	 *  chosen before an address is pasted), once the person scrolls down to it.
+	 *  Picking another coin arms it again (what sits above the field changes
+	 *  with the coin) until something has been typed or pasted there. Typing,
+	 *  pasting or focusing the field ends it (review: the pulse hid the focus
+	 *  ring), and it never glows around a field shown as invalid. */
+	let addressInput = $state<HTMLInputElement | null>(null);
+	let flashAddress = $state(false);
+	/** Something was typed or pasted into the field: no flash from then on. */
+	let addressTyped = false;
+	/** This coin's flash may still start (not once the field was focused; the
+	 *  observer is let go once it has started). */
+	let addressFlashArmed = false;
+	let addressFlashTimer: ReturnType<typeof setTimeout> | undefined;
+	function startAddressFlash(): void {
+		if (!addressFlashArmed || addressTyped) return;
+		flashAddress = true;
+		addressFlashTimer = setTimeout(() => (flashAddress = false), ADDRESS_FLASH_MS);
+	}
+	function endAddressFlash(): void {
+		addressFlashArmed = false;
+		clearTimeout(addressFlashTimer);
+		flashAddress = false;
+	}
+	function onAddressInput(): void {
+		addressTyped = true;
+		endAddressFlash();
+	}
+	$effect(() => {
+		const el = addressInput;
+		// Read so that picking another coin arms the flash again.
+		void method;
+		if (!el) return;
+		addressFlashArmed = true;
+		let io: IntersectionObserver | undefined;
+		if (typeof IntersectionObserver === 'undefined') {
+			startAddressFlash();
+		} else {
+			io = new IntersectionObserver(
+				(entries) => {
+					if (entries.some((e) => e.isIntersecting && e.intersectionRatio >= ADDRESS_IN_VIEW)) {
+						io?.disconnect();
+						startAddressFlash();
+					}
+				},
+				// 0 as well: a field scrolled in from off-screen reports again on
+				// reaching ADDRESS_IN_VIEW.
+				{ threshold: [0, ADDRESS_IN_VIEW] }
+			);
+			io.observe(el);
+		}
+		return () => {
+			io?.disconnect();
+			endAddressFlash();
+		};
+	});
 	// v1.21.17 — BLURT is paid to an account: start from the user's own (he
 	// can still type another). Only when the field is empty as he switches to
 	// BLURT, so clearing it by hand is not undone.
@@ -732,7 +797,14 @@
 				autocapitalize="none"
 				autocorrect="off"
 				spellcheck="false"
-				class="mt-1 w-full rounded-lg border {addressBorderClass} bg-white px-3 py-2 font-mono text-sm dark:bg-ink-900"
+				data-testid="address-share-address"
+				bind:this={addressInput}
+				oninput={onAddressInput}
+				onfocus={endAddressFlash}
+				class="mt-1 w-full rounded-lg border {addressBorderClass} bg-white px-3 py-2 font-mono text-sm dark:bg-ink-900 {flashAddress &&
+				!addressErrorKey
+					? 'flash-address'
+					: ''}"
 			/>
 			{#if addressErrorKey}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -1016,3 +1088,23 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	/* v1.23.4: the Instances page's ?highlight=current pulse (brand emerald,
+	   3 × 2 s), on the address field, so the eye finds it at once. Reduced
+	   motion: app.css shortens every animation to nothing. */
+	@keyframes flash-address-border {
+		0%,
+		100% {
+			box-shadow: 0 0 0 0 rgb(var(--brand-primary-rgb) / 0);
+		}
+		50% {
+			box-shadow:
+				0 0 0 2px rgb(var(--brand-primary-rgb)),
+				0 0 12px 2px rgb(var(--brand-primary-rgb) / 0.6);
+		}
+	}
+	.flash-address {
+		animation: flash-address-border 2s ease-in-out 3;
+	}
+</style>

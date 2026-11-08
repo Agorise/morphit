@@ -334,7 +334,6 @@ apps/web/scripts/chat-notification-wiring-smoke.ts
 apps/web/scripts/chat-pdf-export-smoke.ts
 apps/web/scripts/chat-realtime-cadence-smoke.ts
 apps/web/scripts/chat-scroll-to-newest-smoke.ts
-apps/web/scripts/chat-shippable-gating-smoke.ts
 apps/web/scripts/chat-unread-count-wired-smoke.ts
 apps/web/scripts/claim-reward-balance-smoke.ts
 apps/web/scripts/coin-carousel-invariants-smoke.ts
@@ -486,7 +485,6 @@ apps/web/src/lib/blurt/accountBalance.test.ts
 apps/web/src/lib/blurt/accountBalance.ts
 apps/web/src/lib/blurt/accountHistory.ts
 apps/web/src/lib/blurt/broadcastErrorClass.ts
-apps/web/src/lib/blurt/chainExplorer.ts
 apps/web/src/lib/blurt/ops/ops.redaction.test.ts
 apps/web/src/lib/blurt/ops/order.ts
 apps/web/src/lib/blurt/withdrawVestingSign.ts

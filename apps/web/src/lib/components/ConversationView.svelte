@@ -109,10 +109,12 @@
 		orderCanShip as orderShipsPhysicalItem
 	} from '$lib/chat/orderRole';
 	import {
+		iSharedAddress,
 		twoLegButtons,
 		twoLegPlan,
 		isCryptoForCrypto,
 		type PaymentCheckVerdict,
+		type SharedAddressFact,
 		type ThreadFact
 	} from '$lib/chat/cryptoLegs';
 	import {
@@ -2212,9 +2214,32 @@
 	/** I receive the crypto ⇒ show "Share crypto address". Only when a live
 	 *  order is connected AND the peer is selling. Hidden with no live order —
 	 *  and once the order has been paid. */
-	const showShareAddressButton = $derived(
+	const iReceiveCryptoUnpaid = $derived(
 		legPlan === null && cryptoButtons.shareAddress && !paymentAlreadySent
 	);
+	/** v1.23.4 (owner: "the 'Share your BTC address' button didn't disappear
+	 *  immediately like it should"): also gone the moment my address card for
+	 *  this order is in the chat (still sending counts; a failed one does not). */
+	const myAddressSharedHere = $derived.by(() => {
+		if (!orderPermlink) return false;
+		const facts: SharedAddressFact[] = [];
+		for (const m of messages) {
+			if (m.sender !== me || m.decryptFailed || m.state === 'failed') continue;
+			const d = decodePayload(m.text);
+			if (d.kind !== 'address') continue;
+			facts.push({
+				kind: 'address',
+				mine: true,
+				method: d.payload.method,
+				orderPermlink: d.payload.orderPermlink ?? m.orderPermlink ?? null
+			});
+		}
+		return iSharedAddress(facts, orderPermlink, orderChatAsset);
+	});
+	const showShareAddressButton = $derived(iReceiveCryptoUnpaid && !myAddressSharedHere);
+	/** …and a small "Share a different address" in its place (independent
+	 *  review: another accepted coin, or a typo, must still be possible). */
+	const showShareAddressAgain = $derived(iReceiveCryptoUnpaid && myAddressSharedHere);
 
 	// the "Share mailing address" + "Record shipment" controls
 	// only matter when the trade moves a PHYSICAL thing that can be posted:
@@ -2229,14 +2254,15 @@
 	// the crypto is receiving that physical payment — they say where to send it
 	// ("Share mailing address"). This holds identically for barter, precious
 	// metals, and cash-by-mail. It maps straight onto the crypto-direction
-	// gating above: crypto receiver (showShareAddressButton) ships; crypto
+	// gating above: crypto receiver (iReceiveCryptoUnpaid) ships; crypto
 	// sender (showPayNowButton) shares a mailing address.
 	// A BARTER order counts too: its payment_methods are only the
 	// `pay_<coin>` rails of the accepted coins, so the method check alone
 	// never lit these buttons on a goods/services listing (orderRole.orderCanShip).
 	const orderCanShip = $derived(orderShipsPhysicalItem(orderRecord));
 	/** I RECEIVE crypto ⇒ I'm paying with the physical item ⇒ I ship it. */
-	const showRecordShipmentButton = $derived(orderCanShip && showShareAddressButton);
+	// The crypto receiver ships whether or not his address is shared yet.
+	const showRecordShipmentButton = $derived(orderCanShip && iReceiveCryptoUnpaid);
 	/** I SEND crypto ⇒ I'm receiving the physical payment ⇒ I share where. */
 	const showShareMailingButton = $derived(orderCanShip && showPayNowButton);
 
@@ -2248,6 +2274,7 @@
 	const showChatActionToolbar = $derived(
 		showPayNowButton ||
 			showShareAddressButton ||
+			showShareAddressAgain ||
 			showShareMailingButton ||
 			showRecordShipmentButton ||
 			(legButtons !== null &&
@@ -2255,6 +2282,7 @@
 					legButtons.sendAsset ||
 					legButtons.payBlurt ||
 					legButtons.shareAssetAddress ||
+					legButtons.shareAgain !== null ||
 					legButtons.hint !== null))
 	);
 
@@ -3245,6 +3273,22 @@
 									})}
 								</button>
 							{/if}
+							{#if legButtons.shareAgain !== null}
+								<!-- v1.23.4 (independent review): his address is in the chat, so
+								     the button is gone — but another of the accepted coins, or a
+								     corrected address, is still one small link away. -->
+								<button
+									type="button"
+									data-testid="share-address-again"
+									class="min-h-11 rounded px-2 py-1 text-xs text-ink-600 underline decoration-dotted underline-offset-2 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300 dark:hover:text-ink-100 sm:min-h-0"
+									onclick={() =>
+										legButtons?.shareAgain === 'asset'
+											? openAddressShare(legPlan ? [legPlan.asset] : null)
+											: openAddressShare(legPlan?.paymentAddressCoins ?? null, true)}
+								>
+									{$_('chat.address.share_another')}
+								</button>
+							{/if}
 							{#if legButtons.confirmInWallet}
 								<button
 									type="button"
@@ -3328,6 +3372,17 @@
 								{$_(moneyFlowLabels.shareAddress.key, {
 									values: moneyFlowLabels.shareAddress.values
 								})}
+							</button>
+						{/if}
+						{#if showShareAddressAgain}
+							<!-- v1.23.4 (independent review): as above, for one-coin orders. -->
+							<button
+								type="button"
+								data-testid="share-address-again"
+								class="min-h-11 rounded px-2 py-1 text-xs text-ink-600 underline decoration-dotted underline-offset-2 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-ink-300 dark:hover:text-ink-100 sm:min-h-0"
+								onclick={() => openAddressShare(null)}
+							>
+								{$_('chat.address.share_another')}
 							</button>
 						{/if}
 						<!-- the funds-sent / "Pay now" button initiates

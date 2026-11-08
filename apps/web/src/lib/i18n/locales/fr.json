@@ -517,6 +517,7 @@
 			"share_button_asset": "Partager votre adresse {asset}",
 			"share_button_aria_asset": "Partagez l'adresse où vous voulez recevoir des {asset}",
 			"share_button_blurt": "Partager votre compte Blurt",
+			"share_another": "Partager une autre adresse",
 			"share_button_aria_blurt": "Partagez le compte Blurt où vous voulez recevoir des BLURT",
 			"modal_title": "Partager une adresse de réception",
 			"modal_subtitle": "Envoyez à votre partenaire d'échange l'adresse où vous voulez recevoir la crypto.",

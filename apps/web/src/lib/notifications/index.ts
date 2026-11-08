@@ -23,6 +23,7 @@
 
 import { writable, get, type Readable } from 'svelte/store';
 import { notificationPrefs } from './preferences';
+import { SUPPORTED_LOCALES } from '$i18n/locales';
 import { maybeFireNativeNotification } from './native';
 import { maybePlayChime } from './audio';
 import { maybeVibrate } from './vibrate';
@@ -52,6 +53,13 @@ function emptyCounts(): UnreadCounts {
 }
 
 const counts = writable<UnreadCounts>(emptyCounts());
+
+/** v1.23.4: the counted event-category notifications not yet read, by id: the
+ *  page each points to, and how many times it was counted. */
+const pendingPages: Record<
+	'order' | 'feedback',
+	Map<string, { href: string | null; n: number }>
+> = { order: new Map(), feedback: new Map() };
 export const unreadCount: Readable<UnreadCounts> = { subscribe: counts.subscribe };
 
 /** Per-category coalescing: recent IDs we've seen in the last 30s. */
@@ -104,6 +112,12 @@ export function notify(event: NotificationEvent): void {
 			...c,
 			[event.category]: c[event.category] + 1
 		}));
+		// v1.23.4: remember the page it points to, so opening that page clears it.
+		if (event.category !== 'chat') {
+			const m = pendingPages[event.category];
+			const prev = m.get(event.id);
+			m.set(event.id, { href: event.href ?? null, n: (prev?.n ?? 0) + 1 });
+		}
 	}
 
 	// ALERTS — native notification, chime, vibrate — ARE gated on the
@@ -145,6 +159,8 @@ export function setCategoryCount(category: NotificationCategory, n: number): voi
  *  removes the favicon badge / title prefix / app badge if this
  *  was the last unread category. */
 export function markRead(category?: NotificationCategory): void {
+	if (category === undefined || category === 'order') pendingPages.order.clear();
+	if (category === undefined || category === 'feedback') pendingPages.feedback.clear();
 	counts.update((c: UnreadCounts) => {
 		if (category === undefined) {
 			// Chat is STATE-based: its count is the live unread-conversation
@@ -156,6 +172,68 @@ export function markRead(category?: NotificationCategory): void {
 		}
 		return { ...c, [category]: 0 };
 	});
+}
+
+/** The event-based categories (chat is state-based: read by reading). */
+export type EventCategory = Exclude<NotificationCategory, 'chat'>;
+
+/**
+ * Keep `categories` read while a page that shows them is open and in view
+ * (v1.23.4, owner: "the green badge on my avatar did not disappear when i
+ * clicked on Orders in that menu"). My orders shows the order events and the
+ * leave-feedback reminders — which its own banner announces after it loads,
+ * so clearing once on arrival was not enough. In a background tab the badge
+ * still counts (the favicon and title are how a new fill gets noticed there),
+ * and it clears when the tab is looked at again. Returns the stop function.
+ */
+export function keepReadWhileShown(categories: readonly EventCategory[]): () => void {
+	if (typeof document === 'undefined') return () => {};
+	const clear = (): void => {
+		if (document.visibilityState !== 'visible') return;
+		if (!categories.some((k) => get(counts)[k] !== 0)) return;
+		for (const k of categories) pendingPages[k].clear();
+		counts.update((c) => {
+			const n = { ...c };
+			for (const k of categories) n[k] = 0;
+			return n;
+		});
+	};
+	const unsubscribe = counts.subscribe(() => clear());
+	document.addEventListener('visibilitychange', clear);
+	return () => {
+		unsubscribe();
+		document.removeEventListener('visibilitychange', clear);
+	};
+}
+
+/** A page path without its query, fragment or leading locale, for comparing
+ *  a notification's link with the page shown. PURE. */
+export function pageKey(path: string): string {
+	let p = path.split(/[?#]/, 1)[0] ?? '';
+	const seg = p.split('/')[1] ?? '';
+	if (SUPPORTED_LOCALES.some((l) => l.code === seg)) p = p.slice(seg.length + 1) || '/';
+	return p.length > 1 ? p.replace(/\/+$/, '') : p;
+}
+
+/**
+ * v1.23.4 (independent review): an order notification links to the chat it is
+ * about, and opening that chat later left the badge counting it. The page
+ * shown (`pathname`), in view, reads every order or feedback notification that
+ * points to it.
+ */
+export function markSeenAt(pathname: string): void {
+	if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+	const here = pageKey(pathname);
+	for (const k of ['order', 'feedback'] as const) {
+		let read = 0;
+		for (const [id, p] of pendingPages[k]) {
+			if (p.href !== null && pageKey(p.href) === here) {
+				read += p.n;
+				pendingPages[k].delete(id);
+			}
+		}
+		if (read > 0) counts.update((c) => ({ ...c, [k]: Math.max(0, c[k] - read) }));
+	}
 }
 
 /** Sum across categories — used by title-bar + favicon + app badge.

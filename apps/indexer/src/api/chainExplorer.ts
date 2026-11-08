@@ -217,6 +217,48 @@ interface ChainKeyReferencesBody {
 	readonly accounts: string[];
 }
 
+/** Above any block Blurt will reach (3 s blocks: ~200 years); bounds `?block=`. */
+const MAX_BLOCK_NUM = 2_147_483_647;
+
+/**
+ * A transaction read from the block it is in (v1.23.4): `transaction_ids[i]`
+ * names `transactions[i]`. Annotated like get_transaction's answer
+ * (`transaction_id`, `block_num`, `transaction_num`). `absent`: the block was
+ * read and does not hold it; `unreadable`: the block could not be read (not
+ * produced yet, or no node answered).
+ */
+export async function txFromBlock(
+	blurt: Pick<BlurtClient, 'callCondenser'>,
+	id: string,
+	blockNum: number
+): Promise<
+	| { readonly kind: 'found'; readonly tx: Record<string, unknown> }
+	| { readonly kind: 'absent' }
+	| { readonly kind: 'unreadable' }
+> {
+	let b: unknown;
+	try {
+		b = await blurt.callCondenser('get_block', [blockNum], { userFacing: true });
+	} catch {
+		return { kind: 'unreadable' };
+	}
+	if (typeof b !== 'object' || b === null) return { kind: 'unreadable' };
+	const { transactions, transaction_ids: ids } = b as {
+		transactions?: unknown;
+		transaction_ids?: unknown;
+	};
+	if (!Array.isArray(transactions) || !Array.isArray(ids)) return { kind: 'unreadable' };
+	const want = id.toLowerCase();
+	const i = ids.findIndex((t) => typeof t === 'string' && t.toLowerCase() === want);
+	if (i < 0) return { kind: 'absent' };
+	const tx: unknown = transactions[i];
+	if (typeof tx !== 'object' || tx === null) return { kind: 'unreadable' };
+	return {
+		kind: 'found',
+		tx: { ...(tx as object), transaction_id: want, block_num: blockNum, transaction_num: i }
+	};
+}
+
 export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 	const app = new Hono();
 
@@ -247,23 +289,54 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 		if (!TRX_ID_RE.test(id)) {
 			return c.json(errorBody('bad_request', 'invalid transaction id'), 400);
 		}
+		// v1.23.4: `?block=N`, the block the transaction is in (a chat receipt
+		// knows it). A node's transaction index may not have a fresh
+		// transaction yet, or the node keeps none: then it is read from that
+		// block, which every node serves (owner: the receipt's "Verify on block
+		// explorer" said "Transaction not found" right after the payment).
+		const blockRaw = c.req.query('block');
+		let block: number | null = null;
+		if (blockRaw !== undefined) {
+			block = /^[1-9][0-9]{0,9}$/.test(blockRaw) ? Number(blockRaw) : NaN;
+			if (!Number.isSafeInteger(block) || block > MAX_BLOCK_NUM) {
+				return c.json(errorBody('bad_request', 'invalid block number'), 400);
+			}
+		}
 
 		let result: unknown;
+		let failure: 'not_found' | 'unreachable' | null = null;
 		try {
 			result = await blurt.callCondenser('get_transaction', [id], { userFacing: true });
+			if (result === null || result === undefined) failure = 'not_found';
 		} catch (err) {
 			// A node that ANSWERED "Unknown Transaction" has told us something:
 			// the chain does not have it. That is a 404, not an outage. The
 			// browser's chat sweep asks exactly this before it calls a send
 			// failed (v1.18.0 review, W3), and needs "no" and "could not ask"
 			// kept apart. A transport failure is still a 502.
-			if (!isTransportError(err) && isUnknownTransactionError(err)) {
-				return c.json(errorBody('not_found', 'no such transaction on chain'), 404);
-			}
-			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
+			failure =
+				!isTransportError(err) && isUnknownTransactionError(err) ? 'not_found' : 'unreachable';
 		}
-		if (result === null || result === undefined) {
+		if (failure !== null && block !== null) {
+			const inBlock = await txFromBlock(blurt, id, block);
+			if (inBlock.kind === 'found') {
+				result = inBlock.tx;
+				failure = null;
+			} else if (inBlock.kind === 'unreadable') {
+				// Review: the index's "unknown" may only mean "not indexed yet" —
+				// with the block unread, nothing is known. Not a 404 (which is what
+				// the owner saw), a "could not check".
+				failure = 'unreachable';
+			}
+			// `absent`: the block does not hold it. That confirms a "no" the index
+			// gave; after no answer at all the block number may simply be wrong
+			// (it comes from the payer's receipt), so it stays "could not check".
+		}
+		if (failure === 'not_found') {
 			return c.json(errorBody('not_found', 'no such transaction on chain'), 404);
+		}
+		if (failure === 'unreachable') {
+			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
 		}
 
 		const body: ChainTxBody = { tx: result };

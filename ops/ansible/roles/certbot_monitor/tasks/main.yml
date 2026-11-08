@@ -6,7 +6,10 @@
 #
 # Optional variables:
 #   certbot_expiry_critical_days  : default 7
-#   certbot_expiry_warn_days      : default 30
+#   certbot_renewal_grace_days    : default 7 (days past certbot's renewal
+#                                   point before a warning)
+#   certbot_expiry_warn_days      : unset (warns a week after certbot's
+#                                   renewal point; a lower value wins)
 #   certbot_renewal_stall_days    : default 14
 #
 # References: docs/OPERATIONS.md §16 "Extended monitoring sidecars".
@@ -28,6 +31,7 @@
     mode: '0644'
   when:
     - certbot_expiry_critical_days is defined or
+      certbot_renewal_grace_days is defined or
       certbot_expiry_warn_days is defined or
       certbot_renewal_stall_days is defined
   notify: Restart morphit-certbot-monitor-timer

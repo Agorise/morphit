@@ -26,6 +26,15 @@ export const PAYMENT_CHECK_INTERVAL_MS = 60_000;
  *  explorers in the background, so the next question usually has the answer. */
 export const PAYMENT_CHECK_FIRST_INTERVAL_MS = 15_000;
 export const PAYMENT_CHECK_FIRST_PERIOD_MS = 5 * 60_000;
+/** …and while a payment that was seen is still confirming (v1.23.4): once a
+ *  minute left the chat at 0/3 for about a minute after both wallets showed
+ *  1/3 (owner, a live BTC trade). The instance reuses a confirming answer for
+ *  15 s, so this asks the explorers no more often than that. */
+export const PAYMENT_CHECK_CONFIRMING_INTERVAL_MS = 15_000;
+/** …for this long after it was first seen at 0 confirmations (independent
+ *  review: a low-fee payment can sit unconfirmed for hours — not every 15 s
+ *  all that while); from its first confirmation on, until confirmed. */
+export const PAYMENT_CHECK_CONFIRMING_FAST_FOR_MS = 30 * 60_000;
 /** How long "cannot be checked right now" must last before the seller is
  *  told so (and may confirm from his own wallet). A hidden-network explorer
  *  may take a minute or two to answer at all. */
@@ -219,6 +228,8 @@ export function watchPaymentCheck(input: PaymentCheckInput): Readable<PaymentChe
 		let timer: ReturnType<typeof setTimeout> | null = null;
 		const ctl = new AbortController();
 		const startedAt = Date.now();
+		/** When it was first seen (any depth), or null. */
+		let seenSince: number | null = null;
 		/** Since when the answer has been this same "not yet" (unavailable or
 		 *  not_found), or null. */
 		let notYetSince: { phase: 'unavailable' | 'not_found'; at: number } | null = null;
@@ -255,9 +266,19 @@ export function watchPaymentCheck(input: PaymentCheckInput): Readable<PaymentChe
 					!last.disputed);
 			if (!done) {
 				const early = last.phase !== 'seen' && now - startedAt < PAYMENT_CHECK_FIRST_PERIOD_MS;
+				if (last.phase === 'seen' && seenSince === null) seenSince = now;
+				const confirming =
+					last.phase === 'seen' &&
+					last.confirmations < last.required &&
+					(last.confirmations > 0 ||
+						(seenSince !== null && now - seenSince < PAYMENT_CHECK_CONFIRMING_FAST_FOR_MS));
 				timer = setTimeout(
 					() => void tick(),
-					early ? PAYMENT_CHECK_FIRST_INTERVAL_MS : PAYMENT_CHECK_INTERVAL_MS
+					early
+						? PAYMENT_CHECK_FIRST_INTERVAL_MS
+						: confirming
+							? PAYMENT_CHECK_CONFIRMING_INTERVAL_MS
+							: PAYMENT_CHECK_INTERVAL_MS
 				);
 			}
 		};

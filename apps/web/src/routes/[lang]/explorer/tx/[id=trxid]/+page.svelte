@@ -26,9 +26,17 @@
 	import { decorateOp } from '$lib/explorer/decorate';
 	import { highlightJsonToHtml, expandNestedJsonStrings } from '$lib/explorer/jsonHighlight';
 	import { morphitExplorerBlockUrl, blurtWalletExplorerFallbackUrl } from '$lib/explorer/urls';
+	import { isBlockNumber } from '$lib/explorer/blockNumber';
 	import Head from '$components/Head.svelte';
 
 	const trxId = $derived($page.params.id!);
+	/** v1.23.4: `?block=N` — the block the transaction is in (a chat receipt's
+	 *  link carries it), so a fresh one is found before a node indexes it. */
+	const blockHint = $derived.by(() => {
+		const raw = $page.url.searchParams.get('block');
+		const n = raw !== null && /^[1-9][0-9]{0,9}$/.test(raw) ? Number(raw) : undefined;
+		return isBlockNumber(n) ? n : undefined;
+	});
 
 	type Status = 'loading' | 'ok' | 'not_found' | 'error';
 	let status = $state<Status>('loading');
@@ -53,7 +61,7 @@
 	 *  transaction changed while it was in flight). */
 	let loadGen = 0;
 
-	async function load(id: string): Promise<void> {
+	async function load(id: string, block: number | undefined): Promise<void> {
 		const g = ++loadGen;
 		status = 'loading';
 		errorMsg = '';
@@ -63,7 +71,7 @@
 			// Transaction via the indexer (privacy: no direct RPC from the
 			// browser; also more reliable — the pool finds a node that
 			// exposes get_transaction).
-			const r = await fetchChainTx(resolveOrigin(MORPHIT_INDEXER_ORIGIN), id);
+			const r = await fetchChainTx(resolveOrigin(MORPHIT_INDEXER_ORIGIN), id, undefined, undefined, block);
 			if (g !== loadGen) return;
 			if (r.kind === 'not_found') {
 				status = 'not_found';
@@ -84,7 +92,8 @@
 	// reused when following a link to another transaction).
 	$effect(() => {
 		const id = trxId;
-		untrack(() => void load(id));
+		const block = blockHint;
+		untrack(() => void load(id, block));
 	});
 
 	function toggleOp(i: number): void {

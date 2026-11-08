@@ -20,6 +20,7 @@
  */
 
 import type { BlurtBlock, BlurtTransaction } from '$blurt/client';
+import { isBlockNumber } from '$lib/explorer/blockNumber';
 import type { ChainBlockResponse, ChainTxResponse } from '@morphit/indexer-client';
 import { chainCallTimeoutMs } from '$net/transportBudget';
 
@@ -41,10 +42,13 @@ export async function fetchChainBlock(
 ): Promise<ChainBlockFetchResult> {
 	let res: Response;
 	try {
-		res = await fetchImpl(`${indexerOrigin}/v1/chain/block/${encodeURIComponent(String(blockNumber))}`, {
-			method: 'GET',
-			headers: { accept: 'application/json' }
-		});
+		res = await fetchImpl(
+			`${indexerOrigin}/v1/chain/block/${encodeURIComponent(String(blockNumber))}`,
+			{
+				method: 'GET',
+				headers: { accept: 'application/json' }
+			}
+		);
 	} catch (err) {
 		return { kind: 'error', message: err instanceof Error ? err.message : String(err) };
 	}
@@ -80,7 +84,10 @@ export async function fetchChainTx(
 	indexerOrigin: string,
 	trxId: string,
 	fetchImpl: typeof fetch = fetch,
-	timeoutMs: number = chainCallTimeoutMs(CHAIN_TX_TIMEOUT_MS, indexerOrigin)
+	timeoutMs: number = chainCallTimeoutMs(CHAIN_TX_TIMEOUT_MS, indexerOrigin),
+	/** v1.23.4: the block it is in, when known — read from there when a node's
+	 *  index does not hold it (yet). */
+	block?: number
 ): Promise<ChainTxFetchResult> {
 	const ac = new AbortController();
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -91,7 +98,10 @@ export async function fetchChainTx(
 		}, timeoutMs);
 	});
 	try {
-		return await Promise.race([fetchChainTxOnce(indexerOrigin, trxId, fetchImpl, ac.signal), timedOut]);
+		return await Promise.race([
+			fetchChainTxOnce(indexerOrigin, trxId, fetchImpl, ac.signal, block),
+			timedOut
+		]);
 	} finally {
 		clearTimeout(timer);
 	}
@@ -101,11 +111,13 @@ async function fetchChainTxOnce(
 	indexerOrigin: string,
 	trxId: string,
 	fetchImpl: typeof fetch,
-	signal: AbortSignal
+	signal: AbortSignal,
+	block?: number
 ): Promise<ChainTxFetchResult> {
 	let res: Response;
+	const inBlock = isBlockNumber(block) ? `?block=${block}` : '';
 	try {
-		res = await fetchImpl(`${indexerOrigin}/v1/chain/tx/${encodeURIComponent(trxId)}`, {
+		res = await fetchImpl(`${indexerOrigin}/v1/chain/tx/${encodeURIComponent(trxId)}${inBlock}`, {
 			method: 'GET',
 			headers: { accept: 'application/json' },
 			signal

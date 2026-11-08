@@ -1228,9 +1228,11 @@ value → `400 bad_request` (the message never repeats the input).
   (`confirmations` above 0) whose `tx_time` is `null` as seen. Absent from
   instances before v1.21.17.
 - `checked_at`: when the explorers gave this answer. It can be older
-  than the request: an answer is reused for 30 s while confirming (10 min
-  once 3 deep, 30 s for `not_found`, 15 s for `unavailable`), a stale
-  one is served while it is re-checked, and a re-check that gets no
+  than the request: an answer is reused for 15 s while confirming (10 min
+  once 3 deep, 30 s for `not_found`, 15 s for `unavailable`; 30 s while
+  confirming before v1.23.4), a stale one is served while it is
+  re-checked (since v1.23.4 after waiting up to 3 s for that re-check,
+  whose answer then comes back instead), and a re-check that gets no
   answer keeps the last verdict for up to 30 min.
 - `age_seconds` (v1.23.2): seconds since `checked_at`, by the instance's
   clock, so a browser whose own clock is off can still tell how old the

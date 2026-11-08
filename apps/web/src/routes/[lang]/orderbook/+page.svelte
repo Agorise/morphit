@@ -26,7 +26,7 @@
 	 * stale results never overwrite fresh ones.
 	 */
 
-	import { onMount, onDestroy, untrack } from 'svelte';
+	import { onMount, onDestroy, tick as svelteTick, untrack } from 'svelte';
 	import {
 		FEATURED_FLASH_MS,
 		SEARCH_SETTLE_MS,
@@ -75,9 +75,9 @@
 	import OrderCard from '$lib/components/OrderCard.svelte';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { createOrderbookStream } from '$lib/orderbook/stream';
+	import { measureTops, playSlideIn } from '$lib/orderbook/slideIn';
 	import { isOrderLive } from '$lib/orders/orderExpiry';
 	import { nowMs } from '$lib/stores/now';
-	import { SvelteSet } from 'svelte/reactivity';
 	import type { AssetTicker } from '@morphit/asset-registry';
 	import type {
 		OrderbookQuery,
@@ -513,11 +513,9 @@
 	 *  the server enforces it.  Updated by the upsert/remove
 	 *  callbacks below. */
 	const streamedIds = new Set<string>();
-	// IDs of orders that arrived LIVE (prepended via the
-	// stream while the user is watching), so their card plays the one-shot
-	// slide-in. Reactive (SvelteSet) because it drives OrderCard rendering; each
-	// id is auto-cleared shortly after the animation so it never replays.
-	const justArrivedIds = new SvelteSet<string>();
+	/** v1.23.4: the card list, for sliding a live new order into place
+	 *  ($lib/orderbook/slideIn). */
+	let cardListEl = $state<HTMLUListElement | null>(null);
 
 	/** The signed-in user's Blurt account name, or null if signed
 	 *  out / not yet registered.  Derived so the banner above and
@@ -1137,13 +1135,13 @@
 					items = items;
 				} else {
 					// New row — prepend (recent sort puts newest first).
+					// A genuinely-live new order (the initial snapshot goes through
+					// applySnapshot, not here): v1.23.4 (owner), it slides into its
+					// place over a second and the cards below glide down — read
+					// where they are first, then animate once it is rendered.
+					const before = measureTops(cardListEl);
 					items = [entry, ...items];
-					// this is a genuinely-live new order (the initial
-					// snapshot goes through applySnapshot, not here), so slide its
-					// card into first place. Clear the flag just after the CSS
-					// animation (0.32s) so a later re-render never replays it.
-					justArrivedIds.add(id);
-					setTimeout(() => justArrivedIds.delete(id), 360);
+					void svelteTick().then(() => playSlideIn(cardListEl, before, id));
 				}
 				if (!streamedIds.has(id)) {
 					streamedIds.add(id);
@@ -1788,7 +1786,7 @@
 					{$_('orderbook.match_in_featured')}
 				</p>
 			{/if}
-			<ul class="space-y-3">
+			<ul bind:this={cardListEl} class="space-y-3">
 				{#each listedItems as o (o.account + '/' + o.permlink)}
 					{@const accountIsHidden = $hiddenAccounts.has(o.account.toLowerCase())}
 					{@const accountIsBlocked = $blockedAccounts.has(o.account.toLowerCase())}
@@ -1821,7 +1819,7 @@
 					     viewer's OWN order — you cannot message yourself. -->
 					<OrderCard
 						order={o}
-						justArrived={justArrivedIds.has(o.account + '/' + o.permlink)}
+						orderKey={o.account + '/' + o.permlink}
 						title={cardTitle(o)}
 						displayName={labelProps.displayName}
 						avatarSvg={labelProps.avatarSvg}

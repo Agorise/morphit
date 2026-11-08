@@ -76,8 +76,10 @@ console.log('\n── payment-receipt-presentation ────\n');
 const msg = read('apps/web/src/lib/components/ChatMessage.svelte');
 
 // ─── (a) the verify link's underline is hover/focus-only, dotted ─
+// v1.23.4: the link also carries target/rel/data-testid (opens in a new tab)
+// between href and class — any attributes may sit there, but not another tag.
 const verifyLink =
-	/<a\s+href=\{lp\(verifyPath\)\}\s+class="([^"]*)"/.exec(msg)?.[1] ?? '';
+	/<a\s+href=\{lp\(verifyPath\)\}(?:\s+[\w-]+(?:="[^"]*")?)*?\s+class="([^"]*)"/.exec(msg)?.[1] ?? '';
 check('the "Verify on block explorer" link was found', verifyLink.length > 0);
 check(
 	'(a) no underline at rest',

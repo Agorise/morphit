@@ -565,9 +565,11 @@ const scenarios: Scenario[] = [
 		name: 'certbot cert_expiry_critical → CRITICAL',
 		alert: a('certbot', 'cert_expiry_critical', {
 			cert: 'morphit.example.com',
-			days_left: 5,
-			last_renewal_success_age_days: 60,
-			threshold_days: 7
+			days_left: 3,
+			issued_days_ago: 10,
+			renew_due_days_left: 5,
+			overdue_days: 2,
+			threshold_days: 3
 		}),
 		expectedTier: 'CRITICAL'
 	},
@@ -576,7 +578,9 @@ const scenarios: Scenario[] = [
 		alert: a('certbot', 'renewal_stalled', {
 			cert: 'morphit.example.com',
 			days_left: 5,
-			last_renewal_success_age_days: 45,
+			issued_days_ago: 84,
+			renew_due_days_left: 30,
+			overdue_days: 25,
 			stall_threshold_days: 14
 		}),
 		expectedTier: 'CRITICAL'
@@ -619,8 +623,10 @@ const scenarios: Scenario[] = [
 		alert: a('certbot', 'cert_expiry_warn', {
 			cert: 'morphit.example.com',
 			days_left: 20,
-			last_renewal_success_age_days: 60,
-			threshold_days: 30
+			issued_days_ago: 69,
+			renew_due_days_left: 30,
+			overdue_days: 10,
+			threshold_days: 23
 		}),
 		expectedTier: 'WARN'
 	},

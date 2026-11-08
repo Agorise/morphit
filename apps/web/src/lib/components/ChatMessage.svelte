@@ -1474,7 +1474,7 @@
 								     it in lp() — this one didn't, so the URL had no [lang] segment
 								     and matched no route. Same class of bug as the push
 								     click_path 404. -->
-							{@const verifyPath = morphitExplorerTxUrl(p.txid)}
+							{@const verifyPath = morphitExplorerTxUrl(p.txid, p.block)}
 							{#if verifyPath}
 								<!-- v1.5.0 — THIS instance's explorer only (no off-site
 									     explorer; privacy #1 — no IP leak to a third party).
@@ -1497,8 +1497,14 @@
 										     keeps its hover background + focus ring. Focus-visible gets the
 										     same dots as hover: a keyboard user has no pointer to reveal
 										     them with, and the ring alone shouldn't be the only signal. -->
+								<!-- v1.23.4 (owner): opens in a new tab, so the chat stays where
+								     it is; it carries the receipt's block, so a payment a node has
+								     not indexed yet is still found. -->
 								<a
 									href={lp(verifyPath)}
+									target="_blank"
+									rel="noopener"
+									data-testid="receipt-verify-link"
 									class="hover:bg-current/10 -mx-1 inline-flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold text-current no-underline decoration-current decoration-dotted underline-offset-2 opacity-90 transition-all hover:underline hover:opacity-100 focus:outline-none focus-visible:underline focus-visible:ring-2 focus-visible:ring-current"
 								>
 									<span aria-hidden="true">🔎</span>

@@ -64,7 +64,34 @@ check(
 	rowClass
 );
 
-const buttons = [...toolbar.matchAll(/<button\b[\s\S]*?<\/button>/g)].map((m) => m[0]);
+const allButtons = [...toolbar.matchAll(/<button\b[\s\S]*?<\/button>/g)].map((m) => m[0]);
+// v1.23.4: once his address is shared, "Share your … address" goes and a small
+// "Share a different address" stays (one per flow). It is deliberately quieter
+// than the buttons — a dotted-underlined text action, never a second green
+// button where the first one was — but a phone still gets a 44 px tap target.
+const isShareAgain = (b: string): boolean => /data-testid="share-address-again"/.test(b);
+const shareAgain = allButtons.filter(isShareAgain);
+const buttons = allButtons.filter((b) => !isShareAgain(b));
+check(
+	'"Share a different address" is in both flows',
+	shareAgain.length === 2,
+	String(shareAgain.length)
+);
+for (const [i, b] of shareAgain.entries()) {
+	const c = new Set((/class="([^"]*)"/.exec(b)?.[1] ?? '').split(/\s+/));
+	check(
+		`share-address-again ${i}: 44 px tall on a phone, compact from sm up`,
+		c.has('min-h-11') && c.has('sm:min-h-0'),
+		[...c].join(' ')
+	);
+	check(
+		`share-address-again ${i}: a quiet text action — no outline, no solid face`,
+		c.has('underline') &&
+			c.has('decoration-dotted') &&
+			![...c].some((t) => /^border-morphit|^bg-/.test(t)),
+		[...c].join(' ')
+	);
+}
 // The one-leg four (share address, send, mailing, shipment) and, since
 // v1.21.17, the five of a crypto-for-crypto trade (share where to be paid,
 // pay BLURT, share where to receive, "I see it in my wallet", send).

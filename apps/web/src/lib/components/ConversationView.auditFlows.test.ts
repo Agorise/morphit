@@ -578,6 +578,68 @@ describe('W-L5: a failed send keeps the modal open and says so', () => {
 	});
 });
 
+describe('v1.23.4: "Share your … address" goes once my address is in the chat (owner)', () => {
+	const shareButton = (t: HTMLElement) =>
+		t.querySelector<HTMLButtonElement>('button[aria-label^="chat.address.share_button_aria"]');
+	async function card(method: 'btc' | 'xmr') {
+		const { encodeAddressPayload } = await import('$lib/chat/payload');
+		return encodeAddressPayload({
+			v: 1,
+			kind: 'morphit_addr',
+			method,
+			address: method === 'btc' ? '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa' : '8' + 'A'.repeat(94),
+			orderPermlink: ORDER
+		});
+	}
+	it('a BTC order: my BTC address card, even still sending, hides it at once', async () => {
+		const ts = await import('$lib/trades/tradeStatus');
+		ts.clearAllTradeStates();
+		const v = await render(PEER, 'sell', 'BTC');
+		expect(shareButton(v.target)).not.toBeNull();
+		await v.push([{ sender: ME, state: 'pending', createdAt: null, text: await card('btc') }]);
+		expect(shareButton(v.target)).toBeNull();
+		// …and a small "Share a different address" opens the same window (review).
+		const again = v.target.querySelector<HTMLButtonElement>('[data-testid="share-address-again"]');
+		expect(again?.textContent?.trim()).toBe('chat.address.share_another');
+		again!.click();
+		v.flushSync();
+		expect(v.target.querySelector('[aria-labelledby="address-share-heading"]')).not.toBeNull();
+		v.destroy();
+	});
+	it('an XMR buy paid by mail: my XMR card hides the share button, never "Record shipment"', async () => {
+		const ts = await import('$lib/trades/tradeStatus');
+		ts.clearAllTradeStates();
+		orderMethods = ['cash_by_mail'];
+		try {
+			const v = await render(ME, 'buy', 'XMR');
+			const ship = () =>
+				v.target.querySelector<HTMLButtonElement>(
+					'button[aria-label^="chat.shipment.button_aria"]'
+				);
+			expect(shareButton(v.target)).not.toBeNull();
+			expect(ship()).not.toBeNull();
+			await v.push([{ sender: ME, text: await card('xmr') }]);
+			expect(shareButton(v.target)).toBeNull();
+			expect(ship()).not.toBeNull();
+			v.destroy();
+		} finally {
+			orderMethods = ['paypal'];
+		}
+	});
+	it('a card that failed to post, or the peer’s, leaves it', async () => {
+		const ts = await import('$lib/trades/tradeStatus');
+		ts.clearAllTradeStates();
+		const v = await render(PEER, 'sell', 'BTC');
+		await v.push([
+			{ sender: ME, state: 'failed', text: await card('btc') },
+			{ sender: PEER, text: await card('btc') }
+		]);
+		expect(shareButton(v.target)).not.toBeNull();
+		expect(v.target.querySelector('[data-testid="share-address-again"]')).toBeNull();
+		v.destroy();
+	});
+});
+
 describe('W-M3: the acks carry the newest message shown', () => {
 	it('local and on chain: the newest confirmed message’s time, once the first answer is in', async () => {
 		const { getLastVisited } = await import('$lib/chat/readState');
@@ -691,6 +753,28 @@ describe('v1.21.17: a crypto-for-crypto trade, one step at a time', () => {
 		expect(has(v, 'chat.funds_sent.button_aria')).toBe(false);
 		// v1.23.2: no "Waiting for @x to pay you in …" line under the button.
 		expect(hint(v)).toBe('');
+	});
+
+	it('v1.23.4: once his XMR address is in the chat the button goes; "Share a different address" stays (owner, review)', async () => {
+		const v = await render(PEER, 'buy', 'BLURT');
+		await v.push([await addressMsg()]);
+		expect(has(v, 'chat.address.share_button_aria_asset')).toBe(false);
+		const again = v.target.querySelector<HTMLButtonElement>('[data-testid="share-address-again"]');
+		expect(again).not.toBeNull();
+		again!.click();
+		v.flushSync();
+		// The window offers the payment coins again (XMR or BTC).
+		const placeholders = [...v.target.querySelectorAll('input[placeholder]')].map((i) =>
+			i.getAttribute('placeholder')
+		);
+		expect(
+			placeholders.some(
+				(p) =>
+					p === 'chat.address.address_placeholder_xmr' ||
+					p === 'chat.address.address_placeholder_btc'
+			)
+		).toBe(true);
+		v.destroy();
 	});
 
 	it('the buyer’s payment seen at 0 confirmations: "Send BLURT"; the receipt shows the check', async () => {

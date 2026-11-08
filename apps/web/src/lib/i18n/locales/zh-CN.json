@@ -517,6 +517,7 @@
 			"share_button_asset": "分享你的 {asset} 地址",
 			"share_button_aria_asset": "分享你想接收 {asset} 的地址",
 			"share_button_blurt": "分享你的 Blurt 账户",
+			"share_another": "分享另一个地址",
 			"share_button_aria_blurt": "分享你想接收 BLURT 的 Blurt 账户",
 			"modal_title": "共享一个收款地址",
 			"modal_subtitle": "将您想接收这笔加密货币的地址发送给您的交易伙伴。",

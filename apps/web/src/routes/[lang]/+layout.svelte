@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
+	import { markSeenAt } from '$lib/notifications';
 	import { afterNavigate } from '$app/navigation';
 	import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
 	import RssFeedPicker from '$components/RssFeedPicker.svelte';
@@ -135,6 +136,17 @@
 	// zero-permission channels that update in the user's peripheral
 	// vision whenever unreadCount changes. See
 	// docs/NOTIFICATIONS-DESIGN.md and apps/web/src/lib/notifications/.
+	// v1.23.4 (independent review): the page shown, in view, reads the order
+	// and feedback notifications that point to it (an order notification links
+	// to its chat). Again whenever the tab comes back into view.
+	$effect(() => {
+		const path = $page.url.pathname;
+		markSeenAt(path);
+		const onVisible = (): void => markSeenAt(path);
+		document.addEventListener('visibilitychange', onVisible);
+		return () => document.removeEventListener('visibilitychange', onVisible);
+	});
+
 	onMount(() => {
 		startAmbientChannels();
 		// Fetch this instance's branding once.  The store will

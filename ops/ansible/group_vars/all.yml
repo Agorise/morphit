@@ -760,13 +760,15 @@ enable_postfix_monitor: false
 
 # ─── TLS certbot monitor sidecar ────────────────────
 #
-# Daily check of TLS cert expiry + a renewal-stall detector
-# (cert expiring AND no successful renewal in N days).  Most
-# monitoring stacks miss the "renewal silently broke months ago"
-# pattern; this catches it.
+# Daily check that certbot keeps each TLS cert renewed.  Quiet while
+# certbot is not due or still within the grace days past its renewal
+# point (30 days left on a 90-day cert); warns once a renewal is a week
+# overdue (23 days left), critical at 7 days left.  Catches the
+# "renewal silently broke" pattern with weeks to spare.
 enable_certbot_monitor: false
 # certbot_expiry_critical_days: 7
-# certbot_expiry_warn_days: 30
+# certbot_renewal_grace_days: 7
+# certbot_expiry_warn_days: 14
 # certbot_renewal_stall_days: 14
 
 

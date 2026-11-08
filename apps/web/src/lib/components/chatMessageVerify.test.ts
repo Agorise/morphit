@@ -122,3 +122,49 @@ describe('a claim verified once its trade is recorded', () => {
 		expect(ts.getTradeState('alice', 'sell-blurt-1')?.amountConfirmed).toBe(true);
 	});
 });
+
+describe('"Verify on block explorer" (v1.23.4, owner)', () => {
+	it('opens in a new tab and carries the receipt’s block', async () => {
+		const ts = await import('$lib/trades/tradeStatus');
+		chainTxs.set('c'.repeat(40), transferTx('bob', 'alice', '500.000 BLURT', 'mabcdefghijk'));
+		ts.recordAddressShared({
+			orderOwner: 'alice',
+			orderPermlink: 'sell-blurt-1',
+			peer: 'bob',
+			method: 'blurt',
+			address: 'alice',
+			expectedAmount: 500,
+			expectedMemo: 'mabcdefghijk',
+			direction: 'outgoing'
+		});
+		const { encodeFundsSentPayload } = await import('$lib/chat/payload');
+		const claim = encodeFundsSentPayload({
+			v: 1,
+			kind: 'morphit_funds_sent',
+			method: 'blurt',
+			txid: 'c'.repeat(40),
+			amount: '500',
+			orderPermlink: 'sell-blurt-1',
+			memo: 'mabcdefghijk',
+			block: 65148473
+		} as never);
+		const { target, flushSync } = await mount({
+			me: 'alice',
+			peer: 'bob',
+			orderOwner: 'alice',
+			message: msg({ text: claim })
+		});
+		const link = await vi.waitFor(
+			() => {
+				flushSync();
+				const a = target.querySelector<HTMLAnchorElement>('[data-testid="receipt-verify-link"]');
+				expect(a).not.toBeNull();
+				return a!;
+			},
+			{ timeout: 2_000 }
+		);
+		expect(link.getAttribute('href')).toBe(`/en/explorer/tx/${'c'.repeat(40)}?block=65148473`);
+		expect(link.getAttribute('target')).toBe('_blank');
+		expect(link.getAttribute('rel')).toContain('noopener');
+	});
+});

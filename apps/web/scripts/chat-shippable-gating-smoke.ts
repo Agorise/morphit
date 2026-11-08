@@ -17,7 +17,8 @@
  *    that physical payment → they say where to send it ("Share mailing
  *    address"). Getting this backwards shows grandma the wrong button. The
  *    helper below mirrors ConversationView's two deriveds exactly
- *    (showRecordShipmentButton = orderCanShip && showShareAddressButton;
+ *    (showRecordShipmentButton = orderCanShip && iReceiveCryptoUnpaid — the share
+ *     button's condition before v1.23.4 hid it once the address is shared;
  *     showShareMailingButton   = orderCanShip && showPayNowButton).
  *
  * Usage:
@@ -86,9 +87,15 @@ check('10 — unknown key ignored ⇒ not shippable', !orderUsesShippableMethod(
 // Same invariant for cash-by-mail (crypto buyer mails the cash → ships it).
 {
 	const buyerMailsCash = chatShippingButtons(['cash_by_mail'], true);
-	check('15 — cash-by-mail crypto-RECEIVER ships the cash envelope', buyerMailsCash.showRecordShipment);
+	check(
+		'15 — cash-by-mail crypto-RECEIVER ships the cash envelope',
+		buyerMailsCash.showRecordShipment
+	);
 	const sellerGetsCash = chatShippingButtons(['cash_by_mail'], false);
-	check('16 — cash-by-mail crypto-SENDER shares where to mail the cash', sellerGetsCash.showShareMailing);
+	check(
+		'16 — cash-by-mail crypto-SENDER shares where to mail the cash',
+		sellerGetsCash.showShareMailing
+	);
 }
 // Cash-in-person: neither control, either side (tester3 scenario).
 {
@@ -96,21 +103,38 @@ check('10 — unknown key ignored ⇒ not shippable', !orderUsesShippableMethod(
 	const seller = chatShippingButtons(['cash_in_person'], false);
 	check(
 		'17 — cash-in-person shows neither shipping control (either party)',
-		!buyer.showRecordShipment && !buyer.showShareMailing && !seller.showRecordShipment && !seller.showShareMailing
+		!buyer.showRecordShipment &&
+			!buyer.showShareMailing &&
+			!seller.showRecordShipment &&
+			!seller.showShareMailing
 	);
 }
 
 // ── BARTER listings: methods are only pay_<coin>, yet the goods still ship ──
 {
-	const banana = { side: 'sell', status: 'live', asset: 'BARTER', payment_methods: ['pay_xmr', 'pay_blurt'] };
+	const banana = {
+		side: 'sell',
+		status: 'live',
+		asset: 'BARTER',
+		payment_methods: ['pay_xmr', 'pay_blurt']
+	};
 	check('18 — a BARTER listing can ship (pay_<coin> methods only)', orderCanShip(banana));
-	check('19 — a crypto order paid only on-chain cannot ship', !orderCanShip({ asset: 'XMR', payment_methods: ['pay_xmr'] }));
+	check(
+		'19 — a crypto order paid only on-chain cannot ship',
+		!orderCanShip({ asset: 'XMR', payment_methods: ['pay_xmr'] })
+	);
 	// The goods seller (listing owner) receives crypto ⇒ records the shipment;
 	// the goods buyer sends crypto ⇒ shares their mailing address.
 	const seller = chatMoneyFlow(banana, true);
 	const buyer = chatMoneyFlow(banana, false);
-	check('20 — goods seller: Record shipment, not Share mailing address', orderCanShip(banana) && seller.shareAddress && !seller.payNow);
-	check('21 — goods buyer: Share mailing address (and Pay now)', orderCanShip(banana) && buyer.payNow && !buyer.shareAddress);
+	check(
+		'20 — goods seller: Record shipment, not Share mailing address',
+		orderCanShip(banana) && seller.shareAddress && !seller.payNow
+	);
+	check(
+		'21 — goods buyer: Share mailing address (and Pay now)',
+		orderCanShip(banana) && buyer.payNow && !buyer.shareAddress
+	);
 }
 
 console.log(`\n${count} scenarios, ${failures} failed`);

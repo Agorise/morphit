@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { isCryptoForCrypto, twoLegButtons, twoLegPlan, type ThreadFact } from './cryptoLegs';
+import {
+	iSharedAddress,
+	isCryptoForCrypto,
+	twoLegButtons,
+	twoLegPlan,
+	type SharedAddressFact,
+	type ThreadFact
+} from './cryptoLegs';
+import type { ChatAssetTicker } from './payload';
 
 /** An order buying BLURT, paying XMR or BTC. */
 const BLURT_FOR_XMR_BTC = {
@@ -66,9 +74,22 @@ describe('twoLegButtons — the BLURT seller (pays BLURT, is paid XMR/BTC first)
 			confirmInWallet: false,
 			payBlurt: false,
 			shareAssetAddress: false,
+			shareAgain: null,
 			// v1.23.2: no "Waiting for @x to pay you in …" line (owner's call).
 			hint: null
 		});
+	});
+	it('v1.23.4: once he has shared his XMR/BTC address, the button goes at once (owner)', () => {
+		const b = twoLegButtons(plan, [addr(true, 'btc')], ORDER, null);
+		expect(b.sharePaymentAddress).toBe(false);
+		// …a different or corrected one is a small link away (review).
+		expect(b.shareAgain).toBe('payment');
+		expect(b.sendAsset).toBe(false);
+		expect(b.hint).toBeNull();
+		// The buyer's address, or one about another order, is not his.
+		expect(twoLegButtons(plan, [addr(false, 'btc')], ORDER, null).sharePaymentAddress).toBe(true);
+		const other = { ...addr(true, 'btc'), orderPermlink: 'order-other' } as ThreadFact;
+		expect(twoLegButtons(plan, [other], ORDER, null).sharePaymentAddress).toBe(true);
 	});
 	it('address shared, payment recorded, check running: still no "Send BLURT"', () => {
 		const b = twoLegButtons(plan, [addr(true, 'xmr'), paid(false, 'xmr')], ORDER, 'checking');
@@ -144,6 +165,15 @@ describe('twoLegButtons — the BLURT seller (pays BLURT, is paid XMR/BTC first)
 	it('his own receipt does not count as the buyer’s payment', () => {
 		expect(twoLegButtons(plan, [paid(true, 'xmr')], ORDER, 'seen').sendAsset).toBe(false);
 	});
+	it('v1.23.4: no "share a different address" before sharing, nor once paid', () => {
+		expect(twoLegButtons(plan, [], ORDER, null).shareAgain).toBeNull();
+		for (const v of ['seen', 'checking', 'mismatch'] as const) {
+			expect(
+				twoLegButtons(plan, [addr(true, 'btc'), paid(false, 'btc')], ORDER, v).shareAgain,
+				v
+			).toBeNull();
+		}
+	});
 	it('a payment about another order does not count', () => {
 		const other: ThreadFact = { ...paid(false, 'xmr'), orderPermlink: 'order-other' } as ThreadFact;
 		expect(twoLegButtons(plan, [other], ORDER, 'seen').sendAsset).toBe(false);
@@ -165,6 +195,7 @@ describe('twoLegButtons — the BLURT buyer (pays XMR/BTC first, receives BLURT)
 			confirmInWallet: false,
 			payBlurt: false,
 			shareAssetAddress: false,
+			shareAgain: null,
 			hint: 'waiting_address'
 		});
 	});
@@ -192,6 +223,19 @@ describe('twoLegButtons — buying XMR with BLURT', () => {
 		expect(asked.hint).toBeNull();
 		// His own BLURT "address" is no ask.
 		expect(twoLegButtons(plan, [addr(true, 'blurt')], ORDER, null).payBlurt).toBe(false);
+	});
+	it('v1.23.4: once he has shared his XMR address, that button goes', () => {
+		const plan = twoLegPlan(order, true)!;
+		expect(twoLegButtons(plan, [addr(true, 'xmr')], ORDER, null).shareAssetAddress).toBe(false);
+		expect(twoLegButtons(plan, [addr(true, 'xmr')], ORDER, null).shareAgain).toBe('asset');
+		// Once the XMR has come, nothing more to share.
+		expect(
+			twoLegButtons(plan, [addr(true, 'xmr'), paid(false, 'xmr')], ORDER, null).shareAgain
+		).toBeNull();
+		// The seller's BLURT ask is not his XMR address.
+		expect(twoLegButtons(plan, [addr(false, 'blurt')], ORDER, null).shareAssetAddress).toBe(true);
+		// Nor is an XMR address the seller shared.
+		expect(twoLegButtons(plan, [addr(false, 'xmr')], ORDER, null).shareAssetAddress).toBe(true);
 	});
 	it('after paying, no second BLURT button', () => {
 		expect(
@@ -240,5 +284,29 @@ describe('isCryptoForCrypto (whatever the status)', () => {
 		expect(isCryptoForCrypto({ asset: 'BARTER', payment_methods: ['pay_xmr'] })).toBe(false);
 		expect(isCryptoForCrypto({ asset: 'BLURT', payment_methods: [] })).toBe(false);
 		expect(isCryptoForCrypto(null)).toBe(false);
+	});
+});
+
+describe('iSharedAddress — the one-coin "Share your … address" button (v1.23.4)', () => {
+	const a = (
+		mine: boolean,
+		method: ChatAssetTicker,
+		orderPermlink: string | null = ORDER,
+		kind: 'address' | 'funds_sent' = 'address'
+	): SharedAddressFact => ({ kind, mine, method, orderPermlink });
+	it('my address for this order and coin: shared', () => {
+		expect(iSharedAddress([a(true, 'btc')], ORDER, 'btc')).toBe(true);
+		// An older app's card names no order: it counts.
+		expect(iSharedAddress([a(true, 'btc', null)], ORDER, 'btc')).toBe(true);
+	});
+	it('the peer’s, another order’s, another coin’s or a receipt: not', () => {
+		expect(iSharedAddress([], ORDER, 'btc')).toBe(false);
+		expect(iSharedAddress([a(false, 'btc')], ORDER, 'btc')).toBe(false);
+		expect(iSharedAddress([a(true, 'btc', 'order-other')], ORDER, 'btc')).toBe(false);
+		expect(iSharedAddress([a(true, 'xmr')], ORDER, 'btc')).toBe(false);
+		expect(iSharedAddress([a(true, 'btc', ORDER, 'funds_sent')], ORDER, 'btc')).toBe(false);
+	});
+	it('a barter order (no single coin): any coin of mine counts', () => {
+		expect(iSharedAddress([a(true, 'xmr')], ORDER, null)).toBe(true);
 	});
 });

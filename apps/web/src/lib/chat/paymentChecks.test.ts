@@ -17,6 +17,8 @@ import {
 	confirmationLine,
 	isLess,
 	PAYMENT_CHECK_STALE_AFTER_MS,
+	PAYMENT_CHECK_CONFIRMING_FAST_FOR_MS,
+	PAYMENT_CHECK_CONFIRMING_INTERVAL_MS,
 	PAYMENT_CHECK_FIRST_INTERVAL_MS,
 	PAYMENT_CHECK_INTERVAL_MS,
 	PAYMENT_CHECK_TIME_SLACK_MS,
@@ -178,7 +180,7 @@ describe('checkOnce', () => {
 });
 
 describe('watchPaymentCheck', () => {
-	it('checks again each minute until confirmed, then stops', async () => {
+	it('checks again every 15 s while confirming (v1.23.4), then stops', async () => {
 		vi.useFakeTimers();
 		answers.push(found('0.001', 0), found('0.001', 1), found('0.001', 3), found('0.001', 3));
 		const w = watchPaymentCheck({ asset: 'btc', txid: TXID, address: 'w1', asked: '0.001' });
@@ -186,9 +188,9 @@ describe('watchPaymentCheck', () => {
 		const stop = w.subscribe((s) => seen.push(s));
 		await vi.advanceTimersByTimeAsync(0);
 		expect(get(w)).toMatchObject({ phase: 'seen', confirmations: 0 });
-		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_INTERVAL_MS);
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_CONFIRMING_INTERVAL_MS);
 		expect(get(w)).toMatchObject({ confirmations: 1 });
-		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_INTERVAL_MS);
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_CONFIRMING_INTERVAL_MS);
 		expect(get(w)).toMatchObject({ confirmations: 3 });
 		const n = asks.length;
 		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_INTERVAL_MS * 5);
@@ -268,15 +270,67 @@ describe('watchPaymentCheck', () => {
 		expect(asks.length).toBeGreaterThan(1);
 		stop();
 	});
-	it('once seen, it is asked once a minute', async () => {
+	it('v1.23.4: once seen and still confirming, every 15 s (owner: the chat lagged the wallets by a minute)', async () => {
 		vi.useFakeTimers();
 		answers.push(found('0.001', 0));
 		const w = watchPaymentCheck({ asset: 'btc', txid: TXID, address: 'w5', asked: '0.001' });
 		const stop = w.subscribe(() => {});
 		await vi.advanceTimersByTimeAsync(0);
-		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_FIRST_INTERVAL_MS);
 		expect(asks).toHaveLength(1);
-		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_INTERVAL_MS - PAYMENT_CHECK_FIRST_INTERVAL_MS);
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_CONFIRMING_INTERVAL_MS - 1);
+		expect(asks).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(asks).toHaveLength(2);
+		expect(PAYMENT_CHECK_CONFIRMING_INTERVAL_MS).toBeLessThanOrEqual(15_000);
+		stop();
+	});
+	it('stuck at 0 confirmations past half an hour: back to once a minute (review); 1+ stays quick', async () => {
+		vi.useFakeTimers();
+		for (let i = 0; i < 400; i++) answers.push(found('0.001', 0));
+		const w = watchPaymentCheck({ asset: 'btc', txid: TXID, address: 'w9', asked: '0.001' });
+		const stop = w.subscribe(() => {});
+		await vi.advanceTimersByTimeAsync(0);
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_CONFIRMING_FAST_FOR_MS);
+		const quick = asks.length;
+		// Every 15 s for the first half hour…
+		expect(quick).toBeGreaterThanOrEqual(PAYMENT_CHECK_CONFIRMING_FAST_FOR_MS / 15_000);
+		await vi.advanceTimersByTimeAsync(10 * 60_000);
+		// …then once a minute.
+		expect(asks.length - quick).toBeLessThanOrEqual(11);
+		expect(asks.length - quick).toBeGreaterThanOrEqual(9);
+		// Its first confirmation, after the half hour: quick again until confirmed.
+		answers.length = 0;
+		answers.push(found('0.001', 1));
+		await vi.advanceTimersByTimeAsync(60_000);
+		const at1 = asks.length;
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_CONFIRMING_INTERVAL_MS);
+		expect(asks.length).toBe(at1 + 1);
+		stop();
+		answers.length = 0;
+		asks.length = 0;
+		answers.push(found('0.001', 1), found('0.001', 1));
+		const w2 = watchPaymentCheck({ asset: 'btc', txid: TXID, address: 'w10', asked: '0.001' });
+		const stop2 = w2.subscribe(() => {});
+		await vi.advanceTimersByTimeAsync(0);
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_CONFIRMING_INTERVAL_MS);
+		expect(asks).toHaveLength(2);
+		stop2();
+	});
+	it('fully confirmed but without a date: once a minute, not every 15 s', async () => {
+		vi.useFakeTimers();
+		answers.push({ ok: true, data: { ...found('0.001', 3).data, tx_time: null } });
+		const w = watchPaymentCheck({
+			asset: 'btc',
+			txid: TXID,
+			address: 'w8',
+			asked: '0.001',
+			sharedAtMs: Date.parse('2026-10-26T18:00:00Z')
+		});
+		const stop = w.subscribe(() => {});
+		await vi.advanceTimersByTimeAsync(0);
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_INTERVAL_MS - 1);
+		expect(asks).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
 		expect(asks).toHaveLength(2);
 		stop();
 	});
@@ -286,7 +340,7 @@ describe('watchPaymentCheck', () => {
 		const w = watchPaymentCheck({ asset: 'btc', txid: TXID, address: 'w2', asked: '0.001' });
 		const stop = w.subscribe(() => {});
 		await vi.advanceTimersByTimeAsync(0);
-		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_INTERVAL_MS);
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_CONFIRMING_INTERVAL_MS);
 		expect(asks.length).toBe(2);
 		expect(get(w)).toMatchObject({ phase: 'seen', confirmations: 0 });
 		stop();

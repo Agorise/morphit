@@ -910,7 +910,9 @@ async function main(): Promise<void> {
 	// /v1/chain (block explorer + the ref-block properties proxy)
 	// and /v1/broadcast (the write proxy) each forward at most ONE upstream
 	// Blurt RPC call per request (`/v1/chain/agreed`, the release check's
-	// quorum read, shares one read among all requests: see chainExplorer.ts),
+	// quorum read, shares one read among all requests: see chainExplorer.ts;
+	// v1.23.4: `/v1/chain/tx/:id?block=N` makes a second, `get_block`, only
+	// when the first could not find the transaction),
 	// so they get the same per-IP 'resource' rate-limit
 	// tier as every other upstream-touching proxy (e.g. /v1/account). Without it
 	// an unauthenticated flood of well-formed-but-bogus requests could amplify

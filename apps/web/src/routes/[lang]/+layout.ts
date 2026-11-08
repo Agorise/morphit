@@ -45,6 +45,7 @@ import { browser } from '$app/environment';
 import { waitLocale } from 'svelte-i18n';
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 import { localePath, pickLocaleFromAcceptLanguages } from '$i18n/path';
+import { resolvePageAlias } from '$i18n/pageAliases';
 import { initI18nFor } from '$i18n';
 import { ensureBrandWithin, BRAND_WAIT_MS } from '$lib/brand/brand';
 
@@ -112,7 +113,10 @@ export async function load({
 		const detected = browser
 			? pickLocaleFromAcceptLanguages(navigator.languages ?? [])
 			: DEFAULT_LOCALE;
-		throw redirect(307, localePath(url.pathname + url.search + url.hash, detected));
+		// v1.23.4: a short address typed by hand (/about) goes straight to the
+		// real page (/en/about-this-instance), in one hop.
+		const wanted = resolvePageAlias(url.pathname + url.search + url.hash);
+		throw redirect(307, localePath(wanted, detected));
 	}
 	// Per-instance brand (docs/BRANDING.md), resolved IN PARALLEL with the
 	// locale bundle so every `{brand}` string renders branded on the first
