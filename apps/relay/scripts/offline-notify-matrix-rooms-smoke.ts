@@ -29,7 +29,7 @@ import { leaveRoom, sendMatrix } from '../src/notify/channels/matrix.ts';
 import { drainLeaves, LEAVE_TRIES } from '../src/notify/leaves.ts';
 import { CODE_TTL_MS, TEST_ACCOUNT } from '../src/notify/store.ts';
 import { openVault } from '../src/notify/vault.ts';
-import { DB_TESTS, notifyDb, schemaFrom, schemaSection } from '../test/notifyDb.ts';
+import { DB_TESTS, notifyDb, schemaSection } from '../test/notifyDb.ts';
 import { fakeHomeserver } from '../test/notifyFakes.ts';
 
 if (!DB_TESTS) {
@@ -311,7 +311,7 @@ try {
 			() => 'opened',
 			(e: unknown) => (e as { code?: string }).code ?? String(e)
 		);
-		await old.admin.query(schemaFrom(71)); // the indexer's v71 migration (its SQL)
+		await old.admin.query(schemaSection(71)); // the indexer's v71 migration (its SQL)
 		const upgraded = await old.open(); // the relay opens the store after the upgrade
 		const b2 = upgraded.matrixRoomBook();
 		const routes = await old.count(

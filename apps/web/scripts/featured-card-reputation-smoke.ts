@@ -67,7 +67,8 @@ const sqlOnly = shared
 for (const guard of ['suspicious_reciprocity', 'related_accounts', 'one_way_pile_on', 'review_concentration']) {
 	check(`the shared aggregate SQL still excludes ${guard}`, new RegExp(`FROM ${guard}\\b`).test(sqlOnly));
 }
-check('untethered feedback (no order_permlink) is still excluded', /fb\.order_permlink IS NOT NULL/.test(sqlOnly));
+check('untethered feedback (no order_permlink) is still excluded', // v1.23.5: the rows are read through countedFeedbackFrom, over `feedback f0`.
+	/FROM feedback f0\s+WHERE f0\.order_permlink IS NOT NULL/.test(sqlOnly));
 check('the composite score is computed in ONE place', /computeReputationScore/.test(shared) && /export function reputationFieldsFromRow/.test(shared));
 
 // ─── both endpoints consume it ───────────────────────────────────────

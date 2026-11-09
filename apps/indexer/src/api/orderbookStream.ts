@@ -184,6 +184,7 @@ const ROW_SELECT = `
 	       o.lang,
 	       o.fee_method,
 	       COALESCE(f.c, 0)::int AS feedback_count,
+	       COALESCE(f.cw, 0)::float8 AS feedback_weight,
 	       CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
 	       f.last_feedback_at,
 	       -- cp473 — REAL completed trades, matching /v1/orderbook.

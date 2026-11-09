@@ -107,6 +107,9 @@ interface OrderRow {
 	/** v1.8.15 — RATINGS backing the star average (DIFFERENT from trade_count:
 	 *  a completed trade nobody reviewed counts as a trade, not a rating). */
 	feedback_count: number;
+	/** v1.23.5 — the counted reviews' weight (a repeat trade's review weighs
+	 *  half): the composite score's count. */
+	feedback_weight: number;
 	/** v1.8.15 — time-decayed weighted average rating as a numeric string, or
 	 *  NULL when feedback_count is zero. */
 	weighted_rating: string | null;
@@ -169,7 +172,7 @@ function rowToWire(r: OrderRow) {
 		feedback_count: r.feedback_count,
 		weighted_rating: r.weighted_rating === null ? null : Number(r.weighted_rating),
 		reputation_score: computeReputationScore({
-			count: r.feedback_count,
+			count: Number(r.feedback_weight),
 			weightedAvg: r.weighted_rating === null ? null : Number(r.weighted_rating),
 			lastFeedbackAtMs: r.last_feedback_at === null ? null : r.last_feedback_at.getTime()
 		}),
@@ -218,6 +221,7 @@ const ORDER_SELECT = `SELECT o.account, o.permlink, o.side, o.asset, o.asset_net
 			        -- shows the ⭐ reputation pill, plus the suspicious-reciprocity
 			        -- flag for the "No mutual-review flags" trust pill.
 			        COALESCE(f.c, 0)::int AS feedback_count,
+			        COALESCE(f.cw, 0)::float8 AS feedback_weight,
 			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
 			        f.last_feedback_at,
 			        EXISTS (

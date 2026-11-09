@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 
 import { INTEGRATION_ENABLED, setupWithMigrations, type IntegrationFixture } from './harness';
 import { feedbackByAccountRoute } from '../../src/api/feedback';
-import { FEEDBACK_EXCLUSIONS_SQL } from '../../src/api/reputationJoin';
+import { countedFeedbackFrom, FEEDBACK_EXCLUSIONS_SQL } from '../../src/api/reputationJoin';
 
 type Summary = { count: number | string; weighted_rating: string | number | null };
 type Item = { reviewer: string; subject: string; suppressed: boolean };
@@ -44,7 +44,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('a review counts once, everywhere', () => 
 	const orderbookCount = async (): Promise<number> =>
 		(
 			await fx.db.query<{ c: number }>(
-				`SELECT COUNT(*)::int AS c FROM feedback fb ${FEEDBACK_EXCLUSIONS_SQL} AND fb.subject = 'alice'`
+				`SELECT COUNT(*)::int AS c FROM ${countedFeedbackFrom()} ${FEEDBACK_EXCLUSIONS_SQL} AND fb.subject = 'alice'`
 			)
 		).rows[0]!.c;
 

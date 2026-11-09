@@ -140,7 +140,10 @@ console.log('\n── reputation-receipt-shape invariants smoke (cp124 H4) ─�
 		formulaMatch && formulaMatch[1]
 			? (formulaMatch[1] + (src.match(/'([^']+)'\.\s*\+/g) || []).join(' '))
 			: src;
-	const mentionsFormula = src.includes('SUM(rating × decay_weight) / SUM(decay_weight)');
+	const mentionsFormula = // v1.23.5: each review also carries its review_weight (a repeat trade's is 0.5).
+		src.includes(
+			'SUM(rating × decay_weight × review_weight) / SUM(decay_weight × review_weight)'
+		);
 	const mentionsExclusions =
 		src.includes('suspicious_reciprocity') &&
 		src.includes('related_accounts') &&

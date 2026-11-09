@@ -716,6 +716,11 @@ export interface FeedbackRecord {
 	 *  behavior for indexers that haven't run the signal detectors
 	 *  yet on a fresh DB. */
 	readonly suppressed?: boolean;
+	/** v1.23.5: the (reviewer, subject) pair is flagged by the anti-ring
+	 *  signals. `suppressed` is also true for an earlier review that does not
+	 *  count YET (its trade not proven: reviewing back can make it count); this
+	 *  one is true only when nothing can. Absent from older indexers. */
+	readonly pair_flagged?: boolean;
 	/** the REVIEWED account's current reputation —
 	 *  exclusion-filtered + decay-weighted, identical to the headline
 	 *  figure on their own profile. Present on `/feedback-given`
@@ -818,8 +823,8 @@ export type ReputationExclusionReason =
 	| 'related_accounts'
 	| 'one_way_pile_on'
 	| 'review_concentration'
-	/** The reviewer has a later order-bound review of this subject; only the
-	 *  latest per (reviewer, subject) counts. */
+	/** The reviewer has a later order-bound review of this subject, and this
+	 *  one is not a proven, spaced repeat trade (v1.23.5): it weighs 0. */
 	| 'superseded_by_later_review';
 
 export interface ReputationReceiptRow {
@@ -830,6 +835,12 @@ export interface ReputationReceiptRow {
 	readonly order_permlink: string | null;
 	readonly age_days: number; // 2-decimal precision
 	readonly decay_weight: number; // 5-decimal precision, in (0, 1]
+	/** v1.23.5: 1 (the reviewer's latest review), 0.5 (an earlier review of a
+	 *  proven, spaced repeat trade) or 0. Absent from older indexers. */
+	readonly review_weight?: number;
+	/** v1.23.5: both reviewed each other citing that order, and its owner
+	 *  completed it naming the other. Absent from older indexers. */
+	readonly proven?: boolean;
 	readonly included: boolean;
 	readonly excluded_reason: ReputationExclusionReason;
 }
@@ -846,6 +857,9 @@ export interface ReputationReceiptResponse {
 		readonly count_total: number;
 		readonly count_included: number;
 		readonly count_excluded: number;
+		/** v1.23.5: the included rows' review weights summed — the score's n
+		 *  (a repeat trade's review counts half). Absent from older indexers. */
+		readonly count_weighted?: number;
 		/** COMPLETED TRADES (both parties credited, sock-puppet-pair
 		 *  filtered). What the 🌱 new-trader sprout keys off since v1.5.5,
 		 *  matching every order-card surface. Optional/absent from older

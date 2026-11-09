@@ -77,6 +77,20 @@ const base = buildManifest({
 	const v70 = verifyManifestCompatible({ ...base, schemaVersion: 70, createdAt: '2026-11-05T00:00:00.000Z' }, T70);
 	check('a v70 snapshot exported after the activation time → allowed', v70.ok);
 }
+// ── v1.23.5: a pre-v73 snapshot exported after the repeat-trade activation
+//    time judged reviews by the old rule from then on → refused ───────────
+{
+	const T73: TargetFacts = { ...TARGET, codeSchemaVersion: 73 };
+	const old = { ...base, schemaVersion: 72 };
+	const before = verifyManifestCompatible({ ...old, createdAt: '2026-11-21T23:59:59.000Z' }, T73);
+	check('pre-v73 snapshot exported before the v1.23.5 activation time → allowed', before.ok);
+	const after = verifyManifestCompatible({ ...old, createdAt: '2026-11-22T00:00:00.000Z' }, T73);
+	check('pre-v73 snapshot exported at/after the v1.23.5 activation time → REFUSED', !after.ok && after.reasons.some((x) => /repeat-trade rule/.test(x)));
+	const unreadable = verifyManifestCompatible({ ...old, createdAt: 'not a date' }, T73);
+	check('pre-v73 snapshot with an unreadable export time → REFUSED (fail closed)', !unreadable.ok && unreadable.reasons.some((x) => /repeat-trade rule/.test(x)));
+	const v73 = verifyManifestCompatible({ ...base, schemaVersion: 73, createdAt: '2026-11-25T00:00:00.000Z' }, T73);
+	check('a v73 snapshot exported after the v1.23.5 activation time → allowed', v73.ok);
+}
 {
 	const r = verifyManifestCompatible({ ...base, schemaVersion: 38 }, TARGET);
 	check('schema OLDER than build is allowed (forward-migrate warning, not refusal)', r.ok && r.warnings.some((x) => /forward-migrate/i.test(x)));

@@ -521,7 +521,7 @@ Because it costs real money and hardly helps your reputation.
 
 • **Every listing costs a fee:** about $0.125 in BLURT or $0.25 in BTC/XMR. It goes to the site and the Morphit project, not to your other account. A trade only adds to your trade count when its listing was paid for. (Your one free first buy counts too, but only for you.)
 • **Lots of orders cost more.** If you post many orders in a day (or keep many open), each BLURT-paid listing after the 3rd costs more: the 4th costs 1.25×, the 10th about 4.8×.
-• **One partner counts once.** However many times the same account reviews you, only its latest review counts toward your score.
+• **A repeat partner counts less.** Only the latest review from the same account counts in full. An earlier one counts half, and only if that trade is proven: you reviewed each other for that order within a week of it being completed, its owner marked it completed naming the other, and its listing fee was paid in BLURT (or it was a free first buy), and it came at least 3 days apart from their other counted reviews of you.
 • **Fake pairs get spotted.** Morphit looks for accounts that seem to be one person: made by the same creator and first used minutes apart, swapping 5-star reviews only with each other, or aiming most of their reviews or trades at one account. Reviews and trades between flagged accounts don't count, and a warning can show on the profile.
 
 Honest trading is cheaper, and it actually works.
@@ -1038,7 +1038,7 @@ What limits you in practice:
 • **Fees.** Each listing has a small fee, so tiny trades may not be worth it.
 • **Payment limits.** Banks and payment apps often have their own minimums and daily caps — check before you agree.
 
-For a big amount, consider splitting it into a few smaller trades with the same person, so neither of you risks it all at once. This builds trust between you two, but not extra reputation: only their latest review of you counts.
+For a big amount, consider splitting it into a few smaller trades with the same person, so neither of you risks it all at once. This builds trust between you two, and some reputation too: a repeat trade counts at half the weight of a new partner once you both review each other for it and it is marked completed naming the other (at most one every 3 days).
 
 ---
 
@@ -1324,7 +1324,7 @@ There's no shortcut: real trades, done well, over time.
 
 • Reviewing yourself — it's rejected.
 • Fake accounts, two friends swapping 5-star reviews, one account aiming most of its reviews at one person, or a group piling bad reviews on someone. These patterns are flagged and left out.
-• Lots of reviews from one person — only their latest review of you counts.
+• Piling up reviews from one person. Only their latest review of you counts in full; an earlier one counts half, and only for a proven trade (you reviewed each other for it within a week of it being marked completed naming the other, on a listing paid in BLURT or a free first buy) at least 3 days from their other counted reviews.
 • Reviews that don't name a trade. They show on your profile but don't count.
 
 New accounts carry a 🌱 badge until they have 4 completed trades. That's normal — start small.
@@ -1503,7 +1503,7 @@ Mostly by having little worth stealing, plus a few safety nets.
 
 **Spam gates.** A stranger who isn't answering one of your orders must pay a small BLURT fee to message you first, unless you wrote to them first. Blocked accounts can't reach you. See 'How does Morphit stop spam and unsolicited messages from strangers?'.
 
-**Hard-to-fake reviews.** A review counts only if the reviewer really chatted with you and names an order one of you paid a listing fee for — and only their latest review of you counts. See 'How does Morphit stop fake reviews?'.
+**Hard-to-fake reviews.** A review counts only if the reviewer really chatted with you and names an order one of you paid a listing fee for — and only their latest review of you counts in full (an earlier one counts half, and only for a trade you both reviewed and that was marked completed). See 'How does Morphit stop fake reviews?'.
 
 **A locked-down site.** What you send is checked, and pages run only the site's own code. See 'Is Morphit vulnerable to hacking, data theft, or takedowns?'.
 

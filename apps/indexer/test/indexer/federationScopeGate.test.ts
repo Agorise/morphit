@@ -229,7 +229,7 @@ describe('Part 111 — welcome bonus federation gate (feedback handler)', () => 
 			// cited-order operator-tag lookup; both query FROM
 			// orders).
 			// The citation the order gives (reviewCitation.ts returns its kind).
-			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
+			{ match: 'FROM orders', rows: [{ kind: 'paid', owner: 'bob' }] },
 			// Trade-completion gate via chat-messages. the
 			// feedback handler now requires a verified counterparty
 			// conversation (≥2 msgs each way, ≥15min span, no reciprocity)
@@ -244,6 +244,11 @@ describe('Part 111 — welcome bonus federation gate (feedback handler)', () => 
 			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			// Feedback row insert.
 			{ match: 'INSERT INTO feedback' },
+			// v1.23.5: the pair's repeat-trade spacing, walked again (both ways).
+			{ match: 'SAVEPOINT feedback_repeat_spacing' },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'RELEASE SAVEPOINT feedback_repeat_spacing' },
 			// Push enqueue in its own savepoint (no subscription).
 			{ match: 'SAVEPOINT feedback_push_enqueue' },
 			{ match: 'FROM push_subscriptions', rowCount: 0 },

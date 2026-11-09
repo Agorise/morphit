@@ -36,6 +36,13 @@
  *    API too: an account name ending like a file (bob.old, max.svg) got
  *    nginx's own 404 for /v1/… (no chat key) and for its pages. They become
  *    today's rules, with the language-path rule ahead of them.
+ *  - v1.23.5: `location /`'s `try_files $uri $uri.html $uri/index.html @spa;`
+ *    loses `$uri/index.html` (so `/` reaches @spa too) and @spa's
+ *    `try_files /index.html =503;` puts spa-shell.html first (both as
+ *    shipped): the copy of the app shell that branding names the site in, so a
+ *    link preview of a branded site's home page or of a profile, order or chat
+ *    link names that site. index.html stays the fallback (an older build has
+ *    no copy), and /index.html itself is still served as is.
  * Then `nginx -t` (on failure every file is put back byte for byte), a
  * graceful reload, and VERIFY in what nginx really loaded (`nginx -T`, the
  * sections of these files) and in a live answer from each vhost on this box
@@ -87,6 +94,12 @@ const LANG_RULE = (ind: string): string =>
 	`location ~* "^/[a-z]{2}(?:-[a-z]{2})?/.*\\.(?:env|git|sql|bak|old|orig|swp|tmp|svg)$" {\n${ind}    error_page 418 = @spa;\n${ind}    return 418;\n${ind}}\n${ind}`;
 export const OLD_SCRIPT_SRC = "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'";
 const NEW_SCRIPT_SRC = "script-src 'self' 'wasm-unsafe-eval'";
+
+/** The app shell copy branding may name the site in (scripts/build-brand-slots.mjs). */
+export const SPA_SHELL = 'spa-shell.html';
+const OLD_ROOT_TRY_FILES = '$uri $uri.html $uri/index.html @spa';
+const SHELL_CHANGE =
+	'the app shell is served from spa-shell.html when the build has one (link previews name this site)';
 
 /** A vhost that proxies to the relay (:8080) or indexer (:8081). PURE. */
 export function isMorphitVhost(text: string): boolean {
@@ -201,6 +214,7 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 	const inserts: Array<{ at: number; lines: string[] }> = [];
 	const hostFixes: Dir[] = [];
 	const connFixes: Dir[] = [];
+	const shellFixes: Array<{ d: Dir; ins: string }> = [];
 	const ruleFixes: Array<{ at: number; del: number; ins: string }> = [];
 	const changes = new Set<string>();
 	const addTo = (b: Blk, lines: string[]): void => {
@@ -352,6 +366,31 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 			for (const k of b.kids) conn(k);
 		};
 		conn(s);
+		// v1.23.5: the app shell is served from spa-shell.html when the build has
+		// one (the copy of index.html that branding may name the site in), so a
+		// link preview of a branded site's home page names that site. Only the
+		// lines as web.conf shipped them, in a vhost with the app's @spa fallback.
+		if (s.kids.some((k) => k.name === 'location' && k.args[0] === '@spa')) {
+			for (const k of s.kids)
+				if (k.name === 'location' && k.args.length === 1 && k.args[0] === '/')
+					for (const d of k.dirs)
+						if (d.name === 'try_files' && d.args.join(' ') === OLD_ROOT_TRY_FILES) {
+							shellFixes.push({ d, ins: 'try_files $uri $uri.html @spa;' });
+							changes.add(SHELL_CHANGE);
+						}
+			for (const k of s.kids)
+				if (k.name === 'location' && k.args[0] === '@spa')
+					for (const d of k.dirs)
+						if (
+							d.name === 'try_files' &&
+							d.args.length === 2 &&
+							d.args[0] === '/index.html' &&
+							d.args[1] === '=503'
+						) {
+							shellFixes.push({ d, ins: `try_files /${SPA_SHELL} /index.html =503;` });
+							changes.add(SHELL_CHANGE);
+						}
+		}
 		// The leftover-file and SVG rules of before v1.21.12, in a vhost that
 		// serves the API and the app (an @spa fallback): an account name that
 		// ends like a file is the app's or the API's, never nginx's 404.
@@ -392,6 +431,7 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 			del: d.end - d.start,
 			ins: `limit_conn web_conn ${WEB_CONN_MAX};`
 		})),
+		...shellFixes.map(({ d, ins }) => ({ at: d.start, del: d.end - d.start, ins })),
 		...ruleFixes
 	];
 	for (const e of edits.sort((a, b) => b.at - a.at))
@@ -489,6 +529,10 @@ export function vhostLoadedOk(section: string): { ok: boolean; why: string[] } {
 			: 'a page is still sent without X-DNS-Prefetch-Control (a browser may look up the name of a link on it before a click)',
 		/^\s*limit_conn\s+web_conn\s+40\s*;/m.test(section)
 			? 'a visitor may still download only 40 files at once'
+			: '',
+		/@spa\s*\{[^}]*?^\s*try_files\s+\/index\.html\s+=503\s*;/m.test(section) ||
+		/^\s*try_files\s+\$uri\s+\$uri\.html\s+\$uri\/index\.html\s+@spa\s*;/m.test(section)
+			? 'the app shell is still served from index.html only (link previews say Morphit)'
 			: '',
 		/^\s*location\s+~\*\s+(?:\\\.\(env\|git\|sql\|bak\|old\|orig\|swp\|tmp\)\$|\^\/\(\?!_app\/\)\.\*\\\.svg\$)\s*\{/m.test(
 			section

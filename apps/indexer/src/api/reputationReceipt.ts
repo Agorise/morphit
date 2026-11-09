@@ -73,12 +73,18 @@ import { z } from 'zod';
 
 import type { Database } from '$db/pool';
 import { errorBody, isAccountName } from '$api/shared';
-import { tradeCountSql } from '$api/reputationJoin';
+import { reviewWeightSql, tradeCountSql } from '$api/reputationJoin';
 import {
 	reputationDecayWeight,
 	REPUTATION_DECAY_HALF_LIFE_DAYS
 } from '$indexer/reputation/decay';
 import { computeReputationScoreDetailed } from '$indexer/reputation/score';
+import {
+	provenTradeSql,
+	REPEAT_TRADE_PROOF_WINDOW_HOURS,
+	REPEAT_TRADE_SPACING_HOURS,
+	REPEAT_TRADE_WEIGHT
+} from '$indexer/reputation/repeatTrades';
 
 const querySchema = z.object({
 	as_of: z.string().datetime().optional()
@@ -102,6 +108,13 @@ interface ReceiptRow {
 	order_permlink: string | null;
 	age_days: number;
 	decay_weight: number;
+	/** v1.23.5: what the review weighs — 1 for the reviewer's latest review of
+	 *  this account, REPEAT_TRADE_WEIGHT for an earlier review of a proven,
+	 *  spaced repeat trade, 0 when it does not count. */
+	review_weight: number;
+	/** v1.23.5: the trade it reviews is proven (both reviewed each other
+	 *  citing that order, and its owner completed it naming the other). */
+	proven: boolean;
 	included: boolean;
 	excluded_reason: ExclusionReason;
 }
@@ -115,6 +128,9 @@ interface ReceiptResponse {
 		count_total: number; // ALL feedback rows about this subject
 		count_included: number; // rows that count toward weighted_rating
 		count_excluded: number;
+		/** v1.23.5: SUM(review_weight) over the included rows — the n of the
+		 *  score formula (a repeat trade's review counts half). */
+		count_weighted: number;
 		/** COMPLETED TRADES (both parties credited, sock-puppet-pair
 		 *  filtered). A DIFFERENT number from every count above: those are
 		 *  RATINGS. This is what the 🌱 new-trader sprout keys off since v1.5.5,
@@ -145,6 +161,8 @@ interface FeedbackQueryRow {
 	rating: number;
 	created_at: Date;
 	order_permlink: string | null;
+	proven: boolean;
+	review_weight: number | null;
 }
 
 /** Membership-test helper: does (reviewer, subject) appear in the
@@ -191,10 +209,12 @@ export function reputationReceiptRoute(db: Database): Hono {
 		// formula relies on summing across ALL rows so any partial
 		// receipt would need to surface that limitation explicitly.
 		const rowsRes = await db.query<FeedbackQueryRow>(
-			`SELECT source_trx_id, reviewer, subject, rating, created_at, order_permlink
-			   FROM feedback
-			  WHERE subject = $1
-			  ORDER BY created_at ASC, id ASC`,
+			`SELECT f.source_trx_id, f.reviewer, f.subject, f.rating, f.created_at, f.order_permlink,
+			        (CASE WHEN f.order_permlink IS NULL THEN 0 ELSE ${reviewWeightSql('f')} END) AS review_weight,
+			        (f.order_permlink IS NOT NULL AND ${provenTradeSql('f')}) AS proven
+			   FROM feedback f
+			  WHERE f.subject = $1
+			  ORDER BY f.created_at ASC, f.id ASC`,
 			[account]
 		);
 
@@ -248,22 +268,22 @@ export function reputationReceiptRoute(db: Database): Hono {
 		const asOfMs = asOf.getTime();
 		const MS_PER_DAY = 24 * 60 * 60 * 1000;
 		let countIncluded = 0;
+		let countWeighted = 0;
 		let weightSum = 0;
 		let weightedSum = 0;
 		let lastIncludedMs: number | null = null;
 		const receiptRows: ReceiptRow[] = [];
 
-		// One review per (reviewer, subject) counts: the reviewer's latest
-		// order-bound one (rows are in (created_at, id) order).
-		const latestOfReviewer = new Map<string, number>();
-		rowsRes.rows.forEach((row, i) => {
-			if (row.order_permlink !== null) latestOfReviewer.set(row.reviewer, i);
-		});
-
-		for (const [i, row] of rowsRes.rows.entries()) {
+		// v1.23.5: what each review weighs is stored with it (review_weight:
+		// 1 for the reviewer's latest order-bound review of this account,
+		// REPEAT_TRADE_WEIGHT for an earlier one of a proven, spaced repeat
+		// trade, else 0 — reputation/repeatTrades.ts pairWeights); the rows
+		// show it with whether the trade is proven.
+		for (const row of rowsRes.rows) {
 			const ageMs = Math.max(0, asOfMs - row.created_at.getTime());
 			const ageDays = ageMs / MS_PER_DAY;
 			const weight = reputationDecayWeight(ageMs);
+			const k = row.order_permlink === null ? 0 : Number(row.review_weight ?? 0);
 
 			let reason: ExclusionReason = null;
 			if (row.order_permlink === null) {
@@ -276,15 +296,16 @@ export function reputationReceiptRoute(db: Database): Hono {
 				reason = 'one_way_pile_on';
 			} else if (rcSet.has(row.reviewer)) {
 				reason = 'review_concentration';
-			} else if (latestOfReviewer.get(row.reviewer) !== i) {
+			} else if (k === 0) {
 				reason = 'superseded_by_later_review';
 			}
 
 			const included = reason === null;
 			if (included) {
 				countIncluded++;
-				weightSum += weight;
-				weightedSum += row.rating * weight;
+				countWeighted += k;
+				weightSum += weight * k;
+				weightedSum += row.rating * weight * k;
 				const ms = row.created_at.getTime();
 				if (lastIncludedMs === null || ms > lastIncludedMs) lastIncludedMs = ms;
 			}
@@ -297,6 +318,8 @@ export function reputationReceiptRoute(db: Database): Hono {
 				order_permlink: row.order_permlink,
 				age_days: Math.round(ageDays * 100) / 100,
 				decay_weight: Math.round(weight * 100000) / 100000,
+				review_weight: included ? k : 0,
+				proven: row.proven,
 				included,
 				excluded_reason: reason
 			});
@@ -308,7 +331,7 @@ export function reputationReceiptRoute(db: Database): Hono {
 		// Composite reputation score + its factor breakdown, so a reader can
 		// re-derive the "⭐ 4.06" shown on order cards from these same rows.
 		const scoreBreakdown = computeReputationScoreDetailed({
-			count: countIncluded,
+			count: countWeighted,
 			weightedAvg: weightedRating,
 			lastFeedbackAtMs: lastIncludedMs,
 			asOfMs
@@ -319,9 +342,17 @@ export function reputationReceiptRoute(db: Database): Hono {
 			as_of: asOf.toISOString(),
 			decay_half_life_days: REPUTATION_DECAY_HALF_LIFE_DAYS,
 			formula:
-				'weighted_rating = SUM(rating × decay_weight) / SUM(decay_weight) ' +
-				'where decay_weight = 0.5 ^ (age_days / decay_half_life_days). ' +
-				'reputation_score = base + bonus, where base = (n·weighted_rating + K·μ)/(n + K) ' +
+				'weighted_rating = SUM(rating × decay_weight × review_weight) / SUM(decay_weight × review_weight) ' +
+				'where decay_weight = 0.5 ^ (age_days / decay_half_life_days) and review_weight is 1 for ' +
+				"the reviewer's latest order-bound review of this account and " +
+				`${REPEAT_TRADE_WEIGHT} for an earlier one that is spaced (walking the reviewer's ` +
+				'reviews of this account in time order, one whose trade is proven — both reviewed each other citing that ' +
+				'order, both admitted by the same order, which its owner completed naming the other, both reviews within ' +
+				`${REPEAT_TRADE_PROOF_WINDOW_HOURS} ` +
+				`hours of the completion — and at least ${REPEAT_TRADE_SPACING_HOURS} hours after the last spaced one) and ` +
+				`at least ${REPEAT_TRADE_SPACING_HOURS} hours before the latest one. ` +
+				'reputation_score = base + bonus, where n = SUM(review_weight) (count_weighted), ' +
+				'base = (n·weighted_rating + K·μ)/(n + K) ' +
 				'(Bayesian shrinkage toward neutral prior μ=3.0, K=4), and ' +
 				'bonus = 0.5 · experience_frac · recency_frac · max(0,(base−μ)/(5−μ)) ' +
 				'(a track-record bonus that only rewards above-neutral ratings; ' +
@@ -330,12 +361,13 @@ export function reputationReceiptRoute(db: Database): Hono {
 				'Rows excluded when order_permlink is null OR the (reviewer, subject) pair ' +
 				'is in suspicious_reciprocity OR related_accounts OR one_way_pile_on.attacking_reviewers ' +
 				'OR review_concentration with dominant_subject = subject, ' +
-				'and every review but the reviewer\'s latest order-bound one of this subject. ' +
+				'and every review whose review_weight is 0. ' +
 				'See apps/indexer/src/indexer/reputation/{decay,score}.ts and ADR-0038.',
 			summary: {
 				count_total: rowsRes.rows.length,
 				count_included: countIncluded,
 				count_excluded: rowsRes.rows.length - countIncluded,
+				count_weighted: Math.round(countWeighted * 100) / 100,
 				trade_count: tcRes.rows[0]?.c ?? 0,
 				weight_sum: Math.round(weightSum * 100000) / 100000,
 				weighted_rating: weightedRating,
@@ -352,7 +384,12 @@ export function reputationReceiptRoute(db: Database): Hono {
 		// caches can validate without re-downloading.  Cheap to
 		// compute; ~32 chars hex.
 		const etagInput =
-			account + '|' + asOf.toISOString() + '|' + receiptRows.map((r) => r.source_trx_id).join(',');
+			account +
+			'|' +
+			asOf.toISOString() +
+			'|' +
+			// v1.23.5: a review's weight changes when its trade is proven later.
+			receiptRows.map((r) => `${r.source_trx_id}:${r.review_weight}`).join(',');
 		const etag = `"${simpleHash(etagInput)}"`;
 		c.header('ETag', etag);
 		c.header('Cache-Control', 'public, max-age=60');

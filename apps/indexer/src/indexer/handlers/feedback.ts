@@ -43,7 +43,8 @@ import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
 import { inSavepoint } from '$indexer/savepoint';
 import { raiseReviewSignals } from '$indexer/signals';
 import { hasVerifiedChat as verifiedChatGate } from '$indexer/chatGates';
-import { reviewCitesFeePaidOrder, type ReviewCitation } from '$indexer/reviewCitation';
+import { reviewCitationOf, type ReviewCitation } from '$indexer/reviewCitation';
+import { rewalkPairsOfTrade } from '$indexer/reputation/repeatTrades';
 import { consensusV2Active } from '$indexer/consensusActivation';
 
 const log = logger('feedback');
@@ -118,6 +119,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	/** Which kind of order the review cites (reviewCitation.ts); null with no
 	 *  order cited. */
 	let citation: ReviewCitation | null = null;
+	/** v1.23.5: who owns the cited order (recorded on the review). */
+	let orderAccount: string | null = null;
 	if (ctx.payload.order_permlink !== undefined && ctx.payload.order_permlink !== null) {
 		if (typeof ctx.payload.order_permlink !== 'string') {
 			return { ok: false, reason: 'order_permlink_not_string' };
@@ -172,7 +175,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// From the consensus activation time the cited order must also be one
 		// this pair traded on, and a first-buy waiver order may be cited when
 		// its trade is proven on chain (see reviewCitation.ts).
-		const cited = await reviewCitesFeePaidOrder(client, {
+		const cited = await reviewCitationOf(client, {
 			permlink: ctx.payload.order_permlink,
 			subject,
 			reviewer: ctx.signer,
@@ -183,7 +186,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			return { ok: false, reason: 'order_permlink_not_found_or_unverified' };
 		}
 		orderPermlink = ctx.payload.order_permlink;
-		citation = cited;
+		citation = cited.kind;
+		orderAccount = cited.owner;
 	}
 
 	// ─── ADR-0014 verified-chat badge ────────────────────────────
@@ -258,8 +262,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		await client.query(
 			`INSERT INTO feedback (
 				reviewer, subject, rating, comment, order_permlink,
-				created_at, source_trx_id, has_verified_chat
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				created_at, source_trx_id, has_verified_chat,
+				order_account
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			[
 				ctx.signer,
 				subject,
@@ -268,7 +273,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				orderPermlink,
 				ctx.blockTime,
 				ctx.trxId,
-				hasVerifiedChat
+				hasVerifiedChat,
+				orderAccount
 			]
 		);
 	} catch (err) {
@@ -280,6 +286,20 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			return { ok: false, reason: 'duplicate_feedback' };
 		}
 		throw err;
+	}
+
+	// ─── Repeat trades (reputation/repeatTrades.ts) ──────────────
+	// This review may prove the trade it cites (both reviewed each other, and
+	// it was completed naming the other): walk the pair's spacing again, both
+	// directions. Display only (the ring checks work proof out from the rows
+	// themselves), in its own savepoint like the push and the signals below; a
+	// pair left unwalked is walked at the next start (healRepeatSpacing).
+	if (orderPermlink !== null) {
+		await inSavepoint(client, 'feedback_repeat_spacing', () =>
+			rewalkPairsOfTrade(client, ctx.signer, subject)
+		).catch((err: unknown) => {
+			log.warn('repeat_spacing_failed', { err: String((err as Error)?.message ?? err) });
+		});
 	}
 
 	// ─── Web Push enqueue (localized) ───────

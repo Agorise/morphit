@@ -19,7 +19,7 @@ import type { OfflineNotifyStore } from '../src/notify/store.ts';
 import { keepOpening, openOfflineNotify } from '../src/notify/opening.ts';
 import { NotifySigVerifier, notifyCanonical, notifyPayload } from '../src/notify/sig.ts';
 import { Presence } from '../src/notify/worker.ts';
-import { DB_TESTS, notifyDb, schemaFrom, schemaSection } from './notifyDb.ts';
+import { DB_TESTS, notifyDb, schemaSection } from './notifyDb.ts';
 import { fakeHomeserver } from './notifyFakes.ts';
 
 const AUDIENCE = 'site-relay';
@@ -204,7 +204,7 @@ describe.skipIf(!DB_TESTS)('offline notices: the store opens once the migration 
 		expect(logged.filter((l) => l.event === 'offline_notify_unavailable')).toHaveLength(1);
 
 		// The indexer's v71 migration lands.
-		await d.admin.query(schemaFrom(71));
+		await d.admin.query(schemaSection(71));
 		await vi.waitFor(() => expect(opened).toBe(1), { timeout: 3000 });
 		expect(logged.some((l) => l.event === 'offline_notify_on')).toBe(true);
 		expect(await stored()).toBe(true);

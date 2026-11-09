@@ -214,6 +214,33 @@ export interface BrandingSettings {
 	 *  (derived) at apply time; an unusable one keeps the Morphit colours with
 	 *  a warning, like an unusable name. */
 	readonly theme?: ThemeInput | null;
+	/** The header and homepage logo's size in percent (MORPHIT_INSTANCE_LOGO_SIZE,
+	 *  LOGO_SIZE_MIN–LOGO_SIZE_MAX), or null/absent for the standard 100. */
+	readonly logoSize?: number | null;
+	/** The raw value when it was set but is not a usable size. */
+	readonly invalidLogoSize?: string | null;
+}
+
+/** MORPHIT_INSTANCE_LOGO_SIZE bounds, in percent. */
+export const LOGO_SIZE_MIN = 50;
+export const LOGO_SIZE_MAX = 200;
+
+/** A logo size as an operator writes it ("120" or "120%"): the whole percent,
+ *  null for unset or the standard 100, or 'invalid'. PURE. */
+export function parseLogoSize(raw: string | null | undefined): number | null | 'invalid' {
+	if (raw === null || raw === undefined) return null;
+	const v = raw.trim();
+	if (v === '') return null;
+	const m = /^(\d{1,3})\s*%?$/.exec(v);
+	if (m === null) return 'invalid';
+	const n = Number(m[1]);
+	if (n < LOGO_SIZE_MIN || n > LOGO_SIZE_MAX) return 'invalid';
+	return n === 100 ? null : n;
+}
+
+/** The /brand/theme.css rule that sets the logo size. PURE. */
+export function logoSizeCss(percent: number): string {
+	return `html:root{--brand-logo-scale:${percent / 100}}\n`;
 }
 
 /** /etc/morphit/branding, relocatable like the rest of /etc/morphit. */
@@ -316,12 +343,16 @@ export function readBrandingSettings(
 		background: readConfigValue(installDir, INSTANCE_ENV.THEME_BACKGROUND, env),
 		button: readConfigValue(installDir, INSTANCE_ENV.THEME_BUTTON, env)
 	};
+	const logoRaw = readConfigValue(installDir, INSTANCE_ENV.LOGO_SIZE, env);
+	const logo = parseLogoSize(logoRaw);
 	return {
 		brandName: name.name,
 		invalidBrandName: name.invalid ?? short.invalid,
 		shortName: short.name,
 		dir: brandingDir(env),
-		theme: themeSettingOf(themeIn)
+		theme: themeSettingOf(themeIn),
+		logoSize: logo === 'invalid' ? null : logo,
+		invalidLogoSize: logo === 'invalid' ? logoRaw : null
 	};
 }
 
@@ -1324,10 +1355,24 @@ export function planBranding(
 	// name and colours, so the pages the app draws in the browser from the
 	// untouched index.html never show Morphit's look first (v1.21.8,
 	// vigilante.trading). Canonically empty, and left so when neither is set.
-	if (brandName !== null || palette !== null)
+	// v1.23.5: plus the logo size (MORPHIT_INSTANCE_LOGO_SIZE), which the header
+	// and homepage logo read as --brand-logo-scale (1 when absent).
+	const logoSize = settings.logoSize ?? null;
+	if (brandName !== null || palette !== null || logoSize !== null)
 		put(
 			BRAND_TARGETS.themeCss,
-			Buffer.from(brandThemeCss(brandName ?? DEFAULT_BRAND_NAME, palette))
+			Buffer.from(
+				(brandName !== null || palette !== null
+					? brandThemeCss(brandName ?? DEFAULT_BRAND_NAME, palette)
+					: '') + (logoSize !== null ? logoSizeCss(logoSize) : '')
+			)
+		);
+	if (logoSize !== null)
+		notes.push(`logo size: ${logoSize}% of the standard (the header and homepage logo)`);
+	if ((settings.invalidLogoSize ?? null) !== null)
+		warnings.push(
+			`The logo size ${JSON.stringify(settings.invalidLogoSize)} is not usable: it takes a whole percent from ${LOGO_SIZE_MIN} to ${LOGO_SIZE_MAX}. ` +
+				'Keeping the standard size. Fix it and re-run: sudo morphit-ops branding apply --logo-size 120'
 		);
 	if (brandName !== null)
 		notes.push(`brand name: "${brandName}" (every place the UI names the site)`);

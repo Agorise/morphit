@@ -29,3 +29,15 @@ export function consensusV2Active(blockTime: Date): boolean {
 	const t = blockTime.getTime();
 	return Number.isFinite(t) && t >= ACTIVATION_MS;
 }
+
+/**
+ * v1.23.5: when the anti-ring check of the review and trade-credit gates
+ * (signalVerdicts.reciprocityEverHeld) starts ignoring PROVEN repeat trades
+ * (reputation/repeatTrades.ts). It ACCEPTS reviews and partner names the old
+ * rule refused, so it too applies only to ops in blocks stamped at or after
+ * this time — a trade counts as proven there only when both its reviews are
+ * stamped from then on (provenTradeSql's `since`) — and every indexer must
+ * run v1.23.5 or later before the chain reaches it (the release notes
+ * announce it). Same rules as above: compare block timestamps only.
+ */
+export const CONSENSUS_V3_ACTIVATION_TIME = '2026-11-22T00:00:00Z';

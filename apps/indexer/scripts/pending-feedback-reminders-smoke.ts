@@ -152,6 +152,46 @@ scenario('suppressed feedback does not trigger reminder', () => {
 	if (r.length !== 0) throw new Error(`got ${r.length}`);
 });
 
+// v1.23.5: an earlier review of a repeat trade is `suppressed` until it is
+// proven, and reviewing it back is what proves it: remind. A flagged pair: don't.
+scenario('suppressed but not pair-flagged (an earlier repeat trade) → reminder', () => {
+	const r = computePendingFeedbackReminders({
+		myAccount: 'alice',
+		feedbackReceived: [
+			makeFeedback({
+				reviewer: 'bob',
+				subject: 'alice',
+				order_permlink: 'order-abc',
+				created_at: '2026-04-26T00:00:00Z',
+				suppressed: true,
+				pair_flagged: false
+			})
+		],
+		feedbackGiven: [],
+		nowMs: NOW
+	});
+	if (r.length !== 1) throw new Error(`got ${r.length}`);
+});
+
+scenario('pair-flagged feedback does not trigger reminder', () => {
+	const r = computePendingFeedbackReminders({
+		myAccount: 'alice',
+		feedbackReceived: [
+			makeFeedback({
+				reviewer: 'bob',
+				subject: 'alice',
+				order_permlink: 'order-abc',
+				created_at: '2026-04-26T00:00:00Z',
+				suppressed: true,
+				pair_flagged: true
+			})
+		],
+		feedbackGiven: [],
+		nowMs: NOW
+	});
+	if (r.length !== 0) throw new Error(`got ${r.length}`);
+});
+
 scenario('multiple pending reminders → sorted newest first', () => {
 	const r = computePendingFeedbackReminders({
 		myAccount: 'alice',

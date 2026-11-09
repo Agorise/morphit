@@ -191,6 +191,40 @@ describe('the bare-metal nginx site heals like a fresh copy (planner)', () => {
 		expect(planVhost(p.text).text).toBe(p.text);
 	});
 
+	it('web.conf as shipped before v1.23.5: the app shell comes from spa-shell.html (link previews name the site)', () => {
+		const old = readFileSync(join(import.meta.dirname, 'fixtures', 'web.conf.v1.21.11'), 'utf8');
+		const why = 'the app shell is still served from index.html only (link previews say Morphit)';
+		expect(vhostLoadedOk(old).why).toContain(why);
+		const p = planVhost(old);
+		expect(p.changes).toContain(
+			'the app shell is served from spa-shell.html when the build has one (link previews name this site)'
+		);
+		expect(p.text).toMatch(/^ {8}try_files \$uri \$uri\.html @spa;$/m);
+		expect(p.text).toMatch(/^ {8}try_files \/spa-shell\.html \/index\.html =503;$/m);
+		expect(p.text).not.toContain('$uri/index.html');
+		expect(p.text).not.toMatch(/try_files \/index\.html =503;/);
+		expect(vhostLoadedOk(p.text).why).not.toContain(why);
+		// The same two lines as today's shipped file.
+		for (const line of shipped('web.conf')
+			.split('\n')
+			.filter((l) => /^\s*try_files .*(@spa|=503);$/.test(l)))
+			expect(p.text).toContain(line);
+		expect(planVhost(p.text).text).toBe(p.text);
+		// An operator's own lines are kept; a vhost without the app's @spa is left alone.
+		const own = old
+			.replace(
+				'try_files $uri $uri.html $uri/index.html @spa;',
+				'try_files $uri $uri/index.html @spa;'
+			)
+			.replace('try_files /index.html =503;', 'try_files /index.html =404;');
+		const q = planVhost(own).text;
+		expect(q).toContain('try_files $uri $uri/index.html @spa;');
+		expect(q).toContain('try_files /index.html =404;');
+		const noSpa =
+			'server {\n    listen 80;\n    server_tokens off;\n    error_log stderr crit;\n    root /srv/x;\n    location / {\n        try_files $uri $uri.html $uri/index.html @app;\n    }\n    location @app {\n        try_files /index.html =503;\n    }\n}\n';
+		expect(planVhost(noSpa).text).toBe(noSpa);
+	});
+
 	it('the old leftover rule in a vhost that serves no app page (indexer.conf shape) is left alone', () => {
 		const api = `server {\n    listen 443 ssl;\n    server_tokens off;\n    error_log stderr crit;\n    location ~* \\.(env|git|sql|bak|old|orig|swp|tmp)$ {\n        return 404;\n    }\n    location /v1/ {\n        proxy_pass http://127.0.0.1:8081;\n        proxy_set_header X-Morphit-Local-Health "";\n        proxy_set_header X-I2P-DestB64 "";\n        proxy_set_header X-I2P-DestB32 "";\n        proxy_set_header X-I2P-DestHash "";\n    }\n}\n`;
 		expect(planVhost(api).text).toBe(api);

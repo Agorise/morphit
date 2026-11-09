@@ -23,9 +23,10 @@ import { z } from 'zod';
 import type { Database } from '$db/pool';
 import { decodeCursor, encodeCursor, errorBody, isAccountName } from '$api/shared';
 import {
+	countedFeedbackFrom,
 	FEEDBACK_EXCLUSIONS_SQL,
 	feedbackPairCountsSql,
-	latestReviewOfPairSql,
+	reviewWeightSql,
 	weightedRatingSql
 } from '$api/reputationJoin';
 
@@ -87,16 +88,16 @@ interface ResponseRow {
 	created_at: Date;
 }
 
-/** The ids, among `ids`, of order-bound reviews their reviewer has superseded
- *  with a later review of the same subject — they do not count (only the
- *  latest per pair does, latestReviewOfPairSql). */
+/** The ids, among `ids`, of order-bound reviews that weigh nothing: their
+ *  reviewer has a later review of the same subject, and they are not a proven,
+ *  spaced repeat trade (v1.23.5, reviewWeightSql). They do not count. */
 async function supersededIds(db: Database, ids: readonly string[]): Promise<Set<string>> {
 	if (ids.length === 0) return new Set();
 	const r = await db.query<{ id: string }>(
 		`SELECT f.id::text AS id FROM feedback f
 		  WHERE f.id = ANY($1::bigint[])
 		    AND f.order_permlink IS NOT NULL
-		    AND NOT ${latestReviewOfPairSql('f')}`,
+		    AND ${reviewWeightSql('f')} = 0`,
 		[ids]
 	);
 	return new Set(r.rows.map((x) => x.id));
@@ -135,7 +136,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		// aggregate the user reads as "trader's reputation."
 		const summary = await db.query<SummaryRow>(
 			`WITH non_suppressed AS (
-				SELECT f.rating, f.created_at,
+				SELECT f.rating, f.created_at, rw.k,
 				       -- cp471: the cited order may have been
 				       -- posted by EITHER party (intake allows account IN
 				       -- (subject, reviewer), cp420), so the SUBJECT's side is
@@ -162,13 +163,17 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				      FROM orders o
 				     WHERE o.permlink = f.order_permlink
 				       AND o.account IN (f.subject, f.reviewer)
-				     ORDER BY (o.fee_status = 'verified') DESC, (o.account = f.subject) DESC
+				     ORDER BY COALESCE(o.account = f.order_account, FALSE) DESC,
+				              (o.fee_status = 'verified') DESC, (o.account = f.subject) DESC
 				     LIMIT 1
 				  ) o ON TRUE
+				  -- v1.23.5: the review's weight — 1 for the reviewer's latest,
+				  -- half for a proven, spaced repeat trade, 0 for any other.
+				  CROSS JOIN LATERAL (SELECT ${reviewWeightSql('f')} AS k) rw
 				 WHERE f.subject = $1
 				   AND f.order_permlink IS NOT NULL
 				   AND ${feedbackPairCountsSql('f.reviewer', 'f.subject')}
-				   AND ${latestReviewOfPairSql('f')}
+				   AND rw.k > 0
 			)
 			SELECT
 				COUNT(*)::text AS count,
@@ -176,7 +181,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				-- half-life.  See apps/indexer/src/indexer/reputation/decay.ts
 				-- for the rationale.  Empty result → NULL.
 				CASE WHEN COUNT(*) > 0
-				     THEN ${weightedRatingSql('rating', 'created_at')}::text
+				     THEN ${weightedRatingSql('rating', 'created_at', '', 'k')}::text
 				     ELSE NULL
 				END AS weighted_rating,
 				-- cp124 H5: same formula, FILTERed by side, for the
@@ -185,12 +190,12 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				-- but bad as seller deserves to be visible.
 				COUNT(*) FILTER (WHERE side = 'buy')::text AS buy_count,
 				CASE WHEN COUNT(*) FILTER (WHERE side = 'buy') > 0
-				     THEN ${weightedRatingSql('rating', 'created_at', "side = 'buy'")}::text
+				     THEN ${weightedRatingSql('rating', 'created_at', "side = 'buy'", 'k')}::text
 				     ELSE NULL
 				END AS buy_weighted_rating,
 				COUNT(*) FILTER (WHERE side = 'sell')::text AS sell_count,
 				CASE WHEN COUNT(*) FILTER (WHERE side = 'sell') > 0
-				     THEN ${weightedRatingSql('rating', 'created_at', "side = 'sell'")}::text
+				     THEN ${weightedRatingSql('rating', 'created_at', "side = 'sell'", 'k')}::text
 				     ELSE NULL
 				END AS sell_weighted_rating,
 				SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END)::text AS r1,
@@ -303,10 +308,13 @@ export function feedbackByAccountRoute(db: Database): Hono {
 			        -- the subject OR the reviewer (intake cp420). The
 			        -- "View the order" link must target the order's real
 			        -- OWNER, else it 404s to the "being posted" limbo.
-			        (SELECT o.account FROM orders o
-			          WHERE o.permlink = feedback.order_permlink
-			            AND o.account IN (feedback.subject, feedback.reviewer)
-			          LIMIT 1) AS order_account
+			        -- v1.23.5: the owner recorded on the review when it was
+			        -- applied; for an older row, looked up as before.
+			        COALESCE(feedback.order_account,
+			          (SELECT o.account FROM orders o
+			            WHERE o.permlink = feedback.order_permlink
+			              AND o.account IN (feedback.subject, feedback.reviewer)
+			            LIMIT 1)) AS order_account
 			 FROM feedback
 			 WHERE subject = $1${cursorClause}
 			 -- The table's columns: a bare id here is the SELECT's id::text,
@@ -332,8 +340,10 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		// A row is `suppressed` when it does not count toward the
 		// summary above: its (reviewer, subject) pair is flagged by one
 		// of the four signals (the SAME feedbackPairCountsSql predicate
-		// the summary uses), it cites no order, or the reviewer has a
-		// later review of this subject (latestReviewOfPairSql). The list
+		// the summary uses), it cites no order, or it weighs nothing (a
+		// later review of this subject, and not a counted repeat trade:
+		// reviewWeightSql, with latestReviewOfPairSql for a review not
+		// worked out yet). The list
 		// must agree with the score it sits under (Finding R15).
 		const reviewers = Array.from(new Set(rows.map((r) => r.reviewer)));
 		const flaggedReviewers = new Set<string>();
@@ -367,10 +377,9 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		if (reviewers.length > 0) {
 			const repResult = await db.query<{ subject: string; c: number; r: string | null }>(
 				`SELECT fb.subject, COUNT(*)::int AS c,
-				        ${weightedRatingSql('fb.rating', 'fb.created_at')}::text AS r
-				   FROM feedback fb
+				        ${weightedRatingSql('fb.rating', 'fb.created_at', '', 'fb.k')}::text AS r
+				   FROM ${countedFeedbackFrom('f0.subject = ANY($1::text[])')}
 ${FEEDBACK_EXCLUSIONS_SQL}
-				    AND fb.subject = ANY($1::text[])
 				  GROUP BY fb.subject`,
 				[reviewers]
 			);
@@ -432,10 +441,15 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 				// the score, with nothing on screen saying so. `order_permlink`
 				// is nullable and the intake treats it as optional, so this is
 				// reachable, not theoretical.
-				// Also true for a review its reviewer has since superseded with a
-				// later one of the same subject (one review per pair counts).
+				// Also true for a review that weighs nothing: its reviewer has a
+				// later one of the same subject and it is not a proven, spaced
+				// repeat trade (v1.23.5) — or not YET: reviewing back can prove it.
 				suppressed:
 					flaggedReviewers.has(r.reviewer) || r.order_permlink === null || superseded.has(r.id),
+				/** v1.23.5: the (reviewer, subject) pair is flagged by the
+				 *  anti-ring signals — the one reason reviewing back cannot make
+				 *  this review count (the review-back reminder skips only these). */
+				pair_flagged: flaggedReviewers.has(r.reviewer),
 				/** v1.8.0: the REVIEWER's current reputation —
 				 *  exclusion-filtered + decay-weighted, identical to the
 				 *  headline figure on their own profile. Lets the received
@@ -516,10 +530,13 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 			        -- cp471: same owner rule as the received
 			        -- list — the cited order may belong to EITHER party, so
 			        -- the "View the order" link needs the real owner.
-			        (SELECT o.account FROM orders o
-			          WHERE o.permlink = feedback.order_permlink
-			            AND o.account IN (feedback.subject, feedback.reviewer)
-			          LIMIT 1) AS order_account
+			        -- v1.23.5: the owner recorded on the review when it was
+			        -- applied; for an older row, looked up as before.
+			        COALESCE(feedback.order_account,
+			          (SELECT o.account FROM orders o
+			            WHERE o.permlink = feedback.order_permlink
+			              AND o.account IN (feedback.subject, feedback.reviewer)
+			            LIMIT 1)) AS order_account
 			 FROM feedback
 			 WHERE reviewer = $1${cursorClause}
 			 ORDER BY feedback.created_at DESC, feedback.id ASC
@@ -589,10 +606,9 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 		if (subjects.length > 0) {
 			const repResult = await db.query<{ subject: string; c: number; r: string | null }>(
 				`SELECT fb.subject, COUNT(*)::int AS c,
-				        ${weightedRatingSql('fb.rating', 'fb.created_at')}::text AS r
-				   FROM feedback fb
+				        ${weightedRatingSql('fb.rating', 'fb.created_at', '', 'fb.k')}::text AS r
+				   FROM ${countedFeedbackFrom('f0.subject = ANY($1::text[])')}
 ${FEEDBACK_EXCLUSIONS_SQL}
-				    AND fb.subject = ANY($1::text[])
 				  GROUP BY fb.subject`,
 				[subjects]
 			);
@@ -622,6 +638,8 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 				// tied to no order, does not count toward the subject's score.
 				suppressed:
 					flaggedSubjects.has(r.subject) || r.order_permlink === null || superseded.has(r.id),
+				/** v1.23.5: see the received list. */
+				pair_flagged: flaggedSubjects.has(r.subject),
 				/** (E): the reviewed account's CURRENT reputation
 				 *  (exclusion-filtered + decay-weighted, same as their own
 				 *  profile headline). null when they have no counting

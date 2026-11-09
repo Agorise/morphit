@@ -51,7 +51,9 @@ describe('1. the check asks for the server’s copy of the files named the same 
 		expect(Object.fromEntries(asked.map((a) => [a.path, a.cache]))).toEqual({
 			'/index.html': 'no-cache',
 			'/service-worker.js': 'no-cache',
-			'/_app/immutable/entry/start.AbC123.js': undefined
+			'/_app/immutable/entry/start.AbC123.js': undefined,
+			// v1.23.5: the brandable copy of index.html (404 here: none).
+			'/spa-shell.html': 'no-cache'
 		});
 	});
 });
@@ -161,7 +163,8 @@ describe('3. nothing is judged while another build’s service worker answers th
 				controlling
 			});
 			expect(r.kind).toBe('ok');
-			expect(asked.length).toBe(3);
+			// The three signed files and the shell copy (v1.23.5).
+			expect(asked.length).toBe(4);
 		}
 	});
 });

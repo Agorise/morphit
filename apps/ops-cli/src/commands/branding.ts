@@ -34,6 +34,8 @@
  *   --icon FILE          favicon + app icons symbol  → …/icon.svg
  *   --name "TEXT"        the site's name             → MORPHIT_INSTANCE_BRAND_NAME
  *   --short-name "TEXT"  home-screen label           → MORPHIT_INSTANCE_BRAND_SHORT_NAME
+ *   --logo-size PERCENT  header + homepage logo size  → MORPHIT_INSTANCE_LOGO_SIZE
+ *                        (50–200; 100 is the standard; the footer keeps its size)
  * Colour theme (every other colour is derived from these; docs/BRANDING.md):
  *   --theme NAME         preset: morphit (default) | champagne-gold
  *                                                    → MORPHIT_INSTANCE_THEME
@@ -74,6 +76,9 @@ import { resolveCallerPath } from '../lib/callerPath.ts';
 import {
 	applyBranding,
 	brandingPaths,
+	LOGO_SIZE_MAX,
+	LOGO_SIZE_MIN,
+	parseLogoSize,
 	BRANDING_FILE_FLAGS,
 	MAX_SVG_BYTES,
 	brandConfigFiles,
@@ -132,6 +137,14 @@ function describeSettings(s: BrandingSettings): void {
 		info(
 			`    accent ${t['brand-primary']}, button ${t['brand-btn-face']} with ${t['brand-btn-text'] === '#ffffff' ? 'white' : 'dark'} text, ` +
 				`page ${t['surface-950']}, cards ${t['surface-900']}, text ${t['surface-100']}`
+		);
+	}
+	info(
+		`  Logo size:      ${(s.logoSize ?? null) === null ? '100% (standard)' : `${s.logoSize}% (the header and homepage logo)`}`
+	);
+	if ((s.invalidLogoSize ?? null) !== null) {
+		warn(
+			`  ${INSTANCE_ENV.LOGO_SIZE}="${sanitizeForTerm(s.invalidLogoSize!)}" is not usable — a whole percent from ${LOGO_SIZE_MIN} to ${LOGO_SIZE_MAX}`
 		);
 	}
 	info(`  Branding files: ${s.dir}`);
@@ -652,6 +665,16 @@ function installInputs(ctx: BrandingCtx, installDir: string, brandDir: string): 
 		// inflected forms to the Latin word).
 		updates.set(key, clean === DEFAULT_BRAND_NAME ? null : clean);
 	}
+	// v1.23.5: the header and homepage logo's size, in percent.
+	const size = ctx.flags['logo-size'];
+	if (size !== undefined) {
+		if (size === 'true')
+			return `--logo-size needs a percent: --logo-size 120  (--logo-size= goes back to 100)`;
+		const n = parseLogoSize(size);
+		if (n === 'invalid')
+			return `--logo-size "${sanitizeForTerm(size)}" can't be used: give a whole percent from ${LOGO_SIZE_MIN} to ${LOGO_SIZE_MAX}, e.g. --logo-size 120 (100 is the standard size)`;
+		updates.set(INSTANCE_ENV.LOGO_SIZE, n === null ? null : String(n));
+	}
 	// Colour theme: validate the RESULTING theme (current settings + these
 	// flags) before anything is written.
 	if (Object.keys(THEME_FLAGS).some((f) => ctx.flags[f] !== undefined)) {
@@ -844,7 +867,8 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 	const inputFlags = [
 		...Object.keys(BRANDING_FILE_FLAGS),
 		...Object.keys(CONFIG_FLAGS),
-		...Object.keys(THEME_FLAGS)
+		...Object.keys(THEME_FLAGS),
+		'logo-size'
 	].filter((f) => ctx.flags[f] !== undefined);
 	if (inputFlags.length > 0) {
 		if (sub !== 'apply' || dryRun) {

@@ -47,11 +47,17 @@ export type SnapshotOpCoverage = 'full' | 'orderbook-only';
 const OP_COVERAGE_VALUES: ReadonlySet<string> = new Set(['full', 'orderbook-only']);
 
 /** What an exported snapshot records about the SOURCE DB it was taken from. */
-import { CONSENSUS_V2_ACTIVATION_TIME } from '../indexer/consensusActivation';
+import {
+	CONSENSUS_V2_ACTIVATION_TIME,
+	CONSENSUS_V3_ACTIVATION_TIME
+} from '../indexer/consensusActivation';
 
 /** v1.21.17 — the schema (migration v70) that records the BLURT transfers
  *  proving a first-buy trade, from the consensus activation time on. */
 export const WAIVER_EVIDENCE_SCHEMA_VERSION = 70;
+/** v1.23.5: the first schema whose build judges reviews with the repeat-trade
+ *  rule from CONSENSUS_V3_ACTIVATION_TIME (repeat trades). */
+export const REPEAT_TRADES_SCHEMA_VERSION = 73;
 
 export interface SnapshotManifest {
 	readonly snapshotFormatVersion: number;
@@ -274,6 +280,19 @@ export function verifyManifestCompatible(
 	) {
 		reasons.push(
 			`snapshot schema v${manifest.schemaVersion} was exported on or after ${CONSENSUS_V2_ACTIVATION_TIME} by a build without the first-trade transfer evidence (v${WAIVER_EVIDENCE_SCHEMA_VERSION}); restoring it would lose that evidence for the blocks it covers — use a snapshot from v1.21.17 or later.`
+		);
+	}
+	// v1.23.5 — the same for the repeat-trade rule: a build without it (schema
+	// < 73) that ran past its activation time refused reviews and partner names
+	// every newer node accepts, so its state for those blocks is not the
+	// federation's. Exported before the activation time it judged none.
+	if (
+		manifest.schemaVersion < REPEAT_TRADES_SCHEMA_VERSION &&
+		target.codeSchemaVersion >= REPEAT_TRADES_SCHEMA_VERSION &&
+		!(Date.parse(manifest.createdAt) < Date.parse(CONSENSUS_V3_ACTIVATION_TIME))
+	) {
+		reasons.push(
+			`snapshot schema v${manifest.schemaVersion} was exported on or after ${CONSENSUS_V3_ACTIVATION_TIME} by a build without the repeat-trade rule (v${REPEAT_TRADES_SCHEMA_VERSION}); the reviews it judged from then on may differ from the federation's — use a snapshot from v1.23.5 or later.`
 		);
 	}
 	if (manifest.pgMajor > target.pgMajor) {

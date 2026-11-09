@@ -16,7 +16,11 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { CONSENSUS_V2_ACTIVATION_TIME, consensusV2Active } from '$indexer/consensusActivation';
+import {
+	CONSENSUS_V2_ACTIVATION_TIME,
+	CONSENSUS_V3_ACTIVATION_TIME,
+	consensusV2Active
+} from '$indexer/consensusActivation';
 
 const SRC = join(__dirname, '..', '..', 'src');
 
@@ -65,6 +69,13 @@ describe('consensus activation by block timestamp', () => {
 
 	it('an unreadable block time is never taken as activated', () => {
 		expect(consensusV2Active(new Date('not a time'))).toBe(false);
+	});
+
+	it('v1.23.5 (repeat trades in the ring check) is 2026-11-22T00:00:00Z, after v2', () => {
+		expect(CONSENSUS_V3_ACTIVATION_TIME).toBe('2026-11-22T00:00:00Z');
+		expect(Date.parse(CONSENSUS_V3_ACTIVATION_TIME)).toBeGreaterThan(
+			Date.parse(CONSENSUS_V2_ACTIVATION_TIME)
+		);
 	});
 
 	it('no code reads the retired height constant', () => {

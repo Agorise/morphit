@@ -240,15 +240,19 @@ try {
 	);
 
 	// ── Who decides "stalled": the certificate's age against the stall days ──
-	out = one(6 * D);
+	// An hour off a whole day of age: with LE's 90 days less a second, 6 days
+	// left put the age within a second of 84 days, so it read 83 or 84 by
+	// whether the clock ticked between writing the certificate and the monitor
+	// reading the time (a loaded machine: the second call read 84, the first 83).
+	out = one(6 * D - H);
 	const age = out[0]?.context.issued_days_ago as number;
-	out = one(6 * D, {}, { MORPHIT_CERTBOT_RENEWAL_STALL_DAYS: String(age) });
+	out = one(6 * D - H, {}, { MORPHIT_CERTBOT_RENEWAL_STALL_DAYS: String(age) });
 	check(
 		'issued exactly the stall days ago: renewal_stalled',
 		only(out, 'renewal_stalled'),
 		events(out)
 	);
-	out = one(6 * D, {}, { MORPHIT_CERTBOT_RENEWAL_STALL_DAYS: String(age + 1) });
+	out = one(6 * D - H, {}, { MORPHIT_CERTBOT_RENEWAL_STALL_DAYS: String(age + 1) });
 	check(
 		'issued a day less than that: cert_expiry_critical',
 		only(out, 'cert_expiry_critical'),

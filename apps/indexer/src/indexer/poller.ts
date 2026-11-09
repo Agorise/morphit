@@ -68,6 +68,13 @@ import type { BlurtPriceSource } from '$indexer/price/source';
 import type { FxRateSource } from '$indexer/fx/source';
 import { logger } from '$log';
 import { checkWaiverEvidence, WaiverEvidenceGapError } from '$indexer/waiverEvidenceGuard';
+import { checkRepeatTradesRule, RepeatTradesGapError } from '$indexer/repeatTradesGuard';
+import {
+	healNamingTimes,
+	healOrderAccounts,
+	rewalkAllPairs
+} from '$indexer/reputation/repeatTrades';
+import { redoReviewSignals } from '$indexer/reviewSignalsRedo';
 import { blockTimeOf } from '$indexer/blockTime';
 
 const log = logger('poller');
@@ -120,8 +127,9 @@ async function ensureStateRow(
 	}
 	// First boot — initialise.
 	await db.query(
-		`INSERT INTO indexer_state (id, last_applied_block, chain_id, waiver_evidence_through_block)
-		 VALUES ($1, $2, $3, $2)
+		`INSERT INTO indexer_state (id, last_applied_block, chain_id, waiver_evidence_through_block,
+		                            repeat_trades_through_block)
+		 VALUES ($1, $2, $3, $2, $2)
 		 ON CONFLICT (id) DO NOTHING`,
 		[INDEXER_STATE_ID, Math.max(0, config.startBlock - 1), config.chainId]
 	);
@@ -143,6 +151,11 @@ export async function markApplied(client: pg.PoolClient, blockNum: number): Prom
 			waiver_evidence_through_block = CASE
 				WHEN waiver_evidence_through_block = last_applied_block THEN $1
 				ELSE waiver_evidence_through_block
+			END,
+			-- The same for the v1.23.5 repeat-trade rule (repeatTradesGuard.ts).
+			repeat_trades_through_block = CASE
+				WHEN repeat_trades_through_block = last_applied_block THEN $1
+				ELSE repeat_trades_through_block
 			END
 		 WHERE id = $2`,
 		[blockNum, INDEXER_STATE_ID]
@@ -775,6 +788,50 @@ export class Poller {
 				if (this.abort.signal.aborted) return;
 				await sleep(this.config.errorBackoffMs, this.abort.signal);
 			}
+		}
+
+		// v1.23.5 — the same for the repeat-trade rule (repeatTradesGuard.ts).
+		for (;;) {
+			try {
+				const r = await checkRepeatTradesRule(this.db, (height) => this.blockTimeAt(height));
+				if (r === 'set') log.info('repeat_trades_marker_set', { last_applied_block: lastApplied });
+				break;
+			} catch (err) {
+				if (err instanceof RepeatTradesGapError) {
+					log.error('repeat_trades_gap', {}, err);
+					throw err;
+				}
+				log.warn('repeat_trades_check_retry', {}, err instanceof Error ? err : undefined);
+				if (this.abort.signal.aborted) return;
+				await sleep(this.config.errorBackoffMs, this.abort.signal);
+			}
+		}
+		// v1.23.5 — repeat trades (reputation/repeatTrades.ts), before any block
+		// (the upgrade replay below included) is applied: when each partner was
+		// named, for the orders completed without that recorded (before v1.23.5,
+		// or by an older version after a rollback); the admitting order of every
+		// review that has none recorded; the weight of every review; and, when
+		// an older version may have raised them, Signals B and D again where a
+		// proven trade may make a flag wrong (reviewSignalsRedo.ts). No live
+		// verdict depends on these (a naming time not recorded counts as the
+		// completion's; the review gate counts only reviews from the activation
+		// time on), so a failure is logged and each is tried again at the next
+		// start.
+		try {
+			const named = await healNamingTimes(this.db);
+			if (named > 0) log.info('order_naming_times_set', { orders: named });
+			const set = await healOrderAccounts(this.db);
+			if (set > 0) log.info('review_order_accounts_set', { reviews: set });
+			const changed = await rewalkAllPairs(this.db);
+			if (changed > 0) log.info('review_weights_worked_out', { reviews: changed });
+		} catch (err) {
+			log.warn('review_weights_failed', {}, err instanceof Error ? err : undefined);
+		}
+		try {
+			const redone = await redoReviewSignals(this.db);
+			if (redone !== null) log.info('review_signals_redone', redone);
+		} catch (err) {
+			log.warn('review_signals_redo_failed', {}, err instanceof Error ? err : undefined);
 		}
 
 		// Capture bootIndexedBlock ONCE here (start): later status updates spread

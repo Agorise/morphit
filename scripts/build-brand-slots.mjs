@@ -200,6 +200,67 @@ export function processPage(input, { stamp }) {
 }
 
 /**
+ * The app shell as a brandable page (v1.23.5). nginx answers `/` and every
+ * route that is not prerendered (a profile, an order, a chat) with the app
+ * shell. index.html is that shell, but it is on the on-chain tamper manifest,
+ * so no instance may rewrite it, and a link preview of a branded site (an SMS,
+ * a chat app) read "Morphit" (vigilante.trading, 2026-11-08). This copy is
+ * byte for byte the shell plus a link-preview picture, and it is not on the
+ * manifest: it is stamped and slotted like any prerendered page, so
+ * `morphit-ops branding apply` names the site in it and origin-slots names the
+ * site's address. nginx serves it in index.html's place and falls back to
+ * index.html when it is missing (an older build). The browser's integrity
+ * check still hashes /index.html itself.
+ */
+export const SPA_SHELL_FILE = 'spa-shell.html';
+const SHELL_PREVIEW_ANCHOR = /<meta name="twitter:description" content="[^"]*" \/>/;
+const ORIGIN_MARK = '⁣';
+const MARKED_ORIGIN_RE = /⁣(https?:\/\/[^⁣"<>\s]+)⁣/;
+
+/** The shell copy's text: index.html's, with the link-preview picture after
+ *  the static preview tags. `origin` is the marked build origin, or null (no
+ *  picture: its address must be absolute). Pure — exported for the smoke. */
+export function spaShellText(shell, origin) {
+	if (origin === null) return shell;
+	const img = `${ORIGIN_MARK}${origin}${ORIGIN_MARK}/og-image.png`;
+	const alt = '&#8288;Morphit&#8288; — privacy-first P2P marketplace for Monero, Bitcoin and more';
+	const tags =
+		`\n\t\t<meta property="og:image" content="${img}" />` +
+		'\n\t\t<meta property="og:image:type" content="image/png" />' +
+		'\n\t\t<meta property="og:image:width" content="1200" />' +
+		'\n\t\t<meta property="og:image:height" content="630" />' +
+		`\n\t\t<meta property="og:image:alt" content="${alt}" />` +
+		`\n\t\t<meta name="twitter:image" content="${img}" />` +
+		`\n\t\t<meta name="twitter:image:alt" content="${alt}" />`;
+	if (SHELL_PREVIEW_ANCHOR.test(shell)) return shell.replace(SHELL_PREVIEW_ANCHOR, (m) => m + tags);
+	// (Not the shipped app.html: before </head>, or no picture.)
+	const head = shell.search(/<\/head\s*>/i);
+	return head < 0 ? shell : `${shell.slice(0, head)}${tags.trimStart()}\n${shell.slice(head)}`;
+}
+
+/** Write build/spa-shell.html (and its .gz/.br) from a fresh build's
+ *  index.html, before the slots are recorded. The build origin is the one the
+ *  prerendered pages carry (marked); none found: no picture. */
+function writeSpaShell(buildDir, htmlFiles) {
+	const shellPath = join(buildDir, 'index.html');
+	const outPath = join(buildDir, SPA_SHELL_FILE);
+	if (!existsSync(shellPath) || existsSync(outPath)) return;
+	let origin = null;
+	for (const f of htmlFiles) {
+		const m = MARKED_ORIGIN_RE.exec(readFileSync(f, 'utf8'));
+		if (m) {
+			origin = m[1];
+			break;
+		}
+	}
+	const text = spaShellText(readFileSync(shellPath, 'utf8'), origin);
+	writeFileSync(outPath, text);
+	writeFileSync(`${outPath}.gz`, '');
+	writeFileSync(`${outPath}.br`, '');
+	recompress(outPath);
+}
+
+/**
  * Post-process an adapter-static build in place (see the header). Throws on a
  * leftover / unpaired marker. Called by the adapter wrapper in
  * apps/web/svelte.config.js (so EVERY `vite build` — npm run build, a bare
@@ -217,6 +278,16 @@ export function processBuild(buildDir, log = console.log) {
 	if (!anyMarked && existsSync(mapPath)) {
 		log('[brand-slots] no markers left and a slot map exists — already processed.');
 		return;
+	}
+	if (anyMarked) {
+		writeSpaShell(buildDir, htmlFiles);
+		if (
+			existsSync(join(buildDir, SPA_SHELL_FILE)) &&
+			!files.includes(join(buildDir, SPA_SHELL_FILE))
+		) {
+			files.push(join(buildDir, SPA_SHELL_FILE));
+			htmlFiles.push(join(buildDir, SPA_SHELL_FILE));
+		}
 	}
 	const map = { schema: MAP_SCHEMA, attrs: CANONICAL_HTML_ATTRS, files: {}, theme_files: {} };
 	let slotCount = 0;

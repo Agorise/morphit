@@ -325,7 +325,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 ## 8. Reputation, trust, and chat that survives the platform
 
-140. **Star ratings on chain, signed, immutable.** Every feedback row is a Blurt `morphit_feedback_v1` op signed by the reviewer, and needs a real two-way chat with the trader first. Edit-proof and delete-proof; only a reviewer's latest review of a trader counts.
+140. **Star ratings on chain, signed, immutable.** Every feedback row is a Blurt `morphit_feedback_v1` op signed by the reviewer, and needs a real two-way chat with the trader first. Edit-proof and delete-proof; a reviewer's latest review of a trader counts in full, and an earlier one only for a proven repeat trade, at half weight.
 
 141. **Reputation can't be faked.** Your displayed star average is computed only from on-chain feedback rows whose `reviewer` signed the op AND whose feedback is tethered to a real on-chain order (not free-form). Self-signing isn't possible — the chain rejects ops without a valid signature from the reviewer's posting key — and the indexer further excludes (reviewer, subject) pairs flagged in `suspicious_reciprocity` (sock-puppet pattern) or `related_accounts` (linked-account heuristics). What's left, averaged and rounded to 2 decimals, is what the world sees.
 

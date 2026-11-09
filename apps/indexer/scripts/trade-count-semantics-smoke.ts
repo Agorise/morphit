@@ -200,8 +200,11 @@ check(
 check(
 	'the rating average still counts RATINGS',
 	// The rating aggregate is generated (weightedRatingSql); read the SQL it emits.
-	/SUM\(rating \*/.test(feedbackAggregateJoin('o')) &&
-		/FROM feedback fb[\s\S]*GROUP BY subject/.test(feedbackAggregateJoin('o')),
+	/SUM\(fb\.rating \*/.test(feedbackAggregateJoin('o')) &&
+		// v1.23.5: reviews read through countedFeedbackFrom (aliased fb).
+		/FROM \(SELECT[\s\S]*FROM feedback f0[\s\S]*\) fb\s[\s\S]*GROUP BY fb\.subject/.test(
+			feedbackAggregateJoin('o')
+		),
 	'"★5.00 (34)" must mean 34 ratings; sourcing that count from trades would make the chip lie'
 );
 check(

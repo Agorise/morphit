@@ -1399,6 +1399,64 @@ CREATE INDEX IF NOT EXISTS witness_missed_samples_sampled_at
 COMMENT ON TABLE witness_missed_samples IS
     'Each producing witness''s total missed blocks every 10 minutes, kept 26 hours: the /witnesses page''s missed-in-24h flag. Local only.';
 `
+	},
+	{
+		version: 73,
+		description:
+			'feedback.order_account and review_weight, orders.counterparty_named_at, indexer_state.repeat_trades_through_block and review_signals_redo_due (v1.23.5): repeat trades between the same two people count toward ratings at half weight when proven and spaced 72 hours; counterparty_named_at, order_account and review_weight worked out at start. Additive.',
+		sql: `
+-- ─── v73: repeat trades between the same two people count toward ratings ───
+-- (v1.23.5, indexer/reputation/repeatTrades.ts.) Until now only a reviewer's
+-- latest review of a trader counted. An earlier review now counts at half
+-- weight when the trade it reviews is PROVEN — both reviewed each other citing
+-- that order, on the strength of the same order, which its owner completed
+-- naming the other, both reviews within 7 days of the completion (worked out
+-- from feedback and orders when needed, never stored) — and it is at least 72
+-- hours from the reviewer's other counted reviews of that trader.
+--
+-- order_account: the owner of the order that admitted the review (the
+-- citation rule's first choice, reviewCitation.ts), recorded when the review
+-- is applied. A proven trade's two reviews name the same order. Reviews
+-- indexed before v73 get it when the indexer starts, by the same rule
+-- (healOrderAccounts).
+ALTER TABLE feedback ADD COLUMN IF NOT EXISTS order_account TEXT;
+-- review_weight: what the review weighs toward its subject's rating — 1 for
+-- the reviewer's latest order-bound review of the subject, 0.5 for an earlier
+-- one of a proven, spaced repeat trade, else 0. Worked out from the pair's
+-- reviews and orders whenever one of them changes, and for every pair when the
+-- indexer starts (reputation/repeatTrades.ts). NULL until then. Display only.
+ALTER TABLE feedback ADD COLUMN IF NOT EXISTS review_weight REAL;
+-- The reviews whose weight is not worked out yet: empty once the start-up
+-- walk has run, so the rating aggregates' second branch costs nothing
+-- (api/reputationJoin.ts countedFeedbackFrom).
+CREATE INDEX IF NOT EXISTS feedback_weight_unworked_idx ON feedback (reviewer, subject)
+    WHERE review_weight IS NULL AND order_permlink IS NOT NULL;
+-- When the order's completed_counterparty was recorded: the completion's
+-- block time, or the later op that named the partner (G7). Filled in when the
+-- indexer starts, for every order with a partner and none yet (healNamingTimes:
+-- from the applied completion ops this node holds, else the completion time).
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS counterparty_named_at TIMESTAMPTZ;
+-- The last block applied by a version that knows the v1.23.5 rule; in step
+-- with last_applied_block while it is (repeatTradesGuard.ts). NULL on a node
+-- that has not started this version yet.
+ALTER TABLE indexer_state ADD COLUMN IF NOT EXISTS repeat_trades_through_block BIGINT;
+-- Signals B and D are to be looked at again under the v1.23.5 rule at the
+-- next start (reviewSignalsRedo.ts): at the first start of this version, and
+-- whenever an older one has applied blocks since (repeatTradesGuard.ts).
+ALTER TABLE indexer_state ADD COLUMN IF NOT EXISTS review_signals_redo_due BOOLEAN NOT NULL DEFAULT TRUE;
+
+
+COMMENT ON COLUMN feedback.order_account IS
+    'The owner of the order that admitted this review (v73, the citation rule''s first choice).';
+COMMENT ON COLUMN feedback.review_weight IS
+    'What the review weighs toward its subject''s rating: 1 latest, 0.5 proven spaced repeat trade, else 0 (v73); NULL until worked out. Display only.';
+COMMENT ON COLUMN orders.counterparty_named_at IS
+    'When completed_counterparty was recorded (v73): the block time of the op that named the partner.';
+COMMENT ON COLUMN indexer_state.repeat_trades_through_block IS
+    'Last block applied by a version that knows the v1.23.5 repeat-trade rule (v73).';
+COMMENT ON COLUMN indexer_state.review_signals_redo_due IS
+    'Signals B and D to be looked at again under the v1.23.5 rule at the next start (v73).';
+`
 	}
 ];
 

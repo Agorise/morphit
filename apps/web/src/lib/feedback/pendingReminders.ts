@@ -113,10 +113,13 @@ export function computePendingFeedbackReminders(
 		}
 		// Skip if user already reciprocated.
 		if (reciprocated.has(received.order_permlink)) continue;
-		// Skip suppressed feedback (sock-puppet flagged).  We
-		// don't want to pester users to "reciprocate" reviews
-		// from sock-puppets we already excluded.
-		if (received.suppressed === true) continue;
+		// Skip feedback from a pair the anti-ring signals flagged: we don't
+		// want to pester users to "reciprocate" reviews from sock-puppets we
+		// already excluded. v1.23.5: only those — an earlier review of a
+		// repeat trade shows as `suppressed` until it is proven, and reviewing
+		// it back is exactly what proves it (an older indexer sends no
+		// `pair_flagged`: then `suppressed`, as before).
+		if ((received.pair_flagged ?? received.suppressed) === true) continue;
 
 		// Compute elapsed.
 		const at = Date.parse(received.created_at);

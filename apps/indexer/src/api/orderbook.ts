@@ -189,6 +189,9 @@ interface OrderRow {
 	 *  between 34 ratings and 34 trades, and let an unreviewed real trade
 	 *  count for nothing. */
 	feedback_count: number;
+	/** v1.23.5 — the counted reviews' weight (a repeat trade's review weighs
+	 *  half): the composite score's count. */
+	feedback_weight: number;
 	/** v1.5.5 — REAL completed trades for this account, crediting BOTH sides
 	 *  of every completed order and filtered for sock-puppet pairs. Drives
 	 *  is_new_trader, min_trades and sort=trades. */
@@ -385,6 +388,7 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			        o.lang,
 			        o.fee_method,
 			        COALESCE(f.c, 0)::int AS feedback_count,
+			        COALESCE(f.cw, 0)::float8 AS feedback_weight,
 			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
 			        f.last_feedback_at,
 			        -- v1.5.5 — REAL completed trades, not the feedback proxy.

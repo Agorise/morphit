@@ -58,6 +58,7 @@ function row(overrides: Partial<FeaturedRow> = {}): FeaturedRow {
 		fee_method: 'blurt',
 		// reputation columns
 		feedback_count: 12,
+		feedback_weight: 12,
 		trade_count: 7,
 		weighted_rating: '4.50',
 		last_feedback_at: new Date('2026-07-01T00:00:00Z'),
@@ -122,6 +123,7 @@ describe('GET /v1/featured — order-card trust signals', () => {
 		const { app } = mount([
 			row({
 				feedback_count: 0,
+				feedback_weight: 0,
 				trade_count: 0,
 				weighted_rating: null,
 				last_feedback_at: null,
@@ -149,6 +151,7 @@ describe('GET /v1/featured — order-card trust signals', () => {
 		const { app } = mount([
 			row({
 				feedback_count: 0,
+				feedback_weight: 0,
 				trade_count: 5,
 				weighted_rating: null,
 				last_feedback_at: null,
@@ -199,7 +202,9 @@ describe('GET /v1/featured — order-card trust signals', () => {
 		// exclusion, which the loop above independently verifies.
 		expect(sql).toContain(feedbackAggregateJoin('o', 'SELECT bidder FROM winning_bids'));
 		expect(sql).toContain(accountsJoin('o', 'a'));
-		expect(sql).toContain('AND fb.subject IN (SELECT bidder FROM winning_bids)');
+		// (v1.23.5: inside the counted-review window query, over whole
+		// (reviewer, subject) groups, so it never changes a review's weight.)
+		expect(sql).toContain('AND f0.subject IN (SELECT bidder FROM winning_bids)');
 		expect(sql).toContain('AND cm.recipient IN (SELECT bidder FROM winning_bids)');
 	});
 

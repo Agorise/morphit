@@ -31,6 +31,7 @@
  */
 
 import { fetchWithTimeout } from './fetchWithTimeout';
+import { shellMatchesIndex } from './shellIntegrity';
 
 /** A content-addressed build file: its name changes with its bytes, so any
  *  copy the browser or the service worker stored is this build's own. */
@@ -129,17 +130,26 @@ export function manifestKeyToSameOriginPath(key: string): string | null {
  *  exactly (vigilante.trading, 2026-10-30). The running page itself came from
  *  the network too (navigations are network-first with cache 'reload'), so
  *  this still hashes what runs. Not 'no-store': the reasoning above holds. */
-async function fetchAndHash(sameOriginPath: string): Promise<string> {
+async function fetchAndHash(sameOriginPath: string): Promise<{ hash: string; bytes: Uint8Array }> {
+	const bytes = (await fetchBytes(sameOriginPath))!;
+	return { hash: await sha256SriHash(bytes), bytes };
+}
+
+async function fetchBytes(sameOriginPath: string, missingOk = false): Promise<Uint8Array | null> {
 	const res = await fetchWithTimeout(sameOriginPath, {
 		credentials: 'omit',
 		...(isContentAddressed(sameOriginPath) ? {} : { cache: 'no-cache' as RequestCache })
 	});
+	if (missingOk && res.status === 404) return null;
 	if (!res.ok) {
 		throw new Error(`HTTP ${res.status} for ${sameOriginPath}`);
 	}
-	const buf = new Uint8Array(await res.arrayBuffer());
-	return sha256SriHash(buf);
+	return new Uint8Array(await res.arrayBuffer());
 }
+
+/** v1.23.5: the brandable app shell the server answers `/` and the app's own
+ *  pages with (shellIntegrity.ts). */
+export const SPA_SHELL_PATH = '/spa-shell.html';
 
 /** Check every entry in `manifest` against the asset this site serves at
  *  that path. Returns the mismatches, or `ok` if all hashes line up. Every
@@ -157,10 +167,14 @@ export async function checkManifestAgainstRunningBundle(
 		entries.push({ path, target, expected });
 	}
 	const mismatches: AssetMismatch[] = [];
+	/** index.html as served, when it matched its signed hash. */
+	let signedShell: Uint8Array | null = null;
 	for (const { path, target, expected } of entries) {
 		let actual: string;
 		try {
-			actual = await fetchAndHash(target);
+			const got = await fetchAndHash(target);
+			actual = got.hash;
+			if (target === '/index.html' && actual === expected) signedShell = got.bytes;
 		} catch (err) {
 			return {
 				kind: 'fetch_failed',
@@ -170,6 +184,31 @@ export async function checkManifestAgainstRunningBundle(
 		}
 		if (actual !== expected) {
 			mismatches.push({ path, expected, actual });
+		}
+	}
+	// v1.23.5: the copy of index.html the server answers `/` and the app's own
+	// pages with must load and run exactly what the signed one does. A server
+	// without the copy answers with index.html itself (the nginx configs before
+	// v1.23.5) or 404 (a static host that serves index.html for `/`): nothing to
+	// compare.
+	if (signedShell !== null) {
+		let copy: Uint8Array | null;
+		try {
+			copy = await fetchBytes(SPA_SHELL_PATH, true);
+		} catch (err) {
+			return {
+				kind: 'fetch_failed',
+				path: SPA_SHELL_PATH,
+				cause: err instanceof Error ? err.message : String(err)
+			};
+		}
+		const dec = new TextDecoder();
+		if (copy !== null && !shellMatchesIndex(dec.decode(signedShell), dec.decode(copy))) {
+			mismatches.push({
+				path: SPA_SHELL_PATH,
+				expected: 'the scripts and links of index.html',
+				actual: await sha256SriHash(copy)
+			});
 		}
 	}
 	if (mismatches.length === 0) {

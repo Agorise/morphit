@@ -60,3 +60,44 @@ describe('the logo the pages draw', () => {
 			}
 		});
 });
+
+// v1.23.5: the operator's logo size (MORPHIT_INSTANCE_LOGO_SIZE → --brand-logo-scale
+// in /brand/theme.css) sizes the header logo; the footer keeps its own height.
+describe("the operator's logo size", () => {
+	it('the header logo is its height times --brand-logo-scale (1 when unset)', async () => {
+		const el = await render({ heightPx: 32, shine: true, priority: true });
+		for (const node of [el.querySelector('.morphit-logo-bling-host')!, el.querySelector('img')!])
+			expect(node.getAttribute('style')).toContain(
+				'height: calc(32px * var(--brand-logo-scale, 1));'
+			);
+	});
+	it('the footer logo and an explicit logo keep their plain height', async () => {
+		for (const props of [
+			{ heightPx: 40, variant: 'footer', shine: true },
+			{ heightPx: 24, wordmarkSrc: '/x.svg' }
+		]) {
+			const el = await render(props);
+			const style = el.querySelector('img')!.getAttribute('style') ?? '';
+			expect(style).toContain(`height: ${props.heightPx}px;`);
+			expect(style).not.toContain('brand-logo-scale');
+			document.body.innerHTML = '';
+		}
+	});
+	it("the homepage hero's heights carry the same factor at every breakpoint", async () => {
+		const { readFileSync } = await import('node:fs');
+		const { join } = await import('node:path');
+		const page = readFileSync(
+			join(import.meta.dirname, '..', '..', 'routes', '[lang]', '+page.svelte'),
+			'utf8'
+		);
+		const m = /<MorphitLogoBling\s+heightClass="([^"]+)"/.exec(page);
+		expect(m).not.toBeNull();
+		const classes = m![1]!.split(/\s+/);
+		expect(classes).toEqual([
+			'h-[calc(2.75rem*var(--brand-logo-scale,1))]',
+			'sm:h-[calc(4rem*var(--brand-logo-scale,1))]',
+			'md:h-[calc(5rem*var(--brand-logo-scale,1))]',
+			'lg:h-[calc(6rem*var(--brand-logo-scale,1))]'
+		]);
+	});
+});

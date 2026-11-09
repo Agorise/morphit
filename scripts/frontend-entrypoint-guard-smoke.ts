@@ -62,7 +62,8 @@ for (const conf of ['ops/bunkerweb/frontend/nginx.conf', 'ops/nginx/web.conf']) 
 	// code (so a missing index.html yields a clean error, never a loop).
 	check(
 		`${conf}: SPA fallback routes through @spa and ends in a status code (no infinite loop possible)`,
-		/@spa/.test(src) && /try_files\s+\/index\.html\s*=\d{3}\s*;/.test(src)
+		// v1.23.5: @spa tries the brandable copy (spa-shell.html) first.
+		/@spa/.test(src) && /try_files\s+(?:\/spa-shell\.html\s+)?\/index\.html\s*=\d{3}\s*;/.test(src)
 	);
 }
 

@@ -19,6 +19,17 @@ tarball, runs `npm ci`, rebuilds and redeploys the web frontend
 (then checks it answered on its configured bind), and restarts
 services. If anything fails, it rolls back automatically.
 
+**Deadline: every instance must run v1.23.5 or later before
+2026-11-22 00:00 UTC.** From that time (by block timestamp) the review
+and partner-name check stops counting a proven repeat trade between two
+people as review-ring evidence (`docs/release-notes/RELEASE-NOTES-v1.23.5.md`).
+An instance still on an older release then refuses reviews the others
+accept. If an older release applied blocks from that time on, v1.23.5
+stops before applying anything more and its log says
+`repeat_trades_gap`; the two ways on are the same as for
+`waiver_evidence_gap` below (the snapshot must be made by v1.23.5 or
+later).
+
 **Deadline: every instance must run v1.21.18 or later before
 2026-11-01 00:00 UTC.** From that time (by block timestamp) every
 indexer applies the stricter "consensus v2" rules (listed in

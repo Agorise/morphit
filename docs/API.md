@@ -592,6 +592,7 @@ All feedback received by `:account`.
       "created_at":          "2026-04-22T10:00:00Z",
       "source_trx_id":       "abc123...",
       "suppressed":          false,
+      "pair_flagged":        false,
       "has_verified_chat":   true,
       "responses": [
         {
@@ -610,9 +611,23 @@ All feedback received by `:account`.
   headline rating: the (reviewer, subject) pair is flagged by the
   anti-review-ring signals (`suspicious_reciprocity`,
   `related_accounts`), the review cites no order, or **the reviewer
-  has a later order-bound review of this subject — only a reviewer's
-  latest review of a trader counts** (the reputation receipt marks
-  older ones `superseded_by_later_review`). See ADR-0014 / ADR-0038.
+  has a later order-bound review of this subject and this one is not a
+  proven repeat trade**: a reviewer's latest review of a trader counts
+  in full, and since v1.23.5 an earlier one counts at half weight when
+  its trade is proven (both reviewed each other citing that order, both
+  admitted by the same order — its fee paid in BLURT, or a first-buy
+  waiver — which its owner completed naming the other, both reviews within
+  7 days of the completion) and it is at least 72 hours from the
+  reviewer's other counted reviews of the trader (the reputation
+  receipt marks the others `superseded_by_later_review`, and shows each
+  review's `review_weight` and `proven`). See ADR-0014 / ADR-0038.
+- `pair_flagged: true` (v1.23.5) means the pair is flagged by those
+  anti-review-ring signals: the one reason reviewing back cannot make
+  the row count.
+- `order_account` is the owner of the cited order: since v1.23.5 the one
+  recorded with the review (the order that admitted it, of those whose fee
+  was paid in BLURT or that are a first-buy waiver), else the cited order of
+  either party.
 - `has_verified_chat: true` means a real two-way conversation
   preceded the review. New reviews without one are rejected
   (`no_verified_counterparty`), so only older rows can show
@@ -645,8 +660,12 @@ Tier: `list`
 
 Everything that goes into `:account`'s published rating, so anyone can
 re-derive the score: every review about the account (counted or not),
-each one's exclusion reason (`null` when counted), its age and decay
-weight, and the formula. Optional `?as_of=<ISO timestamp>` (default now).
+each one's exclusion reason (`null` when counted), its age, decay weight
+and review weight (v1.23.5: 1 for the reviewer's latest review, 0.5 for
+an earlier review of a proven, spaced repeat trade, 0 when it does not
+count; `proven` says whether its trade is proven), and the formula. The
+score's review count is `count_weighted`, the sum of the review weights.
+Optional `?as_of=<ISO timestamp>` (default now).
 
 ```json
 {
@@ -655,7 +674,7 @@ weight, and the formula. Optional `?as_of=<ISO timestamp>` (default now).
   "decay_half_life_days": 365,
   "formula": "…",
   "summary": {
-    "count_total": 44, "count_included": 42, "count_excluded": 2,
+    "count_total": 44, "count_included": 42, "count_excluded": 2, "count_weighted": 40.5,
     "trade_count": 47,
     "weight_sum": 38.2, "weighted_rating": 4.7,
     "reputation_score": 91.3, "reputation_base": 88.0, "reputation_bonus": 3.3,
@@ -664,7 +683,8 @@ weight, and the formula. Optional `?as_of=<ISO timestamp>` (default now).
   "rows": [
     { "source_trx_id": "…", "reviewer": "bob", "rating": 5,
       "created_at": "2026-09-01T…", "order_permlink": "order-…",
-      "age_days": 40, "decay_weight": 0.93, "included": true, "excluded_reason": null }
+      "age_days": 40, "decay_weight": 0.93, "review_weight": 1, "proven": true,
+      "included": true, "excluded_reason": null }
   ]
 }
 ```

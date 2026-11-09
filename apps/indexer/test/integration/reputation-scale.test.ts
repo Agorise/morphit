@@ -5,12 +5,17 @@
  * Every orderbook page aggregated the whole feedback table with NUMERIC POWER
  * for the time decay — about 20 µs a call, twice per review — so 50,000
  * reviews cost over a second per request before anything else ran.
+ *
+ * v1.23.5: each review's weight is stored (repeat trades). Both states are
+ * timed: right after the upgrade, nothing worked out yet (the latest-review
+ * rule, as in v1.23.4), and after the walk the indexer runs at start.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { INTEGRATION_ENABLED, setupWithMigrations, type IntegrationFixture } from './harness';
 import { orderbookRoute } from '../../src/api/orderbook';
 import { reputationReceiptRoute } from '../../src/api/reputationReceipt';
+import { rewalkAllPairs } from '../../src/indexer/reputation/repeatTrades';
 import type { Poller } from '../../src/indexer/poller';
 
 const poller = { getStatus: () => ({ indexedBlock: 1 }) } as unknown as Poller;
@@ -84,4 +89,30 @@ describe.skipIf(!INTEGRATION_ENABLED)('reputation at 50,000 reviews', () => {
 			);
 		}
 	}, 60_000);
+	it('the start-up walk over 50,000 reviews, then the same page and the same agreement', async () => {
+		const t0 = performance.now();
+		expect(await rewalkAllPairs(fx.db)).toBeGreaterThan(0);
+		const walk = performance.now() - t0;
+		console.log(`walk ${walk.toFixed(0)} ms`);
+		expect(walk).toBeLessThan(30_000);
+		await fx.db.query('ANALYZE feedback');
+		await page();
+		const times: number[] = [];
+		for (let i = 0; i < 3; i++) times.push((await page()).ms);
+		times.sort((a, b) => a - b);
+		expect(times[1], `median ${times[1]!.toFixed(0)} ms`).toBeLessThan(600);
+		const { items } = await page();
+		const cards = items.filter((i) => i.weighted_rating !== null).slice(0, 5);
+		expect(cards.length).toBeGreaterThan(0);
+		for (const card of cards) {
+			const res = await reputationReceiptRoute(fx.db).request(
+				`/${card.account}/reputation-receipt`
+			);
+			const receipt = (await res.json()) as { summary: { weighted_rating: number | null } };
+			expect(Number(card.weighted_rating), card.account).toBeCloseTo(
+				receipt.summary.weighted_rating!,
+				2
+			);
+		}
+	}, 120_000);
 });

@@ -22,6 +22,8 @@
 
 import type pg from 'pg';
 import { RESERVED_ACCOUNT_NAMES } from '$indexer/confusables';
+import { provenTradeSql } from '$indexer/reputation/repeatTrades';
+import { CONSENSUS_V3_ACTIVATION_TIME } from '$indexer/consensusActivation';
 
 /** Minimum reviews in each direction to trigger Signal B. */
 export const SIGNAL_B_MIN_COUNT = 3;
@@ -73,22 +75,46 @@ export interface Queryable {
  */
 export async function reciprocityEverHeld(
 	db: Queryable,
-	args: { a: string; b: string; asOf: Date; before?: boolean }
+	args: {
+		a: string;
+		b: string;
+		asOf: Date;
+		before?: boolean;
+		/** v1.23.5 (the review and trade-credit gates, from
+		 *  CONSENSUS_V3_ACTIVATION_TIME): the pair's own reviews of a trade
+		 *  PROVEN by `asOf` (reputation/repeatTrades.ts provenTradeSql, worked
+		 *  out from the feedback and orders rows) are not ring evidence — two
+		 *  people who really trade with each other often are what this pattern
+		 *  would otherwise catch. Only reviews stamped from the activation time
+		 *  on, both of the trade's, count as proven here: each recorded its
+		 *  admitting order live on every node (an older release cannot apply
+		 *  those blocks: repeatTradesGuard.ts), so the verdict never rests on an
+		 *  order_account a node worked out at start (healOrderAccounts). Only
+		 *  the pair's own COUNTS change (and the
+		 *  moments): the averages and a proven review of someone else (the
+		 *  reviewer's other activity) are as before, so the verdict can only go
+		 *  from held to not held, never the reverse. */
+		ignoreProven?: boolean;
+	}
 ): Promise<boolean> {
 	if (args.a === args.b) return false;
 	const upTo = args.before === true ? 'created_at < $3' : 'created_at <= $3';
+	const unproven = (alias: string): string =>
+		args.ignoreProven === true
+			? ` AND NOT ${provenTradeSql(alias, { asOf: '$3', since: `'${CONSENSUS_V3_ACTIVATION_TIME}'::timestamptz` })}`
+			: '';
 	const r = await db.query<{ held: boolean }>(
 		`WITH moments AS (
-		   SELECT DISTINCT created_at AS t FROM feedback
-		    WHERE ((reviewer = $1 AND subject = $2) OR (reviewer = $2 AND subject = $1))
-		      AND ${upTo}
+		   SELECT DISTINCT fm.created_at AS t FROM feedback fm
+		    WHERE ((fm.reviewer = $1 AND fm.subject = $2) OR (fm.reviewer = $2 AND fm.subject = $1))
+		      AND fm.${upTo}${unproven('fm')}
 		 )
 		 SELECT EXISTS (
 		   SELECT 1 FROM moments m
 		    CROSS JOIN LATERAL (
 		      SELECT
-		        COUNT(*) FILTER (WHERE f.reviewer = $1 AND f.subject = $2) AS ab,
-		        COUNT(*) FILTER (WHERE f.reviewer = $2 AND f.subject = $1) AS ba,
+		        COUNT(*) FILTER (WHERE f.reviewer = $1 AND f.subject = $2${unproven('f')}) AS ab,
+		        COUNT(*) FILTER (WHERE f.reviewer = $2 AND f.subject = $1${unproven('f')}) AS ba,
 		        AVG(f.rating) FILTER (WHERE f.reviewer = $1 AND f.subject = $2) AS ab_avg,
 		        AVG(f.rating) FILTER (WHERE f.reviewer = $2 AND f.subject = $1) AS ba_avg,
 		        COUNT(DISTINCT f.subject) FILTER (WHERE f.reviewer = $1) AS a_subjects,

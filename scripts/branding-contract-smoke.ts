@@ -36,19 +36,34 @@
  *        (ops-cli's VALUE_FLAGS); otherwise X is dropped and the flag reads
  *        "true". Also covers payment-method add's documented flags.
  *   C-9  ops/bunkerweb/frontend/nginx.conf serves every brand asset no-cache.
+ *   C-10 (v1.23.5) The brandable app shell: the build's spa-shell.html carries
+ *        the preview picture after app.html's static preview tags, ops-cli
+ *        does not protect it, and both nginx configs answer `/` and the app's
+ *        routes with it before index.html.
  */
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BRAND_OVERRIDABLE_PATHS } from '../apps/web/src/lib/net/dynamicPaths.ts';
+import { SPA_SHELL } from '../apps/ops-cli/src/lib/nginxVhostHeal.ts';
 import {
 	BRAND_TARGETS,
 	PNG_ICONS,
 	CANONICAL_HTML_ATTRS as OPS_ATTRS,
 	isProtectedPath
 } from '../apps/ops-cli/src/lib/branding.ts';
-import { CANONICAL_HTML_ATTRS as BUILD_ATTRS, SLOT_FORM_SOURCE } from './build-brand-slots.mjs';
+import {
+	CANONICAL_HTML_ATTRS as BUILD_ATTRS,
+	SLOT_FORM_SOURCE,
+	processPage,
+	spaShellText,
+	SPA_SHELL_FILE
+} from './build-brand-slots.mjs';
+import { brandPage } from '../apps/ops-cli/src/lib/branding.ts';
+import { deriveTheme, themeStyleElement } from '../packages/operator-config/src/theme.ts';
+import { stripMarkedOrigins } from '../apps/web/scripts/origin-slots.mjs';
+import { shellMatchesIndex } from '../apps/web/src/lib/net/shellIntegrity.ts';
 import { DEFAULT_BRAND_NAME, BRAND_PLACEHOLDER_RE } from '../packages/operator-config/src/brand.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -218,6 +233,7 @@ const needValue = [
 	'icon',
 	'name',
 	'short-name',
+	'logo-size',
 	'beta',
 	'description',
 	'category'
@@ -250,6 +266,98 @@ check(
 	uncached.length === 0 && overCached.length === 0,
 	`not no-cache: ${uncached.join(', ')}; wrongly matched: ${overCached.join(', ')}`
 );
+
+// C-10 (v1.23.5): the brandable app shell. The build writes spa-shell.html —
+// index.html with the link-preview picture right after app.html's static
+// preview tags — and nginx answers `/` and the app's routes with it.
+const appHtml = readFileSync(join(WEB, 'src', 'app.html'), 'utf8');
+const shellText = spaShellText(appHtml, 'https://morphit.io');
+const pic = shellText.indexOf(
+	'<meta property="og:image" content="\u2063https://morphit.io\u2063/og-image.png" />'
+);
+const desc = shellText.indexOf('<meta name="twitter:description"');
+check(
+	'C-10a: the shell copy puts the preview picture (origin-marked, alt brand-marked) after the static preview tags',
+	pic > desc &&
+		desc > 0 &&
+		shellText.includes('og:image:alt" content="&#8288;Morphit&#8288; —') &&
+		shellText.includes(
+			'<meta name="twitter:image" content="\u2063https://morphit.io\u2063/og-image.png" />'
+		) &&
+		spaShellText(appHtml, null) === appHtml,
+	`picture at ${pic}, twitter:description at ${desc}`
+);
+check(
+	'C-10b: the shell copy is the same file name in the build, the bare-metal heal and both nginx configs, and is not protected',
+	SPA_SHELL_FILE === SPA_SHELL && !isProtectedPath(SPA_SHELL_FILE),
+	`${SPA_SHELL_FILE} vs ${SPA_SHELL}`
+);
+const shellConf: string[] = [];
+for (const f of [
+	join('ops', 'bunkerweb', 'frontend', 'nginx.conf'),
+	join('ops', 'nginx', 'web.conf')
+]) {
+	const c = readFileSync(join(REPO, f), 'utf8');
+	if (!/location @spa \{\n\s*try_files \/spa-shell\.html \/index\.html =503;/.test(c))
+		shellConf.push(`${f}: @spa does not try spa-shell.html, then index.html`);
+	if (!/location \/ \{[^}]*\n\s*try_files \$uri \$uri\.html @spa;/.test(c))
+		shellConf.push(`${f}: \`location /\` does not hand \`/\` to @spa`);
+}
+check(
+	'C-10c: nginx answers `/` and the app routes with spa-shell.html, falling back to index.html',
+	shellConf.length === 0,
+	shellConf.join('; ')
+);
+
+// C-10d (v1.23.5): what branding writes into the shell copy is what the
+// browser's build-integrity check allows (shellIntegrity.ts) — else every
+// branded site would show its visitors "Build integrity check failed". The
+// real steps on app.html: the shell copy, the origin and brand markers taken
+// out, the slots branded with a name, a colour theme and the site's address.
+{
+	const page = appHtml
+		.replaceAll('%sveltekit.assets%', '')
+		.replace(
+			'%sveltekit.head%',
+			'<link rel="modulepreload" href="/_app/immutable/entry/start.A.js" />'
+		)
+		.replace(
+			'%sveltekit.body%',
+			'<script>{ __sveltekit_a = { base: "" }; import("/_app/immutable/entry/start.A.js") }</script>'
+		)
+		.replace(/%sveltekit\.[a-z.]+%/g, '');
+	const index = processPage(stripMarkedOrigins(page).text, { stamp: false }).text as string;
+	const shell = processPage(stripMarkedOrigins(spaShellText(page, 'https://morphit.io')).text, {
+		stamp: true
+	}) as {
+		text: string;
+		slots: [number, number, string, string][];
+		theme: [number, number, string, string][];
+	};
+	const theme = deriveTheme({ from: '#f3dca0', to: '#bb872f' });
+	const branded =
+		theme.ok &&
+		brandPage(
+			shell.text,
+			[...shell.slots, ...shell.theme].sort((a, b) => a[0] - b[0]) as Parameters<
+				typeof brandPage
+			>[1],
+			'Vigilante Trading',
+			{ style: themeStyleElement(theme.palette), color: theme.palette.tokens['brand-2']! }
+		).replaceAll('https://morphit.io/og-image.png', 'https://vigilante.trading/og-image.png');
+	const ok =
+		typeof branded === 'string' &&
+		branded !== index &&
+		branded.includes('Vigilante Trading') &&
+		branded.includes('id="morphit-theme"') &&
+		shellMatchesIndex(index, branded) &&
+		!shellMatchesIndex(index, branded.replace('</body>', '<script src="/x.js"></script></body>'));
+	check(
+		'C-10d: a shell copy branded with a name, a colour theme and an address passes the browser integrity check (and a tampered one does not)',
+		ok,
+		theme.ok ? 'the branded copy fails shellMatchesIndex' : 'theme did not derive'
+	);
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {

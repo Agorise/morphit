@@ -53,10 +53,15 @@ function bad(scope: string, msg: string): void {
 // the head tailer both call, so the rule is read
 // from there — and the handler must still be the one calling it.
 const handlerSrc = readFileSync(resolve(SRC, 'indexer/handlers/feedback.ts'), 'utf8');
-if (!/reviewCitesFeePaidOrder\(/.test(handlerSrc)) {
+// v1.23.5: the handler calls reviewCitationOf (the same rule, with the cited
+// order's owner), which reviewCitesFeePaidOrder wraps for the head tailer.
+if (
+	!/\breviewCitationOf\(/.test(handlerSrc) ||
+	!/from '\$indexer\/reviewCitation'/.test(handlerSrc)
+) {
 	bad(
 		'intake',
-		'the feedback handler no longer calls the shared reviewCitesFeePaidOrder predicate'
+		'the feedback handler no longer calls the shared reviewCitationOf (reviewCitation.ts)'
 	);
 }
 const intake = readFileSync(resolve(SRC, 'indexer/reviewCitation.ts'), 'utf8');
@@ -68,7 +73,10 @@ const flatIntake = intake.replace(/\s+/g, ' ');
 const flatSummary = summary.replace(/\s+/g, ' ');
 
 // 1. Intake accepts a cited order from EITHER party (subject OR signer).
-if (/account IN \(\$1, \$3\)/.test(flatIntake)) {
+// v1.23.5: the rule is one SQL text (citationCandidatesSql) with the subject
+// and reviewer as expressions; the waiver helper below it also says $1, $3,
+// so the check reads the builder itself.
+if (/o\.account IN \(\$\{subject\}, \$\{reviewer\}\)/.test(flatIntake)) {
 	ok('intake: cited-order check accepts EITHER party (account IN ($1, $3))');
 } else {
 	bad(

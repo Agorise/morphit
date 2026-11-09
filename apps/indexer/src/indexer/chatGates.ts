@@ -197,7 +197,16 @@ export async function hasVerifiedChat(
 		Number.isFinite(spanSec) &&
 		spanSec >= 15 * 60;
 	if (!conversation) return false;
-	return !(await reciprocityEverHeld(db, { a: args.a, b: args.b, asOf: args.asOf }));
+	// `asOf` is the judged op's block time (see above). A proven repeat trade
+	// is not ring evidence; only trades whose two reviews both come from the
+	// v1.23.5 activation time on count as proven (signalVerdicts.ts), so before
+	// that time the verdict is exactly the old one.
+	return !(await reciprocityEverHeld(db, {
+		a: args.a,
+		b: args.b,
+		asOf: args.asOf,
+		ignoreProven: true
+	}));
 }
 
 /** Max unique new senders (i.e. senders the recipient has not

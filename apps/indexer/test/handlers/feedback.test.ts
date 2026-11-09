@@ -149,7 +149,7 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 		// order_permlink (anti-Sybil gate).
 		const mock = makeMockClient([
 			// The citation the order gives (reviewCitation.ts returns its kind).
-			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
+			{ match: 'FROM orders', rows: [{ kind: 'paid', owner: 'bob' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -157,6 +157,11 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			// The pair's review history: has the reciprocity pattern ever held?
 			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// v1.23.5: the pair's repeat-trade spacing, walked again (both ways).
+			{ match: 'SAVEPOINT feedback_repeat_spacing' },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'RELEASE SAVEPOINT feedback_repeat_spacing' },
 			// The push enqueue runs in its own savepoint (no subscription here).
 			{ match: 'SAVEPOINT feedback_push_enqueue' },
 			{ match: 'FROM push_subscriptions', rowCount: 0 },
@@ -204,7 +209,7 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 		// clause didn't match.  Result: no welcome bonus fires.
 		const mock = makeMockClient([
 			// The citation the order gives (reviewCitation.ts returns its kind).
-			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
+			{ match: 'FROM orders', rows: [{ kind: 'paid', owner: 'bob' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -212,6 +217,11 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			// The pair's review history: has the reciprocity pattern ever held?
 			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// v1.23.5: the pair's repeat-trade spacing, walked again (both ways).
+			{ match: 'SAVEPOINT feedback_repeat_spacing' },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'RELEASE SAVEPOINT feedback_repeat_spacing' },
 			// The push enqueue runs in its own savepoint (no subscription here).
 			{ match: 'SAVEPOINT feedback_push_enqueue' },
 			{ match: 'FROM push_subscriptions', rowCount: 0 },
@@ -256,7 +266,7 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 		// opened, so the overall op is still ok:true.
 		const mock = makeMockClient([
 			// The citation the order gives (reviewCitation.ts returns its kind).
-			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
+			{ match: 'FROM orders', rows: [{ kind: 'paid', owner: 'bob' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -264,6 +274,11 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			// The pair's review history: has the reciprocity pattern ever held?
 			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// v1.23.5: the pair's repeat-trade spacing, walked again (both ways).
+			{ match: 'SAVEPOINT feedback_repeat_spacing' },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'RELEASE SAVEPOINT feedback_repeat_spacing' },
 			// The push enqueue runs in its own savepoint (no subscription here).
 			{ match: 'SAVEPOINT feedback_push_enqueue' },
 			{ match: 'FROM push_subscriptions', rowCount: 0 },
@@ -309,7 +324,7 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 		// contains both VALUES clauses.
 		const mock = makeMockClient([
 			// The citation the order gives (reviewCitation.ts returns its kind).
-			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
+			{ match: 'FROM orders', rows: [{ kind: 'paid', owner: 'bob' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -317,6 +332,11 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			// The pair's review history: has the reciprocity pattern ever held?
 			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// v1.23.5: the pair's repeat-trade spacing, walked again (both ways).
+			{ match: 'SAVEPOINT feedback_repeat_spacing' },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'RELEASE SAVEPOINT feedback_repeat_spacing' },
 			// The push enqueue runs in its own savepoint (no subscription here).
 			{ match: 'SAVEPOINT feedback_push_enqueue' },
 			{ match: 'FROM push_subscriptions', rowCount: 0 },
@@ -473,7 +493,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		// `account IN (subject, reviewer)`.
 		const mock = makeMockClient([
 			// The citation the order gives (reviewCitation.ts returns its kind).
-			{ match: 'FROM orders', rows: [{ kind: 'paid' }] },
+			{ match: 'FROM orders', rows: [{ kind: 'paid', owner: 'bob' }] },
 			{
 				match: 'FROM chat_messages',
 				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
@@ -481,6 +501,11 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 			// The pair's review history: has the reciprocity pattern ever held?
 			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// v1.23.5: the pair's repeat-trade spacing, walked again (both ways).
+			{ match: 'SAVEPOINT feedback_repeat_spacing' },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'AS proven', rows: [] },
+			{ match: 'RELEASE SAVEPOINT feedback_repeat_spacing' },
 			// The push enqueue runs in its own savepoint (no subscription here).
 			{ match: 'SAVEPOINT feedback_push_enqueue' },
 			{ match: 'FROM push_subscriptions', rowCount: 0 },

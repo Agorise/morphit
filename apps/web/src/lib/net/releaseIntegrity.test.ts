@@ -185,7 +185,7 @@ describe('a manifest entry is only ever fetched from this site', () => {
 			'index.html': await sri(GOOD['/index.html']!)
 		});
 		expect(r.kind).toBe('ok');
-		expect(requested).toEqual([`${ORIGIN}/index.html`]);
+		expect(requested).toEqual([`${ORIGIN}/index.html`, `${ORIGIN}/spa-shell.html`]);
 	});
 
 	it('a file served with different bytes is named as a mismatch', async () => {

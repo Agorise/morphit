@@ -166,7 +166,8 @@ const scenarios: Scenario[] = [
 			if (!/<MorphitLogoBling heightPx=\{32\}[^>]*\bpriority\b/.test(layout)) {
 				return 'the header logo (+layout.svelte) does not pass `priority`';
 			}
-			if (!/<MorphitLogoBling heightClass=[^>]*\bpriority\b/.test(page)) {
+			// v1.23.5: the hero tag spans lines (its height classes carry the logo size).
+			if (!/<MorphitLogoBling\s+heightClass=[^>]*\bpriority\b/.test(page)) {
 				return 'the homepage hero logo (+page.svelte) does not pass `priority`';
 			}
 			if (/variant="footer"[^>]*\bpriority\b/.test(layout)) {

@@ -539,6 +539,11 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_INSTANCE_THEME_BACKGROUND',
 	// MORPHIT_INSTANCE_THEME_BUTTON: deep | bright — primary-button style.
 	'MORPHIT_INSTANCE_THEME_BUTTON',
+	// MORPHIT_INSTANCE_LOGO_SIZE: the header and homepage logo's size in
+	//   percent of the standard (50–200; unset = 100). A logo with two lines of
+	//   text reads small at the standard height. Applied by `morphit-ops
+	//   branding apply` (/brand/theme.css), without rebuilding.
+	'MORPHIT_INSTANCE_LOGO_SIZE',
 	'MORPHIT_INSTANCE_TOR_ADDRESS',
 	'MORPHIT_INSTANCE_LOKINET_ADDRESS',
 	'MORPHIT_INSTANCE_I2P_ADDRESS',
@@ -604,7 +609,8 @@ export const INSTANCE_ENV = {
 	THEME_MID: 'MORPHIT_INSTANCE_THEME_MID',
 	THEME_TO: 'MORPHIT_INSTANCE_THEME_TO',
 	THEME_BACKGROUND: 'MORPHIT_INSTANCE_THEME_BACKGROUND',
-	THEME_BUTTON: 'MORPHIT_INSTANCE_THEME_BUTTON'
+	THEME_BUTTON: 'MORPHIT_INSTANCE_THEME_BUTTON',
+	LOGO_SIZE: 'MORPHIT_INSTANCE_LOGO_SIZE'
 } as const;
 
 export interface LoadResult {

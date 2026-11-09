@@ -76,6 +76,7 @@ import { validateOrderPermlink } from '$indexer/permlink';
 import { hasVerifiedChat } from '$indexer/chatGates';
 import { raiseTradeSignals } from '$indexer/signals';
 import { inSavepoint } from '$indexer/savepoint';
+import { rewalkPairsOfTrade } from '$indexer/reputation/repeatTrades';
 import { logger } from '$log';
 
 const log = logger('order-complete');
@@ -138,7 +139,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 	const res = await client.query(
 		`UPDATE orders SET status = 'completed', updated_at = $3, completed_at = $3,
-		        completed_counterparty = $4
+		        completed_counterparty = $4,
+		        counterparty_named_at = CASE WHEN $4::text IS NULL THEN NULL ELSE $3::timestamptz END
 		 WHERE account = $1 AND permlink = $2 AND status = 'live'`,
 		[ctx.signer, permlink, ctx.blockTime, counterparty]
 	);
@@ -155,12 +157,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// naming the partner later is not another trade.
 		if (counterparty !== null) {
 			const fill = await client.query(
-				`UPDATE orders SET completed_counterparty = $3, updated_at = $4
+				`UPDATE orders SET completed_counterparty = $3, updated_at = $4, counterparty_named_at = $4
 				 WHERE account = $1 AND permlink = $2 AND status = 'completed'
 				   AND completed_counterparty IS NULL`,
 				[ctx.signer, permlink, counterparty, ctx.blockTime]
 			);
 			if ((fill.rowCount ?? 0) > 0) {
+				await repeatSpacing(client, ctx.signer, counterparty);
 				await tradeSignals(client, ctx, counterparty);
 				ctx.recordOrderbookChange(`${ctx.signer}/${permlink}`);
 				return { ok: true };
@@ -174,9 +177,24 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'target_already_' + (probe.rows[0]?.status ?? 'unknown') };
 	}
 
-	if (counterparty !== null) await tradeSignals(client, ctx, counterparty);
+	if (counterparty !== null) {
+		await repeatSpacing(client, ctx.signer, counterparty);
+		await tradeSignals(client, ctx, counterparty);
+	}
 	ctx.recordOrderbookChange(`${ctx.signer}/${permlink}`);
 	return { ok: true };
 };
+
+/** v1.23.5: naming the partner may prove the trade the two already reviewed
+ *  each other for (reputation/repeatTrades.ts): walk the pair's spacing
+ *  again. Display only, in its own savepoint; a failure leaves the pair to the
+ *  walk at the next start. */
+async function repeatSpacing(client: pg.PoolClient, a: string, b: string): Promise<void> {
+	await inSavepoint(client, 'complete_repeat_spacing', () =>
+		rewalkPairsOfTrade(client, a, b)
+	).catch((err: unknown) => {
+		log.warn('repeat_spacing_failed', { err: String((err as Error)?.message ?? err) });
+	});
+}
 
 export default handle;

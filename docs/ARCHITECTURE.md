@@ -133,7 +133,13 @@ locally.
    rejects it unless the two had a real two-way chat (2+ messages each
    way over 15+ minutes).
 2. It is broadcast through the user's indexer; every indexer ingests it.
-   Only a reviewer's latest order-bound review of a trader counts.
+   A reviewer's latest order-bound review of a trader counts in full; an
+   earlier one counts at half weight when its trade is proven (both
+   reviewed each other citing that order, both admitted by the same
+   BLURT-paid (or first-buy waiver) order, which its owner completed naming
+   the other, both reviews within 7 days of the completion) and
+   it is at least 72 hours from the reviewer's other counted reviews of
+   the trader (v1.23.5, repeat trades).
 3. Feedback is never editable. A response can be posted (as a separate
    signed op) but the original remains.
 

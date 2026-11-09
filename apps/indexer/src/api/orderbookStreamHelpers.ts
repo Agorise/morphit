@@ -88,6 +88,9 @@ export interface OrderbookStreamRow {
 	lang: string | null;
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr' | null;
 	feedback_count: number;
+	/** v1.23.5 — the counted reviews' weight (a repeat trade's review weighs
+	 *  half): the composite score's count. */
+	feedback_weight: number;
 	/** REAL completed trades (both sides credited), sock-puppet
 	 *  filtered. A DIFFERENT number from feedback_count: a trade nobody
 	 *  reviewed counts here and not there. The order card reads this; an
@@ -155,7 +158,7 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 		trade_count: r.trade_count,
 		weighted_rating: r.weighted_rating === null ? null : Number(r.weighted_rating),
 		reputation_score: computeReputationScore({
-			count: r.feedback_count,
+			count: Number(r.feedback_weight),
 			weightedAvg: r.weighted_rating === null ? null : Number(r.weighted_rating),
 			lastFeedbackAtMs: r.last_feedback_at === null ? null : r.last_feedback_at.getTime()
 		}),

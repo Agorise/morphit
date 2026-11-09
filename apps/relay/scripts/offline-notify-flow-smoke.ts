@@ -78,7 +78,9 @@ const schemaSql = readFileSync(
 	join(import.meta.dirname, '../../indexer/src/db/schema.sql'),
 	'utf8'
 );
-const v69 = schemaSql.slice(schemaSql.indexOf('-- ─── v69:'));
+// The offline-notice sections (v69–v71) only: later ones change tables of the
+// indexer's (v73 `feedback`) that the private schema has not got.
+const v69 = schemaSql.slice(schemaSql.indexOf('-- ─── v69:'), schemaSql.indexOf('-- ─── v72:'));
 if (!v69.startsWith('-- ─── v69:')) throw new Error('schema.sql has no v69 section');
 const SCHEMA = `offline_notify_smoke_${process.pid}`;
 const admin = new pg.Client({ connectionString: url });

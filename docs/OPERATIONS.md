@@ -6643,6 +6643,53 @@ A reviewer can ask what happened to a review with
 `GET /v1/feedback/status?reviewer=&subject=&order_permlink=` (see
 `docs/API.md`).
 
+### Repeat trades between the same two people (v1.23.5)
+
+A reviewer's latest review of a trader counts in full, as before. Since
+v1.23.5 an earlier one counts too, at half weight, when its trade is PROVEN —
+both reviewed each other for that order, both reviews were admitted on the
+strength of the same listing — one whose fee was paid in BLURT and posted
+from 2026-11-01 on, or a proven first-buy waiver (a BTC or XMR fee is
+verified by each indexer when it gets to it, so it never decides this) — its owner completed it naming the other,
+and both reviews came within 7 days of the completion — and it is at least 72 hours from the reviewer's other counted
+reviews of that trader.
+
+- Whether a trade is proven is worked out from the reviews and orders each
+  time it is needed. Each review records the order that admitted it
+  (`feedback.order_account`), and each order when its partner was named
+  (`orders.counterparty_named_at`; the upgrade fills this in from the
+  completion ops your indexer holds).
+- What each review weighs is stored (`feedback.review_weight`) and worked out
+  again whenever a review or a completion between the two arrives.
+- At every start the indexer also, before it applies a block:
+  - records when each order's partner was named, for orders without that
+    time (from the completion ops it holds): log `order_naming_times_set`;
+  - records the admitting order of any review from before 2026-11-22 without
+    one (the reviews from before v1.23.5, or written by an older version
+    after a rollback): log `review_order_accounts_set`;
+  - works out every review's weight (`review_weights_worked_out`, only when
+    something changed);
+  - at the first start of v1.23.5, and after an older version has applied
+    blocks, re-checks the Signal B and D flags a proven trade could make
+    wrong (`review_signals_redone`).
+  These are display only; a failure is logged and tried again at the next
+  start. Until the first start finishes them, ratings count only each
+  reviewer's latest review, as before v1.23.5.
+- The reputation receipt shows each review's weight and whether its trade is
+  proven.
+
+Signals B (reciprocity) and D (concentration) leave a pair's proven trades out
+of that pair's own count (everything else they measure is unchanged), so two
+people who trade with each other often are not flagged. The review and
+partner-name gate does the same for ops in blocks stamped at or after
+**2026-11-22 00:00 UTC** (the v1.23.5 activation time), counting as proven
+only trades whose two reviews both come from then on: it then accepts reviews
+and partner names an older indexer refuses, so **every indexer must run
+v1.23.5 or later before then**, or it will disagree with the others about
+those reviews. An indexer that an older release ran past that time refuses to
+start on v1.23.5 (`repeat_trades_gap`) until it is re-indexed from before it
+or restored from a snapshot, the same as the waiver-evidence guard.
+
 ### If the money didn't arrive
 
 The 90% is a transfer inside the user's fee transaction, so if it

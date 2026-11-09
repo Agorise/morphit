@@ -167,7 +167,13 @@
 			     the heading is 10% smaller than text-3xl/4xl/5xl/6xl, each with its
 			     line height scaled the same (37.5/40/48/60 px → 33.75/36/43.2/54). -->
 			<div class="-mt-3 mb-9 animate-fade-up md:-mt-4 md:mb-10">
-				<MorphitLogoBling heightClass="h-11 sm:h-16 md:h-20 lg:h-24" shine priority />
+				<!-- v1.23.5: h-11 sm:h-16 md:h-20 lg:h-24, times the operator's logo
+				     size (MORPHIT_INSTANCE_LOGO_SIZE → --brand-logo-scale; 1 unset). -->
+				<MorphitLogoBling
+					heightClass="h-[calc(2.75rem*var(--brand-logo-scale,1))] sm:h-[calc(4rem*var(--brand-logo-scale,1))] md:h-[calc(5rem*var(--brand-logo-scale,1))] lg:h-[calc(6rem*var(--brand-logo-scale,1))]"
+					shine
+					priority
+				/>
 			</div>
 
 			<h1

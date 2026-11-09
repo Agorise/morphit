@@ -70,13 +70,112 @@ export type ReviewCitation = 'paid' | 'waived';
  * of `asOf` would add nothing.)
  */
 /** The cited order `o` is the owner's first-buy WAIVER order, completed
- *  naming the OTHER party of the review ($1 subject, $3 reviewer). One text,
- *  used by the citation and by waiverTradeOfThePair, so the two cannot drift. */
-const WAIVER_TRADE_OF_THE_PAIR = `o.fee_method = 'waived_first_buy'
+ *  naming the OTHER party of the review. One text, used by the citation and by
+ *  waiverTradeOfThePair, so the two cannot drift. `subject` and `reviewer` are
+ *  SQL expressions. */
+function waiverTradeOfThePairSql(subject: string, reviewer: string): string {
+	return `o.fee_method = 'waived_first_buy'
 		          AND o.status = 'completed'
-		          AND o.completed_counterparty = (CASE WHEN o.account = $1 THEN $3 ELSE $1 END)`;
+		          AND o.completed_counterparty = (CASE WHEN o.account = ${subject} THEN ${reviewer} ELSE ${subject} END)`;
+}
+
+/**
+ * v1.23.5: SQL — the order `o` may be the one a review is recorded against
+ * (`order_account`, what proves a repeat trade), because its fee verdict is
+ * the same on every node from the block that posted it:
+ *   - a first-buy waiver order (stored verified at intake), or
+ *   - a BLURT-fee order posted from the consensus v2 activation time on: its
+ *     fee transfer is in the order's own transaction and judged by the
+ *     federation's rules as of that block, at intake and on any re-check
+ *     alike (blurtFeeReverify.ts).
+ * Not a BTC or XMR fee (each node verifies it against outside explorers when
+ * it gets to it), and not a BLURT order posted before that time (the re-check
+ * may still raise it from underpaid on its legacy grace, whenever it runs).
+ */
+export function pinnableOrderSql(o: string): string {
+	return `(${o}.fee_method = 'waived_first_buy'
+	        OR (${o}.fee_method = 'blurt' AND ${o}.created_at >= '${CONSENSUS_V2_ACTIVATION_TIME}'::timestamptz))`;
+}
+
+/**
+ * The citation rule as SQL (v1.23.5: one text for the handler and for the
+ * start-up back-fill of `feedback.order_account`, healOrderAccounts): every
+ * order that admits the review, best first, as rows (kind, owner,
+ * in_block_fee). The arguments are SQL expressions — placeholders for the
+ * handler, the review row's own columns for the back-fill — for the review's
+ * subject, cited permlink and reviewer, whether the pair rule applies, and its
+ * block time. The order completed naming the other is preferred only if it
+ * was named by the review's time (live that is every such order the database
+ * holds; at start-up it keeps a later completion from changing the choice).
+ * `pinOnly`: only the orders that may be recorded against (pinnableOrderSql).
+ */
+export function citationCandidatesSql(e: {
+	subject: string;
+	permlink: string;
+	reviewer: string;
+	pairBound: string;
+	asOf: string;
+	pinOnly?: boolean;
+}): string {
+	const { subject, permlink, reviewer, pairBound, asOf } = e;
+	const pin = e.pinOnly === true ? `\n\t    AND ${pinnableOrderSql('o')}` : '';
+	return `SELECT CASE WHEN o.fee_method = 'waived_first_buy' THEN 'waived' ELSE 'paid' END AS kind,
+	        o.account AS owner,
+	        ${pinnableOrderSql('o')} AS in_block_fee
+	   FROM orders o
+	  WHERE o.account IN (${subject}, ${reviewer})${pin}
+	    AND o.permlink = ${permlink}
+	    AND o.fee_status = 'verified'
+	    AND ((o.fee_method <> 'waived_first_buy'
+	          AND (NOT ${pairBound}
+	               OR o.completed_counterparty = (CASE WHEN o.account = ${subject} THEN ${reviewer} ELSE ${subject} END)
+	               OR EXISTS (
+	                    SELECT 1 FROM chat_messages m
+	                     WHERE m.order_permlink = ${permlink}
+	                       AND m.created_at <= ${asOf}
+	                       AND ((m.sender = ${subject} AND m.recipient = ${reviewer})
+	                            OR (m.sender = ${reviewer} AND m.recipient = ${subject})))))
+	      OR (${waiverTradeOfThePairSql(subject, reviewer)}
+	          AND EXISTS (
+	               SELECT 1 FROM waiver_trade_transfers t
+	                WHERE t.recipient = o.account
+	                  AND t.sender = o.completed_counterparty
+	                  AND t.block_time >= o.created_at
+	                  AND t.block_time >= '${CONSENSUS_V2_ACTIVATION_TIME}'::timestamptz
+	                  AND t.block_time <= ${asOf}
+	                  AND t.amount_blurt >= ${WAIVER_TRADE_MIN_TRANSFER_BLURT.toFixed(3)}::numeric)))
+	  ORDER BY (o.fee_method = 'waived_first_buy'),
+	           COALESCE(o.status = 'completed'
+	                    AND o.completed_counterparty = (CASE WHEN o.account = ${subject} THEN ${reviewer} ELSE ${subject} END)
+	                    AND COALESCE(o.counterparty_named_at, o.completed_at) <= ${asOf},
+	                    FALSE) DESC,
+	           (o.account = ${subject}) DESC`;
+}
 
 export async function reviewCitesFeePaidOrder(
+	db: ChatGateDb,
+	args: {
+		permlink: string;
+		subject: string;
+		reviewer: string;
+		pairBound: boolean;
+		asOf: Date;
+	}
+): Promise<ReviewCitation | null> {
+	return (await reviewCitationOf(db, args))?.kind ?? null;
+}
+
+/**
+ * reviewCitesFeePaidOrder, with the OWNER of the order that admits the review
+ * (v1.23.5): recorded on the review (feedback.order_account), so the two
+ * reviews of one trade and its completion are pinned to the same order even
+ * when both parties own an order under that permlink. Among the orders that
+ * qualify: a paid one before a waiver order (the kind decides the welcome
+ * bonus, as before), then the one completed naming the other party (the order
+ * they traded on), then the subject's — and only one whose fee is judged in
+ * its block (pinnableOrderSql): none, and the owner is null.
+ */
+export async function reviewCitationOf(
 	db: ChatGateDb,
 	args: {
 		permlink: string;
@@ -87,7 +186,7 @@ export async function reviewCitesFeePaidOrder(
 		/** The review's block time: chat and transfers at or before it count. */
 		asOf: Date;
 	}
-): Promise<ReviewCitation | null> {
+): Promise<{ kind: ReviewCitation; owner: string | null } | null> {
 	// The paid branch keeps `fee_method <> 'waived_first_buy'`: the free
 	// first-buy waiver order is stored as fee_status='verified' at ZERO cost,
 	// so it passed this check. A fresh sock (free relay signup) could cite its
@@ -96,43 +195,22 @@ export async function reviewCitesFeePaidOrder(
 	// accepted citation) from whichever instance the sock named in
 	// operator_tag. A paid citation must carry a real paid listing fee; a
 	// waiver citation must carry the proof of a real trade instead.
-	const r = await db.query<{ kind: ReviewCitation }>(
-		`SELECT CASE WHEN o.fee_method = 'waived_first_buy' THEN 'waived' ELSE 'paid' END AS kind
-		   FROM orders o
-		  WHERE o.account IN ($1, $3)
-		    AND o.permlink = $2
-		    AND o.fee_status = 'verified'
-		    AND ((o.fee_method <> 'waived_first_buy'
-		          AND (NOT $4::boolean
-		               OR o.completed_counterparty = (CASE WHEN o.account = $1 THEN $3 ELSE $1 END)
-		               OR EXISTS (
-		                    SELECT 1 FROM chat_messages m
-		                     WHERE m.order_permlink = $2
-		                       AND m.created_at <= $5
-		                       AND ((m.sender = $1 AND m.recipient = $3)
-		                            OR (m.sender = $3 AND m.recipient = $1)))))
-		      OR (${WAIVER_TRADE_OF_THE_PAIR}
-		          AND EXISTS (
-		               SELECT 1 FROM waiver_trade_transfers t
-		                WHERE t.recipient = o.account
-		                  AND t.sender = o.completed_counterparty
-		                  AND t.block_time >= o.created_at
-		                  AND t.block_time >= $7::timestamptz
-		                  AND t.block_time <= $5
-		                  AND t.amount_blurt >= $6::numeric)))
-		  ORDER BY (o.fee_method = 'waived_first_buy')
-		  LIMIT 1`,
-		[
-			args.subject,
-			args.permlink,
-			args.reviewer,
-			args.pairBound,
-			args.asOf,
-			WAIVER_TRADE_MIN_TRANSFER_BLURT.toFixed(3),
-			CONSENSUS_V2_ACTIVATION_TIME
-		]
+	// Every admitting order, best first (one or two: an order of each party):
+	// the first decides the kind, as before; the first whose fee is judged in
+	// its block is the one the review is recorded against (null if none).
+	const r = await db.query<{ kind: ReviewCitation; owner: string; in_block_fee: boolean }>(
+		citationCandidatesSql({
+			subject: '$1',
+			permlink: '$2',
+			reviewer: '$3',
+			pairBound: '$4::boolean',
+			asOf: '$5'
+		}),
+		[args.subject, args.permlink, args.reviewer, args.pairBound, args.asOf]
 	);
-	return r.rows[0]?.kind ?? null;
+	const first = r.rows[0];
+	if (first === undefined) return null;
+	return { kind: first.kind, owner: r.rows.find((x) => x.in_block_fee)?.owner ?? null };
 }
 
 /**
@@ -153,7 +231,7 @@ export async function waiverTradeOfThePair(
 		  WHERE o.account IN ($1, $3)
 		    AND o.permlink = $2
 		    AND o.fee_status = 'verified'
-		    AND ${WAIVER_TRADE_OF_THE_PAIR}
+		    AND ${waiverTradeOfThePairSql('$1', '$3')}
 		  ORDER BY o.account
 		  LIMIT 1`,
 		[args.subject, args.permlink, args.reviewer]

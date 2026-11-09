@@ -80,6 +80,7 @@ import {
 	brandNameProblem,
 	htmlEscape,
 	readBrandingSettings,
+	parseLogoSize,
 	CANONICAL_HTML_ATTRS,
 	type BrandingSettings
 } from '../src/lib/branding.ts';
@@ -212,11 +213,27 @@ describe('build-brand-slots (prerender post-processing)', () => {
 			files: Record<string, Array<[number, number, string, string]>>;
 			theme_files: Record<string, Array<[number, number, string, string]>>;
 		};
-		expect(Object.keys(map.files).sort()).toEqual(['en/login.html', 'pl.html']);
+		expect(Object.keys(map.files).sort()).toEqual(['en/login.html', 'pl.html', 'spa-shell.html']);
 		// `files`: site-name slots only (the v1.19 shape an older CLI reads);
 		// the colour-theme slots live in `theme_files`: the theme-color meta
 		// value and the </head> insertion point for the theme <style>.
-		expect(Object.keys(map.theme_files).sort()).toEqual(['en/login.html', 'pl.html']);
+		expect(Object.keys(map.theme_files).sort()).toEqual([
+			'en/login.html',
+			'pl.html',
+			'spa-shell.html'
+		]);
+		// v1.23.5: spa-shell.html is the app shell as a brandable page — index.html
+		// with the stamp and its slots, which nginx serves in index.html's place.
+		expect(read('spa-shell.html')).toBe(
+			read('index.html').replace('<html lang="en">', `<html lang="en" ${CANONICAL_HTML_ATTRS}>`)
+		);
+		expect(map.files['spa-shell.html']!.map((s) => s[2])).toEqual(['Morphit']);
+		expect(gunzipSync(readFileSync(join(buildDir, 'spa-shell.html.gz'))).toString()).toBe(
+			read('spa-shell.html')
+		);
+		expect(brotliDecompressSync(readFileSync(join(buildDir, 'spa-shell.html.br'))).toString()).toBe(
+			read('spa-shell.html')
+		);
 		expect(map.theme_files['en/login.html']!.map((s) => s[3])).toEqual([
 			'theme-color',
 			'theme-style'
@@ -784,6 +801,78 @@ describe('site-name rules', () => {
 		expect(m.name).toBe('Morphit');
 	});
 
+	it('v1.23.5: the brandable app shell names the site; index.html never changes', () => {
+		const shell = read('index.html');
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		expect(read('spa-shell.html')).toContain('<title>Vigilante Trading</title>');
+		expect(read('spa-shell.html')).toContain('data-brand-name="Vigilante Trading"');
+		expect(read('index.html')).toBe(shell);
+		applyBranding({ buildDir, settings: settings(), reset: true });
+		expect(read('spa-shell.html')).toContain('<title>Morphit</title>');
+	});
+
+	// v1.23.5: the header and homepage logo's size (MORPHIT_INSTANCE_LOGO_SIZE).
+	it('a logo size: theme.css sets --brand-logo-scale; 100, unset or a bad value leave it out', () => {
+		expect(parseLogoSize('120')).toBe(120);
+		expect(parseLogoSize(' 120% ')).toBe(120);
+		expect(parseLogoSize('50')).toBe(50);
+		expect(parseLogoSize('200')).toBe(200);
+		expect(parseLogoSize('100')).toBeNull();
+		expect(parseLogoSize('')).toBeNull();
+		expect(parseLogoSize(null)).toBeNull();
+		for (const bad of ['49', '201', '1.2', '120px', 'big', '-120', '0120x'])
+			expect(parseLogoSize(bad)).toBe('invalid');
+
+		const canonicalCss = read('brand/theme.css');
+		const r = applyBranding({ buildDir, settings: settings({ logoSize: 120 }) });
+		expect(read('brand/theme.css')).toBe('html:root{--brand-logo-scale:1.2}\n');
+		expect(r.touched).toContain('brand/theme.css');
+		expect(r.notes.join('\n')).toContain('logo size: 120%');
+		// With a name and a theme: the same stylesheet carries all of it.
+		applyBranding({
+			buildDir,
+			settings: settings({
+				brandName: 'Vigilante Trading',
+				theme: { preset: 'champagne-gold' },
+				logoSize: 115
+			})
+		});
+		const css = read('brand/theme.css');
+		expect(css).toContain(`--brand-name-hex:${brandNameCssHex('Vigilante Trading')}`);
+		expect(css).toContain('--brand-btn-face-rgb:214 178 106');
+		expect(css.endsWith('html:root{--brand-logo-scale:1.15}\n')).toBe(true);
+		// Back to the standard size: the rule is gone.
+		applyBranding({
+			buildDir,
+			settings: settings({ brandName: 'Vigilante Trading', theme: { preset: 'champagne-gold' } })
+		});
+		expect(read('brand/theme.css')).not.toContain('--brand-logo-scale');
+		// A value that is not a size: a warning, and the standard size.
+		const bad = applyBranding({
+			buildDir,
+			settings: settings({ logoSize: null, invalidLogoSize: '300' })
+		});
+		expect(bad.warnings.join('\n')).toMatch(/logo size "300" is not usable/);
+		expect(read('brand/theme.css')).toBe(canonicalCss);
+	});
+
+	it('reads MORPHIT_INSTANCE_LOGO_SIZE from the config', () => {
+		mkdirSync(join(root, 'etc'), { recursive: true });
+		writeFileSync(join(root, 'morphit.config.env'), 'MORPHIT_INSTANCE_LOGO_SIZE=120\n');
+		const env = { MORPHIT_ETC_DIR: join(root, 'etc') };
+		expect(readBrandingSettings(root, env)).toMatchObject({ logoSize: 120, invalidLogoSize: null });
+		writeFileSync(join(root, 'morphit.config.env'), 'MORPHIT_INSTANCE_LOGO_SIZE=huge\n');
+		expect(readBrandingSettings(root, env)).toMatchObject({
+			logoSize: null,
+			invalidLogoSize: 'huge'
+		});
+		writeFileSync(join(root, 'morphit.config.env'), 'MORPHIT_INSTANCE_LOGO_SIZE=100\n');
+		expect(readBrandingSettings(root, env)).toMatchObject({
+			logoSize: null,
+			invalidLogoSize: null
+		});
+	});
+
 	// v1.21.5: the BETA marker is gone. A MORPHIT_INSTANCE_BETA_BADGE line left
 	// in an operator's config from before is ignored end to end: no setting, no
 	// brand.json field, and the pages' (inert) attribute is left as built.
@@ -965,6 +1054,34 @@ describe('morphit-ops branding apply --logo/--icon/--name (one-command setup)', 
 		);
 		expect(read('en/login.html')).toContain('<title>Sign in to Morphit</title>');
 		expect(read('brand/site-logo.svg')).toContain('viewBox="0 0 357 250"');
+	});
+
+	it('--logo-size: saved, applied, shown by status; 100 or empty removes it; a bad size changes nothing', () => {
+		const r = cli('apply', '--logo-size', '120');
+		expect(r.status, r.out).toBe(0);
+		expect(readFileSync(join(root, 'morphit.config.env'), 'utf8')).toMatch(
+			/^MORPHIT_INSTANCE_LOGO_SIZE=120$/m
+		);
+		expect(read('brand/theme.css')).toContain('--brand-logo-scale:1.2');
+		expect(cli('status').out).toContain('Logo size:      120%');
+		for (const bad of ['250', 'big', '1.2']) {
+			const b = cli('apply', '--logo-size', bad);
+			expect(b.status, bad).toBe(1);
+			expect(b.out).toMatch(/whole percent from 50 to 200/);
+		}
+		expect(readFileSync(join(root, 'morphit.config.env'), 'utf8')).toMatch(
+			/^MORPHIT_INSTANCE_LOGO_SIZE=120$/m
+		);
+		const r2 = cli('apply', '--logo-size', '100');
+		expect(r2.status, r2.out).toBe(0);
+		expect(readFileSync(join(root, 'morphit.config.env'), 'utf8')).not.toMatch(/LOGO_SIZE=/);
+		expect(read('brand/theme.css')).not.toContain('--brand-logo-scale');
+		cli('apply', '--logo-size', '115%');
+		expect(readFileSync(join(root, 'morphit.config.env'), 'utf8')).toMatch(
+			/^MORPHIT_INSTANCE_LOGO_SIZE=115$/m
+		);
+		expect(cli('apply', '--logo-size=').status).toBe(0);
+		expect(readFileSync(join(root, 'morphit.config.env'), 'utf8')).not.toMatch(/LOGO_SIZE=/);
 	});
 
 	it('refuses an unsafe file or an unusable name and changes nothing', () => {

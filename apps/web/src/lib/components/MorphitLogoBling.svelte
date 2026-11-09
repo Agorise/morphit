@@ -132,17 +132,25 @@
 	const logoSrc = $derived(
 		wordmarkSrc ?? (variant === 'footer' ? SITE_LOGO_FOOTER_PATH : SITE_LOGO_PATH)
 	);
+	// v1.23.5 — the operator's logo size (MORPHIT_INSTANCE_LOGO_SIZE, written by
+	// `morphit-ops branding apply` into /brand/theme.css as --brand-logo-scale;
+	// 1 when unset). The header logo only: the footer keeps its size, and the
+	// homepage hero's heightClass carries the same factor (routes/[lang]/+page).
+	const scaled = $derived(variant === 'main' && wordmarkSrc === undefined);
+	const heightCss = $derived(
+		scaled ? `calc(${heightPx}px * var(--brand-logo-scale, 1))` : `${heightPx}px`
+	);
 </script>
 
 <div
 	class={`morphit-logo-bling-host ${heightClass} ${cls}`}
-	style={heightClass ? '' : `height: ${heightPx}px;`}
+	style={heightClass ? '' : `height: ${heightCss};`}
 >
 	<img
 		src={logoSrc}
 		alt={$brandName}
 		class={`morphit-logo-bling-wordmark ${heightClass}`}
-		style={heightClass ? 'max-width: 90vw;' : `height: ${heightPx}px;`}
+		style={heightClass ? 'max-width: 90vw;' : `height: ${heightCss};`}
 		width={attrWidth}
 		height={attrHeight}
 		fetchpriority={priority ? 'high' : undefined}

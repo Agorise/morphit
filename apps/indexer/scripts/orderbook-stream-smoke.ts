@@ -99,6 +99,9 @@ function makeRow(overrides: Partial<OrderbookStreamRow> = {}): OrderbookStreamRo
 		lang: null,
 		fee_method: 'blurt',
 		feedback_count: 5,
+		// v1.23.5: what those reviews weigh (a repeat trade's counts half); the
+		// composite score's count.
+		feedback_weight: 5,
 		// a DIFFERENT number from feedback_count on purpose. The card
 		// reads this; when the stream omitted it, every live orderbook card
 		// rendered "no trades".

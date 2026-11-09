@@ -17,7 +17,7 @@ icons, your name. This guide shows how to brand an instance so that:
 | Icon | Browser-tab favicon, "add to home screen" app icons | `icon.svg` |
 | Launch screens | The iPhone/iPad screen shown while the app opens | made from `logo.svg` |
 | Link preview | The picture shown when a link to your site is shared (`/og-image.png`, 1200 × 630) | drawn from `icon.svg` (or `logo.svg`) and the site name |
-| Site name | Every place the UI names the **site**: "Sign in to …", "Your … password", page titles, RSS feed titles, and — on the pages Morphit prerenders (homepage, sign-in, FAQ, guides) — link previews and the home-screen label (see [Limits](#limits)) | `MORPHIT_INSTANCE_BRAND_NAME` |
+| Site name | Every place the UI names the **site**: "Sign in to …", "Your … password", page titles, RSS feed titles, link previews (of every page, the bare address included), and — on the pages Morphit prerenders (homepage, sign-in, FAQ, guides) — the home-screen label (see [Limits](#limits)) | `MORPHIT_INSTANCE_BRAND_NAME` |
 | Colours | The whole colour scheme: the hero heading gradient, accents, links, buttons, focus rings, chat bubbles, the homepage cards, the page background and its corner glows, the grey text/surface scale, the browser's theme colour and the Android app colours | two or three colours: `--theme-from`, `--theme-to` (optional `--theme-mid`, `--theme-background`), or a preset `--theme champagne-gold` |
 
 Mentions of the **software** and the **federation** stay "Morphit": "Run a Morphit node", "other
@@ -113,6 +113,11 @@ someone opens one directly.
   Morphit logo it replaces (header 32 px, footer 40 px, homepage hero 44–96 px), and its width
   follows its own proportions. A wide logo is wide, a compact one compact. It is never stretched or
   squashed; a very wide logo is scaled down to fit a phone screen.
+- **A logo that reads small** (two lines of text, say) can be made bigger in the header and the
+  homepage hero: `sudo morphit-ops branding apply --logo-size 120` shows it at 120 % of the
+  standard height (50–200; `--logo-size 100` or `--logo-size=` goes back to the standard). It is
+  saved as `MORPHIT_INSTANCE_LOGO_SIZE` in `morphit.config.env`, re-applied on every upgrade, and
+  reaches every page through `/brand/theme.css`. The footer logo keeps its size.
 - **Include a `viewBox`**, or at least a pixel `width` and `height`. If only the size is given,
   Morphit adds the matching `viewBox` itself so the logo scales in every browser.
 - **The sheen** (the glint that sweeps across the logo every ~15 s) follows your logo's own shape
@@ -290,6 +295,14 @@ warning. Branding therefore never rebuilds. `morphit-ops branding apply` edits t
   such place is recorded in `build/.brand-slots.json`; software mentions are not in that list and
   are never touched. Because the page itself carries your name, it is right on first paint, for
   visitors without JavaScript, and for search engines and link previews.
+- **The app shell** (v1.23.5): the bare address (`https://your.site/`) and every page the app draws
+  in the browser (an order, a profile, a chat) are answered with the app shell. `index.html` is that
+  shell and is on the on-chain manifest, so it is never edited; the build ships a copy of it,
+  `spa-shell.html`, with the link-preview picture added, recorded in `build/.brand-slots.json` like
+  a prerendered page. Branding names your site in that copy, and the web server answers with it
+  (`index.html` when a build has no copy). A link to your site shared in a text message or a chat
+  app therefore shows your name and picture, not Morphit's. The browser's integrity check still
+  fetches and verifies `/index.html` itself.
 - `/brand/theme.css` carries your name and colours for every page, including the ones the app
   draws in the browser (chats, profiles, orders), which boot from the untouched `index.html`: every
   page links it in its head, so the browser paints nothing until it has loaded. No page ever shows
@@ -332,10 +345,10 @@ site: for that, visitors look at the address bar and *About this instance*.
   theme's background; without your own icon they keep Morphit's (navy) icons.
 - The hero heading's gradient runs left to right, as Morphit's does.
 - Pages the app draws in the browser (an order, a profile, a chat, an explorer transaction) start
-  from the shared `index.html`, which the integrity check covers and branding never edits. Their
-  link previews, the text shown to visitors without JavaScript, and the iPhone "Add to Home Screen"
-  label taken from one of those pages say "Morphit". Once the page has loaded, everything a visitor
-  reads uses your name.
+  from the app shell: their link preview names your site, but it is the same for all of them (your
+  site's name and picture, not the order's or the profile's). A bare-metal nginx set up before
+  v1.23.5 is switched to the brandable shell by the upgrade (`morphit-ops upgrade` heals the copied
+  `web.conf`).
 - The link-preview picture's tagline ("Anonymously trade crypto, fiat, goods and services") is in
   English, as on Morphit's own.
 - In Persian (right-to-left) text, punctuation right after a Latin-script name can display on the

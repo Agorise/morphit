@@ -17,6 +17,14 @@
  * ≥3 mutual 5-star reviews within 7 days with no third-party
  * feedback.
  *
+ * Signals B and D leave a pair's reviews of a PROVEN trade out of the pair's
+ * own count (v1.23.5, reputation/repeatTrades.ts): both parties reviewed each
+ * other citing that order, and its owner completed it naming the other. Two
+ * people who really trade with each other often are exactly what they would
+ * otherwise flag. A proven review of a third party still counts as the
+ * reviewer's other activity (B's diversity, D's total), so the change only
+ * ever flags less.
+ *
  * **Signal C — one-way pile-on.** ≥3 distinct reviewers
  * targeting the same subject with avg rating ≤2, posted within a
  * 7-day window, where all reviewers' first_activity_at clusters
@@ -78,6 +86,7 @@
 import type pg from 'pg';
 import type { Database } from '$db/pool';
 import { consensusV2Active } from '$indexer/consensusActivation';
+import { provenTradeSql } from '$indexer/reputation/repeatTrades';
 import {
 	SIGNAL_A_EXEMPT_RESERVED_CREATORS,
 	SIGNAL_A_PROXIMITY_MINUTES,
@@ -152,7 +161,11 @@ export async function detectSuspiciousReciprocityInTx(
 			SELECT
 				reviewer,
 				subject,
-				COUNT(*) AS cnt,
+				-- v1.23.5: the pair's own reviews of a PROVEN trade are not ring
+				-- evidence. Only the count leaves them out: the average, and a
+				-- proven review of someone else (the reviewer's other activity,
+				-- below), are as before, so this only ever flags less.
+				COUNT(*) FILTER (WHERE NOT ${provenTradeSql('feedback', { asOf: '$4::timestamptz' })}) AS cnt,
 				AVG(rating)::NUMERIC(3,2) AS avg_rating
 			FROM feedback
 			WHERE created_at > $4::timestamptz - INTERVAL '${SIGNAL_B_WINDOW_DAYS} days'
@@ -565,7 +578,11 @@ export async function detectReviewConcentrationInTx(
 			SELECT
 				reviewer,
 				subject,
-				COUNT(*)::int AS pair_count,
+				-- v1.23.5: reviews of PROVEN trades with this subject are not
+				-- concentration evidence. Only this count leaves them out (they
+				-- stay in the reviewer's total above, and in the average), so this
+				-- only ever flags less.
+				(COUNT(*) FILTER (WHERE NOT ${provenTradeSql('feedback', { asOf: '$6::timestamptz' })}))::int AS pair_count,
 				AVG(rating)::NUMERIC(3,2) AS pair_avg_rating
 			FROM feedback
 			WHERE created_at > $6::timestamptz - INTERVAL '${SIGNAL_D_WINDOW_DAYS} days'

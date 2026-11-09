@@ -18,6 +18,8 @@
  *     log holds no line naming a client;
  *   - the indexer's health and stream answers carry the security headers;
  *   - web.conf's /ipfs/ asks the gateway for 127.0.0.1, not the visitor's Host.
+ *   - `/` and the app's own routes get spa-shell.html when the build has it,
+ *     index.html when not; /index.html is always index.html (v1.23.5).
  * MORPHIT_NGX_ROOT=<dir containing ops/> runs another tree to watch it fail.
  * Needs nginx and openssl; otherwise it says so and skips.
  */
@@ -145,9 +147,14 @@ interface Seen {
 	headers: IncomingHttpHeaders;
 }
 
+/** The test site's document root (main sets it; the app-shell checks write
+ *  and remove spa-shell.html in it). */
+let SITE = '';
+
 async function main(): Promise<void> {
 	const work = mkdtempSync(join(tmpdir(), 'ngx-hard-'));
 	const site = join(work, 'site');
+	SITE = site;
 	mkdirSync(join(site, '.well-known'), { recursive: true });
 	writeFileSync(join(site, 'index.html'), '<!doctype html><title>shell</title>SPA-SHELL');
 	// Leftovers that must never be served, and an SVG that must be (the
@@ -394,6 +401,45 @@ async function runChecks(
 			`${L}: the page CSP keeps 'wasm-unsafe-eval' for the WebAssembly crypto`,
 			csp.includes("'wasm-unsafe-eval'")
 		);
+	}
+
+	// v1.23.5: the app shell is spa-shell.html when the build has it — the
+	// copy branding names the site in, so a link preview of `/` (or of a
+	// profile, order or chat link) names the site — and index.html when it
+	// does not (an older build). /index.html itself is always index.html: the
+	// browser's integrity check hashes it.
+	if (c.page) {
+		const shell = join(SITE, 'spa-shell.html');
+		writeFileSync(shell, '<!doctype html><title>shell</title>BRANDED-SHELL');
+		try {
+			for (const p of ['/', '/?then=/orderbook', '/en/chat/bob', '/es/@ann']) {
+				const g = await get(port, p, { tls });
+				check(
+					`${L}: ${p} is answered with the brandable app shell (spa-shell.html)`,
+					g.status === 200 &&
+						g.body.includes('BRANDED-SHELL') &&
+						String(g.headers['content-security-policy'] ?? '') !== '' &&
+						String(g.headers['cache-control'] ?? '') === 'no-cache',
+					`${g.status} ${g.body.slice(0, 60)} cache-control: ${String(g.headers['cache-control'] ?? '')}`
+				);
+			}
+			const idx = await get(port, '/index.html', { tls });
+			check(
+				`${L}: /index.html is still index.html itself (the integrity check hashes it)`,
+				idx.status === 200 && idx.body.includes('SPA-SHELL') && !idx.body.includes('BRANDED'),
+				`${idx.status} ${idx.body.slice(0, 60)}`
+			);
+		} finally {
+			rmSync(shell, { force: true });
+		}
+		for (const p of ['/', '/en/chat/bob']) {
+			const g = await get(port, p, { tls });
+			check(
+				`${L}: without spa-shell.html (an older build), ${p} is index.html`,
+				g.status === 200 && g.body.includes('SPA-SHELL'),
+				`${g.status} ${g.body.slice(0, 60)}`
+			);
+		}
 	}
 
 	// Account names may end in .old, .git, .svg … (any part of 3+ characters).

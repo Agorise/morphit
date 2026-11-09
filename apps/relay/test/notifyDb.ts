@@ -1,6 +1,6 @@
 /**
- * Offline notices: the production tables (the indexer's schema.sql, from the
- * v69 section on: v69 offline_notify_*, v70, v71 offline_notify_matrix_rooms)
+ * Offline notices: the production tables (the indexer's schema.sql, its
+ * v69 offline_notify_*, v70 and v71 offline_notify_matrix_rooms sections)
  * in a private schema of a real Postgres (TEST_DATABASE_URL), for tests that
  * must run the real store. `DB_TESTS` is false without TEST_DATABASE_URL: such
  * tests skip (the smoke suite runs them with Postgres).
@@ -23,6 +23,13 @@ export function schemaFrom(version: number): string {
 	return sql.slice(at);
 }
 
+/** The offline-notice sections only (v69–v71): later sections change tables
+ *  of the indexer's (v73 the `feedback` table) that this private schema has
+ *  not got. */
+export function notifySchema(): string {
+	return [69, 70, 71].map((v) => schemaSection(v)).join('\n');
+}
+
 /** The text of one section only (to build an older database). */
 export function schemaSection(version: number): string {
 	const from = schemaFrom(version);
@@ -35,7 +42,7 @@ export async function notifyDb(opts: { sql?: string } = {}) {
 	const admin = new pg.Client({ connectionString: DB_URL });
 	await admin.connect();
 	await admin.query(`CREATE SCHEMA ${name}; SET search_path = ${name}`);
-	await admin.query(opts.sql ?? schemaFrom(69));
+	await admin.query(opts.sql ?? notifySchema());
 	// Every connection to this schema says so (application_name): a test can
 	// tell its own waiting backends from other tests' on the same database.
 	const options = `-c search_path=${name} -c application_name=${name}`;

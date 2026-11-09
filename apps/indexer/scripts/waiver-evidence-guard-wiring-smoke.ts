@@ -8,9 +8,16 @@
  * pins that the poller runs it before applying anything, stops on its verdict,
  * keeps the marker in step, and starts a fresh node in step.
  *
- * Tamper tests (each must turn this red): drop the call from Poller.run, catch
- * and ignore the gap error, stop updating the marker in markApplied (or update
- * it unconditionally), insert a fresh state row without it.
+ * v1.23.5: the same for repeatTradesGuard.ts (the repeat-trade rule from the
+ * v1.23.5 activation time), which follows the same pattern, and the
+ * repeat-trade start-up steps after it (naming times, admitting orders,
+ * weights, the review-ring flags), before any block — the upgrade replay
+ * included — is applied.
+ *
+ * Tamper tests (each must turn this red): drop either call from Poller.run,
+ * catch and ignore either gap error, stop updating either marker in
+ * markApplied (or update it unconditionally), insert a fresh state row
+ * without either.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -49,8 +56,42 @@ check(
 	)
 );
 check(
-	'a fresh node starts in step',
-	/INSERT INTO indexer_state \(id, last_applied_block, chain_id, waiver_evidence_through_block\)\s*VALUES \(\$1, \$2, \$3, \$2\)/.test(
+	'a fresh node starts in step (both markers)',
+	/INSERT INTO indexer_state \(id, last_applied_block, chain_id, waiver_evidence_through_block,\s*repeat_trades_through_block\)\s*VALUES \(\$1, \$2, \$3, \$2, \$2\)/.test(
+		poller
+	)
+);
+
+// v1.23.5 — repeatTradesGuard.ts.
+const repeatGuard = run.indexOf('await checkRepeatTradesRule(this.db,');
+check(
+	'Poller.run checks the repeat-trade rule before it applies any block',
+	repeatGuard > 0 &&
+		(firstApply < 0 || repeatGuard < firstApply) &&
+		repeatGuard < run.indexOf('reconcileAfterUpgrade(')
+);
+check(
+	'a repeat-trade gap stops the node (the error is rethrown, not swallowed)',
+	/if \(err instanceof RepeatTradesGapError\) \{\s*log\.error\('repeat_trades_gap', \{\}, err\);\s*throw err;\s*\}/.test(
+		run
+	)
+);
+const reconcile = run.indexOf('reconcileAfterUpgrade(');
+const steps = [
+	'await healNamingTimes(this.db)',
+	'await healOrderAccounts(this.db)',
+	'await rewalkAllPairs(this.db)',
+	'await redoReviewSignals(this.db)'
+].map((s) => run.indexOf(s));
+check(
+	'the repeat-trade start-up steps run after the guard, in order, before any block is applied',
+	steps.every((at) => at > repeatGuard) &&
+		steps.every((at, i) => i === 0 || at > steps[i - 1]!) &&
+		steps.every((at) => (firstApply < 0 || at < firstApply) && at < reconcile)
+);
+check(
+	'markApplied keeps the repeat-trade marker in step only while it was',
+	/repeat_trades_through_block = CASE\s*WHEN repeat_trades_through_block = last_applied_block THEN \$1\s*ELSE repeat_trades_through_block\s*END/.test(
 		poller
 	)
 );

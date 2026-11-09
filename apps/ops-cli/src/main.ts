@@ -206,6 +206,7 @@ const VALUE_FLAGS = new Set([
 	'icon',
 	'name',
 	'short-name',
+	'logo-size',
 	'beta',
 	// branding apply colour theme (docs/BRANDING.md, "Colours")
 	'theme',
@@ -254,6 +255,7 @@ function printHelp(): void {
 		"                                  [--theme-mid '#…'] [--theme-background '#121212'], or a",
 		'                                  preset: --theme champagne-gold | morphit (the default).',
 		'                                  Buttons: --theme-button deep | bright.',
+		'                                  Logo size: --logo-size 120 (percent; header + homepage).',
 		'  alt-address [--out=PATH]        Guided setup for a Tor/Lokinet/I2P address, a Nostr pubkey',
 		'                                  or an ENS .eth name: helps you generate one (vanity prefix',
 		'                                  where possible), shows how to install its key on this',

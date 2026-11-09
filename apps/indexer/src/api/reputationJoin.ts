@@ -36,11 +36,18 @@ export function decayWeightSql(createdAt: string): string {
 
 /**
  * The decay-weighted average rating to two decimals, as NUMERIC (NULL when no
- * row qualifies). `filter` is an optional aggregate FILTER condition.
+ * row qualifies). `filter` is an optional aggregate FILTER condition; `weight`
+ * an optional per-row factor (v1.23.5: the review's weight, `fb.k` — a repeat
+ * trade's review weighs REPEAT_TRADE_WEIGHT).
  */
-export function weightedRatingSql(rating: string, createdAt: string, filter = ''): string {
+export function weightedRatingSql(
+	rating: string,
+	createdAt: string,
+	filter = '',
+	weight = ''
+): string {
 	const f = filter ? ` FILTER (WHERE ${filter})` : '';
-	const w = decayWeightSql(createdAt);
+	const w = weight ? `${decayWeightSql(createdAt)} * ${weight}` : decayWeightSql(createdAt);
 	return `ROUND((SUM(${rating} * ${w})${f} / NULLIF(SUM(${w})${f}, 0))::numeric, 2)`;
 }
 
@@ -106,18 +113,61 @@ export function latestReviewOfPairSql(alias: string): string {
 }
 
 /**
- * The aggregate WHERE clause: {@link feedbackPairCountsSql}, one review per
- * (reviewer, subject) ({@link latestReviewOfPairSql}), and the trade-bound
- * filter. Assumes the feedback table is aliased `fb`.
- *
- * Drops feedback with a NULL order_permlink (Finding G2.1): untethered
- * feedback doesn't drive the reputation signal, which closes the "real human
- * Alice writes vague positive feedback for stranger Bob she never traded with"
- * path that sock-puppet detection (which only catches REPETITIVE pairs) misses.
+ * What an order-bound review weighs toward its subject's rating (v1.23.5), as
+ * DOUBLE PRECISION: the stored `review_weight` — 1 for the reviewer's latest
+ * review of the subject, REPEAT_TRADE_WEIGHT for an earlier one of a proven,
+ * spaced repeat trade, else 0 ($indexer/reputation/repeatTrades). A review
+ * not worked out yet (NULL: while the indexer's start-up walk runs after the
+ * upgrade, or written by an older version after a rollback) weighs as before
+ * v1.23.5: 1 when it is the reviewer's latest, else 0. The pair signals are applied
+ * separately ({@link feedbackPairCountsSql}).
  */
-export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
-	      AND ${feedbackPairCountsSql('fb.reviewer', 'fb.subject')}
-	      AND ${latestReviewOfPairSql('fb')}`;
+export function reviewWeightSql(alias: string): string {
+	return `COALESCE(${alias}.review_weight,
+	                 CASE WHEN ${latestReviewOfPairSql(alias)} THEN 1 ELSE 0 END)::float8`;
+}
+
+/**
+ * The feedback table as aggregates read it, as a FROM item aliased `fb`: every
+ * order-bound review that weighs something, with its weight `fb.k` — the rule
+ * of {@link reviewWeightSql}, written as two branches so the planner reads the
+ * stored weights in one pass and only the reviews not worked out yet (none,
+ * once the indexer's start-up walk has run: feedback_weight_unworked_idx is
+ * then empty) with the latest-review rule. `scope`, when given, restricts the
+ * rows, written over `f0`, e.g. `f0.subject = ANY(<the accounts>)`. Follow it
+ * with {@link FEEDBACK_EXCLUSIONS_SQL}.
+ */
+export function countedFeedbackFrom(scope = ''): string {
+	const and = scope ? `\n\t       AND ${scope}` : '';
+	return `(SELECT f0.id, f0.reviewer, f0.subject, f0.rating, f0.created_at, f0.order_permlink,
+	           f0.review_weight::float8 AS k
+	      FROM feedback f0
+	     WHERE f0.order_permlink IS NOT NULL
+	       AND f0.review_weight > 0${and}
+	    UNION ALL
+	    SELECT f0.id, f0.reviewer, f0.subject, f0.rating, f0.created_at, f0.order_permlink,
+	           1::float8 AS k
+	      FROM feedback f0
+	     WHERE f0.order_permlink IS NOT NULL
+	       AND f0.review_weight IS NULL
+	       AND ${latestReviewOfPairSql('f0')}${and}) fb`;
+}
+
+/**
+ * The aggregate WHERE clause over {@link countedFeedbackFrom}: the review
+ * weighs something (`fb.k > 0`) and {@link feedbackPairCountsSql} lets the
+ * pair count. Callers append `AND …` and aggregate with `COUNT(*)` (the reviews
+ * that count), `SUM(fb.k)` (their weight, what the score counts) and
+ * `weightedRatingSql(…, …, '', 'fb.k')`.
+ *
+ * Only order-bound reviews are in {@link countedFeedbackFrom} (Finding G2.1):
+ * untethered feedback doesn't drive the reputation signal, which closes the
+ * "real human Alice writes vague positive feedback for stranger Bob she never
+ * traded with" path that sock-puppet detection (which only catches REPETITIVE
+ * pairs) misses.
+ */
+export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.k > 0
+	      AND ${feedbackPairCountsSql('fb.reviewer', 'fb.subject')}`;
 
 /**
  * v1.5.5 — COMPLETED-TRADE count per account, sock-puppet filtered.
@@ -236,6 +286,8 @@ export const TRADE_COUNT_SQL = tradeCountSql();
  * aggregate to an orders row, exposing:
  *
  *   f.c                 int      — feedback count (0 via COALESCE at use site)
+ *   f.cw                float8   — their weight (v1.23.5; a repeat trade's
+ *                                  review weighs half): the score's count
  *   f.r                 numeric  — time-decayed weighted rating, NULL when c = 0
  *   f.last_feedback_at  timestamptz
  *
@@ -248,7 +300,7 @@ export const TRADE_COUNT_SQL = tradeCountSql();
  *   no benefit. This only ADDS a restriction — it can never relax an exclusion.
  */
 export function feedbackAggregateJoin(orderAlias = 'o', scopeSubjectsSql?: string): string {
-	const scope = scopeSubjectsSql ? `\n\t      AND fb.subject IN (${scopeSubjectsSql})` : '';
+	const scope = scopeSubjectsSql ? `f0.subject IN (${scopeSubjectsSql})` : '';
 	return `	 LEFT JOIN (
 	   -- Excludes feedback from (reviewer, subject) pairs
 	   -- flagged in suspicious_reciprocity OR related_accounts.
@@ -264,14 +316,16 @@ export function feedbackAggregateJoin(orderAlias = 'o', scopeSubjectsSql?: strin
 	   -- catches REPETITIVE pairs; this filter closes the
 	   -- "real human Alice writes vague positive feedback for
 	   -- stranger Bob she never traded with" attack path.
-	   SELECT subject, COUNT(*)::int AS c,
-	          MAX(created_at) AS last_feedback_at,
+	   SELECT fb.subject, COUNT(*)::int AS c,
+	          -- v1.23.5: the reviews' weight (a repeat trade's weighs half).
+	          SUM(fb.k)::float8 AS cw,
+	          MAX(fb.created_at) AS last_feedback_at,
 	          -- Time-decay weighted rating, 365-day half-life
 	          -- (indexer/reputation/decay.ts).
-	          ${weightedRatingSql('rating', 'created_at')} AS r
-	     FROM feedback fb
-${FEEDBACK_EXCLUSIONS_SQL}${scope}
-	    GROUP BY subject
+	          ${weightedRatingSql('fb.rating', 'fb.created_at', '', 'fb.k')} AS r
+	     FROM ${countedFeedbackFrom(scope)}
+${FEEDBACK_EXCLUSIONS_SQL}
+	    GROUP BY fb.subject
 	 ) f ON f.subject = ${orderAlias}.account`;
 }
 
@@ -328,6 +382,7 @@ export function reputationSelectColumns(
 	tradeAlias = 'tc'
 ): string {
 	return `COALESCE(f.c, 0)::int AS feedback_count,
+	       COALESCE(f.cw, 0)::float8 AS feedback_weight,
 	       CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
 	       f.last_feedback_at,
 	       COALESCE(${tradeAlias}.c, 0)::int AS trade_count,
@@ -429,6 +484,9 @@ ${scope}
 /** Row shape produced by {@link reputationSelectColumns}. */
 export interface ReputationRow {
 	feedback_count: number;
+	/** v1.23.5 — the counted reviews' weight (a repeat trade's review weighs
+	 *  REPEAT_TRADE_WEIGHT): what the score counts. */
+	feedback_weight: number;
 	/** v1.5.5 — COMPLETED trades (both sides credited), sock-puppet filtered.
 	 *  A DIFFERENT number from `feedback_count`: a trade nobody reviewed counts
 	 *  here and not there. */
@@ -460,7 +518,7 @@ export function reputationFieldsFromRow(r: ReputationRow): {
 		trade_count: r.trade_count,
 		weighted_rating: weightedAvg,
 		reputation_score: computeReputationScore({
-			count: r.feedback_count,
+			count: Number(r.feedback_weight),
 			weightedAvg,
 			lastFeedbackAtMs: r.last_feedback_at === null ? null : r.last_feedback_at.getTime()
 		}),
