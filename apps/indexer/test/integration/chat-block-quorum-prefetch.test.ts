@@ -26,7 +26,12 @@ import { mockBlurt } from '../testutils/context';
 
 const FIRST = 101;
 const COUNT = 30;
-const QUORUM_RTT_MS = 100;
+// Long enough that what it measures — 30 reads one after another (9 s)
+// against a few rounds of 8 side by side (about 1.2 s) — outweighs the
+// machine's own time to apply 30 blocks: at 100 ms the bound sat only three
+// times above a quiet machine's whole run (about 0.5 s), and a busy CI runner
+// took 1.6 s and failed it (2026-11-09).
+const QUORUM_RTT_MS = 300;
 
 function chatBlock(n: number): unknown {
 	return {

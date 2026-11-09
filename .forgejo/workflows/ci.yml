@@ -276,6 +276,13 @@ jobs:
 
   smokes:
     name: Smoke suite (run-smokes.sh, pulses 1–2 of 3)
+    # After the integration tests, never beside them: the runner runs two jobs
+    # at a time, and a few integration tests hold a wall-clock bound (a window
+    # of chat blocks applied in under half the serial time, a reputation page
+    # under 600 ms). Beside a smoke pulse the runner ran one of them nine times
+    # slower than a quiet machine and failed it (2026-11-09). The four checks
+    # that share the runner with the integration tests take about a minute.
+    needs: integration
     runs-on: ubuntu-24.04
     # The suite runs three times to catch flakes, in two jobs: pulses 1 and 2
     # here, pulse 3 in `smokes-pulse-3` right after (`needs`, so the two never

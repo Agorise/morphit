@@ -174,6 +174,16 @@ indexer that an older release ran past that time does not start on v1.23.5 (its 
   to the homepage and a profile page loads, without errors, on a desktop and a phone; at 120 %
   the header logo is 38.4 px and the homepage logo 115.2 px (52.8 px on a phone), the footer
   40 px; an unbranded build keeps 32, 96 and 40.
+- CI: the smoke pulses now start after the integration tests (`needs: integration` in `ci.yml`).
+  The runner runs two jobs at a time, and beside a smoke pulse it ran the quorum read-ahead test
+  nine times slower than a quiet machine, failing its wall-clock bound.
+  `chat-block-quorum-prefetch.test.ts` also simulates 300 ms quorum reads instead of 100 ms, so
+  the gap it measures (9 s one read after another against about 1.2 s eight at a time) outweighs
+  the machine's own time; it still fails when the reads go one at a time.
+- CI and installs: `scripts/fetch-matrix-bot-natives.mjs` tries a GitHub download again after a
+  server error, a 429 or a dropped connection (after 5, 15, 30 and 60 s) instead of failing on
+  the first: a 504 from GitHub failed CI. Any other answer is still final, and every download is
+  still checked against its pinned SHA-256.
 - Test fix: `certbot-monitor-renewal-due-smoke`'s certificate-age cases sat within a second of a
   whole day of age (Let's Encrypt's 90 days less a second), so the age read 83 or 84 days by
   whether the clock ticked mid-check, and it failed on a loaded machine. They are now an hour off

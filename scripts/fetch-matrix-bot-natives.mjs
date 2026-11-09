@@ -75,19 +75,35 @@ const version = (dir) => {
 		return null;
 	}
 };
+/** Seconds to wait before each retry. GitHub's release downloads answer 5xx
+ *  for a while now and then (a 504 failed CI on 2026-11-08): a server error,
+ *  a 429 or a dropped connection is tried again; any other answer is final.
+ *  Every byte is still checked against its pin, so a retry cannot install
+ *  anything else. */
+export const RETRY_WAITS_S = [5, 15, 30, 60];
+
 async function download(url) {
 	if (verifyOnly)
 		fail(`not in place, and --verify-only downloads nothing (${url.replace(/^.*\//, '')})`);
-	const ctrl = new AbortController();
-	const t = setTimeout(() => ctrl.abort(), 180_000);
-	try {
-		const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow' });
-		if (!res.ok) fail(`HTTP ${res.status} from ${url}`);
-		return Buffer.from(await res.arrayBuffer());
-	} catch (e) {
-		fail(`download failed from ${url} (${e?.message ?? e})`);
-	} finally {
-		clearTimeout(t);
+	for (let attempt = 0; ; attempt++) {
+		const ctrl = new AbortController();
+		const t = setTimeout(() => ctrl.abort(), 180_000);
+		let problem;
+		try {
+			const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow' });
+			if (res.ok) return Buffer.from(await res.arrayBuffer());
+			if (res.status < 500 && res.status !== 429) fail(`HTTP ${res.status} from ${url}`);
+			problem = `HTTP ${res.status}`;
+		} catch (e) {
+			problem = e?.message ?? String(e);
+		} finally {
+			clearTimeout(t);
+		}
+		const wait = RETRY_WAITS_S[attempt];
+		if (wait === undefined)
+			fail(`download failed from ${url} (${problem}; tried ${attempt + 1} times)`);
+		say(`  ${problem} from ${url.replace(/^.*\//, '')}; trying again in ${wait} s`);
+		await new Promise((r) => setTimeout(r, wait * 1000));
 	}
 }
 function place(file, bytes) {
