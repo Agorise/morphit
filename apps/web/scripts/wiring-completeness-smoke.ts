@@ -853,6 +853,53 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
+	// ─── Hive, Steem, BitShares P2P trading wired (ADR-0054) ───────
+	...(['HIVE', 'STEEM', 'BTS'] as const).flatMap((t) => [
+		{
+			id: `${t.toLowerCase()}-p2p`,
+			claim_source: 'brag_list' as const,
+			claim_phrase: 'Hive, Steem and BitShares peer-to-peer',
+			anchor: {
+				kind: 'grep' as const,
+				pattern: `ticker: '${t}'`,
+				paths: ['packages/asset-registry/src/index.ts']
+			},
+			status: 'live' as const
+		},
+		{
+			id: `${t.toLowerCase()}-payment-rail-wired`,
+			claim_source: 'brag_list' as const,
+			claim_phrase: 'Hive, Steem and BitShares peer-to-peer',
+			anchor: {
+				kind: 'grep' as const,
+				pattern: `key: 'pay_${t.toLowerCase()}'`,
+				paths: ['apps/web/src/lib/payments/registry.ts']
+			},
+			status: 'live' as const
+		}
+	]),
+	{
+		id: 'graphene-coins-own-account-warning',
+		claim_source: 'brag_list',
+		claim_phrase: 'Hive, Steem and BitShares peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "{#if p.method === 'hive' || p.method === 'steem' || p.method === 'bts'}",
+			paths: ['apps/web/src/lib/components/ChatMessage.svelte']
+		},
+		status: 'live'
+	},
+	{
+		id: 'hive-explorer-hivescan',
+		claim_source: 'brag_list',
+		claim_phrase: 'Hive, Steem and BitShares peer-to-peer',
+		anchor: {
+			kind: 'grep',
+			pattern: "BUNDLED_HIVE_CHAT_LINK_URL = 'https://hivescan.info/tx/{txid}'",
+			paths: ['apps/web/src/lib/explorer/urlsCore.ts']
+		},
+		status: 'live'
+	},
 	// ─── DAI post-page wired ───────────────────────
 	// A later change added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork

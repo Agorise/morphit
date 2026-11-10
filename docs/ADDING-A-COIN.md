@@ -59,8 +59,9 @@ nothing is guessed mid-implementation.
 
 11. **Memo / destination tag.** Whether a payment can carry one. Morphit does
     not carry memos for external coins; a coin that needs one to reach a
-    custodial account (XRP's destination tag) gets a warning to share a
-    self-custody address instead.
+    custodial account (XRP's destination tag, the memo a Hive, Steem or
+    BitShares exchange account needs) gets a warning to share a self-custody
+    address or account instead.
 12. **Freeze or censorship powers.** If an issuer or foundation can freeze
     funds, the coin gets a privacy-warning chip (as USDT, USDC and DAI do).
 
@@ -233,6 +234,11 @@ exhaustive checks now name the rest:
 - `CHAT_PAYMENT_METHOD` in `apps/web/src/lib/chat/payload.ts` — the coins a
   chat address or "funds sent" message may name (both encoders and the
   decoder read it).
+- `ACCOUNT_NAME_COIN` in the same file — whether the coin's address is an
+  account name (BLURT, HIVE, STEEM, BTS): the same in every trade, so the
+  address-share window does not demand a never-shared one for it, and the
+  ask carries the trade's own random memo instead, which is what ties a
+  payment into the account to the trade.
 - `SAMPLES` in `apps/web/src/lib/chat/everyCoinRoundTrip.test.ts` — one
   well-formed address and transaction ID for the coin; the test then proves
   its chat messages encode and decode.

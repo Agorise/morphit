@@ -114,8 +114,8 @@ export interface ListingFeeResponse {
 	 *  recommendation.  See ADR-0039. */
 	readonly price_warning?: string;
 	/** v1.23.2: USD per 1 coin for every coin but BLURT, BTC, XMR and ECX
-	 *  (that is ETH, LTC, BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, USDT,
-	 *  USDC and DAI) this instance has a fresh price for — always USD,
+	 *  (that is ETH, LTC, BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, HIVE,
+	 *  STEEM, BTS, USDT, USDC and DAI) this instance has a fresh price for — always USD,
 	 *  whatever `denomination_fiat` says. Display only. Absent when none is
 	 *  fresh. */
 	readonly asset_prices_usd?: Readonly<Record<string, number>>;
@@ -1441,12 +1441,14 @@ export interface StrangerFeeQuoteResponse {
 // ─── Trade payment check ───────────────────────────────────────────
 // GET /v1/payment-check?asset=btc|xmr&txid=<64 hex>&address=<addr>
 //   [&tx_key=<64×n hex, n = 1..17>, XMR only and required there]
+// GET /v1/payment-check?asset=hive|steem&txid=<40 hex>&address=<account>
+//   [&memo=<the ask's memo>]  (v1.24.0; asked of those chains' API nodes)
 // The seller's screen in a crypto-for-crypto trade polls this to see
 // whether the buyer's BTC / XMR payment reached the address shared in
 // the chat, and how deep it is. 400 on a malformed query, 429 past the
 // `payment-check` rate-limit tier. Answers are display-only.
 
-export type PaymentCheckAsset = 'btc' | 'xmr';
+export type PaymentCheckAsset = 'btc' | 'xmr' | 'hive' | 'steem';
 
 /** The query, as sent. `tx_key` only for XMR: the transaction key the
  *  wallet shows for the sent transaction, as shown — the main key, or the
@@ -1458,6 +1460,8 @@ export interface PaymentCheckQuery {
 	readonly txid: string;
 	readonly address: string;
 	readonly tx_key?: string;
+	/** v1.24.0 — HIVE / STEEM only: the ask's memo (6-32 of a-z0-9). */
+	readonly memo?: string;
 }
 
 interface PaymentCheckCommon {
@@ -1498,6 +1502,10 @@ export type PaymentCheckResponse =
 			readonly confirmations: number;
 			readonly tx_time?: string | null;
 			readonly tx_time_disputed?: true;
+			/** v1.24.0 — HIVE / STEEM asked with a memo: a transfer in this
+			 *  transaction reached the account without it (`amount` counts only
+			 *  those that carry it). */
+			readonly memo_mismatch?: true;
 	  })
 	| (PaymentCheckCommon & {
 			readonly status: 'not_found' | 'unavailable';
@@ -1640,6 +1648,9 @@ export interface InstanceResponse {
 		readonly eth?: string | null;
 		readonly xrp?: string | null;
 		readonly ecx?: string | null;
+		readonly hive?: string | null;
+		readonly steem?: string | null;
+		readonly bts?: string | null;
 		/** USDT per-network explorer URL overrides.
 		 *  Optional sub-map; older indexer builds (older)
 		 *  omit this field, in which case the frontend uses its

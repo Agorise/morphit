@@ -1467,6 +1467,23 @@ export const DEFAULT_XRP_CHAT_LINK_URL = 'https://livenet.xrpl.org/transactions/
 // different default override via MORPHIT_FRONTEND_ECX_CHAT_LINK_URL.
 export const DEFAULT_ECX_CHAT_LINK_URL = 'https://explorer.ecash.com/tx/{txid}';
 
+// Hive (HIVE) chat-link explorer URL bundled default: hivescan.info, the HAF
+// block explorer the Hive core developers run (hivehub.dev, hive.ausbit.dev
+// and ecosynthesizer.com are the next choices).  Override via
+// MORPHIT_FRONTEND_HIVE_CHAT_LINK_URL.
+export const DEFAULT_HIVE_CHAT_LINK_URL = 'https://hivescan.info/tx/{txid}';
+
+// Steem (STEEM) chat-link explorer URL bundled default: steemscan.com;
+// ecosynthesizer.com (data from the SteemWorld API, seen 20 days behind the
+// chain on 9 Nov 2026) and steemblockexplorer.com are the next choices.
+// Override via MORPHIT_FRONTEND_STEEM_CHAT_LINK_URL.
+export const DEFAULT_STEEM_CHAT_LINK_URL = 'https://steemscan.com/transaction/{txid}';
+
+// BitShares (BTS) chat-link explorer URL bundled default: bitshareschain.com,
+// the BitShares explorer that looks a transaction up by its id.  Override via
+// MORPHIT_FRONTEND_BTS_CHAT_LINK_URL.
+export const DEFAULT_BTS_CHAT_LINK_URL = 'https://www.bitshareschain.com/tx/{txid}';
+
 // USDT per-network chat-link explorer URL
 // bundled defaults.  USDT is multi-network so the operator
 // override is per-network (each chain has its own explorer
@@ -1718,6 +1735,9 @@ export interface ChatLinkExplorersResult {
 	readonly eth: string;
 	readonly xrp: string;
 	readonly ecx: string;
+	readonly hive: string;
+	readonly steem: string;
+	readonly bts: string;
 	/** multi-network USDT per-network chat-link
 	 *  URLs.  4 networks (erc20/trc20/spl/bep20).  Operator-tunable
 	 *  via wizard step 12b or by setting MORPHIT_FRONTEND_USDT_<NET>
@@ -1843,7 +1863,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'\n' +
 			'Single-network assets (one URL each):\n' +
 			'  • BTC, XMR, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL,\n' +
-			'    ETH, XRP, ECX\n' +
+			'    ETH, XRP, ECX, HIVE, STEEM, BTS\n' +
 			'\n' +
 			'Multi-network assets (one URL per network):\n' +
 			'  • USDT: ERC-20, TRC-20, SPL, BEP-20\n' +
@@ -1908,6 +1928,18 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	// ─── ECX ──
 	console.log('\n  ── ECX (eCash) block explorer URL ──\n');
 	const ecx = await editChatLinkUrl('ECX block explorer URL', DEFAULT_ECX_CHAT_LINK_URL);
+
+	// ─── HIVE ──
+	console.log('\n  ── HIVE (Hive) block explorer URL ──\n');
+	const hive = await editChatLinkUrl('HIVE block explorer URL', DEFAULT_HIVE_CHAT_LINK_URL);
+
+	// ─── STEEM ──
+	console.log('\n  ── STEEM (Steem) block explorer URL ──\n');
+	const steem = await editChatLinkUrl('STEEM block explorer URL', DEFAULT_STEEM_CHAT_LINK_URL);
+
+	// ─── BTS ──
+	console.log('\n  ── BTS (BitShares) block explorer URL ──\n');
+	const bts = await editChatLinkUrl('BTS block explorer URL', DEFAULT_BTS_CHAT_LINK_URL);
 
 	// ─── USDT multi-network ──
 	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
@@ -2076,7 +2108,27 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 					)
 				};
 
-	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, dcr, sol, eth, xrp, ecx, usdt, usdc, dai };
+	return {
+		btc,
+		xmr,
+		bch,
+		ltc,
+		dash,
+		doge,
+		zec,
+		arrr,
+		dcr,
+		sol,
+		eth,
+		xrp,
+		ecx,
+		hive,
+		steem,
+		bts,
+		usdt,
+		usdc,
+		dai
+	};
 }
 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
@@ -2180,6 +2232,10 @@ const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze(
 	ETH: 'Ethereum — single-network mainnet.  Launched 2015 with Proof-of-Work,\n    transitioned to Proof-of-Stake in September 2022 ("The Merge").  Validators\n    stake ETH and process blocks in rotation; no central freeze authority.\n    Addresses are 20-byte hex with 0x prefix (42 chars total) — SAME shape as\n    every EVM token-account address on Base, Polygon, Arbitrum, BSC.  Asset\n    field (and network field for multi-network assets) disambiguates.  ENS\n    names are NOT resolved by Morphit (avoids centralized RPC dependency).\n    Smart-contract destinations may revert if the contract lacks a payable\n    receive() or fallback() function — wallet UX warns before sending.\n    Transparent base layer with no native protocol-level mixing; wallet-side\n    address rotation is the privacy lever.  No central issuer.',
 	SOL: 'Solana — single-network mainnet-beta.  Launched 2020.  Delegated\n    Proof-of-Stake consensus with Proof-of-History sequencing for high\n    transaction throughput.  Validators stake SOL and process blocks in\n    rotation; no central freeze authority.  Addresses are 32-byte public\n    keys base58-encoded (32-44 chars, most are 44).  Same address format\n    as USDT-Solana and USDC-Solana SPL token-accounts — asset field on\n    the order disambiguates.  Transparent base layer with no native\n    protocol-level mixing; wallet-side address rotation is the privacy\n    lever.  No central issuer.',
 	ECX: "eCash (ECX) — single-network mainnet.  A hard fork of Bitcoin\n    associated with LayerTwo Labs, at block 973,728 (29 Oct 2026), that adds\n    drivechains (BIP300/301).  Not XEC, the older Bitcoin ABC coin also called eCash.\n    Addresses are Bitcoin's own formats (1..., 3..., bc1...): the same\n    string is a BTC and an ECX address, so the chat card names the chain.\n    Replay protection is opt-in (the node's own wallet adds none): a\n    payment from coins held before the fork can also go out on Bitcoin, so\n    users are told to split those coins first.\n    Transparent like BTC; no central issuer.",
+	HIVE: 'Hive (HIVE) — single-network mainnet.  The 2020 community fork of\n    Steem, run by elected witnesses (delegated proof of stake), 3-second\n    blocks, 3 decimals.  The address is the account name (3-16 characters,\n    the same rule as Blurt), so the chat card names the chain.  Morphit\n    carries no memo: a seller shares their own account, never an exchange\n    deposit account (those need a memo).  Transparent; no central issuer.',
+	STEEM:
+		'Steem (STEEM) — single-network mainnet.  The chain Hive and Blurt\n    forked from, run by elected witnesses (delegated proof of stake),\n    3-second blocks, 3 decimals.  The address is the account name (3-16\n    characters, the same rule as Blurt and Hive).  Morphit carries no\n    memo: a seller shares their own account, never an exchange deposit\n    account.  Transparent; no central issuer.',
+	BTS: 'BitShares (BTS) — single-network mainnet.  The first Graphene chain\n    (2015), with a built-in exchange; run by elected witnesses, 5 decimals.\n    The address is the account name (1-63 characters).  Morphit carries no\n    memo: a seller shares their own account, never an exchange deposit\n    account.  Transparent; the core asset BTS cannot be frozen (issuers\n    can freeze only their own user-issued assets).',
 	BARTER:
 		'Barter — goods & services traded directly, NOT a coin.  Priced in\n    fiat; a seller lists wares and the buyer settles in whichever accepted\n    crypto the two agree on, so BARTER has no receive address, price feed,\n    or chain of its own (isGoodsAsset gates it out of every crypto surface).\n    Disable this if you do not want your instance to carry goods/services\n    listings alongside crypto trades — it is the one most operators consider\n    turning off first.'
 });
@@ -2451,9 +2507,10 @@ export async function stepListingFee(
 			'     separately and not editable here.\n' +
 			'\n' +
 			'  2. Fallback BLURT/USD price.  The indexer normally\n' +
-			'     pulls live BLURT/USD prices from an outlier-rejected\n' +
-			'     median of several external feeds (Coingecko,\n' +
-			'     CoinPaprika, CryptoCompare, …), with\n' +
+			'     pulls live BLURT/USD prices from api.blurt.blog and\n' +
+			'     the Cexius exchange (averaged), then an outlier-\n' +
+			'     rejected median of several external feeds\n' +
+			'     (Coingecko, CoinPaprika, CryptoCompare, …), with\n' +
 			'     on-platform data behind it.  When those are unreachable AND nothing\n' +
 			'     has cached, the indexer falls back to this number.\n' +
 			'     Display-only — fee verification is BLURT-native\n' +

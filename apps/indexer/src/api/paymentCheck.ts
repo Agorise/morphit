@@ -1,9 +1,16 @@
 /**
- * Morphit indexer — GET /v1/payment-check: has a trade's BTC / XMR payment
- * reached the seller's address, with how much, and how deep?
+ * Morphit indexer — GET /v1/payment-check: has a trade's BTC / XMR / HIVE /
+ * STEEM payment reached the seller's address, with how much, and how deep?
  *
  *   GET /v1/payment-check?asset=btc|xmr&txid=<64 hex>&address=<addr>
  *                        [&tx_key=<64×n hex, n = 1..17>, XMR only and required]
+ *   GET /v1/payment-check?asset=hive|steem&txid=<40 hex>&address=<account>
+ *                        [&memo=<the ask's memo, 6-32 of a-z0-9>]
+ *                        (v1.24.0; the account name is the address, only
+ *                        transfers with the memo count — `memo_mismatch: true`
+ *                        when one reached the account without it — and a
+ *                        confirmation counts only from an irreversible block:
+ *                        fee/grapheneTxCheck.ts)
  *
  * `tx_key` is what the wallet shows for the sent transaction: the main key,
  * or — when the transaction has additional keys (a subaddress among several
@@ -95,6 +102,13 @@ export const PAYMENT_CHECK_FRESH_MS = {
 	/** No answer: do not hammer explorers that are down. */
 	unavailable: 15_000
 } as const;
+/** (v1.24.0) HIVE and STEEM make a block every 3 seconds and an irreversible
+ *  one within seconds (Hive) or about a minute (Steem): a confirming or
+ *  not-yet-seen answer is reused for less long there. */
+export const PAYMENT_CHECK_FRESH_MS_3S_CHAINS = {
+	confirming: 5_000,
+	notFound: 6_000
+} as const;
 /** How long a request holding a stale answer waits for its re-check before
  *  serving the stale one (v1.23.4): an explorer that answers quickly brings
  *  the new depth back on this request, not on the browser's next poll. */
@@ -119,7 +133,13 @@ export const PAYMENT_CHECK_ROUNDS_PER_MIN = 120;
 export const PAYMENT_CHECK_CACHE_MAX = 2_000;
 
 const HEX64 = /^[0-9a-f]{64}$/i;
-const PARAMS: ReadonlySet<string> = new Set(['asset', 'txid', 'address', 'tx_key']);
+const HEX40 = /^[0-9a-f]{40}$/i;
+/** A Hive / Steem account name (is_valid_account_name: 3-16 characters,
+ *  dot-separated parts of at least 3; the registry's shape). */
+const HIVE_STEEM_ACCOUNT = /^(?=.{3,16}$)[a-z][a-z0-9-]+[a-z0-9](?:\.[a-z][a-z0-9-]+[a-z0-9])*$/;
+/** The ask's memo, as the chat generates it (web chat/payload.ts MEMO_RE). */
+const TRADE_MEMO = /^[a-z0-9]{6,32}$/;
+const PARAMS: ReadonlySet<string> = new Set(['asset', 'txid', 'address', 'tx_key', 'memo']);
 
 /** The query, validated and normalised (lowercase hex, lowercase bech32), or
  *  null. Every parameter at most once; nothing else allowed. PURE. */
@@ -135,6 +155,15 @@ export function parsePaymentQuery(
 	const address = one('address');
 	// Trimmed: a key pasted from a wallet often carries a stray space or newline.
 	const txKey = one('tx_key')?.trim() ?? null;
+	const memo = one('memo');
+	if (asset === 'hive' || asset === 'steem') {
+		if (txid === null || !HEX40.test(txid) || txKey !== null) return null;
+		if (address === null || !HIVE_STEEM_ACCOUNT.test(address)) return null;
+		if (memo !== null && !TRADE_MEMO.test(memo)) return null;
+		return { asset, txid: txid.toLowerCase(), address, txKey: null, memo };
+	}
+	// A memo is HIVE / STEEM only.
+	if (memo !== null) return null;
 	if (asset !== 'btc' && asset !== 'xmr') return null;
 	if (txid === null || !HEX64.test(txid)) return null;
 	if (address === null) return null;
@@ -178,15 +207,16 @@ const UNAVAILABLE: PaymentVerdict = {
 	txTime: null
 };
 
-function freshFor(v: PaymentVerdict): number {
+function freshFor(v: PaymentVerdict, asset: PaymentQuery['asset']): number {
+	const fast = asset === 'hive' || asset === 'steem';
 	if (v.status === 'found') {
-		return v.confirmations >= PAYMENT_REQUIRED_CONFIRMATIONS
-			? PAYMENT_CHECK_FRESH_MS.confirmed
-			: PAYMENT_CHECK_FRESH_MS.confirming;
+		if (v.confirmations >= PAYMENT_REQUIRED_CONFIRMATIONS) return PAYMENT_CHECK_FRESH_MS.confirmed;
+		return fast ? PAYMENT_CHECK_FRESH_MS_3S_CHAINS.confirming : PAYMENT_CHECK_FRESH_MS.confirming;
 	}
-	return v.status === 'not_found'
-		? PAYMENT_CHECK_FRESH_MS.notFound
-		: PAYMENT_CHECK_FRESH_MS.unavailable;
+	if (v.status === 'not_found') {
+		return fast ? PAYMENT_CHECK_FRESH_MS_3S_CHAINS.notFound : PAYMENT_CHECK_FRESH_MS.notFound;
+	}
+	return PAYMENT_CHECK_FRESH_MS.unavailable;
 }
 
 export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
@@ -208,10 +238,10 @@ export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
 
 	const keyOf = (q: PaymentQuery): string =>
 		createHash('sha256')
-			.update(`${q.asset}|${q.txid}|${q.address}|${q.txKey ?? ''}`)
+			.update(`${q.asset}|${q.txid}|${q.address}|${q.txKey ?? ''}|${q.memo ?? ''}`)
 			.digest('hex');
 
-	const store = (key: string, v: PaymentVerdict): void => {
+	const store = (key: string, v: PaymentVerdict, asset: PaymentQuery['asset']): void => {
 		const now = clock();
 		const prev = cache.get(key);
 		if (
@@ -230,7 +260,7 @@ export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
 			if (oldest.done === true) break;
 			cache.delete(oldest.value);
 		}
-		cache.set(key, { verdict: v, checkedAt: now, freshUntil: now + freshFor(v) });
+		cache.set(key, { verdict: v, checkedAt: now, freshUntil: now + freshFor(v, asset) });
 	};
 
 	/** The round for `key`: the one running, a new one, or null when the
@@ -286,7 +316,7 @@ export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
 				log.warn('payment_check_failed', { error: err instanceof Error ? err.name : typeof err });
 				v = UNAVAILABLE;
 			}
-			store(key, v);
+			store(key, v, q.asset);
 		})().finally(() => {
 			clearTimeout(timer);
 			inFlight.delete(key);
@@ -319,7 +349,8 @@ export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
 						amount: v.amount,
 						confirmations: v.confirmations,
 						tx_time: v.txTime,
-						...(v.txTimeDisputed === true ? { tx_time_disputed: true as const } : {})
+						...(v.txTimeDisputed === true ? { tx_time_disputed: true as const } : {}),
+						...(v.memoMismatch === true ? { memo_mismatch: true as const } : {})
 					}
 				: { ...common, status: v.status, amount: null, confirmations: null, tx_time: null };
 		return c.json(body);
@@ -332,7 +363,7 @@ export function paymentCheckRoute(deps: PaymentCheckRouteDeps): Hono {
 			return c.json(
 				errorBody(
 					'bad_request',
-					'expected asset=btc|xmr, txid (64 hex), a mainnet address for the asset, and for xmr only tx_key (64 hex per key)'
+					'expected asset=btc|xmr|hive|steem, txid (64 hex; 40 for hive and steem), a mainnet address (an account name for hive and steem), for xmr only tx_key (64 hex per key), and for hive and steem an optional memo (6-32 of a-z0-9)'
 				),
 				400
 			);

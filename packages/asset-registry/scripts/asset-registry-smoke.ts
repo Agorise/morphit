@@ -185,6 +185,9 @@ for (const a of ASSETS) {
 		assert(a.addressShape.test(valid), `'${a.ticker}' addressShape rejects known-valid '${valid}'`);
 	}
 	for (const bad of INVALID_ADDRESSES) {
+		// A one-letter BitShares account name is valid on that chain
+		// (GRAPHENE_MIN_ACCOUNT_NAME_LENGTH is 1); BTS's own rule is checked below.
+		if (a.ticker === 'BTS' && bad === 'a') continue;
 		assert(!a.addressShape.test(bad), `'${a.ticker}' addressShape accepts obviously-bad '${bad}'`);
 	}
 }
@@ -259,6 +262,28 @@ for (const a of ASSETS) {
 	}
 	for (const bad of ['Alice', '1alice', 'al', 'alice-', 'alice.', 'a'.repeat(17)]) {
 		assert(!shape.test(bad), `BLURT addressShape accepts the invalid account ${bad}`);
+	}
+}
+
+// HIVE and STEEM use Blurt's account-name rule (3-16 characters); BTS
+// bitshares-core's is_valid_name (1-63 characters, dot-separated labels, each
+// starting with a letter and ending with a letter or digit).
+for (const t of ['HIVE', 'STEEM'] as const) {
+	const shape = getAsset(t).addressShape;
+	for (const ok of ['hiveio', 'steemit', 'alice.brave', 'trader42', 'abc']) {
+		assert(shape.test(ok), `${t} addressShape refuses the valid account ${ok}`);
+	}
+	for (const bad of ['Alice', '1alice', 'al', 'alice-', 'alice.', 'a'.repeat(17), 'a']) {
+		assert(!shape.test(bad), `${t} addressShape accepts the invalid account ${bad}`);
+	}
+}
+{
+	const shape = getAsset('BTS').addressShape;
+	for (const ok of ['a', 'open.ledger-dex', 'bitshares-dex', 'a.b', 'x'.repeat(63), 'b0']) {
+		assert(shape.test(ok), `BTS addressShape refuses the valid account ${ok}`);
+	}
+	for (const bad of ['Alice', '1alice', 'alice-', 'alice.', 'a..b', '.a', 'a.1b', 'x'.repeat(64), '']) {
+		assert(!shape.test(bad), `BTS addressShape accepts the invalid account ${bad}`);
 	}
 }
 

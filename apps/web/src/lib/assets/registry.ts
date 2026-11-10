@@ -133,9 +133,7 @@ const USDT_TRC20_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
 const USDT_SPL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 const validateUsdt: AddressValidator = (s) =>
-	USDT_ERC20_OR_BEP20_RE.test(s) ||
-	USDT_TRC20_RE.test(s) ||
-	USDT_SPL_RE.test(s);
+	USDT_ERC20_OR_BEP20_RE.test(s) || USDT_TRC20_RE.test(s) || USDT_SPL_RE.test(s);
 
 // USDC — Ethereum + Base + Polygon all share the EVM 0x[40 hex]
 // address format; SPL is base58 32-44 chars.  Note no TRC-20
@@ -147,8 +145,7 @@ const validateUsdt: AddressValidator = (s) =>
 const USDC_EVM_RE = /^0x[a-fA-F0-9]{40}$/;
 const USDC_SPL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-const validateUsdc: AddressValidator = (s) =>
-	USDC_EVM_RE.test(s) || USDC_SPL_RE.test(s);
+const validateUsdc: AddressValidator = (s) => USDC_EVM_RE.test(s) || USDC_SPL_RE.test(s);
 
 // DAI — ALL FOUR supported networks (Ethereum, Polygon, Base,
 // Arbitrum) use the same EVM 0x[40 hex] address format.  Unlike
@@ -201,8 +198,7 @@ const validateLtc: AddressValidator = (s) =>
 const DASH_P2PKH_RE = /^X[1-9A-HJ-NP-Za-km-z]{33}$/;
 const DASH_P2SH_RE = /^7[1-9A-HJ-NP-Za-km-z]{33}$/;
 
-const validateDash: AddressValidator = (s) =>
-	DASH_P2PKH_RE.test(s) || DASH_P2SH_RE.test(s);
+const validateDash: AddressValidator = (s) => DASH_P2PKH_RE.test(s) || DASH_P2SH_RE.test(s);
 
 // DOGE address regex.  P2PKH starts with `D`, P2SH starts
 // with `9` or `A` (multi-sig variants).  No bech32 — Dogecoin
@@ -211,8 +207,7 @@ const validateDash: AddressValidator = (s) =>
 const DOGE_P2PKH_RE = /^D[1-9A-HJ-NP-Za-km-z]{33}$/;
 const DOGE_P2SH_RE = /^[9A][1-9A-HJ-NP-Za-km-z]{33}$/;
 
-const validateDoge: AddressValidator = (s) =>
-	DOGE_P2PKH_RE.test(s) || DOGE_P2SH_RE.test(s);
+const validateDoge: AddressValidator = (s) => DOGE_P2PKH_RE.test(s) || DOGE_P2SH_RE.test(s);
 
 // ZEC address regex.  Zcash supports both transparent
 // (base58, t1/t3 prefixes, ~35 chars total) and shielded
@@ -302,6 +297,21 @@ const validateXrp: AddressValidator = (s) => XRP_RE.test(s);
 // and 5, bech32 hrp "bc"): an ECX address IS a BTC address, so the check is
 // Bitcoin's.  The chat card names the chain in words (assets.ecx.address_share).
 const validateEcx: AddressValidator = (s) => validateBtc(s);
+
+// Hive and Steem route transfers by account name (is_valid_account_name in
+// both chains' code): 3-16 characters, dot-separated parts of at least 3, each
+// starting with a letter and ending with a letter or digit.  Every such name is
+// a valid Blurt name too, so the same name can be an account on each of the
+// three chains: the chat card names the coin in words.
+const HIVE_STEEM_ACCOUNT_RE = /^(?=.{3,16}$)[a-z][a-z0-9-]+[a-z0-9](?:\.[a-z][a-z0-9-]+[a-z0-9])*$/;
+const validateHiveSteem: AddressValidator = (s) => HIVE_STEEM_ACCOUNT_RE.test(s);
+
+// A BitShares account name (bitshares-core is_valid_name): 1-63 characters,
+// dot-separated labels, each starting with a letter and ending with a letter
+// or digit, letters, digits and dashes between.
+const BTS_ACCOUNT_RE =
+	/^(?=.{1,63}$)[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z](?:[a-z0-9-]*[a-z0-9])?)*$/;
+const validateBts: AddressValidator = (s) => BTS_ACCOUNT_RE.test(s);
 
 // ─── Registry ────────────────────────────────────────────────────
 
@@ -779,7 +789,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 	{
 		ticker: 'xrp',
 		displayTicker: 'XRP',
-		displayName: 'Ripple (XRP)',
+		displayName: 'Ripple',
 		oneLineDescription:
 			'Ripple (XRP) — Federated Byzantine Agreement cryptocurrency.  Trade-only — cannot pay listing fees.',
 		logoSvgPath: '/icons/icon-xrp.svg',
@@ -801,7 +811,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		// Bitcoin ABC's older coin, is also called eCash.  ADR-0053.
 		ticker: 'ecx',
 		displayTicker: 'ECX',
-		displayName: 'eCash (ECX)',
+		displayName: 'eCash',
 		oneLineDescription:
 			'eCash (ECX) — a 2026 hard fork of Bitcoin with drivechains, not XEC.  Trade-only — cannot pay listing fees.',
 		logoSvgPath: '/icons/icon-ecx.svg',
@@ -815,6 +825,63 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		defaultNetwork: 'mainnet',
 		// No issuer can freeze ECX.  Its hazards (Bitcoin-identical addresses,
 		// opt-in replay protection) are on the chat card and in the FAQ.
+		privacyWarningKey: null
+	},
+	{
+		// Hive (HIVE): the 2020 community fork of Steem.  ADR-0054.
+		ticker: 'hive',
+		displayTicker: 'HIVE',
+		displayName: 'Hive',
+		oneLineDescription:
+			'Hive (HIVE) — the 2020 community fork of Steem.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-hive.svg',
+		accentClass: 'text-red-500',
+		decimals: 3,
+		// v1.24.0: the ask carries the trade's own random memo (as BLURT's),
+		// which ties a payment into the reused account to this trade; a seller
+		// shares their own account, never an exchange's.
+		supportsMemo: true,
+		addressValidator: validateHiveSteem,
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		privacyWarningKey: null
+	},
+	{
+		// Steem (STEEM): the chain Blurt and Hive forked from.  ADR-0054.
+		ticker: 'steem',
+		displayTicker: 'STEEM',
+		displayName: 'Steem',
+		oneLineDescription:
+			'Steem (STEEM) — the chain Hive and Blurt forked from.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-steem.svg',
+		accentClass: 'text-blue-300',
+		decimals: 3,
+		supportsMemo: true,
+		addressValidator: validateHiveSteem,
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		privacyWarningKey: null
+	},
+	{
+		// BitShares (BTS): the first Graphene chain.  ADR-0054.
+		ticker: 'bts',
+		displayTicker: 'BTS',
+		displayName: 'BitShares',
+		oneLineDescription:
+			'BitShares (BTS) — the first Graphene chain, with a built-in exchange.  Trade-only — cannot pay listing fees.',
+		logoSvgPath: '/icons/icon-bts.svg',
+		accentClass: 'text-cyan-400',
+		decimals: 5,
+		supportsMemo: true,
+		addressValidator: validateBts,
+		canBeUsedForListingFee: false,
+		canBeTraded: true,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
 		privacyWarningKey: null
 	},
 	{
@@ -883,9 +950,7 @@ export function getAsset(ticker: ChatAssetTicker): AssetMetadata {
  *  to the free coin picker. Case-insensitive + total. */
 export function chatAssetFromTicker(ticker: string): ChatAssetTicker | null {
 	const lower = ticker.toLowerCase();
-	return Object.prototype.hasOwnProperty.call(BY_TICKER, lower)
-		? (lower as ChatAssetTicker)
-		: null;
+	return Object.prototype.hasOwnProperty.call(BY_TICKER, lower) ? (lower as ChatAssetTicker) : null;
 }
 
 /** Filter helpers for common UI-side queries. */

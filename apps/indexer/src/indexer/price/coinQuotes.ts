@@ -4,7 +4,7 @@
  * morphit trades more coins than it charges fees in. BLURT, BTC and XMR have
  * their own guarded price sources (factory.ts). For the others, that is
  * every coin but BLURT, BTC, XMR and ECX (ETH, LTC, BCH, DASH, DOGE, ZEC,
- * ARRR, DCR, SOL, XRP, USDT, USDC and DAI), this module gives a USD price
+ * ARRR, DCR, SOL, XRP, HIVE, STEEM, BTS, USDT, USDC and DAI), this module gives a USD price
  * for the "(≈11 BRL)" beside an amount and for filling in "how much ETH is
  * 11 BRL". Nothing is charged, enforced or signed from these numbers.
  *
@@ -12,7 +12,8 @@
  * mean (aggregate.ts), so one wrong answer is outvoted:
  *   - the onion pricenodes' consensus (pricenodes.ts) — the same rounds that
  *     price BTC and XMR, over Tor, no extra request; works on a hidden-only
- *     instance;
+ *     instance (not for HIVE, STEEM and BTS, which the pricenodes are not
+ *     known to quote);
  *   - where this instance may reach clearnet: ONE CoinGecko request and ONE
  *     CryptoCompare request for all the coins together, per refresh.
  *
@@ -49,6 +50,11 @@ export const COIN_QUOTE_IDS: Readonly<
 	DCR: { coingecko: 'decred', cryptocompare: 'DCR' },
 	SOL: { coingecko: 'solana', cryptocompare: 'SOL' },
 	XRP: { coingecko: 'ripple', cryptocompare: 'XRP' },
+	// (v1.24.0) CoinGecko's API ids and CryptoCompare's symbols for Hive,
+	// Steem and BitShares, checked on both sites' coin pages (2026-11-09).
+	HIVE: { coingecko: 'hive', cryptocompare: 'HIVE' },
+	STEEM: { coingecko: 'steem', cryptocompare: 'STEEM' },
+	BTS: { coingecko: 'bitshares', cryptocompare: 'BTS' },
 	USDT: { coingecko: 'tether', cryptocompare: 'USDT' },
 	USDC: { coingecko: 'usd-coin', cryptocompare: 'USDC' },
 	DAI: { coingecko: 'dai', cryptocompare: 'DAI' }

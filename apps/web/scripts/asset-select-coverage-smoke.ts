@@ -135,6 +135,23 @@ if (importsRegistry && iteratesRegistry && gatesOnTradable) {
 	);
 }
 
+// ─── Step 5: a displayName never carries its own ticker ──────────
+// (v1.24.0) Every picker shows `displayName (displayTicker)`, so a name
+// written "Hive (HIVE)" read "Hive (HIVE) (HIVE)" (and "Ripple (XRP) (XRP)",
+// "eCash (ECX) (ECX)" since v1.21 / v1.22).
+const doubled: string[] = [];
+for (const m of feSrc.matchAll(/displayTicker:\s*'([A-Z]+)',\s*displayName:\s*'([^']*)'/g)) {
+	if (m[2].includes(`(${m[1]})`)) doubled.push(`${m[1]}: "${m[2]}"`);
+}
+const named = Array.from(feSrc.matchAll(/displayTicker:\s*'[A-Z]+',\s*displayName:/g)).length;
+if (named !== dtMatches.length) {
+	fail(`displayName does not follow displayTicker in ${dtMatches.length - named} entries`, 'this step reads them as a pair');
+} else if (doubled.length === 0) {
+	pass(`no displayName repeats its ticker (${named} entries; the pickers add "(TICKER)")`);
+} else {
+	fail(`displayName repeats the ticker: ${doubled.join('; ')}`, 'pickers render displayName (displayTicker)');
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures === 0) console.log(`✓ all ${passes} scenarios passed`);
 process.exit(failures > 0 ? 1 : 0);

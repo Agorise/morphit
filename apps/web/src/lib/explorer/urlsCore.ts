@@ -81,6 +81,14 @@ export const XRP_TXID_RE = /^[a-fA-F0-9]{64}$/;
  *  linked to an eCash explorer. */
 export const ECX_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
+/** HIVE, STEEM and BTS transaction ids: 40 hex chars (20 bytes, the
+ *  RIPEMD-160 transaction id of the Graphene chains — Blurt's format too).
+ *  The same 40-hex string can name a transaction on each of these chains, so
+ *  each coin links only to explorers of its own chain. */
+export const HIVE_TXID_RE = /^[0-9a-fA-F]{40}$/;
+export const STEEM_TXID_RE = /^[0-9a-fA-F]{40}$/;
+export const BTS_TXID_RE = /^[0-9a-fA-F]{40}$/;
+
 /** Blurt trx_id: 40 hex chars (20 bytes). */
 export const BLURT_TRXID_RE = /^[0-9a-fA-F]{40}$/;
 
@@ -360,6 +368,25 @@ export const BUNDLED_XRP_CHAT_LINK_URL = 'https://livenet.xrpl.org/transactions/
  *  that copy.  Operators override via MORPHIT_FRONTEND_ECX_CHAT_LINK_URL. */
 export const BUNDLED_ECX_CHAT_LINK_URL = 'https://explorer.ecash.com/tx/{txid}';
 
+/** HIVE (Hive) chat-link explorer.  hivescan.info, the HAF block explorer the
+ *  Hive core developers run (its transaction page is /tx/{txid}: the
+ *  /transaction/ path answers with an error).  Operators override via
+ *  MORPHIT_FRONTEND_HIVE_CHAT_LINK_URL.  See ADR-0054. */
+export const BUNDLED_HIVE_CHAT_LINK_URL = 'https://hivescan.info/tx/{txid}';
+
+/** STEEM (Steem) chat-link explorer.  FutureShock's SteemScan (a
+ *  client-routed /transaction/{txid} page, seen showing a transaction by the
+ *  owner's survey).  ecosynthesizer.com comes second: its Steem pages are
+ *  built from the SteemWorld API, seen 20 days behind the chain on 9 Nov
+ *  2026, so a fresh payment may not be there.  Operators override via
+ *  MORPHIT_FRONTEND_STEEM_CHAT_LINK_URL.  See ADR-0054. */
+export const BUNDLED_STEEM_CHAT_LINK_URL = 'https://steemscan.com/transaction/{txid}';
+
+/** BTS (BitShares) chat-link explorer.  bitshareschain.com, the BitShares
+ *  explorer that looks a transaction up by its id (/tx/{txid}).  Operators
+ *  override via MORPHIT_FRONTEND_BTS_CHAT_LINK_URL.  See ADR-0054. */
+export const BUNDLED_BTS_CHAT_LINK_URL = 'https://www.bitshareschain.com/tx/{txid}';
+
 /** best→worst ordered lists of bundled explorer templates
  *  per asset.  The first element is the same string as the singular
  *  `BUNDLED_<ASSET>_CHAT_LINK_URL` constant above; the rest are
@@ -464,6 +491,26 @@ export const BUNDLED_ECX_CHAT_LINK_URLS: readonly string[] = [
 	// client-routed /tx/{txid} page; its /api/tx answered for a mainnet txid
 	// at block 982,846 on 2026-11-03). See ADR-0053.
 	'https://explorer.blockfab.org/tx/{txid}'
+];
+
+export const BUNDLED_HIVE_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_HIVE_CHAT_LINK_URL,
+	'https://hivehub.dev/tx/{txid}',
+	'https://hive.ausbit.dev/tx/{txid}',
+	'https://ecosynthesizer.com/hive/transaction/{txid}'
+];
+
+export const BUNDLED_STEEM_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_STEEM_CHAT_LINK_URL,
+	// Server-rendered, from the SteemWorld API (see above), then @penguinpablo's.
+	'https://ecosynthesizer.com/steem/trx/{txid}',
+	'https://steemblockexplorer.com/tx/{txid}'
+];
+
+export const BUNDLED_BTS_CHAT_LINK_URLS: readonly string[] = [
+	BUNDLED_BTS_CHAT_LINK_URL
+	// No second BitShares explorer that opens a transaction by its id is
+	// known (2026-11): the others look up blocks, accounts and objects.
 ];
 
 /** per-NETWORK ordered explorer-alternative lists for the

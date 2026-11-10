@@ -1078,6 +1078,129 @@ describe('v1.21.17: a crypto-for-crypto trade, one step at a time', () => {
 		expect(paymentCheckAsks).toHaveLength(0);
 	});
 
+	it('v1.24.0: a HIVE payment is checked live; "Send BLURT" only once its block is irreversible (3 deep)', async () => {
+		orderMethods = ['pay_hive'];
+		const { encodeAddressPayload, encodeFundsSentPayload } = await import('$lib/chat/payload');
+		const HTX = 'ab'.repeat(20);
+		const thread = [
+			{
+				id: 1,
+				sender: ME,
+				createdAt: new Date('2026-10-26T18:00:00Z'),
+				text: encodeAddressPayload({
+					v: 1,
+					kind: 'morphit_addr',
+					method: 'hive',
+					address: 'alicetrader',
+					amount: '12.345',
+					memo: 'k3m9qz2a',
+					orderPermlink: ORDER
+				})
+			},
+			{
+				id: 2,
+				sender: PEER,
+				createdAt: new Date('2026-10-26T18:05:00Z'),
+				text: encodeFundsSentPayload({
+					v: 1,
+					kind: 'morphit_funds_sent',
+					method: 'hive',
+					txid: HTX,
+					orderPermlink: ORDER
+				})
+			}
+		];
+		const hiveFound = (n: number) => ({
+			ok: true,
+			data: { ...found('12.345', n).data, asset: 'hive' }
+		});
+		paymentCheckAnswer = hiveFound(2);
+		const v = await render(PEER, 'buy', 'BLURT');
+		await v.push(thread);
+		await vi.waitFor(() => {
+			v.flushSync();
+			expect(v.target.querySelector('[data-testid="payment-check"]')?.textContent?.trim()).toBe(
+				'chat.payment_check.seen'
+			);
+		});
+		expect(paymentCheckAsks[0]).toEqual({
+			asset: 'hive',
+			txid: HTX,
+			address: 'alicetrader',
+			memo: 'k3m9qz2a'
+		});
+		// Seen arriving at 2/3, its block not irreversible: nothing released yet.
+		expect(has(v, 'chat.funds_sent.button_aria_asset')).toBe(false);
+		v.destroy();
+		paymentCheckAnswer = hiveFound(3);
+		const w = await render(PEER, 'buy', 'BLURT');
+		await w.push(thread);
+		await vi.waitFor(() => {
+			w.flushSync();
+			expect(has(w, 'chat.funds_sent.button_aria_asset')).toBe(true);
+		});
+		w.destroy();
+		// v1.24.0 review: someone else's payment into the same account, cited by
+		// its txid — irreversible, enough, but without this trade's memo.
+		paymentCheckAnswer = {
+			ok: true,
+			data: { ...hiveFound(3).data, amount: '0', memo_mismatch: true }
+		};
+		const x = await render(PEER, 'buy', 'BLURT');
+		await x.push(thread);
+		await vi.waitFor(() => {
+			x.flushSync();
+			expect(x.target.querySelector('[data-testid="payment-check"]')?.textContent?.trim()).toBe(
+				'chat.payment_check.wrong_memo'
+			);
+		});
+		expect(has(x, 'chat.funds_sent.button_aria_asset')).toBe(false);
+		x.destroy();
+	});
+
+	it('v1.24.0: a BTS payment is not looked up here: "Send BLURT" only once he says he sees it in his wallet', async () => {
+		orderMethods = ['pay_bts'];
+		const { encodeAddressPayload, encodeFundsSentPayload } = await import('$lib/chat/payload');
+		const v = await render(PEER, 'buy', 'BLURT');
+		await v.push([
+			{
+				id: 1,
+				sender: ME,
+				createdAt: new Date('2026-10-26T18:00:00Z'),
+				text: encodeAddressPayload({
+					v: 1,
+					kind: 'morphit_addr',
+					method: 'bts',
+					address: 'alice-trader',
+					amount: '120.00037',
+					memo: 'k3m9qz2a',
+					orderPermlink: ORDER
+				})
+			},
+			{
+				id: 2,
+				sender: PEER,
+				createdAt: new Date('2026-10-26T18:05:00Z'),
+				text: encodeFundsSentPayload({
+					v: 1,
+					kind: 'morphit_funds_sent',
+					method: 'bts',
+					txid: 'cd'.repeat(20),
+					orderPermlink: ORDER
+				})
+			}
+		]);
+		await vi.waitFor(() => {
+			v.flushSync();
+			expect(hint(v)).toBe('chat.legs.check_wallet');
+		});
+		expect(paymentCheckAsks).toHaveLength(0);
+		expect(has(v, 'chat.funds_sent.button_aria')).toBe(false);
+		v.target.querySelector<HTMLButtonElement>('[data-testid="chat-leg-wallet-confirm"]')!.click();
+		v.flushSync();
+		expect(has(v, 'chat.funds_sent.button_aria_asset')).toBe(true);
+	});
+
 	it('a receipt in a coin with no check here (LTC), before any LTC address: "no address", not his own call', async () => {
 		orderMethods = ['pay_ltc'];
 		const { encodeFundsSentPayload } = await import('$lib/chat/payload');

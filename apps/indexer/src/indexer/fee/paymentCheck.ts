@@ -1,6 +1,10 @@
 /**
- * Morphit indexer — has a trade's BTC / XMR payment reached the seller's
- * address? (GET /v1/payment-check, api/paymentCheck.ts)
+ * Morphit indexer — has a trade's BTC / XMR / HIVE / STEEM payment reached the
+ * seller's address? (GET /v1/payment-check, api/paymentCheck.ts)
+ *
+ * HIVE and STEEM (v1.24.0) are looked up by transaction id on those chains'
+ * API nodes (grapheneTxCheck.ts), with the same quorum of two operators and
+ * the same verdict; everything below about explorers is BTC / XMR.
  *
  * In a crypto-for-crypto trade the seller shares a BTC or XMR address in the
  * chat, the buyer pays it and records the txid (for XMR also the tx key). The
@@ -46,21 +50,26 @@ import { getAsset } from '@morphit/asset-registry';
 import { BitcoinExplorerFeeVerifier } from './bitcoinExplorerVerifier';
 import { MoneroProofFeeVerifier } from './moneroProofVerifier';
 import { explorerAvailability } from './externalFeeAvailability';
+import { GrapheneTxChecker } from './grapheneTxCheck';
 import { anyHidden, feeVerifierTiers } from './externalFeeVerifiers';
 import type { PaymentLookupResult } from './verifier';
-import { SOURCE_HIDDEN_REQUEST_TIMEOUT_MS } from '$indexer/sourceFetch';
+import { isClearnetSource, SOURCE_HIDDEN_REQUEST_TIMEOUT_MS } from '$indexer/sourceFetch';
 
 /** Confirmations after which the seller's screen calls a payment confirmed. */
 export const PAYMENT_REQUIRED_CONFIRMATIONS = 3;
 
-export type PaymentAsset = 'btc' | 'xmr';
+export type PaymentAsset = 'btc' | 'xmr' | 'hive' | 'steem';
 
-/** A validated query (api/paymentCheck.ts validates). `txKey` is XMR only. */
+/** A validated query (api/paymentCheck.ts validates). `txKey` is XMR only;
+ *  for HIVE / STEEM `address` is the account name and `memo` the ask's memo
+ *  (null: none was asked, and every transfer to the account counts). */
 export interface PaymentQuery {
 	readonly asset: PaymentAsset;
 	readonly txid: string;
 	readonly address: string;
 	readonly txKey: string | null;
+	/** Absent for BTC / XMR. */
+	readonly memo?: string | null;
 }
 
 /** What the explorers say, amounts in coin units (a decimal string),
@@ -73,6 +82,9 @@ export type PaymentVerdict =
 			readonly txTime: string | null;
 			/** The explorers' times disagree (paymentTimeOf): no time. */
 			readonly txTimeDisputed?: true;
+			/** (v1.24.0, HIVE / STEEM) A transfer reached the account with a
+			 *  memo other than the ask's (`amount` leaves it out). */
+			readonly memoMismatch?: true;
 	  }
 	| {
 			readonly status: 'not_found' | 'unavailable';
@@ -93,6 +105,15 @@ interface XmrTier {
 		signal?: AbortSignal
 	): Promise<PaymentLookupResult>;
 }
+/** HIVE / STEEM: one checker over that chain's API nodes. */
+interface AccountChainTier {
+	lookupPayment(
+		txid: string,
+		account: string,
+		memo: string | null,
+		signal?: AbortSignal
+	): Promise<PaymentLookupResult>;
+}
 
 /** `units` of the smallest unit as a decimal string in coin units, without
  *  trailing zeros: 2_500n sats → "0.000025", 0n → "0". PURE. */
@@ -104,22 +125,37 @@ export function formatCoinAmount(units: bigint, decimals: number): string {
 	return frac.length === 0 ? whole : `${whole}.${frac}`;
 }
 
+const TICKER = { btc: 'BTC', xmr: 'XMR', hive: 'HIVE', steem: 'STEEM' } as const satisfies Record<
+	PaymentAsset,
+	string
+>;
+
+/** Operators that must agree on a HIVE / STEEM payment. */
+export const ACCOUNT_CHAIN_PAYMENT_QUORUM = 2;
+
 export class PaymentChecker {
 	constructor(
-		private readonly tiers: { readonly btc: readonly BtcTier[]; readonly xmr: readonly XmrTier[] }
+		private readonly tiers: {
+			readonly btc: readonly BtcTier[];
+			readonly xmr: readonly XmrTier[];
+			readonly hive?: readonly AccountChainTier[];
+			readonly steem?: readonly AccountChainTier[];
+		}
 	) {}
 
 	/** Ask tier after tier until one gives a verdict (`found` / `not_found`).
 	 *  No tier at all (no usable explorer for the asset) → `unavailable`. */
 	async check(q: PaymentQuery, signal?: AbortSignal): Promise<PaymentVerdict> {
-		const decimals = getAsset(q.asset === 'btc' ? 'BTC' : 'XMR').decimals;
+		const decimals = getAsset(TICKER[q.asset]).decimals;
 		const asked: readonly (() => Promise<PaymentLookupResult>)[] =
-			q.asset === 'btc'
-				? this.tiers.btc.map((t) => () => t.lookupPayment(q.txid, q.address, signal))
-				: // No key: lookupPayment refuses it before asking anyone.
-					this.tiers.xmr.map(
-						(t) => () => t.lookupPayment(q.txid, q.address, q.txKey ?? '', signal)
-					);
+			q.asset === 'xmr'
+				? // No key: lookupPayment refuses it before asking anyone.
+					this.tiers.xmr.map((t) => () => t.lookupPayment(q.txid, q.address, q.txKey ?? '', signal))
+				: q.asset === 'btc'
+					? this.tiers.btc.map((t) => () => t.lookupPayment(q.txid, q.address, signal))
+					: (this.tiers[q.asset] ?? []).map(
+							(t) => () => t.lookupPayment(q.txid, q.address, q.memo ?? null, signal)
+						);
 		for (const ask of asked) {
 			// Out of time (the route's round deadline): no further tier.
 			if (signal?.aborted === true) break;
@@ -137,7 +173,8 @@ export class PaymentChecker {
 					amount: formatCoinAmount(r.amount, decimals),
 					confirmations: r.confirmations,
 					txTime: r.blockTime !== null ? new Date(r.blockTime * 1000).toISOString() : null,
-					...(r.timeDisputed === true ? { txTimeDisputed: true as const } : {})
+					...(r.timeDisputed === true ? { txTimeDisputed: true as const } : {}),
+					...(r.otherMemo === true ? { memoMismatch: true as const } : {})
 				};
 			}
 			if (r.kind === 'not_found') {
@@ -155,6 +192,10 @@ interface PaymentCheckConfig {
 	readonly xmrExplorerUrls: readonly string[];
 	readonly btcMinSuccessfulResponses: number;
 	readonly xmrMinSuccessfulResponses: number;
+	/** HAfAH bases (Hive) and JSON-RPC URLs (Steem); empty or absent: not
+	 *  checked. */
+	readonly hivePaymentNodes?: readonly string[];
+	readonly steemPaymentNodes?: readonly string[];
 }
 
 /** The checker a node runs: the fee path's explorer tiers, quorum and
@@ -165,7 +206,7 @@ export function buildPaymentChecker(
 	config: PaymentCheckConfig,
 	fetchImpl: typeof fetch
 ): PaymentChecker {
-	const tiersFor = (method: PaymentAsset, quorum: number): (readonly string[])[] => {
+	const tiersFor = (method: 'btc' | 'xmr', quorum: number): (readonly string[])[] => {
 		const a = explorerAvailability(config, method);
 		return a.off === null ? feeVerifierTiers(a, quorum) : [];
 	};
@@ -198,5 +239,30 @@ export function buildPaymentChecker(
 				fetchImpl
 			)
 	);
-	return new PaymentChecker({ btc, xmr });
+	// No Tor / I2P HIVE or STEEM node is known; a zero-clearnet node keeps
+	// only the ones it can reach without clearnet (none, by default).
+	const accountChain = (chain: 'hive' | 'steem', all: readonly string[]) => {
+		const urls =
+			config.blurtRpcEndpoints.length === 0 ? all.filter((u) => !isClearnetSource(u)) : all;
+		return urls.length === 0
+			? []
+			: [
+					new GrapheneTxChecker(
+						{
+							chain,
+							urls,
+							minAgree: ACCOUNT_CHAIN_PAYMENT_QUORUM,
+							requiredConfirmations: PAYMENT_REQUIRED_CONFIRMATIONS,
+							requestTimeoutMs: anyHidden(urls) ? SOURCE_HIDDEN_REQUEST_TIMEOUT_MS : 5_000
+						},
+						fetchImpl
+					)
+				];
+	};
+	return new PaymentChecker({
+		btc,
+		xmr,
+		hive: accountChain('hive', config.hivePaymentNodes ?? []),
+		steem: accountChain('steem', config.steemPaymentNodes ?? [])
+	});
 }

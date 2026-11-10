@@ -1,5 +1,6 @@
 /**
- * Live check of a BTC or XMR payment recorded in a trade chat (v1.21.17).
+ * Live check of a BTC or XMR (v1.21.17), HIVE or STEEM (v1.24.0) payment
+ * recorded in a trade chat.
  *
  * The buyer records "I paid" with the payment's txid (and, for Monero, its tx
  * key). The seller must see — before he sends his side — that the payment
@@ -9,9 +10,14 @@
  * listing-fee checks do (only over Tor/I2P on a hidden-only instance); the
  * browser never talks to an explorer itself.
  *
- * One watcher per payment (asset, txid, address, key), shared by every
- * subscriber (the receipt card and the chat's buttons), polling once a minute
- * until confirmed and stopping when nobody watches.
+ * One watcher per payment (asset, txid, address, key or memo), shared by every
+ * subscriber (the receipt card and the chat's buttons), polling until
+ * confirmed (sooner at first and while confirming; every 6 s for HIVE / STEEM)
+ * and stopping when nobody watches.
+ *
+ * HIVE / STEEM (v1.24.0): the account is the same in every trade, so the ask's
+ * memo goes along and only a transfer carrying it counts; an ask without one
+ * binds nothing, and a payment seen there is the receiver's own call.
  */
 import { readable, type Readable } from 'svelte/store';
 import { getPaymentCheck } from '$lib/indexer/client';
@@ -44,18 +50,41 @@ export const PAYMENT_CHECK_UNAVAILABLE_FOR_MS = 3 * 60_000;
  *  little while to reach every explorer, but a wrong Monero tx key (which
  *  explorers report as "not found") would otherwise keep him waiting forever. */
 export const PAYMENT_CHECK_NOT_FOUND_FOR_MS = 5 * 60_000;
+/** (v1.24.0) HIVE and STEEM make a block every 3 seconds: their payments are
+ *  asked about sooner (the instance reuses such an answer for 5-6 s), and a
+ *  transaction id the nodes still do not know after this long lets the seller
+ *  settle it from his wallet, as for BLURT (blurtLegCheck.ts). */
+export const PAYMENT_CHECK_3S_CHAIN_INTERVAL_MS = 6_000;
+export const PAYMENT_CHECK_3S_CHAIN_NOT_FOUND_FOR_MS = 3 * 60_000;
+
+/** The coins whose payment this instance can be asked about. PURE. */
+export function isCheckedPaymentAsset(m: string): m is PaymentCheckInput['asset'] {
+	return m === 'btc' || m === 'xmr' || m === 'hive' || m === 'steem';
+}
+
+/** Coins with 3-second blocks and an account for an address. */
+function threeSecondChain(asset: PaymentCheckInput['asset']): boolean {
+	return asset === 'hive' || asset === 'steem';
+}
+
 /** A payment whose block is this much older than the address it is said to
  *  pay was not made for this trade (someone else's earlier payment to a
  *  reused address). Block times may run up to ~2 h off. */
 export const PAYMENT_CHECK_TIME_SLACK_MS = 2 * 60 * 60 * 1000;
 
 export interface PaymentCheckInput {
-	readonly asset: 'btc' | 'xmr';
+	readonly asset: 'btc' | 'xmr' | 'hive' | 'steem';
 	readonly txid: string;
-	/** The address the receiver shared for this payment. */
+	/** The address the receiver shared for this payment (HIVE / STEEM: the
+	 *  account name). */
 	readonly address: string;
 	/** Monero only. Without it a Monero payment cannot be checked. */
 	readonly txKey?: string;
+	/** (v1.24.0) HIVE / STEEM only: the memo the receiver's ask carries. The
+	 *  account is the same in every trade, so only a transfer with this memo
+	 *  is this trade's payment; without one, any payment into the account
+	 *  would match, and a seen payment is the receiver's own call. */
+	readonly memo?: string;
 	/** What the receiver asked for, in coin units (decimal string), if he did. */
 	readonly asked?: string;
 	/** When the address was shared (ms). A payment in a block older than this
@@ -91,6 +120,18 @@ export type PaymentCheckState =
 			 *  it cannot be dated, so it cannot be checked here — the seller's
 			 *  own call, never "old" on one explorer's word. */
 			readonly disputed?: boolean;
+			/** (v1.24.0) A HIVE / STEEM transfer reached the account, but none
+			 *  in this transaction carries the ask's memo: not this trade's. */
+			readonly wrongMemo?: boolean;
+			/** (v1.24.0) A HIVE / STEEM ask without a memo: nothing ties a
+			 *  payment into the account to this trade, so seen is the
+			 *  receiver's own call (as `unasked`). */
+			readonly unbound?: boolean;
+			/** (v1.24.0) A HIVE / STEEM payment not yet `required` deep — the
+			 *  instance counts that depth only from an irreversible block: it shows
+			 *  arriving, but releases nothing until a fork can no longer drop it
+			 *  (as a BLURT payment, blurtLegCheck.ts). */
+			readonly pending?: boolean;
 			/** (v1.23.2) When the explorers were last asked (ms). The instance
 			 *  serves its last answer while re-checks get none, so a count can be
 			 *  older than it looks; the receipt says so (confirmationLine). */
@@ -120,8 +161,8 @@ export function verdictOf(s: PaymentCheckState): PaymentCheckVerdict {
 			if (s.old) return 'old';
 			if (s.short) return 'mismatch';
 			if (s.disputed) return 'unverifiable';
-			if (s.undated) return 'checking';
-			return s.unasked ? 'unasked' : 'seen';
+			if (s.undated || s.pending) return 'checking';
+			return s.unasked || s.unbound ? 'unasked' : 'seen';
 		case 'no_key':
 			return 'unverifiable';
 		case 'unavailable':
@@ -139,7 +180,13 @@ export async function checkOnce(
 ): Promise<PaymentCheckState> {
 	if (input.asset === 'xmr' && !input.txKey) return { phase: 'no_key' };
 	const r = await getPaymentCheck(
-		{ asset: input.asset, txid: input.txid, address: input.address, txKey: input.txKey },
+		{
+			asset: input.asset,
+			txid: input.txid,
+			address: input.address,
+			txKey: input.txKey,
+			...(input.memo !== undefined ? { memo: input.memo } : {})
+		},
 		signal
 	);
 	if (!r.ok) return { phase: 'unavailable' };
@@ -167,6 +214,9 @@ export async function checkOnce(
 		typeof ageS === 'number' && Number.isFinite(ageS) && ageS >= 0 ? Date.now() - ageS * 1000 : NaN;
 	const undated =
 		input.sharedAtMs !== undefined && d.confirmations > 0 && !Number.isFinite(txMs) && !disputed;
+	const pending = threeSecondChain(input.asset) && d.confirmations < d.required_confirmations;
+	const wrongMemo = nothing && d.memo_mismatch === true;
+	const unbound = threeSecondChain(input.asset) && input.memo === undefined;
 	return {
 		phase: 'seen',
 		amount: d.amount,
@@ -175,6 +225,9 @@ export async function checkOnce(
 		short: nothing || (input.asked !== undefined && isLess(d.amount, input.asked)),
 		...(old ? { old: true } : {}),
 		...(undated ? { undated: true } : {}),
+		...(pending ? { pending: true } : {}),
+		...(wrongMemo ? { wrongMemo: true } : {}),
+		...(unbound ? { unbound: true } : {}),
 		...(disputed ? { disputed: true } : {}),
 		...(input.asked === undefined ? { unasked: true } : {}),
 		...(Number.isFinite(checkedAtMs) ? { checkedAtMs } : {})
@@ -211,13 +264,19 @@ export function confirmationLine(
 const watchers = new Map<string, Readable<PaymentCheckState>>();
 
 function keyOf(i: PaymentCheckInput): string {
-	return [i.asset, i.txid, i.address, i.txKey ?? '', i.asked ?? '', i.sharedAtMs ?? ''].join(
-		'\u0000'
-	);
+	return [
+		i.asset,
+		i.txid,
+		i.address,
+		i.txKey ?? '',
+		i.memo ?? '',
+		i.asked ?? '',
+		i.sharedAtMs ?? ''
+	].join('\u0000');
 }
 
-/** Watch one payment: checks at once, then once a minute until it is
- *  confirmed; stops while nobody subscribes. */
+/** Watch one payment: checks at once, then again until it is confirmed (see
+ *  the intervals above); stops while nobody subscribes. */
 export function watchPaymentCheck(input: PaymentCheckInput): Readable<PaymentCheckState> {
 	const key = keyOf(input);
 	let w = watchers.get(key);
@@ -250,7 +309,9 @@ export function watchPaymentCheck(input: PaymentCheckInput): Readable<PaymentChe
 					now - notYetSince.at >=
 					(next.phase === 'unavailable'
 						? PAYMENT_CHECK_UNAVAILABLE_FOR_MS
-						: PAYMENT_CHECK_NOT_FOUND_FOR_MS);
+						: threeSecondChain(input.asset)
+							? PAYMENT_CHECK_3S_CHAIN_NOT_FOUND_FOR_MS
+							: PAYMENT_CHECK_NOT_FOUND_FOR_MS);
 				if (lasting) next = { phase: next.phase, long: true };
 			} else {
 				notYetSince = null;
@@ -272,13 +333,16 @@ export function watchPaymentCheck(input: PaymentCheckInput): Readable<PaymentChe
 					last.confirmations < last.required &&
 					(last.confirmations > 0 ||
 						(seenSince !== null && now - seenSince < PAYMENT_CHECK_CONFIRMING_FAST_FOR_MS));
+				const fast = threeSecondChain(input.asset) && (early || confirming);
 				timer = setTimeout(
 					() => void tick(),
-					early
-						? PAYMENT_CHECK_FIRST_INTERVAL_MS
-						: confirming
-							? PAYMENT_CHECK_CONFIRMING_INTERVAL_MS
-							: PAYMENT_CHECK_INTERVAL_MS
+					fast
+						? PAYMENT_CHECK_3S_CHAIN_INTERVAL_MS
+						: early
+							? PAYMENT_CHECK_FIRST_INTERVAL_MS
+							: confirming
+								? PAYMENT_CHECK_CONFIRMING_INTERVAL_MS
+								: PAYMENT_CHECK_INTERVAL_MS
 				);
 			}
 		};

@@ -217,6 +217,12 @@ SECTIONS = [
         ('XRP (XRP)',                                                        ['Y','-','-','-','-'], None),
         # eCash launched 29 Oct 2026; none of the four lists it (checked 2026-11-02).
         ('eCash (ECX)',                                                      ['Y','-','-','-','-'], None),
+        # Hive, Steem, BitShares: not in Bisq's asset list (bisq-network/bisq
+        # assets), Haveno's coin list (STEEM only among its removed coins), and
+        # neither OpenMonero nor BasicSwap trades them (checked 2026-11-09).
+        ('Hive (HIVE)',                                                      ['Y','-','-','-','-'], None),
+        ('Steem (STEEM)',                                                    ['Y','-','-','-','-'], None),
+        ('BitShares (BTS)',                                                  ['Y','-','-','-','-'], None),
         ('Fiat (cash, bank transfer, etc.)',                                 ['Y','Y','Y','Y','-'], None),
         ('Barter for goods and services',                                    ['Y','-','-','-','-'], None),
         ('Cash by mail with carrier-tracking workflow',                      ['Y','-','-','-','-'], None),

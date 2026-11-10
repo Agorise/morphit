@@ -120,6 +120,15 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'BCH'
 	},
 	{
+		// BitShares as a payment method (trade-only, Category B): hidden when
+		// the traded asset is BTS.  Paid to an account name, with the trade's memo.
+		key: 'pay_bts',
+		name: 'BitShares (BTS)',
+		url: 'https://bitshares.org',
+		category: 'crypto',
+		assetExclusion: 'BTS'
+	},
+	{
 		key: 'pay_blurt',
 		name: 'BLURT',
 		url: 'https://blurt.blog',
@@ -237,6 +246,15 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'ETH'
 	},
 	{
+		// Hive as a payment method (trade-only, Category B): hidden when the
+		// traded asset is HIVE.  Paid to an account name, with the trade's memo.
+		key: 'pay_hive',
+		name: 'Hive (HIVE)',
+		url: 'https://hive.io',
+		category: 'crypto',
+		assetExclusion: 'HIVE'
+	},
+	{
 		// Litecoin as a payment method.  Same
 		// Category-B semantics as BCH: when the trade's traded
 		// asset is LTC, "pay with LTC" is hidden (assetExclusion);
@@ -309,6 +327,15 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		url: 'https://solana.com',
 		category: 'crypto',
 		assetExclusion: 'SOL'
+	},
+	{
+		// Steem as a payment method (trade-only, Category B): hidden when the
+		// traded asset is STEEM.  Paid to an account name, with the trade's memo.
+		key: 'pay_steem',
+		name: 'Steem (STEEM)',
+		url: 'https://steem.com',
+		category: 'crypto',
+		assetExclusion: 'STEEM'
 	},
 	{
 		key: 'pay_usdt',

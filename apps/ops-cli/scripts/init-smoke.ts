@@ -199,6 +199,9 @@ const sampleAnswers: WizardAnswers = {
 		eth: 'https://eth.blockscout.com/tx/{txid}',
 		xrp: 'https://livenet.xrpl.org/transactions/{txid}',
 		ecx: 'https://explorer.ecash.com/tx/{txid}',
+		hive: 'https://hivescan.info/tx/{txid}',
+		steem: 'https://steemscan.com/transaction/{txid}',
+		bts: 'https://www.bitshareschain.com/tx/{txid}',
 		usdt: {
 			erc20: 'https://etherscan.io/tx/{txid}',
 			trc20: 'https://tronscan.org/#/transaction/{txid}',

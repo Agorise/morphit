@@ -2,7 +2,8 @@
 	/**
 	 * AddressShareModal — share a receiving address through the
 	 * chat for any tradable asset (BTC, XMR, BLURT, USDT, USDC,
-	 * DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX —
+	 * DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX,
+	 * HIVE, STEEM, BTS —
 	 * every tradable coin).
 	 *
 	 * This modal builds a structured payload (`morphit_addr` v1) and
@@ -44,6 +45,7 @@
 		encodeAddressPayload,
 		fitsChatMessage,
 		generateBlurtMemo,
+		isAccountNameCoin,
 		isValidAddress,
 		jitterAmountForAsset,
 		PAYLOAD_CONSTANTS,
@@ -133,7 +135,10 @@
 		'sol',
 		'eth',
 		'xrp',
-		'ecx'
+		'ecx',
+		'hive',
+		'steem',
+		'bts'
 	];
 	const visibleMethods = $derived(
 		allowedMethods && allowedMethods.length > 0
@@ -351,11 +356,13 @@
 	 *  Default ON for XMR AND all transparent assets
 	 *  (BTC/BCH/LTC/BLURT).  XMR uses 6 trailing
 	 *  decimals of jitter to defeat amount-correlation on the
-	 *  Monero chain (see jitterMoneroAmount).  All 8 UTXO assets
+	 *  Monero chain (see jitterMoneroAmount).  All 9 UTXO assets
 	 *  (BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/ECX) use satoshi-precision
 	 *  jitter (up to 999 sat ≈ $0.001-$0.50 trivial cost — see
 	 *  jitterUtxoAmount).  BLURT uses milliblurt-precision jitter
-	 *  (see jitterBlurtAmount).  SOL/ETH/XRP use their own
+	 *  (see jitterBlurtAmount), HIVE and STEEM the same 0.001 steps
+	 *  (jitterHiveSteemAmount) and BTS 0.00001 steps (jitterBtsAmount,
+	 *  v1.24.0).  SOL/ETH/XRP use their own
 	 *  per-asset jitter (jitterSolAmount/jitterEthAmount/
 	 *  jitterXrpAmount — calibrated to lamport / wei / drop
 	 *  precision respectively).  USDT, USDC, and DAI (a later change
@@ -411,7 +418,10 @@
 	 *  be confusing.  A "Regenerate" button is provided for the
 	 *  rare case where they want a fresh one. */
 	$effect(() => {
-		if (method === 'blurt' && useMemo && memo === '') {
+		// v1.24.0: every account-name coin (BLURT, HIVE, STEEM, BTS). The
+		// account is the same in every trade, so the memo is what ties a
+		// payment to THIS trade.
+		if (isAccountNameCoin(method) && useMemo && memo === '') {
 			memo = generateBlurtMemo();
 		}
 	});
@@ -522,14 +532,22 @@
 	/** v1.21.17 — where a crypto-for-crypto seller is paid, the address must
 	 *  be new: a payment to a reused address cannot be told apart from an
 	 *  earlier one (someone else's, or the same one cited in two chats). A
-	 *  Blurt account is exempt: a BLURT payment is checked by who sent it. */
+	 *  Blurt account is exempt: a BLURT payment is checked by who sent it. So
+	 *  are Hive, Steem and BitShares accounts (v1.24.0): the account IS the
+	 *  address, the same in every trade, and a new one costs a fee — the
+	 *  window says how the payment is checked instead (HIVE / STEEM: by the
+	 *  chat, chat.address.reuse_account_checked_body; BTS: in the wallet,
+	 *  chat.address.reuse_account_body). */
 	const reuseBlocked = $derived(
 		requireAmount &&
-			method !== 'blurt' &&
+			!isAccountNameCoin(method) &&
 			(sharedBefore || reuseCheckedFor !== `${method.toUpperCase()}\u0000${trimmedAddress}`)
 	);
-	/** …and a BLURT ask carries its memo (see the memo block below). */
-	const memoMissing = $derived(requireAmount && method === 'blurt' && (!useMemo || memo === ''));
+	/** …and an account-name coin's ask (BLURT, HIVE, STEEM, BTS) carries its
+	 *  memo (see the memo block below). */
+	const memoMissing = $derived(
+		requireAmount && isAccountNameCoin(method) && (!useMemo || memo === '')
+	);
 	const canSubmit = $derived(
 		addressLooksValid &&
 			!reuseBlocked &&
@@ -545,15 +563,13 @@
 	/** Address-error inline message.  Empty when the address looks
 	 *  valid OR is empty.  Showing an error pre-emptively (before
 	 *  the user has typed enough chars) is jarring, so only flag
-	 *  invalid AFTER they've typed something substantial.  BLURT
-	 *  account names are short (3-16 chars) so the threshold is
-	 *  lower than for the other assets (BTC, XMR, USDT, USDC, DAI,
-	 *  BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX — all
-	 *  use the same 10-char threshold). */
+	 *  invalid AFTER they've typed something substantial.  Account
+	 *  names (BLURT, HIVE, STEEM, BTS) are short, so the threshold is
+	 *  3 characters for them and 10 for every other coin. */
 	const addressErrorKey = $derived.by(() => {
 		if (trimmedAddress.length === 0) return null;
 		// Method-aware "still typing" threshold.
-		const minTyped = method === 'blurt' ? 3 : 10;
+		const minTyped = isAccountNameCoin(method) ? 3 : 10;
 		if (trimmedAddress.length < minTyped) return null;
 		if (addressLooksValid) return null;
 		// v1.5.0 — BLURT: format-valid but the account doesn't exist on chain.
@@ -635,7 +651,8 @@
 				// the user hasn't toggled it off.  The memo is
 				// generated client-side; encodeAddressPayload validates
 				// the shape one more time as defense in depth.
-				...(method === 'blurt' && useMemo && memo !== '' ? { memo } : {}),
+				// v1.24.0: and the other account-name coins (HIVE, STEEM, BTS).
+				...(isAccountNameCoin(method) && useMemo && memo !== '' ? { memo } : {}),
 				// pin the USDT network on the message
 				// itself.  The receiver renders "Tron (TRC-20) USDT
 				// address:" as the bold header so cross-network
@@ -823,7 +840,29 @@
 			     before.  Renders BELOW the error row (errors take
 			     priority) but ABOVE the optional subaddress tip.
 			     Local-only, hashed, never transmitted. -->
-			{#if sharedBefore && !addressErrorKey}
+			{#if isAccountNameCoin(method) && method !== 'blurt'}
+				<!-- Only where this account is how the sharer is PAID in a
+				     crypto-for-crypto trade (requireAmount): the chat's check
+				     runs there.  A buyer sharing his receiving account, or a
+				     barter or one-leg seller, is told nothing about it. -->
+				{#if requireAmount && !addressErrorKey && addressLooksValid}
+					<!-- Hive / Steem / BitShares (v1.24.0): the account is the
+					     address, the same in every trade, so a payment to it
+					     cannot be told apart from an earlier one by where it
+					     went. Not blocked (a new account costs a fee). HIVE and
+					     STEEM payments are checked by transaction id and block
+					     time (paymentChecks.ts); for BTS the seller is told to
+					     check the payment in the wallet. -->
+					<p
+						class="mt-2 rounded-lg border border-amber-400/40 bg-amber-400/5 p-2 text-xs text-amber-900 dark:text-amber-200"
+						role="note"
+					>
+						{method === 'hive' || method === 'steem'
+							? $_('chat.address.reuse_account_checked_body')
+							: $_('chat.address.reuse_account_body')}
+					</p>
+				{/if}
+			{:else if sharedBefore && !addressErrorKey}
 				<div
 					class="mt-2 rounded-lg border border-red-400 bg-red-50 p-2 text-xs dark:border-red-600 dark:bg-red-950"
 					role="alert"
@@ -878,8 +917,8 @@
 			</details>
 		{/if}
 
-		{#if method === 'blurt'}
-			<!-- Phase F.4 — BLURT payment memo.  Auto-generated for
+		{#if isAccountNameCoin(method)}
+			<!-- Phase F.4 — BLURT payment memo (v1.24.0: also HIVE, STEEM, BTS).  Auto-generated for
 			     this trade so the seller can match incoming transfers
 			     even if other unrelated BLURT lands in their account
 			     at the same time.  Random + opaque — does NOT leak
@@ -906,7 +945,7 @@
 						{memo}
 					</code>
 					<p class="mt-2 text-xs text-ink-600 dark:text-ink-300">
-						{$_('chat.address.memo_explain')}
+						{$_('chat.address.memo_explain', { values: { coin: method.toUpperCase() } })}
 					</p>
 				{/if}
 				<!-- A crypto-for-crypto seller's BLURT ask keeps its memo: it is what

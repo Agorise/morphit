@@ -51,6 +51,9 @@
 		'eth',
 		'xrp',
 		'ecx',
+		'hive',
+		'steem',
+		'bts',
 		'barter'
 	] as const satisfies readonly ChatAssetTicker[];
 	/** Every coin is on the sheet: a coin added to the registry does not compile

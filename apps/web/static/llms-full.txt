@@ -1,6 +1,6 @@
 # Morphit — complete FAQ (English)
 
-> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX marketplace.
+> Non-custodial peer-to-peer fiat↔BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX/HIVE/STEEM/BTS marketplace.
 > No KYC. No custody. No arbitration. Federated, open-source.
 > Translations available at https://morphit.io/faq?lang=<code>
 > where <code> ∈ {en, es, de, pl, fr, it, ru, fa, zh-CN, zh-HK}.
@@ -27,7 +27,7 @@ So that nobody — not a company, not a government, not even us — can take Mor
 
 **FAQ key:** `what_is_morphit`
 
-Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (XMR, BTC, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, and ECX) directly with each other. You can barter goods and services too.
+Morphit is a peer-to-peer marketplace where people trade cash for cryptocurrency (XMR, BTC, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, and BTS) directly with each other. You can barter goods and services too.
 
 Morphit never holds your cash or coins, and never asks who you are. Think of it as a public bulletin board for trades (a decentralised bulletin board service, or DBBS) — not a bank or an exchange.
 
@@ -284,7 +284,8 @@ The extra is at most:
 • BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, ECX: 999 satoshis (0.00000999)
 • ETH, XRP, USDT, USDC, DAI: 0.000999
 • SOL: 0.000000999
-• BLURT: 0.099
+• BLURT, HIVE, STEEM: 0.099
+• BTS: 0.00999
 
 It is on by default; the switch is under the amount when you share your address. Turn it off only when you must send an exact figure, such as an invoice. It does not protect against USDT or USDC freezes; see the [privacy guides](/privacy) for each coin.
 
@@ -556,7 +557,7 @@ Why it comes up:
 • **Rewards.** The welcome bonus and loyalty rewards come in BLURT and Blurt Power (BP).
 • **Blurt Power.** BP earns you a nice % APR and gives your votes weight on Blurt social sites like blurt.media and blurt.blog.
 
-You can trade XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, or ECX on Morphit without ever trading BLURT itself. You only need that little bit for network fees.
+You can trade XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, or BTS on Morphit without ever trading BLURT itself. You only need that little bit for network fees.
 
 ---
 
@@ -580,8 +581,8 @@ Morphit uses the BLURT price for two things: showing a rough dollar value next t
 
 Where it comes from, in order:
 
-• **api.blurt.blog**, the Blurt community's own price service, whenever its answer looks sensible.
-• If that's down or looks wrong: an average of several public price sites (CoinGecko, CoinPaprika, CryptoCompare, and others if the operator adds them), leaving out any that disagree too much.
+• **api.blurt.blog**, the Blurt community's own price service, and **Cexius**, an exchange that trades BLURT for USDT: the two answers averaged, or either one alone when the other is down or looks wrong.
+• If both are down or look wrong: an average of several public price sites (CoinGecko, CoinPaprika, CryptoCompare, and others if the operator adds them), leaving out any that disagree too much.
 • Optionally, a price worked out from trades on Morphit itself. It's off unless the operator turns it on, and it's only used when the sources above fail.
 • With no recent price at all, the site asks for the standard BLURT fee amount and shows no dollar figure.
 
@@ -591,7 +592,7 @@ A bad price can't change what the network accepts: every site checks fees agains
 
 BTC and XMR prices come first from five Haveno and Bisq price servers reached over Tor. Their price is used only when at least two of them agree and they are most of the answers. If they don't agree, the site falls back to the public price sites (or, for a Tor/I2P-only site, to other Morphit sites).
 
-The operator can show prices in a currency other than USD, such as EUR. Then the api.blurt.blog step is skipped, because it only quotes dollars.
+The operator can show prices in a currency other than USD, such as EUR. Then the api.blurt.blog and Cexius step is skipped, because both quote only dollars.
 
 ---
 
@@ -599,7 +600,7 @@ The operator can show prices in a currency other than USD, such as EUR. Then the
 
 **FAQ key:** `where_to_buy_blurt`
 
-**Right here on Morphit.** BLURT is one of the 17 assets traded here, alongside XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, and ECX. Open the [orderbook](/orderbook), find someone selling BLURT, and message them. You pay them the way they accept (cash, bank transfer, another coin…), and they send BLURT to your account. No exchange account, no card, no KYC. You can also post your own buy order and let sellers come to you.
+**Right here on Morphit.** BLURT is one of the 20 assets traded here, alongside XMR, BTC, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, and BTS. Open the [orderbook](/orderbook), find someone selling BLURT, and message them. You pay them the way they accept (cash, bank transfer, another coin…), and they send BLURT to your account. No exchange account, no card, no KYC. You can also post your own buy order and let sellers come to you.
 
 **Your first order can be free.** If your very first order is a buy of BLURT worth at least $1, Morphit covers the listing fee. See "Is my first order really free?"
 
@@ -1907,7 +1908,7 @@ Morphit shows this chip to share two facts, so you can choose with open eyes:
 • **Tether can freeze addresses.** Tether, the company behind USDT, can freeze the USDT at an address, and has done so.
 • **USDT payments are public.** On all four networks (Ethereum, Tron, Solana, BNB Smart Chain) anyone can see the transactions. That's how those chains work, not something special about USDT.
 
-This doesn't make USDT bad: it holds a steady dollar value and is easy to trade almost anywhere. If privacy matters most, XMR is the better tool. If you want a coin no company can freeze, look at BTC, BLURT, BCH, LTC, DASH, DOGE, DCR, SOL, ETH, XRP, or ECX. The chip is information, not a verdict.
+This doesn't make USDT bad: it holds a steady dollar value and is easy to trade almost anywhere. If privacy matters most, XMR is the better tool. If you want a coin no company can freeze, look at BTC, BLURT, BCH, LTC, DASH, DOGE, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, or BTS. The chip is information, not a verdict.
 
 ---
 
@@ -1920,7 +1921,7 @@ For the same reason as USDT: USDC is a stablecoin run by a company. The warning 
 • **Circle can freeze addresses.** Circle, the company behind USDC, can freeze the USDC at an address on any supported network, and has done so.
 • **USDC payments are public** on all four networks (Ethereum, Solana, Base, Polygon).
 
-The other coins here (XMR, BTC, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX) have no company that can freeze them.
+The other coins here (XMR, BTC, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, BTS) have no company that can freeze them.
 
 Many traders accept this trade-off for a steady dollar value, and that's fine. The warning appears on Morphit's order form and in the window where you share an address; it never blocks anything, it just makes sure the choice is yours. An operator can also switch USDC off for their whole site. If so, pick another coin or another site.
 
@@ -2158,6 +2159,63 @@ A site's operator can switch ECX off for their site; other Morphit sites can sti
 
 ---
 
+## What is Hive (HIVE), and why is it on Morphit?
+
+**FAQ key:** `what_is_hive`
+
+Hive (HIVE) is the coin of the Hive blockchain, which split off from Steem on 20 March 2020. Like Blurt, it has no mining: elected witnesses make a block every 3 seconds, and a transfer costs no fee. Every payment is public.
+
+On Morphit, HIVE is **trade-only**: you can buy and sell it, but you can't pay listing fees with it (those are paid in BLURT, BTC or XMR).
+
+**Your address is your account name** (3 to 16 characters, like `alice`). The same name can belong to someone else on Blurt, Steem or BitShares, so check that you are sending HIVE.
+
+Three things to know before you trade:
+• **Use the trade's memo.** When the seller shares their account, Morphit adds a short random memo for this trade, and the buyer puts it on the transfer. It is how the payment is matched to the trade, so whoever receives the HIVE must share their own account — never an exchange's deposit account, which needs the exchange's own memo.
+• **Send liquid HIVE.** Not HIVE Power (staked HIVE), and not HBD, Hive's separate dollar token.
+• **The chat checks the payment.** When the buyer records the HIVE payment with its transaction ID, Morphit looks it up on the Hive chain and shows it arriving, with the trade's memo and the amount asked; it counts as confirmed once its block can no longer be undone, usually within a minute.
+
+A site's operator can switch HIVE off for their site; other Morphit sites can still trade it. More tips: [HIVE privacy guide](/privacy/hive).
+
+---
+
+## What is Steem (STEEM), and why is it on Morphit?
+
+**FAQ key:** `what_is_steem`
+
+Steem (STEEM) is the coin of the Steem blockchain, launched in 2016: the chain Hive and Blurt split off from. Elected witnesses make a block every 3 seconds, and a transfer costs no fee. Every payment is public.
+
+On Morphit, STEEM is **trade-only**: you can buy and sell it, but you can't pay listing fees with it (those are paid in BLURT, BTC or XMR).
+
+**Your address is your account name** (3 to 16 characters, like `alice`). The same name can belong to someone else on Blurt, Hive or BitShares, so check that you are sending STEEM.
+
+Three things to know before you trade:
+• **Use the trade's memo.** When the seller shares their account, Morphit adds a short random memo for this trade, and the buyer puts it on the transfer. It is how the payment is matched to the trade, so whoever receives the STEEM must share their own account — never an exchange's deposit account, which needs the exchange's own memo.
+• **Send liquid STEEM.** Not Steem Power (staked STEEM), and not SBD, Steem's separate dollar token.
+• **The chat checks the payment.** When the buyer records the STEEM payment with its transaction ID, Morphit looks it up on the Steem chain and shows it arriving, with the trade's memo and the amount asked; it counts as confirmed once its block can no longer be undone, usually within a minute.
+
+A site's operator can switch STEEM off for their site; other Morphit sites can still trade it. More tips: [STEEM privacy guide](/privacy/steem).
+
+---
+
+## What is BitShares (BTS), and why is it on Morphit?
+
+**FAQ key:** `what_is_bts`
+
+BitShares (BTS) is the coin of BitShares, the first blockchain built on Graphene (2015), the software Steem, Hive and Blurt grew from. It has a built-in exchange where anyone can issue tokens. Elected witnesses make a block every 3 seconds, and each transfer pays a small fee in BTS. Every payment is public.
+
+On Morphit, BTS is **trade-only**: you can buy and sell it, but you can't pay listing fees with it (those are paid in BLURT, BTC or XMR).
+
+**Your address is your account name** (1 to 63 characters, like `alice-trader`). The same name can belong to someone else on Blurt, Hive or Steem, so check that you are sending BTS.
+
+Three things to know before you trade:
+• **Use the trade's memo.** When the seller shares their account, Morphit adds a short random memo for this trade, and the buyer puts it on the transfer. It is how the payment is matched to the trade, so whoever receives the BTS must share their own account — never an exchange's deposit account, which needs the exchange's own memo.
+• **Send BTS itself.** BitShares carries many other tokens (bitUSD, tokens issued by exchanges); a trade in BTS is paid in BTS. Unlike BTS, some of those tokens can be frozen by whoever issued them.
+• **Check your wallet.** Morphit can't look a BitShares payment up by its transaction ID, so whoever receives the BTS checks in their own wallet that it carries the trade's memo before sending their side.
+
+A site's operator can switch BTS off for their site; other Morphit sites can still trade it. More tips: [BTS privacy guide](/privacy/bts).
+
+---
+
 ## What is Bitcoin Cash (BCH), and why is it on Morphit?
 
 **FAQ key:** `what_is_bch`
@@ -2235,7 +2293,7 @@ Word of mouth. Every person you bring makes the orderbook more useful for everyo
 • **Write about it** on Blurt.blog, your own blog or Substack, and share it where it's on-topic.
 • **Demo it at meetups** — Bitcoin, Monero, privacy, freedom-tech and agorist groups. Five minutes is enough.
 • **Print flyers and stickers** with a big QR code to your site and one line, like "Buy crypto, no ID". Try community boards, cafés, libraries, campuses and factory gates at shift change.
-• **Reach other coin communities.** Morphit supports Ethereum, Solana, XRP, Pirate Chain, Decred and more — "trade your coin person to person, no KYC" lands well.
+• **Reach other coin communities.** Morphit supports Hive, Steem, BitShares, Ethereum, Solana, XRP, Pirate Chain, Decred and more — "trade your coin person to person, no KYC" lands well.
 • **Operators:** pay a local promoter a small salary plus bonuses in BLURT for new signups, first trades or demos.
 
 **Don't:**
@@ -2329,7 +2387,7 @@ Barter is for trading wares only: you can't use it to pay Morphit's listing fee.
 
 **FAQ key:** `what_is_a_txid`
 
-When you send crypto, the blockchain gives that payment a unique ID called the Transaction ID. Wallets name it differently: “TxID”, “Transaction Hash”, “Tx Hash” or just “Hash” (Mycelium, for example, calls it “Hash”). It's a long string of letters and numbers, usually 64 characters (Blurt's are 40).
+When you send crypto, the blockchain gives that payment a unique ID called the Transaction ID. Wallets name it differently: “TxID”, “Transaction Hash”, “Tx Hash” or just “Hash” (Mycelium, for example, calls it “Hash”). It's a long string of letters and numbers, usually 64 characters (Blurt's, Hive's, Steem's and BitShares' are 40).
 
 To find it: open your wallet, tap the payment you sent, and copy the ID or Hash it shows.
 
@@ -2357,7 +2415,7 @@ Anyone with the ID can look the payment up on a public block explorer. On open c
 
 ## Metadata
 
-Total FAQ entries: 148
+Total FAQ entries: 151
 Canonical URL: https://morphit.io/faq
 License: AGPL-3.0 (content may be quoted/redistributed)
 Source of truth: https://git.agorise.net/agorise/morphit

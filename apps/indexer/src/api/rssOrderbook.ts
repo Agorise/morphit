@@ -23,7 +23,7 @@
  *   /rss/orderbook/by-asset/<asset>.xml
  *     Same shape, filtered to a single asset
  *     (BTC | XMR | BLURT | USDT | USDC | DAI | BCH | LTC | DASH
- *     | DOGE | ZEC | ARRR | DCR | SOL | ETH | XRP | ECX). Lets a subscriber follow only the trades they
+ *     | DOGE | ZEC | ARRR | DCR | SOL | ETH | XRP | ECX | HIVE | STEEM | BTS). Lets a subscriber follow only the trades they
  *     care about. The BARE URL (no query string) reveals only
  *     "I care about BTC" and nothing more granular. It also
  *     accepts OPTIONAL filters as query params — side,

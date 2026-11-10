@@ -21,6 +21,9 @@ const snapshot = vi.hoisted(() => ({
 			eth: null as string | null,
 			xrp: null as string | null,
 			ecx: null as string | null,
+			hive: null as string | null,
+			steem: null as string | null,
+			bts: null as string | null,
 			usdt: { erc20: null, trc20: null, spl: null, bep20: null } as Record<string, string | null>,
 			usdc: { erc20: null, spl: null, base: null, polygon: null } as Record<string, string | null>,
 			dai: { erc20: null, polygon: null, base: null, arbitrum: null } as Record<
@@ -109,7 +112,10 @@ const NATIVE: ExternalAsset[] = [
 	'SOL',
 	'ETH',
 	'XRP',
-	'ECX'
+	'ECX',
+	'HIVE',
+	'STEEM',
+	'BTS'
 ];
 const TXID: Record<ExternalAsset, string> = {
 	BTC: HEX,
@@ -124,7 +130,10 @@ const TXID: Record<ExternalAsset, string> = {
 	SOL: '5'.repeat(88),
 	ETH: `0x${HEX}`,
 	XRP: HEX.toUpperCase(),
-	ECX: HEX
+	ECX: HEX,
+	HIVE: HEX.slice(0, 40),
+	STEEM: HEX.slice(0, 40),
+	BTS: HEX.slice(0, 40)
 };
 
 function setPageHost(hostname: string | null): void {
@@ -174,7 +183,10 @@ function resetOverrides(): void {
 		'sol',
 		'eth',
 		'xrp',
-		'ecx'
+		'ecx',
+		'hive',
+		'steem',
+		'bts'
 	] as const)
 		c[k] = null;
 	for (const m of [c.usdt, c.usdc, c.dai]) for (const k of Object.keys(m)) m[k] = null;
@@ -240,6 +252,10 @@ describe('the hidden explorer addresses', () => {
 		expect(ONION_EXPLORER_URLS.ARRR).toEqual([]);
 		expect(ONION_EXPLORER_URLS.ECX).toEqual([]);
 		expect(I2P_EXPLORER_URLS.ECX ?? []).toEqual([]);
+		for (const k of ['HIVE', 'STEEM', 'BTS'] as const) {
+			expect(ONION_EXPLORER_URLS[k], k).toEqual([]);
+			expect(I2P_EXPLORER_URLS[k] ?? [], k).toEqual([]);
+		}
 	});
 
 	it('leave out every address that did not load in the maintainer’s check', () => {
@@ -306,6 +322,9 @@ describe('links on a hidden page', () => {
 		expect(externalExplorerUrl('ARRR', HEX)).toBeNull();
 		// never a Bitcoin explorer for an eCash txid
 		expect(externalExplorerUrls('ECX', HEX)).toEqual([]);
+		// no hidden explorer of the Graphene chains, and never one another's
+		for (const k of ['HIVE', 'STEEM', 'BTS'] as const)
+			expect(externalExplorerUrls(k, HEX.slice(0, 40)), k).toEqual([]);
 		expect(blurtWalletExplorerFallbackUrl('tx', 'a'.repeat(40))).toBeNull();
 	});
 

@@ -26,6 +26,14 @@
  *  - {BTC, ECX} accept exactly the same addresses: eCash (ECX) kept
  *    Bitcoin's formats, so the string never tells the two apart (the
  *    chat card names the chain; ADR-0053).
+ *  - {BLURT, HIVE, STEEM} accept exactly the same account names (Steem's
+ *    rule, which Hive and Blurt kept), and BTS accepts each of them too
+ *    (bitshares-core's name rule is wider: 1-63 characters); a BTS name
+ *    of 1-2 or 17+ characters is no account on the other three.  BTS's
+ *    rule also accepts every all-lowercase bech32 / CashAddr string
+ *    (bc1..., ltc1..., q...) — a valid BitShares account name — so those
+ *    BTC/LTC/BCH/ECX specimens are BTS-shaped.  The chat card names the
+ *    coin; ADR-0054.
  *
  * Any UNDOCUMENTED overlap fails the smoke.
  *
@@ -67,7 +75,11 @@ const SPECIMENS: Record<string, string[]> = {
 	ETH: ['0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'],
 	XRP: ['rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh', 'rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv'],
 	// eCash keeps Bitcoin's address formats: the same strings.
-	ECX: ['1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy', 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq']
+	ECX: ['1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy', 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq'],
+	// Graphene chains: account names (Blurt's rule for HIVE and STEEM).
+	HIVE: ['hiveio', 'blocktrades'],
+	STEEM: ['steemit', 'ned-reward'],
+	BTS: ['open.ledger-dex', 'a', 'bitshares-committee-member-1']
 };
 
 // Documented intentional overlaps as (A_owner, addr_class, B_acceptors).
@@ -178,6 +190,33 @@ const EXPECTED_OVERLAPS: Set<string> = new Set([
 	'ECX-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->USDT',
 	'ECX-bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq->BTC',
 	'LTC-3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy->ECX',
+	// Blurt, Hive and Steem share the account-name rule; BitShares' rule is
+	// wider and also takes all-lowercase bech32 / CashAddr strings (ADR-0054).
+	'BCH-qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a->BTS',
+	'BLURT-alice->BTS',
+	'BLURT-alice->HIVE',
+	'BLURT-alice->STEEM',
+	'BLURT-bob-trader-42->BTS',
+	'BLURT-bob-trader-42->HIVE',
+	'BLURT-bob-trader-42->STEEM',
+	'BTC-bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq->BTS',
+	'BTS-open.ledger-dex->BLURT',
+	'BTS-open.ledger-dex->HIVE',
+	'BTS-open.ledger-dex->STEEM',
+	'ECX-bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq->BTS',
+	'HIVE-blocktrades->BLURT',
+	'HIVE-blocktrades->BTS',
+	'HIVE-blocktrades->STEEM',
+	'HIVE-hiveio->BLURT',
+	'HIVE-hiveio->BTS',
+	'HIVE-hiveio->STEEM',
+	'LTC-ltc1qhgqd3p9hky4r29mxrkv0p38apgmt9rqxmf04qd->BTS',
+	'STEEM-ned-reward->BLURT',
+	'STEEM-ned-reward->BTS',
+	'STEEM-ned-reward->HIVE',
+	'STEEM-steemit->BLURT',
+	'STEEM-steemit->BTS',
+	'STEEM-steemit->HIVE',
 ]);
 
 // Walk every (A, specimen, B) triple and record overlaps

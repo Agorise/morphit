@@ -13,10 +13,20 @@ import { z } from 'zod';
 import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, normalizeContactUrl, sanitizeBrandName } from '@morphit/operator-config';
 import {
 	DEFAULT_BTC_FEE_EXPLORERS,
+	DEFAULT_HIVE_PAYMENT_NODES,
 	DEFAULT_PRICENODES,
+	DEFAULT_STEEM_PAYMENT_NODES,
 	explorerOperatorOf,
 	isAcceptableSourceUrl
 } from '@morphit/operator-config/fee-sources';
+
+/** A comma-separated list, trimmed, empty entries dropped. PURE. */
+function listOf(s: string): string[] {
+	return s
+		.split(',')
+		.map((u) => u.trim())
+		.filter((u) => u.length > 0);
+}
 
 /** How many distinct explorer OPERATORS a list holds (an operator's .onion and
  *  clearnet addresses are one; feeSources.ts explorerOperatorOf). A quorum is
@@ -342,6 +352,9 @@ export interface Config {
 	/** Blurt-native BLURT/USD price feed (api.blurt.blog/price_info).
 	 *  Joins the external market average for BLURT only. Empty disables it. */
 	readonly blurtPriceFeedUrl: string;
+	/** Cexius public API base (v1.24.0): its BLURT/USDT last price is averaged
+	 *  with the Blurt feed as BLURT's primary source.  Empty = not used. */
+	readonly cexiusBaseUrl: string;
 	/** Relative outlier band for the crypto external average, e.g.
 	 *  0.05 = drop sources >5% off the median before averaging. */
 	readonly priceOutlierTolerance: number;
@@ -482,6 +495,12 @@ export interface Config {
 	/** Explorer URLs for Monero verification, same tiering as BTC's.
 	 *  Empty = XMR fees off. */
 	readonly xmrExplorerUrls: readonly string[];
+
+	/** v1.24.0: the nodes asked whether a trade's HIVE (HAfAH bases) or
+	 *  STEEM (JSON-RPC URLs) payment arrived (/v1/payment-check). Empty: that
+	 *  coin's payments are not checked here (the seller checks his wallet). */
+	readonly hivePaymentNodes: readonly string[];
+	readonly steemPaymentNodes: readonly string[];
 
 	/** quorum gate.  Minimum number of BTC explorers
 	 *  that must return a successful, agreeing response before a fee
@@ -720,6 +739,18 @@ export interface Config {
 	 *  exist on both chains (replay), so a Bitcoin explorer can show the
 	 *  Bitcoin copy of a payment. */
 	readonly frontendEcxChatLinkUrl: string | undefined;
+
+	/** Hive (HIVE), Steem (STEEM) and BitShares (BTS) chat-link explorer URL
+	 *  templates.  When set, the frontend uses them instead of the bundled
+	 *  `hivescan.info/tx/{txid}` (the Hive core developers' HAF
+	 *  block explorer), `steemscan.com/transaction/{txid}` and
+	 *  `www.bitshareschain.com/tx/{txid}`.  Must contain `{txid}`; checked at
+	 *  config load.  Each must be an explorer of that chain: the three share
+	 *  the transaction-id format (40 hex), so another chain's explorer finds
+	 *  nothing or the wrong transaction. */
+	readonly frontendHiveChatLinkUrl: string | undefined;
+	readonly frontendSteemChatLinkUrl: string | undefined;
+	readonly frontendBtsChatLinkUrl: string | undefined;
 
 	/** Per-instance per-network USDT chat-link explorer URL
 	 *  templates (DD-11 closure; the multi-network
@@ -1190,9 +1221,12 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_COINCAP_API_KEY: z.string().optional(),
 	MORPHIT_INDEXER_MESSARI_BASE_URL: z.string().default('https://data.messari.io'),
 	MORPHIT_INDEXER_MESSARI_API_KEY: z.string().optional(),
-	// Blurt-native price feed (BLURT/USD). Joins the external
-	// average for BLURT. Set empty to disable.
+	// Blurt-native price feed (BLURT/USD): BLURT's primary source, averaged
+	// with Cexius's BLURT/USDT (below) when both answer. Set empty to disable.
 	MORPHIT_INDEXER_BLURT_PRICE_FEED_URL: z.string().default('https://api.blurt.blog/price_info'),
+	// Cexius exchange public API (v1.24.0): its BLURT/USDT last price is the
+	// other half of BLURT's primary source. Set empty to disable.
+	MORPHIT_INDEXER_CEXIUS_BASE_URL: z.string().default('https://cexius.com/api/v2'),
 	MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE: z.coerce.number().positive().max(1).default(0.05),
 
 	// ─── USD→fiat FX feed (multi-currency $1-equivalent floor) ──
@@ -1317,6 +1351,23 @@ const envSchema = z.object({
 					.filter((u) => u.length > 0)
 					.every((u) => isAcceptableSourceUrl(u)),
 			'all BTC explorer URLs must be https://, or http:// to a .onion / .i2p service (cleartext over the open internet exposes the txid+address)'
+		),
+
+	// v1.24.0: trade payment checks for HIVE and STEEM (fee/grapheneTxCheck.ts).
+	// Empty: not checked here. Default: @morphit/operator-config feeSources.ts.
+	MORPHIT_INDEXER_HIVE_PAYMENT_NODES: z
+		.string()
+		.default(DEFAULT_HIVE_PAYMENT_NODES.join(','))
+		.refine(
+			(s) => listOf(s).every((u) => isAcceptableSourceUrl(u)),
+			'all HIVE payment nodes must be https://, or http:// to a .onion / .i2p service'
+		),
+	MORPHIT_INDEXER_STEEM_PAYMENT_NODES: z
+		.string()
+		.default(DEFAULT_STEEM_PAYMENT_NODES.join(','))
+		.refine(
+			(s) => listOf(s).every((u) => isAcceptableSourceUrl(u)),
+			'all STEEM payment nodes must be https://, or http:// to a .onion / .i2p service'
 		),
 
 	// XMR fee verification.
@@ -1654,6 +1705,36 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
 		),
+	// HIVE chat-link explorer URL override.  Single-network.  When unset,
+	// falls back to the bundled hivescan.info default.
+	MORPHIT_FRONTEND_HIVE_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
+		),
+	// STEEM chat-link explorer URL override.  Single-network.  When unset,
+	// falls back to the bundled steemscan.com default.
+	MORPHIT_FRONTEND_STEEM_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
+		),
+	// BTS chat-link explorer URL override.  Single-network.  When unset,
+	// falls back to the bundled www.bitshareschain.com default.
+	MORPHIT_FRONTEND_BTS_CHAT_LINK_URL: z
+		.string()
+		.max(512)
+		.optional()
+		.refine(
+			(s) => s === undefined || isValidChatLinkTemplate(s),
+			'must be https:// (or http:// to a Tor v3 .onion or .i2p host), contain {txid}, and parse as URL'
+		),
 	// USDT per-network chat-link explorer URLs.
 	// DD-11 closure: these were missing since an earlier release so the
 	// public-API per-network override never worked.  Frontend
@@ -1955,6 +2036,7 @@ export function loadConfig(): Config {
 		messariBaseUrl: e.MORPHIT_INDEXER_MESSARI_BASE_URL,
 		messariApiKey: e.MORPHIT_INDEXER_MESSARI_API_KEY,
 		blurtPriceFeedUrl: e.MORPHIT_INDEXER_BLURT_PRICE_FEED_URL,
+		cexiusBaseUrl: e.MORPHIT_INDEXER_CEXIUS_BASE_URL,
 		priceOutlierTolerance: e.MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE,
 		// USD→fiat FX feed
 		fxFeedEnabled: e.MORPHIT_INDEXER_FX_FEED_ENABLED,
@@ -2008,6 +2090,9 @@ export function loadConfig(): Config {
 			if (q.note !== null && list.length > 0) console.warn(q.note);
 			return q.value;
 		})(),
+
+		hivePaymentNodes: listOf(e.MORPHIT_INDEXER_HIVE_PAYMENT_NODES),
+		steemPaymentNodes: listOf(e.MORPHIT_INDEXER_STEEM_PAYMENT_NODES),
 
 		xmrFeeAddress: e.MORPHIT_INDEXER_XMR_FEE_ADDRESS,
 		xmrFeePiconero: BigInt(e.MORPHIT_INDEXER_XMR_FEE_PICONERO),
@@ -2126,6 +2211,9 @@ export function loadConfig(): Config {
 		frontendEthChatLinkUrl: e.MORPHIT_FRONTEND_ETH_CHAT_LINK_URL,
 		frontendXrpChatLinkUrl: e.MORPHIT_FRONTEND_XRP_CHAT_LINK_URL,
 		frontendEcxChatLinkUrl: e.MORPHIT_FRONTEND_ECX_CHAT_LINK_URL,
+		frontendHiveChatLinkUrl: e.MORPHIT_FRONTEND_HIVE_CHAT_LINK_URL,
+		frontendSteemChatLinkUrl: e.MORPHIT_FRONTEND_STEEM_CHAT_LINK_URL,
+		frontendBtsChatLinkUrl: e.MORPHIT_FRONTEND_BTS_CHAT_LINK_URL,
 		// multi-network USDT + USDC chat-link
 		// overrides.  Independent fields per (asset, network) since
 		// the underlying explorers vary per chain and an operator's

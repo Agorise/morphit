@@ -121,7 +121,6 @@ apps/indexer/src/indexer/flowBackfill.ts
 apps/indexer/src/indexer/fx/frankfurterFetcher.ts
 apps/indexer/src/indexer/price/aggregate.ts
 apps/indexer/src/indexer/price/blurtBlogFetcher.ts
-apps/indexer/src/indexer/price/compositeSource.ts
 apps/indexer/src/indexer/price/disagreementMonitor.ts
 apps/indexer/src/indexer/price/driftMonitor.ts
 apps/indexer/src/indexer/price/factory.ts
@@ -478,7 +477,6 @@ apps/web/scripts/yubikey-enroll-verify-smoke.ts
 apps/web/scripts/yubikey-error-classifier-smoke.ts
 apps/web/scripts/yubikey-transport-mock-smoke.ts
 apps/web/src/lib/assets/networks.ts
-apps/web/src/lib/assets/registry.ts
 apps/web/src/lib/auth/recommendedAuthenticatorApps.ts
 apps/web/src/lib/auth/totp.test.ts
 apps/web/src/lib/blurt/accountBalance.test.ts

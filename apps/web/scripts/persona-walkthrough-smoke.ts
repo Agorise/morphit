@@ -2520,7 +2520,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: [
 			"ticker: 'xrp'",
-			"displayName: 'Ripple (XRP)'",
+			"displayName: 'Ripple',",
 			'canBeUsedForListingFee: false'
 		]
 	},

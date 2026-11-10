@@ -330,3 +330,17 @@ only to show what an amount is worth and to fill an amount in — never
 for a fee, a check or anything signed. eCash (ECX) is left out: other
 coins use the same ticker, so a provider's "ECX" may not be this eCash.
 The browser still asks no price service of its own.
+
+### 2026-11 (v1.24.0) — Hive, Steem and BitShares; Cexius for BLURT
+
+`asset_prices_usd` can carry HIVE, STEEM and BTS as well (CoinGecko
+`hive`, `steem`, `bitshares`; CryptoCompare `HIVE`, `STEEM`, `BTS`).
+The onion pricenodes are not known to quote them, so they come from the
+two clearnet requests only, and an instance reached only over Tor and
+I2P shows them without a dollar value. BLURT's own price gains a second
+primary source: the Cexius exchange's BLURT/USDT last trade price is
+asked together with api.blurt.blog, and the two plausible answers are
+combined with the same robust mean (`primary_avg`); either one alone
+serves when the other is down, and the aggregators only when both are
+(`CompositeCachedPriceSource` `primaryBlend`, `cexiusFetcher.ts`;
+`MORPHIT_INDEXER_CEXIUS_BASE_URL`, empty to leave it out).

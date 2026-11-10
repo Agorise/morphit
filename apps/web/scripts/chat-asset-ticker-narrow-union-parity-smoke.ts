@@ -41,13 +41,13 @@ const CANONICAL = new Set([
 // present in the line, the union is allow-listed.
 const NARROW_BY_DESIGN: Array<{ pattern: string; reason: string }> = [
 	{
-		pattern: "readonly asset: 'btc' | 'xmr';",
+		pattern: "readonly asset: 'btc' | 'xmr' | 'hive' | 'steem';",
 		reason:
-			'v1.21.17 payment check (/v1/payment-check, PaymentCheckInput/Response) — the coins the instance checks against block explorers: BTC and XMR only'
+			'payment check (/v1/payment-check, PaymentCheckInput/Response) — the coins the instance checks: BTC and XMR against block explorers (v1.21.17), HIVE and STEEM against their API nodes (v1.24.0)'
 	},
 	{
-		pattern: "q: { asset: 'btc' | 'xmr';",
-		reason: 'v1.21.17 getPaymentCheck query — BTC and XMR only, as /v1/payment-check'
+		pattern: "asset: 'btc' | 'xmr' | 'hive' | 'steem';",
+		reason: 'getPaymentCheck query — BTC, XMR, HIVE and STEEM only, as /v1/payment-check'
 	},
 	{
 		pattern: "'usdt' | 'usdc' | 'dai'",

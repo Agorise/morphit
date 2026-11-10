@@ -1073,6 +1073,9 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   ETH:  https://eth.blockscout.com/tx/{txid}');
 	lines.push('#   XRP:  https://livenet.xrpl.org/transactions/{txid}');
 	lines.push('#   ECX:  https://explorer.ecash.com/tx/{txid}');
+	lines.push('#   HIVE: https://hivescan.info/tx/{txid}');
+	lines.push('#   STEEM: https://steemscan.com/transaction/{txid}');
+	lines.push('#   BTS:  https://www.bitshareschain.com/tx/{txid}');
 	lines.push('#');
 	lines.push('# Defaults (multi-network, per chain):');
 	lines.push('#   USDT (ERC-20):  https://etherscan.io/tx/{txid}');
@@ -1102,7 +1105,10 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 		`MORPHIT_FRONTEND_SOL_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.sol)}`,
 		`MORPHIT_FRONTEND_ETH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.eth)}`,
 		`MORPHIT_FRONTEND_XRP_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.xrp)}`,
-		`MORPHIT_FRONTEND_ECX_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.ecx)}`
+		`MORPHIT_FRONTEND_ECX_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.ecx)}`,
+		`MORPHIT_FRONTEND_HIVE_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.hive)}`,
+		`MORPHIT_FRONTEND_STEEM_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.steem)}`,
+		`MORPHIT_FRONTEND_BTS_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.bts)}`
 	);
 	// USDT per-network env vars.  These
 	// finally route through the indexer body to the frontend's
@@ -1171,10 +1177,11 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(`MORPHIT_INDEXER_XMR_FEE_PICONERO=${answers.listingFee.xmrPiconero}`);
 	lines.push('');
 	lines.push('# Fallback BLURT/USD price.  The indexer runs a composite');
-	lines.push('# price source: an outlier-rejected median across several');
-	lines.push('# external feeds (Coingecko, CoinPaprika, CryptoCompare, …)');
-	lines.push('# → morphit_native → static floor (this).');
-	lines.push('# Only consulted when both live upstreams have failed AND no');
+	lines.push('# price source: api.blurt.blog and Cexius (averaged) → an');
+	lines.push('# outlier-rejected median across several external feeds');
+	lines.push('# (Coingecko, CoinPaprika, CryptoCompare, …) → morphit_native');
+	lines.push('# → static floor (this).');
+	lines.push('# Only consulted when every live upstream has failed AND no');
 	lines.push('# value has cached successfully since boot.  Display-only at');
 	lines.push("# the indexer; fee verification doesn't touch USD prices.");
 	lines.push('# Update when BLURT drifts significantly:');

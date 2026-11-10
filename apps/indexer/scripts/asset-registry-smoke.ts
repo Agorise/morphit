@@ -39,9 +39,9 @@ function scenario(name: string, fn: () => void): void {
 
 console.log('\n── asset registry smoke ─────────────────────────────────\n');
 
-scenario('all current assets registered (18 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, BARTER)', () => {
+scenario('all current assets registered (21 assets: BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, BTS, BARTER)', () => {
 	const tickers = ASSETS.map((a) => a.ticker).sort();
-	const expected = ['arrr', 'barter', 'bch', 'blurt', 'btc', 'dai', 'dash', 'dcr', 'doge', 'ecx', 'eth', 'ltc', 'sol', 'usdc', 'usdt', 'xmr', 'xrp', 'zec'];
+	const expected = ['arrr', 'barter', 'bch', 'blurt', 'btc', 'bts', 'dai', 'dash', 'dcr', 'doge', 'ecx', 'eth', 'hive', 'ltc', 'sol', 'steem', 'usdc', 'usdt', 'xmr', 'xrp', 'zec'];
 	if (JSON.stringify(tickers) !== JSON.stringify(expected)) {
 		throw new Error(`expected ${expected}, got ${tickers}`);
 	}
@@ -190,6 +190,9 @@ scenario('lower-case tickers match payload union', () => {
 		'eth',
 		'xrp',
 		'ecx',
+		'hive',
+		'steem',
+		'bts',
 		'barter'
 	]);
 	for (const a of ASSETS) {
@@ -285,11 +288,14 @@ scenario('feePayableAssets matches canBeUsedForListingFee', () => {
 	}
 });
 
-scenario('memoCapableAssets includes BLURT, excludes BTC + XMR', () => {
+// v1.24.0: the account-name coins (BLURT, HIVE, STEEM, BTS) carry the trade's
+// memo — their account is the same in every trade, and the memo ties a payment
+// to it (web chat/payload.ts ACCOUNT_NAME_COIN); BTC, XMR and the rest do not.
+scenario('memoCapableAssets is the account-name coins (BLURT, HIVE, STEEM, BTS), never BTC or XMR', () => {
 	const m = memoCapableAssets()
 		.map((a) => a.ticker)
 		.sort();
-	const expected = ['blurt'];
+	const expected = ['blurt', 'bts', 'hive', 'steem'];
 	if (JSON.stringify(m) !== JSON.stringify(expected)) {
 		throw new Error(`expected ${expected}, got ${m}`);
 	}

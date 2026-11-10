@@ -958,6 +958,9 @@
 		ETH: 'what_is_eth',
 		XRP: 'what_is_xrp',
 		ECX: 'what_is_ecx',
+		HIVE: 'what_is_hive',
+		STEEM: 'what_is_steem',
+		BTS: 'what_is_bts',
 		BARTER: 'what_is_barter'
 	};
 	/** the Step-1 asset blocks, ALPHABETIZED by ticker. Each block
@@ -2944,7 +2947,7 @@
 			     USDC, and DAI are the three stablecoin assets that
 			     surface here (USDT/USDC are issuer-centralized;
 			     DAI is partly-centralized via its collateral mix);
-			     BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX all carry
+			     BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX/HIVE/STEEM/BTS all carry
 			     null and skip. -->
 			{#if asset === 'USDT'}
 				<PrivacyWarningChip privacyWarningKey="usdt_centralized" />

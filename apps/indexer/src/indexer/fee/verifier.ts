@@ -145,6 +145,9 @@ export type PaymentLookupResult =
 			 *  (paymentTimeOf): no time is given, and the payment cannot be
 			 *  dated here at all. */
 			readonly timeDisputed?: boolean;
+			/** (v1.24.0, HIVE / STEEM) A transfer of the coin reached the
+			 *  account with a memo other than the ask's; `amount` leaves it out. */
+			readonly otherMemo?: boolean;
 	  }
 	| { readonly kind: 'not_found' }
 	| { readonly kind: 'no_answer' };

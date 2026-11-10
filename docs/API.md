@@ -418,7 +418,7 @@ Query parameters (all optional):
 
 | Param            | Type    | Description |
 |---|---|---|
-| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, `USDC`, `DAI`, `BCH`, `LTC`, `DASH`, `DOGE`, `ZEC`, `ARRR`, `DCR`, `SOL`, `ETH`, `XRP`, or `ECX` |
+| `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, `USDC`, `DAI`, `BCH`, `LTC`, `DASH`, `DOGE`, `ZEC`, `ARRR`, `DCR`, `SOL`, `ETH`, `XRP`, `ECX`, `HIVE`, `STEEM`, or `BTS` |
 | `asset_network`  | string  | For multi-network assets: USDT → `erc20`/`trc20`/`spl`/`bep20`; USDC → `erc20`/`spl`/`base`/`polygon`; DAI → `erc20`/`polygon`/`base`/`arbitrum`. Only orders on that network; refused for an asset that has one network or not this one |
 | `side`           | string  | `buy` or `sell` |
 | `fiat_currency`  | string  | ISO-4217, one or more, comma-separated, e.g. `USD` or `USD,EUR` |
@@ -952,11 +952,12 @@ for the full derivation transparency.
 
 `asset_prices_usd` (v1.23.2) is a map of USD per coin for the coins this
 instance has a fresh price for, out of every coin but BLURT, BTC, XMR and ECX
-(that is ETH, LTC, BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, USDT, USDC and
-DAI), e.g.
+(that is ETH, LTC, BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, HIVE, STEEM, BTS,
+USDT, USDC and DAI), e.g.
 `{"ETH": 3005.2, "LTC": 89.5, "USDT": 1.0001}`. It is always USD,
 whatever `denomination_fiat` says, and comes from the onion pricenodes
-plus (where the instance may reach clearnet) one CoinGecko and one
+(not for HIVE, STEEM and BTS, which they are not known to quote) plus
+(where the instance may reach clearnet) one CoinGecko and one
 CryptoCompare request for all coins together. Display only, under the
 same NOT-AN-ORACLE warning; a coin without a fresh price is absent, and
 the field is absent when no coin has one. eCash (ECX) is never listed.
@@ -1178,8 +1179,8 @@ before any signing happens.
 
 Tier: `payment-check`
 
-Has a trade's BTC or XMR payment reached the seller's address, with how
-much, and how deep? In a crypto-for-crypto trade the seller shares an
+Has a trade's BTC, XMR, HIVE or STEEM payment reached the seller's
+address, with how much, and how deep? In a crypto-for-crypto trade the seller shares an
 address in the chat and the buyer records the payment there; the
 seller's screen polls this while the payment confirms. The browser asks
 only its own instance; the instance asks the block explorers it uses
@@ -1187,6 +1188,25 @@ for BTC / XMR listing fees, in the same order and over the same
 transport (onion / I2P explorers first over Tor / I2P, clearnet ones
 only where clearnet is allowed and only when those cannot answer; a
 Tor/I2P-only node never asks a clearnet explorer).
+
+**HIVE and STEEM (v1.24.0).** `asset=hive|steem`, `txid` (40 hex),
+`address` (the seller's account name: 3-16 characters, parts of at least 3
+between dots; no `tx_key`) and `memo` (the memo of the seller's ask, 6-32 of
+a-z0-9; optional, refused for BTC / XMR). The
+instance asks that chain's API nodes by transaction id
+(`MORPHIT_INDEXER_HIVE_PAYMENT_NODES`: HAfAH's `/transactions/<id>`,
+`/headblock` and `/sync-status`; `MORPHIT_INDEXER_STEEM_PAYMENT_NODES`:
+JSON-RPC `condenser_api.get_transaction`, `get_dynamic_global_properties`
+and `get_block_header`), and two operators must agree on the block and the
+amount. `amount` counts the `transfer` operations of that transaction to the
+account in the coin itself (never HBD / SBD, a power-up, savings or escrow;
+a transfer from the account to itself pays nothing), and with `memo` only
+those carrying it: one that reached the account with another memo adds
+`memo_mismatch: true` to a `found` answer. `confirmations` is the
+depth from the head, and reaches `required_confirmations` only once the
+block is irreversible (a few seconds on Hive, about a minute on Steem);
+`tx_time` is the block's time. Clearnet only: a Tor/I2P-only node answers
+`unavailable`. A confirming answer is reused for 5 s, `not_found` for 6 s.
 
 Query: `asset=btc|xmr`, `txid` (64 hex), `address` (a mainnet address of
 that asset, checksum checked), and for XMR only `tx_key` — the

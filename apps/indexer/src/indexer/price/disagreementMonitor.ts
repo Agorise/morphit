@@ -210,7 +210,18 @@ export class DisagreementMonitor {
  *  prevents a false "disagreement" alarm from comparing the native
  *  price against the tiny static floor while external sources are
  *  briefly unreachable. */
-const EXTERNAL_MARKET_SOURCES: ReadonlySet<string> = new Set(['coingecko', 'external_avg']);
+const EXTERNAL_MARKET_SOURCES: ReadonlySet<string> = new Set([
+	'coingecko',
+	'external_avg',
+	// v1.24.0: the primary sources are external markets too. Before, a price
+	// committed from them (BLURT's own feed, BTC/XMR's pricenodes — the
+	// normal case) left the monitor inactive: it compared native against
+	// nothing whenever the primary was up.
+	'blurt_price_feed',
+	'cexius',
+	'primary_avg',
+	'pricenodes'
+]);
 
 /** Run config for the disagreement-monitor loop.  Mirrors the
  *  shape of the peer-price monitor's config (defense F) so the two

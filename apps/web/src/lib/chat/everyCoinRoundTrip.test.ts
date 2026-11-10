@@ -60,7 +60,11 @@ const SAMPLES: Record<
 	eth: { address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', txid: `0x${HEX64}` },
 	xrp: { address: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh', txid: HEX64.toUpperCase() },
 	// eCash: a Bitcoin address IS an eCash address
-	ecx: { address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', txid: HEX64 }
+	ecx: { address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', txid: HEX64 },
+	// Graphene chains: the account name is the address, 40-hex transaction ids
+	hive: { address: 'hiveio', txid: 'ab'.repeat(20) },
+	steem: { address: 'steemit', txid: 'cd'.repeat(20) },
+	bts: { address: 'open.ledger-dex', txid: 'ef'.repeat(20) }
 };
 
 const COINS = Object.keys(SAMPLES) as (keyof typeof SAMPLES)[];

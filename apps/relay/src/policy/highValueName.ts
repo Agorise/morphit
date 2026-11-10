@@ -200,6 +200,7 @@ const DICTIONARY_BRANDS: ReadonlySet<string> = new Set([
 	'blurt',
 	'steem',
 	'hive',
+	'bitshares',
 	'splinterlands',
 	'leofinance',
 	// Generic high-value identity terms

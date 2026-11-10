@@ -43,6 +43,7 @@
 	} from '$lib/chat/chatService';
 	import {
 		decodePayload,
+		isAccountNameCoin,
 		isOffChainCoin,
 		type ChatAssetTicker,
 		type OffChainCoin
@@ -370,6 +371,9 @@
 		if (method === 'eth') return externalExplorerUrl('ETH', txid);
 		if (method === 'xrp') return externalExplorerUrl('XRP', txid);
 		if (method === 'ecx') return externalExplorerUrl('ECX', txid);
+		if (method === 'hive') return externalExplorerUrl('HIVE', txid);
+		if (method === 'steem') return externalExplorerUrl('STEEM', txid);
+		if (method === 'bts') return externalExplorerUrl('BTS', txid);
 		if (method === 'usdt') {
 			// Per-network USDT explorer URL.  Without a network we
 			// can't pick the right template — older clients sending
@@ -442,6 +446,9 @@
 		if (method === 'eth') return externalExplorerUrls('ETH', txid);
 		if (method === 'xrp') return externalExplorerUrls('XRP', txid);
 		if (method === 'ecx') return externalExplorerUrls('ECX', txid);
+		if (method === 'hive') return externalExplorerUrls('HIVE', txid);
+		if (method === 'steem') return externalExplorerUrls('STEEM', txid);
+		if (method === 'bts') return externalExplorerUrls('BTS', txid);
 		// multi-network tokens now get the same "+N more
 		// explorers" dropdown as native-chain assets.  Require the
 		// wire-format `network` field to disambiguate (same contract
@@ -1083,6 +1090,21 @@
 							{$_('assets.ecx.address_share.warning')}
 						</aside>
 					{/if}
+					{#if p.method === 'hive' || p.method === 'steem' || p.method === 'bts'}
+						<!-- Hive, Steem, BitShares: the address is an account name,
+						     which can exist on Blurt and the other two chains too,
+						     and an exchange deposit account needs the exchange's own
+						     memo, where the trade's memo goes.  Names the coin and
+						     asks for the receiver's own account, every time. -->
+						<aside
+							class="rounded-md border border-amber-400/30 bg-amber-400/5 px-2.5 py-2 text-xs text-amber-200"
+							role="note"
+						>
+							{$_('chat.address.account_coin_warning', {
+								values: { coin: p.method.toUpperCase() }
+							})}
+						</aside>
+					{/if}
 					{#if xmrLooksStandard}
 						<!-- Subaddress nudge — XMR addresses starting with
 						     `4` (standard or integrated) link every received
@@ -1093,7 +1115,7 @@
 							{$_('chat.address.subaddress_tip')}
 						</p>
 					{/if}
-					{#if p.method === 'blurt' && p.memo && isIncoming}
+					{#if isAccountNameCoin(p.method) && p.memo && isIncoming}
 						<!-- Phase F.4 — Required-memo display.  When the
 						     seller pinned a memo to this address pill, the
 						     buyer MUST include it as their on-chain transfer
@@ -1128,7 +1150,9 @@
 								</button>
 							</div>
 							<p class="mt-2 text-xs text-red-900 dark:text-red-100">
-								{$_('chat.address.memo_required_explain')}
+								{$_('chat.address.memo_required_explain', {
+									values: { coin: p.method.toUpperCase() }
+								})}
 							</p>
 						</div>
 					{/if}
@@ -1295,6 +1319,10 @@
 								{$_('chat.payment_check.unavailable')}
 							{:else if c.old}
 								{$_('chat.payment_check.old', { values: { coin } })}
+							{:else if c.wrongMemo}
+								<!-- v1.24.0: HIVE / STEEM — it reached the account, but
+								     without this trade's memo. -->
+								{$_('chat.payment_check.wrong_memo', { values: { coin } })}
 							{:else if c.short && !/[1-9]/.test(c.amount)}
 								{$_('chat.payment_check.wrong_address', { values: { coin } })}
 							{:else if c.short}

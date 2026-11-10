@@ -190,7 +190,7 @@
 	 *
 	 *  Why this strategy: the registry order today is BTC, XMR,
 	 *  BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR,
-	 *  SOL, ETH, XRP, ECX, [5 networks], barter.  Alternating means each
+	 *  SOL, ETH, XRP, ECX, HIVE, STEEM, BTS, [5 networks], barter.  Alternating means each
 	 *  row sees a mixed-character set instead of one row of "the
 	 *  important originals" + another of "the latest additions";
 	 *  visually pleasant + every row stays representative as the

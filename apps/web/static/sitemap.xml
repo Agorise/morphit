@@ -5922,4 +5922,484 @@
 		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/ecx"/>
 		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/ecx"/>
 	</url>
+	<url>
+		<loc>https://morphit.io/de/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/en/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/es/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/fa/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/fr/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/it/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/pl/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/ru/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/zh-CN/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/zh-HK/privacy/hive</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/hive"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/hive"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/de/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/en/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/es/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/fa/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/fr/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/it/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/pl/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/ru/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/zh-CN/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/zh-HK/privacy/steem</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/steem"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/steem"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/de/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/en/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/es/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/fa/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/fr/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/it/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/pl/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/ru/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/zh-CN/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
+	<url>
+		<loc>https://morphit.io/zh-HK/privacy/bts</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="en" href="https://morphit.io/en/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="es" href="https://morphit.io/es/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fa" href="https://morphit.io/fa/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="fr" href="https://morphit.io/fr/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="it" href="https://morphit.io/it/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="pl" href="https://morphit.io/pl/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="ru" href="https://morphit.io/ru/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-CN" href="https://morphit.io/zh-CN/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="zh-HK" href="https://morphit.io/zh-HK/privacy/bts"/>
+		<xhtml:link rel="alternate" hreflang="x-default" href="https://morphit.io/privacy/bts"/>
+	</url>
 </urlset>

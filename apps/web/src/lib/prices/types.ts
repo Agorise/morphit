@@ -3,7 +3,7 @@ import type { AssetTicker } from '@morphit/asset-registry';
  * Morphit — price feeds.
  *
  * USD prices for the priced assets (BTC, XMR, BLURT, USDT, USDC, DAI, BCH,
- * LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX). Live prices come from
+ * LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, BTS). Live prices come from
  * this instance's indexer (providers/indexer.ts): BLURT, BTC and XMR from
  * their guarded fee-price sources, and since v1.23.2 the others (display only)
  * from its coin quotes; ECX, and any coin without a fresh price, is

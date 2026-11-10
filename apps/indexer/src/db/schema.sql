@@ -2183,7 +2183,7 @@ COMMENT ON TABLE one_way_pile_on IS
 -- second multi-network asset (ERC-20/SPL/Base/Polygon); Part
 -- 122 a later change added DAI as a third (ERC-20/Polygon/Base/Arbitrum).
 -- Single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP,
--- ECX) write NULL.
+-- ECX, HIVE, STEEM, BTS) write NULL.
 --
 -- Pre-Part-121 rows stay NULL on this column.  Validate-time
 -- gates in the order handler:

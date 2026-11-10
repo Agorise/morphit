@@ -1857,11 +1857,11 @@ every upstream fails, the indexer keeps serving the last good
 value with `stale=true`. If no upstream has ever succeeded
 since boot, it falls back to the static floor
 (`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR`). For BLURT
-specifically, Blurt's own `api.blurt.blog/price_info` feed is an
-authoritative PRIMARY tier tried *before* this median — when it
-answers plausibly it sets the BLURT price directly, and the median
-and lower tiers are only its fallback (see the note
-below).
+specifically, Blurt's own `api.blurt.blog/price_info` feed and (from
+v1.24.0) the Cexius exchange's BLURT/USDT are a PRIMARY tier asked
+*before* this median — when they answer plausibly they set the BLURT
+price directly (their average, or either alone), and the median and
+lower tiers are only its fallback (see the notes below).
 
 **Update — denomination is operator-configurable**: by
 default the BLURT price echo on `/v1/listing-fee` is expressed
@@ -1951,6 +1951,25 @@ fallback for staleness is unchanged: when the primary and the aggregators
 are all temporarily down, the indexer keeps serving the last committed
 value (`stale=true`), not the static floor — the static floor only
 applies at cold-start before any source has ever answered.
+
+**v1.24.0 update — Cexius joins Blurt's feed as BLURT's primary
+source.** Every cycle the indexer asks `api.blurt.blog/price_info` and
+the Cexius exchange's BLURT/USDT ticker
+(`https://cexius.com/api/v2/markets/BLURT-USDT/tickers`, its last trade
+price; set `MORPHIT_INDEXER_CEXIUS_BASE_URL` empty to leave it out)
+together. Both plausible: their midpoint is the BLURT price, shown as
+`primary_avg` in the `morphit-ops health` source line, with each one's
+own price on its own line (two markets a few percent apart is normal, so
+no disagreement warning is shown for it; more than 50% apart, api.blurt.blog's
+alone, as `blurt_price_feed`). One down or implausible: the other alone,
+under its own name (`blurt_price_feed` or `cexius`). Both down: the
+aggregator median, as before. USD only, like the Blurt feed (Cexius
+quotes USDT). If you firewall the indexer's outbound traffic, allow
+`cexius.com` too. The cross-source disagreement monitor (defense C) now
+also compares the native price against a price from these primary
+sources and from the BTC/XMR pricenodes; before, it compared only when
+the aggregator median was serving, which on a healthy node was almost
+never.
 
 **v1.21.0 update — BTC and XMR prices, and the USD→fiat table, come from
 the Haveno and Bisq pricenodes over Tor.** Every node asks the five
@@ -2175,8 +2194,8 @@ checks payments against that pin. The live price only shapes the
 *displayed* fee. So during a stale episode a user who pays the
 quoted fee still verifies; you may just be quoting a fee slightly
 off market. Stale is a UX quality issue, not a correctness bug.
-(BLURT/USD comes from `api.blurt.blog` first, whenever its value
-is plausible; the external median is the fallback.)
+(BLURT/USD comes from `api.blurt.blog` and Cexius first — their
+average, or either alone; the external median is the fallback.)
 
 ---
 
@@ -9551,7 +9570,7 @@ Morphit's services initiate outbound connections to:
   verifier only as a fallback, never on a zero-clearnet node)
 - Clearnet Monero explorers / public nodes (the XMR fee verifier, only as a
   fallback, never on a zero-clearnet node)
-- Price and FX APIs: `api.blurt.blog` (BLURT), and the clearnet price / FX
+- Price and FX APIs: `api.blurt.blog` and `cexius.com` (BLURT), and the clearnet price / FX
   aggregators of §13 only as a fallback, never on a zero-clearnet node
 - The relay's chain-broadcast endpoint (Blurt p2p / RPC)
 - An RSS feed for canary news entropy
@@ -12312,7 +12331,7 @@ of demand.
 
 **Audience:** operators deciding which trade-only assets their
 instance accepts, and how transaction-explorer links resolve for
-single-network trade-only assets (BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX) and multi-network trade-only assets (USDT, USDC, DAI).
+single-network trade-only assets (BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, BTS) and multi-network trade-only assets (USDT, USDC, DAI).
 
 ### How to set this (two paths)
 
@@ -12417,6 +12436,8 @@ MORPHIT_INDEXER_DISABLED_ASSETS="ETH"
 MORPHIT_INDEXER_DISABLED_ASSETS="XRP"
 # Refuse only ECX (eCash) trades:
 MORPHIT_INDEXER_DISABLED_ASSETS="ECX"
+# Refuse the Graphene coins (Hive, Steem, BitShares):
+MORPHIT_INDEXER_DISABLED_ASSETS="HIVE,STEEM,BTS"
 # Refuse BARTER (the goods/services "asset"; e.g. a
 # crypto-only instance that doesn't want off-platform barter listings):
 MORPHIT_INDEXER_DISABLED_ASSETS="BARTER"
@@ -12433,15 +12454,15 @@ MORPHIT_INDEXER_DISABLED_ASSETS="BCH,USDT"
 
 # Refuse the four older Bitcoin-derived coins (still keeps BTC +
 # XMR + BLURT + USDT + USDC + DAI + ZEC + ARRR + DCR + SOL + ETH +
-# XRP + ECX enabled)
+# XRP + ECX + HIVE + STEEM + BTS enabled)
 MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH,DOGE"
-# Refuse all centralized + partly-centralized stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX only)
+# Refuse all centralized + partly-centralized stablecoins (privacy-pure operator stance: BTC/XMR/BLURT/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP/ECX/HIVE/STEEM/BTS only)
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI"
 
-# Refuse everything that isn't BLURT + XMR + BTC (all 14
+# Refuse everything that isn't BLURT + XMR + BTC (all 17
 # Category-B trade-only assets disabled — keeps only the three
 # Category-A fee-payable assets)
-MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP,ECX"
+MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI,BCH,LTC,DASH,DOGE,ZEC,ARRR,DCR,SOL,ETH,XRP,ECX,HIVE,STEEM,BTS"
 
 # Whitespace-tolerant — same result as above
 MORPHIT_INDEXER_DISABLED_ASSETS="USDT, DAI, USDC"
@@ -12740,7 +12761,7 @@ The ops-cli `morphit-ops init` wizard step 12 (Chat-link external
 explorer URLs) walks through the chat-link explorer override of
 every single-network coin, in canonical asset-registry order
 (BTC → XMR → BCH → LTC → DASH → DOGE → ZEC → ARRR → DCR → SOL →
-ETH → XRP → ECX), each with the same probe-reachability check — except an
+ETH → XRP → ECX → HIVE → STEEM → BTS), each with the same probe-reachability check — except an
 `.onion` / `.i2p` / `.loki` one, which is never probed from the server (that
 would hand the name to its resolver; v1.21.15), and no probe follows a redirect
 to such a host.
@@ -12755,18 +12776,46 @@ Bundled defaults + alternative-explorer surveys at addition time:
 - **ETH** (`MORPHIT_FRONTEND_ETH_CHAT_LINK_URL`) — bundled `https://eth.blockscout.com/tx/{txid}` (chosen for being an open-source non-aggregator project explorer with no SQL trackers; alternatives surveyed: etherscan.io, ethplorer.io, beaconcha.in/block-explorer).  See ADR-0035.
 - **XRP** (`MORPHIT_FRONTEND_XRP_CHAT_LINK_URL`) — bundled `https://livenet.xrpl.org/transactions/{txid}` (the official XRP Ledger Foundation explorer — a non-profit organization; chosen for the non-aggregator + non-Ripple-Labs criteria).  See ADR-0036.
 - **ECX** (`MORPHIT_FRONTEND_ECX_CHAT_LINK_URL`) — bundled `https://explorer.ecash.com/tx/{txid}` (the eCash project's own mempool.space instance; `https://explorer.blockfab.org/tx/{txid}` is a second eCash explorer).  Point it only at an eCash explorer, never a Bitcoin one: eCash addresses and txids look exactly like Bitcoin's, and a payment replayed on Bitcoin has the same txid there.  No Tor or I2P eCash explorer is known, so a page opened over Tor or I2P shows no link for ECX unless you set a `.onion` / `.i2p` one here.  See ADR-0053.
+- **HIVE** (`MORPHIT_FRONTEND_HIVE_CHAT_LINK_URL`) — bundled `https://hivescan.info/tx/{txid}` (the HAF block explorer run by Hive's core developers; `https://hivehub.dev/tx/{txid}`, `https://hive.ausbit.dev/tx/{txid}` and `https://ecosynthesizer.com/hive/transaction/{txid}` are the next choices).
+- **STEEM** (`MORPHIT_FRONTEND_STEEM_CHAT_LINK_URL`) — bundled `https://steemscan.com/transaction/{txid}` (`https://ecosynthesizer.com/steem/trx/{txid}` and `https://steemblockexplorer.com/tx/{txid}` are the next choices; ecosynthesizer.com builds its Steem pages from the SteemWorld API, which was 20 days behind the chain on 9 November 2026).
+- **BTS** (`MORPHIT_FRONTEND_BTS_CHAT_LINK_URL`) — bundled `https://www.bitshareschain.com/tx/{txid}` (no second BitShares explorer that opens a transaction by its id is known).  For all three, point it only at an explorer of that chain: Hive, Steem and BitShares (and Blurt) share the 40-hex transaction-id format, so another chain's explorer finds nothing or someone else's transaction.  No Tor or I2P explorer of these chains is known, so a page opened over Tor or I2P shows no link for them unless you set a `.onion` / `.i2p` one here.  See ADR-0054.
 
 If you choose to disable any of these instance-wide via
 `MORPHIT_INDEXER_DISABLED_ASSETS=<TICKER>`, the corresponding
 chat-link config has no effect on your instance.
+
+**v1.24.0 — HIVE and STEEM payments are checked in the chat**, as BTC and
+XMR payments are: when the buyer records a payment with its transaction id,
+the seller's screen asks your indexer (`/v1/payment-check`), which asks that
+chain's API nodes and needs two operators to agree on the block and the
+amount. Only a transfer carrying the memo of the seller's ask counts (the
+account is the same in every trade; the chat adds a random memo to each ask,
+as for BLURT). The payment counts as confirmed only once its block is irreversible
+(a few seconds on Hive, about a minute on Steem). BTS payments are not
+checked (the seller checks his wallet). The nodes asked:
+
+- `MORPHIT_INDEXER_HIVE_PAYMENT_NODES` — HAfAH bases (plain GET JSON), by
+  default `https://api.hive.blog/hafah-api`, `https://api.openhive.network/hafah-api`,
+  `https://techcoderx.com/hafah-api`, `https://rpc.mahdiyari.info/hafah-api`
+  and `https://hiveapi.actifit.io/hafah-api`.
+- `MORPHIT_INDEXER_STEEM_PAYMENT_NODES` — JSON-RPC nodes, by default
+  `https://api.steemit.com`, `https://api.justyy.com`, `https://api.steememory.com`,
+  `https://api.moecki.online` and `https://api.pennsif.net`.
+
+Comma-separated; set one empty to turn that coin's check off (its payments
+then show "can't be checked right now", and the seller checks his wallet). If you
+firewall the indexer's outbound traffic, allow these hosts. A Tor/I2P-only
+indexer asks none of them (no hidden Hive or Steem node is known): there the
+chat says after a few minutes that it can't check the payment, and the
+seller checks his wallet.
 
 ### Schema migration v32
 
 `apps/indexer/src/db/schema.sql` adds an `orders.asset_network
 TEXT` column for multi-network assets.  Pre-Part-121 rows
 have `asset_network IS NULL`, which is the correct value for
-single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX
-all single-network; USDT, USDC, DAI multi-network; all
+single-network assets too (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX,
+HIVE, STEEM, BTS all single-network; USDT, USDC, DAI multi-network; all
 single-network assets write NULL).
 USDT orders carry one of `'erc20'|'trc20'|'spl'|'bep20'`;
 USDC orders carry one of `'erc20'|'spl'|'base'|'polygon'`;
@@ -15062,7 +15111,7 @@ Since v1.23.2 the pay and share-address windows show what an amount of any
 coin is worth — "0.0037 ETH (≈11 BRL)" — and fill the amount in for the
 order's value. For BLURT, BTC and XMR the prices are the ones your instance
 already had. For every coin but BLURT, BTC, XMR and ECX (that is ETH, LTC,
-BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, USDT, USDC and DAI) your indexer now
+BCH, DASH, DOGE, ZEC, ARRR, DCR, SOL, XRP, HIVE, STEEM, BTS, USDT, USDC and DAI) your indexer now
 keeps a USD price too, **for display only**: no fee, check or signature ever
 uses it. eCash (ECX) has none: other coins use the same ticker.
 
@@ -15070,7 +15119,9 @@ What your server asks, on every price refresh (`MORPHIT_INDEXER_PRICE_REFRESH_IN
 
 - **Nothing new over Tor.** The onion Bisq and Haveno price nodes your instance
   already asks for BTC and XMR quote these coins in the same answer; it used to
-  throw that part away.
+  throw that part away. (Not HIVE, STEEM and BTS, added in v1.24.0: the
+  pricenodes are not known to quote them, so only CoinGecko and CryptoCompare
+  price them, and a hidden-only instance shows them without a fiat value.)
 - **Where your instance may use clearnet:** one CoinGecko request and one
   CryptoCompare request, each for all of those coins together
   (`MORPHIT_INDEXER_COINGECKO_BASE_URL`, `MORPHIT_INDEXER_CRYPTOCOMPARE_BASE_URL`,

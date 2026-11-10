@@ -67,11 +67,13 @@ const FIAT: ReadonlySet<string> = new Set([
  * (v1.23.2, display only: the "(≈11 BRL)" beside an amount). Bisq quotes them
  * as BTC per coin, Haveno as `<COIN>/XMR` (XMR per coin); either is turned
  * into USD through that node's own BTC or XMR price. Left out on purpose:
- * BLURT (its own sources), BTC and XMR (above), and ECX, whose ticker other
- * coins also use, so a node's "ECX" may not be this eCash.
+ * BLURT (its own sources), BTC and XMR (above), ECX, whose ticker other
+ * coins also use, so a node's "ECX" may not be this eCash, and HIVE, STEEM and
+ * BTS, which the pricenodes are not known to quote (CoinGecko and
+ * CryptoCompare price them, coinQuotes.ts).
  */
 export const PRICENODE_COINS: ReadonlySet<string> = new Set([
-	// every coin but BLURT, BTC, XMR and ECX:
+	// every coin but BLURT, BTC, XMR, ECX, HIVE, STEEM and BTS:
 	'ETH',
 	'LTC',
 	'BCH',

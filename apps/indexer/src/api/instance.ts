@@ -198,6 +198,9 @@ export interface InstanceResponse {
 		eth: string | null;
 		xrp: string | null;
 		ecx: string | null;
+		hive: string | null;
+		steem: string | null;
+		bts: string | null;
 		/** USDT per-network explorer URL
 		 *  overrides.  Optional sub-map; older indexer builds
 		 *  (older — yes, this includes every prior build of
@@ -415,6 +418,9 @@ export function instanceRoute(
 				eth: config.frontendEthChatLinkUrl ?? null,
 				xrp: config.frontendXrpChatLinkUrl ?? null,
 				ecx: config.frontendEcxChatLinkUrl ?? null,
+				hive: config.frontendHiveChatLinkUrl ?? null,
+				steem: config.frontendSteemChatLinkUrl ?? null,
+				bts: config.frontendBtsChatLinkUrl ?? null,
 				usdt: {
 					erc20: config.frontendUsdtErc20ChatLinkUrl ?? null,
 					trc20: config.frontendUsdtTrc20ChatLinkUrl ?? null,

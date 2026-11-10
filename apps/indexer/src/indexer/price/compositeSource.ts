@@ -2,12 +2,14 @@
  * Composite cached BLURT/USD price source.
  *
  * Refreshes in the background every `refreshIntervalMs`. Each
- * refresh walks tiers in precedence order: an optional PRIMARY
- * source (an authoritative single feed — for BLURT, Blurt's own
- * `api.blurt.blog/price_info`) is tried first and wins whenever it
- * returns a plausible value; only when it is down/implausible does the
- * refresh fall through to the EXTERNAL aggregator-average, then the
- * native FALLBACK tier, then the static floor. It commits the first
+ * refresh walks tiers in precedence order: an optional PRIMARY BLEND
+ * (several feeds asked together and averaged — for BLURT, Blurt's own
+ * `api.blurt.blog/price_info` and Cexius's BLURT/USDT, v1.24.0) wins
+ * whenever one of them returns a plausible value; then the optional
+ * PRIMARY sources one by one (BTC/XMR: the onion pricenodes); only when
+ * those are down/implausible does the refresh fall through to the
+ * EXTERNAL aggregator-average, then the native FALLBACK tier, then the
+ * static floor. It commits the first
  * plausible value the chain yields. If everything fails, the last good
  * value is served with stale=true; if nothing has ever succeeded, the
  * static floor is served.
@@ -42,16 +44,33 @@ export interface CompositePriceSourceConfig {
 		readonly name: string;
 		readonly fetch: PriceFetch;
 	}>;
-	/** OPTIONAL PRIMARY upstream(s) — tried FIRST, ahead of the external
-	 *  average.  The first that returns a plausible value is committed as
-	 *  the price (source = that upstream's own name) and the external
-	 *  aggregators are NOT queried that cycle.  This is how one
-	 *  AUTHORITATIVE feed becomes the source of truth: for BLURT it is
-	 *  Blurt's own `api.blurt.blog/price_info`, which wins whenever it is
-	 *  up; the aggregator-average (`upstreams`) + native fallback serve
-	 *  only when the primary is down or implausible.  Omit for a purely
-	 *  averaged source (BTC, XMR). */
+	/** OPTIONAL PRIMARY upstream(s) — tried one by one after the primary
+	 *  blend, ahead of the external average.  The first that returns a
+	 *  plausible value is committed as the price (source = that upstream's
+	 *  own name) and the external aggregators are NOT queried that cycle.
+	 *  BTC and XMR: the onion pricenodes; a hidden-only node adds the
+	 *  federation after them.  The aggregator-average (`upstreams`) +
+	 *  native fallback serve only when every primary is down or
+	 *  implausible. */
 	readonly primaryUpstreams?: ReadonlyArray<{
+		readonly name: string;
+		readonly fetch: PriceFetch;
+	}>;
+	/** OPTIONAL PRIMARY BLEND (v1.24.0) — asked first of all, together.
+	 *  The plausible answers are combined like the external tier
+	 *  (aggregateRobust: two answers give their midpoint; nothing is flagged
+	 *  as an outlier, each source's own price shows on the health view) and
+	 *  committed: as source 'primary_avg' when two or more answered, else
+	 *  under the one that did.  When none answers, `primaryUpstreams` and
+	 *  the rest follow as before.  For BLURT: Blurt's own feed and Cexius's
+	 *  BLURT/USDT.
+	 *
+	 *  (v1.24.0 review) Answers further apart than BLEND_MAX_SPREAD are not
+	 *  averaged: the FIRST source in the list that answered is committed
+	 *  alone (for BLURT, Blurt's own feed, the primary before Cexius joined).
+	 *  A thin market's one odd trade must not move the price by half its
+	 *  distance. */
+	readonly primaryBlend?: ReadonlyArray<{
 		readonly name: string;
 		readonly fetch: PriceFetch;
 	}>;
@@ -160,6 +179,12 @@ interface CachedEntry {
 	updatedAt: number; // ms epoch
 }
 
+/** How far apart the blend's answers may be and still be averaged: the
+ *  higher at most this fraction above the lower (see `primaryBlend`). Blurt's
+ *  feed and Cexius were 13% apart when Cexius joined (v1.24.0): a normal gap
+ *  between two markets, averaged; one odd trade at twice the price is not. */
+export const BLEND_MAX_SPREAD = 0.5;
+
 export class CompositeCachedPriceSource implements BlurtPriceSource {
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private cached: CachedEntry | null = null;
@@ -177,7 +202,12 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 	/** Per-external-source health, surfaced to the morphit-ops view. */
 	private readonly extStats: Map<
 		string,
-		{ lastOkAt: number | null; lastTriedAt: number | null; okLastCycle: boolean; lastValue: number | null }
+		{
+			lastOkAt: number | null;
+			lastTriedAt: number | null;
+			okLastCycle: boolean;
+			lastValue: number | null;
+		}
 	>;
 	/** Whether the last committed external average dropped any source
 	 *  as an outlier (a disagreement signal worth surfacing). */
@@ -200,10 +230,9 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 		this.plausibleMax = config.plausibleMax ?? PRICE_PLAUSIBLE_MAX_USD;
 		this.outlierTolerance = config.outlierTolerance ?? CRYPTO_OUTLIER_TOLERANCE_DEFAULT;
 		this.extStats = new Map(
-			[...(config.primaryUpstreams ?? []), ...config.upstreams].map((u) => [
-				u.name,
-				{ lastOkAt: null, lastTriedAt: null, okLastCycle: false, lastValue: null }
-			])
+			[...(config.primaryBlend ?? []), ...(config.primaryUpstreams ?? []), ...config.upstreams].map(
+				(u) => [u.name, { lastOkAt: null, lastTriedAt: null, okLastCycle: false, lastValue: null }]
+			)
 		);
 	}
 
@@ -272,11 +301,48 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 	async refreshOnce(): Promise<void> {
 		const now = this.now();
 
-		// ── Primary tier: an authoritative single source (for BLURT,
-		//    the Blurt-native `api.blurt.blog/price_info` feed) is tried
-		//    FIRST.  The first plausible reading wins and the external
-		//    aggregators are skipped this cycle; the refresh falls through
-		//    to the average only when every primary is down/implausible. ──
+		// ── Primary blend: asked together, the plausible answers averaged
+		//    (for BLURT, Blurt's own feed and Cexius). ──
+		const blend = this.config.primaryBlend ?? [];
+		if (blend.length > 0) {
+			let answered = await this.askAll(blend, now, 'primary');
+			if (answered.length > 1) {
+				const lo = Math.min(...answered.map((a) => a.value));
+				const hi = Math.max(...answered.map((a) => a.value));
+				if (hi > lo * (1 + BLEND_MAX_SPREAD)) {
+					log.info('primary_blend_spread', {
+						kept: answered[0]!.name,
+						values: answered.map((a) => `${a.name}=${a.value}`).join(' ')
+					});
+					answered = answered.slice(0, 1);
+				}
+			}
+			const agg = aggregateRobust(
+				answered.map((a) => a.value),
+				this.outlierTolerance
+			);
+			if (agg !== null && this.plausible(agg.value)) {
+				// Not flagged as a provider disagreement: two markets a few
+				// percent apart is their normal state (each one's own price is
+				// on the health view), and the midpoint drops neither.
+				this.lastOutlierRejected = false;
+				const source = answered.length === 1 ? answered[0]!.name : 'primary_avg';
+				await this.commit(agg.value, source, now);
+				log.info('refreshed_primary', {
+					source,
+					considered: agg.considered,
+					rejected: agg.rejected,
+					price: agg.value
+				});
+				return;
+			}
+		}
+
+		// ── Primary tier: authoritative sources one by one (BTC/XMR: the
+		//    onion pricenodes; on a hidden-only node, then the federation).
+		//    The first plausible reading wins and the external aggregators
+		//    are skipped this cycle; the refresh falls through to the
+		//    average only when every primary is down/implausible. ──
 		for (const up of this.config.primaryUpstreams ?? []) {
 			const stat = this.extStats.get(up.name)!;
 			stat.lastTriedAt = now;
@@ -319,43 +385,7 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 			log.info('external_tier_deferred', { reason: 'primary_pending' });
 			return;
 		}
-		const results = await Promise.allSettled(this.config.upstreams.map((u) => u.fetch()));
-		const values: number[] = [];
-		results.forEach((res, i) => {
-			const up = this.config.upstreams[i]!;
-			const stat = this.extStats.get(up.name)!;
-			stat.lastTriedAt = now;
-			let value: number | null = null;
-			if (res.status === 'fulfilled') {
-				value = res.value;
-			} else {
-				// PriceFetch contract says "never throws"; a buggy impl
-				// shouldn't crash the refresher.
-				log.warn('upstream_threw', { source: up.name }, res.reason);
-			}
-			if (
-				value !== null &&
-				Number.isFinite(value) &&
-				value > 0 &&
-				value >= this.plausibleMin &&
-				value <= this.plausibleMax
-			) {
-				stat.lastOkAt = now;
-				stat.okLastCycle = true;
-				stat.lastValue = value;
-				values.push(value);
-			} else {
-				stat.okLastCycle = false;
-				if (value !== null) {
-					log.warn('upstream_bad_or_out_of_range', {
-						source: up.name,
-						value,
-						min: this.plausibleMin,
-						max: this.plausibleMax
-					});
-				}
-			}
-		});
+		const values = (await this.askAll(this.config.upstreams, now, 'upstream')).map((a) => a.value);
 
 		if (values.length > 0) {
 			const agg = aggregateRobust(values, this.outlierTolerance);
@@ -415,6 +445,57 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 		}
 	}
 
+	private plausible(value: number): boolean {
+		return (
+			Number.isFinite(value) &&
+			value > 0 &&
+			value >= this.plausibleMin &&
+			value <= this.plausibleMax
+		);
+	}
+
+	/** Ask every source of a tier at once; record each one's health and
+	 *  return the plausible answers. Never throws (a PriceFetch should not,
+	 *  and one that does is logged and counts as no answer). */
+	private async askAll(
+		sources: ReadonlyArray<{ readonly name: string; readonly fetch: PriceFetch }>,
+		now: number,
+		tier: 'primary' | 'upstream'
+	): Promise<Array<{ name: string; value: number }>> {
+		const results = await Promise.allSettled(sources.map((u) => u.fetch()));
+		const out: Array<{ name: string; value: number }> = [];
+		results.forEach((res, i) => {
+			const up = sources[i]!;
+			const stat = this.extStats.get(up.name)!;
+			stat.lastTriedAt = now;
+			let value: number | null = null;
+			if (res.status === 'fulfilled') {
+				value = res.value;
+			} else {
+				// PriceFetch contract says "never throws"; a buggy impl
+				// shouldn't crash the refresher.
+				log.warn(`${tier}_threw`, { source: up.name }, res.reason);
+			}
+			if (value !== null && this.plausible(value)) {
+				stat.lastOkAt = now;
+				stat.okLastCycle = true;
+				stat.lastValue = value;
+				out.push({ name: up.name, value });
+			} else {
+				stat.okLastCycle = false;
+				if (value !== null) {
+					log.warn(`${tier}_bad_or_out_of_range`, {
+						source: up.name,
+						value,
+						min: this.plausibleMin,
+						max: this.plausibleMax
+					});
+				}
+			}
+		});
+		return out;
+	}
+
 	/** Commit a value as the new cached price + run the drift check.
 	 *  Extracted so the external-average and native-fallback paths
 	 *  share identical commit + Defense-B semantics. */
@@ -456,7 +537,11 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 		lastTriedAt: Date | null;
 		lastValue: number | null;
 	}> {
-		return [...(this.config.primaryUpstreams ?? []), ...this.config.upstreams].map((u) => {
+		return [
+			...(this.config.primaryBlend ?? []),
+			...(this.config.primaryUpstreams ?? []),
+			...this.config.upstreams
+		].map((u) => {
 			const s = this.extStats.get(u.name)!;
 			return {
 				name: u.name,

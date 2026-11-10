@@ -22,11 +22,12 @@
  * (morphit_native, kept OUT of the average so the external-vs-native
  * cross-check stays meaningful), then the static floor:
  *
- *   BLURT/USD:  api.blurt.blog/price_info (PRIMARY — the source of
- *               truth, tried first) → then, only if it is down or
- *               implausible, the Coingecko + CoinPaprika + CryptoCompare
- *               average (+ CoinCap/Messari when keyed, + CoinLore when
- *               id set) → morphit_native → static floor
+ *   BLURT/USD:  api.blurt.blog/price_info and Cexius's BLURT/USDT
+ *               (PRIMARY, v1.24.0: asked together and averaged; either
+ *               alone when the other is down) → then, only if both are
+ *               down or implausible, the Coingecko + CoinPaprika +
+ *               CryptoCompare average (+ CoinCap/Messari when keyed, +
+ *               CoinLore when id set) → morphit_native → static floor
  *   BTC, XMR:   the Haveno / Bisq pricenodes over Tor (PRIMARY, in any
  *               denomination fiat: their consensus, price/pricenodes.ts)
  *               → only when they make no price, the clearnet aggregators:
@@ -87,6 +88,7 @@ import type { BlurtPriceSource, PriceFetch } from '$indexer/price/source';
 import { CompositeCachedPriceSource } from '$indexer/price/compositeSource';
 import { createCoingeckoFetcher } from '$indexer/price/coingeckoFetcher';
 import { createBlurtBlogFetcher } from '$indexer/price/blurtBlogFetcher';
+import { createCexiusFetcher } from '$indexer/price/cexiusFetcher';
 import { createCoinpaprikaFetcher } from '$indexer/price/coinpaprikaFetcher';
 import { createKrakenFetcher } from '$indexer/price/krakenFetcher';
 import { createCryptocompareFetcher } from '$indexer/price/cryptocompareFetcher';
@@ -170,10 +172,14 @@ export interface AssetPriceSourceOptions {
 	 *  these via env vars. */
 	readonly staticFloor: number;
 	/** true only for BLURT: pull the Blurt-native price feed
-	 *  (api.blurt.blog/price_info).  this feed is the PRIMARY
-	 *  source of truth for BLURT/USD: tried first, committed whenever
-	 *  plausible; the aggregator-average is the fallback. */
+	 *  (api.blurt.blog/price_info), half of BLURT/USD's PRIMARY blend
+	 *  (with `cexiusMarket`): asked first, the plausible answers averaged
+	 *  and committed; the aggregator-average is the fallback. */
 	readonly blurtPriceFeed?: boolean;
+	/** Cexius market id (USDT-quoted, USD only), e.g. 'BLURT-USDT' — the
+	 *  other half of BLURT's primary blend (v1.24.0). Omit for assets
+	 *  Cexius is not asked for. */
+	readonly cexiusMarket?: string;
 }
 
 /** Per-asset known defaults for the launch set.  Operators
@@ -204,6 +210,9 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 		coincapId: 'blurt',
 		messariSlug: 'blurt',
 		blurtPriceFeed: true,
+		// Cexius lists BLURT/USDT (cexius.com/trade/BLURT-USDT); its last
+		// price is averaged with Blurt's own feed (v1.24.0).
+		cexiusMarket: 'BLURT-USDT',
 		staticFloor: 0.002,
 		plausibleMin: 0.0001,
 		plausibleMax: 0.1
@@ -386,14 +395,35 @@ export function createAssetPriceSource(
 			})
 		});
 	}
-	// Blurt-native price feed (api.blurt.blog/price_info).
-	// BLURT only, USD only (the feed quotes USD), and only when a URL is
-	// set (an operator can blank MORPHIT_INDEXER_BLURT_PRICE_FEED_URL to
-	// opt out). This is the PRIMARY source of truth for BLURT/USD: it is
-	// tried FIRST and committed whenever it returns a plausible value; the
-	// CEX-aggregator average (built above) serves only as a fallback when
-	// the feed is down or implausible. A self-sovereign, non-CEX source of
-	// truth suits Morphit's decentralization priority.
+	// BLURT/USD's PRIMARY BLEND (v1.24.0): Blurt's own price feed
+	// (api.blurt.blog/price_info) and Cexius's BLURT/USDT, asked together
+	// each cycle and averaged (compositeSource.ts `primaryBlend`); either
+	// alone when the other is down or implausible. USD only (both quote
+	// USD / USDT); an operator blanks MORPHIT_INDEXER_BLURT_PRICE_FEED_URL or
+	// MORPHIT_INDEXER_CEXIUS_BASE_URL to leave one out. The CEX-aggregator
+	// average (built above) serves only when both are down or implausible.
+	const primaryBlend: Array<{ name: string; fetch: PriceFetch }> = [];
+	if (isUsd && options.blurtPriceFeed && config.blurtPriceFeedUrl) {
+		primaryBlend.push({
+			name: 'blurt_price_feed',
+			fetch: createBlurtBlogFetcher({
+				url: config.blurtPriceFeedUrl,
+				plausibleMin: options.plausibleMin,
+				plausibleMax: options.plausibleMax,
+				timeoutMs: 5_000
+			})
+		});
+	}
+	if (isUsd && options.cexiusMarket && config.cexiusBaseUrl) {
+		primaryBlend.push({
+			name: 'cexius',
+			fetch: createCexiusFetcher({
+				baseUrl: config.cexiusBaseUrl,
+				market: options.cexiusMarket,
+				timeoutMs: 5_000
+			})
+		});
+	}
 	const primaryUpstreams: Array<{ name: string; fetch: PriceFetch }> = [];
 	// BTC / XMR: the onion pricenodes' consensus, in any fiat they quote. The
 	// fetch reads the latest round (no I/O); the round itself runs in the
@@ -404,17 +434,6 @@ export function createAssetPriceSource(
 		primaryUpstreams.push({
 			name: 'pricenodes',
 			fetch: pricenodePriceFetch(pricenodes, asset, config.priceFeedDenominationFiat)
-		});
-	}
-	if (isUsd && options.blurtPriceFeed && config.blurtPriceFeedUrl) {
-		primaryUpstreams.push({
-			name: 'blurt_price_feed',
-			fetch: createBlurtBlogFetcher({
-				url: config.blurtPriceFeedUrl,
-				plausibleMin: options.plausibleMin,
-				plausibleMax: options.plausibleMax,
-				timeoutMs: 5_000
-			})
 		});
 	}
 
@@ -495,6 +514,7 @@ export function createAssetPriceSource(
 
 	const source = new CompositeCachedPriceSource({
 		upstreams,
+		primaryBlend,
 		primaryUpstreams,
 		// v1.21.15: when every clearnet source above is down, the federation
 		// (peers reached over Tor/I2P when their web address does not answer)

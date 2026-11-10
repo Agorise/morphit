@@ -469,11 +469,12 @@ export function getAccountTrades(
 	});
 }
 
-/** GET /v1/payment-check — does this BTC/XMR transaction pay this address,
- *  how much, and how far has it confirmed (v1.21.17)? Asked of this instance,
- *  which asks block explorers (Tor/I2P only on a hidden-only instance). */
+/** GET /v1/payment-check — does this BTC/XMR (v1.21.17) or HIVE/STEEM
+ *  (v1.24.0) transaction pay this address, how much, and how far has it
+ *  confirmed? Asked of this instance, which asks block explorers (Tor/I2P
+ *  only on a hidden-only instance) or the chain's API nodes. */
 export interface PaymentCheckResponse {
-	readonly asset: 'btc' | 'xmr';
+	readonly asset: 'btc' | 'xmr' | 'hive' | 'steem';
 	readonly txid: string;
 	readonly status: 'found' | 'not_found' | 'unavailable';
 	/** Coin units paid to the address by this transaction (decimal string). */
@@ -492,14 +493,25 @@ export interface PaymentCheckResponse {
 	/** v1.23.2 — seconds since `checked_at` by the instance's clock. Absent
 	 *  from an older instance. */
 	readonly age_seconds?: number;
+	/** v1.24.0 — HIVE / STEEM asked with a memo: a transfer in this
+	 *  transaction reached the account, but none carries the memo
+	 *  (`amount` counts only those that do). */
+	readonly memo_mismatch?: true;
 }
 
 export function getPaymentCheck(
-	q: { asset: 'btc' | 'xmr'; txid: string; address: string; txKey?: string },
+	q: {
+		asset: 'btc' | 'xmr' | 'hive' | 'steem';
+		txid: string;
+		address: string;
+		txKey?: string;
+		memo?: string;
+	},
 	signal?: AbortSignal
 ): Promise<Result<PaymentCheckResponse>> {
 	const query = new URLSearchParams({ asset: q.asset, txid: q.txid, address: q.address });
 	if (q.txKey) query.set('tx_key', q.txKey);
+	if (q.memo) query.set('memo', q.memo);
 	return request<PaymentCheckResponse>('/v1/payment-check', { signal, query, cache: 'no-store' });
 }
 

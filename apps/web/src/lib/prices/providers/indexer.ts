@@ -49,6 +49,9 @@ const OTHER: ReadonlySet<PricedSymbol> = new Set<PricedSymbol>([
 	'DCR',
 	'SOL',
 	'XRP',
+	'HIVE',
+	'STEEM',
+	'BTS',
 	'USDT',
 	'USDC',
 	'DAI'

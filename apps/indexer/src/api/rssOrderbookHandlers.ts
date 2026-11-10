@@ -533,9 +533,7 @@ function filterQueryString(f: FeedFilters): string {
  *
  *  HIGH fix: the regex used to be hardcoded
  *  `/^(btc|xmr|blurt)\.xml$/` and silently stayed frozen at 3
- *  assets across 14 subsequent asset additions (BCH
- *  LTC, DASH, USDC, USDT, DAI, DOGE,
- *  ZEC, ARRR, DCR, SOL, ETH, XRP, ECX)
+ *  assets across 14 subsequent asset additions
  *  — every per-asset RSS feed except BTC/XMR/BLURT 400'd silently
  *  for ~14 checkpoints.  Fix derives the allow-set from
  *  ASSET_TICKERS so future asset additions cannot drift this

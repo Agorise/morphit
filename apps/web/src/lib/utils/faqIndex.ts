@@ -158,6 +158,10 @@ export const FAQ_KEYS = [
 	'what_is_eth',
 	'what_is_xrp',
 	'what_is_ecx',
+	// The Graphene chains (account names for addresses, like Blurt)
+	'what_is_hive',
+	'what_is_steem',
+	'what_is_bts',
 	'what_is_barter',
 	// Asset-specific transactional advice
 	'what_is_a_txid',
@@ -782,6 +786,27 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'what_is_a_txid',
 		'block_explorer',
 		'how_morphit_protects_me'
+	],
+	what_is_hive: [
+		'privacy_practices',
+		'how_to_buy',
+		'what_is_a_txid',
+		'block_explorer',
+		'what_is_blurt'
+	],
+	what_is_steem: [
+		'privacy_practices',
+		'how_to_buy',
+		'what_is_a_txid',
+		'block_explorer',
+		'what_is_blurt'
+	],
+	what_is_bts: [
+		'privacy_practices',
+		'how_to_buy',
+		'what_is_a_txid',
+		'block_explorer',
+		'what_is_blurt'
 	],
 	what_is_barter: ['how_to_buy', 'fees', 'how_morphit_protects_me', 'what_is_morphit'],
 	// BCH/LTC/DASH FAQ_RELATED parity

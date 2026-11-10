@@ -86,6 +86,12 @@ export const ONION_EXPLORER_URLS: Readonly<Record<HiddenExplorerKey, readonly st
 		// No Tor or I2P eCash explorer is known (2026-11). A Bitcoin one must
 		// not stand in: the same txid can be a Bitcoin payment (replay).
 		ECX: [],
+		// No Tor or I2P explorer of Hive, Steem or BitShares is known (2026-11).
+		// Another of the three must not stand in: they share the 40-hex
+		// transaction-id format.
+		HIVE: [],
+		STEEM: [],
+		BTS: [],
 		SOL: multi('solana'),
 		ETH: multi('ethereum'),
 		XRP: multi('xrp-ledger'),

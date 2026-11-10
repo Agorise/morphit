@@ -57,7 +57,14 @@ function source(over: Partial<ConstructorParameters<typeof CoinQuoteSource>[0]> 
 
 describe('coin quotes: the batch answers (pure)', () => {
 	it('every listed coin has a CoinGecko id and a CryptoCompare symbol; ECX has neither', () => {
-		expect(Object.keys(COIN_QUOTE_IDS).sort()).toEqual([...PRICENODE_COINS].sort());
+		// The pricenodes' coins, plus Hive, Steem and BitShares (v1.24.0), which
+		// the pricenodes are not known to quote.
+		expect(Object.keys(COIN_QUOTE_IDS).sort()).toEqual(
+			[...PRICENODE_COINS, 'HIVE', 'STEEM', 'BTS'].sort()
+		);
+		expect(COIN_QUOTE_IDS.HIVE).toEqual({ coingecko: 'hive', cryptocompare: 'HIVE' });
+		expect(COIN_QUOTE_IDS.STEEM).toEqual({ coingecko: 'steem', cryptocompare: 'STEEM' });
+		expect(COIN_QUOTE_IDS.BTS).toEqual({ coingecko: 'bitshares', cryptocompare: 'BTS' });
 		expect(COIN_QUOTE_IDS.ECX).toBeUndefined();
 		expect(COIN_QUOTE_IDS.ARRR!.coingecko).toBe('pirate-chain');
 		expect(COIN_QUOTE_IDS.XRP!.coingecko).toBe('ripple');

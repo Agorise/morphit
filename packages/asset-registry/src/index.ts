@@ -62,6 +62,9 @@ export const ASSET_TICKERS = [
 	'ETH',
 	'XRP',
 	'ECX',
+	'HIVE',
+	'STEEM',
+	'BTS',
 	'BARTER'
 ] as const;
 
@@ -1107,6 +1110,82 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 			/^(1[1-9A-HJ-NP-Za-km-z]{25,34}|3[1-9A-HJ-NP-Za-km-z]{25,34}|bc1[023456789acdefghjklmnpqrstuvwxyz]{6,87})$/
 	}),
 	Object.freeze({
+		ticker: 'HIVE',
+		// 3 decimals: 1.000 HIVE, the Graphene asset format Hive kept from
+		// Steem (and Blurt has too).
+		decimals: 3,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		// TRADE-ONLY, like every coin added after BLURT, BTC and XMR.
+		canPayListingFee: false,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// No issuer can freeze HIVE. (The chain's elected witnesses did move
+		// funds by hard fork once, in 2020; the privacy guide says so.)
+		privacyWarningKey: null,
+		privacyFeatures: {
+			// The "address" is the account name, as on Blurt.
+			freshAddressAdvice: 'account-reuse',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'hive'
+		},
+		// A Hive account name: 3-16 characters
+		// (HIVE_MIN/MAX_ACCOUNT_NAME_LENGTH), dot-separated parts of at least
+		// 3, each starting with a letter and ending with a letter or digit,
+		// letters, digits and dashes between (is_valid_account_name, which Hive
+		// kept from Steem). Every such name is also a valid Blurt name, so the
+		// same string can be an account on all three chains;
+		// address-shape-overlap-smoke documents it.
+		addressShape: /^(?=.{3,16}$)[a-z][a-z0-9-]+[a-z0-9](?:\.[a-z][a-z0-9-]+[a-z0-9])*$/
+	}),
+	Object.freeze({
+		ticker: 'STEEM',
+		// 3 decimals: 1.000 STEEM (STEEM_BLOCKCHAIN_PRECISION_DIGITS).
+		decimals: 3,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		canPayListingFee: false,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// No issuer can freeze STEEM. (The chain's witnesses froze some
+		// accounts by soft fork once, in 2020; the privacy guide says so.)
+		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'account-reuse',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'steem'
+		},
+		// A Steem account name (steemit/steem libraries/protocol/authority.cpp
+		// is_valid_account_name, STEEM_MIN/MAX_ACCOUNT_NAME_LENGTH 3/16): the
+		// same rule as HIVE's.
+		addressShape: /^(?=.{3,16}$)[a-z][a-z0-9-]+[a-z0-9](?:\.[a-z][a-z0-9-]+[a-z0-9])*$/
+	}),
+	Object.freeze({
+		ticker: 'BTS',
+		// 5 decimals: GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS (1 BTS = 100,000
+		// satoshi-like units).
+		decimals: 5,
+		isCoordinationChain: false,
+		canBeTraded: true,
+		canPayListingFee: false,
+		supportedNetworks: ['mainnet'],
+		defaultNetwork: 'mainnet',
+		// The core asset BTS cannot be frozen (asset issuers can freeze only
+		// their own user-issued assets, never BTS).
+		privacyWarningKey: null,
+		privacyFeatures: {
+			freshAddressAdvice: 'account-reuse',
+			optInPrivacyTech: null,
+			privacyGuideKey: 'bts'
+		},
+		// A BitShares account name (bitshares-core is_valid_name): 1 to 63
+		// characters, dot-separated labels, each starting with a letter and
+		// ending with a letter or digit, letters, digits and dashes between.
+		// A real Blurt, Hive or Steem account name is also one;
+		// address-shape-overlap-smoke documents it.
+		addressShape: /^(?=.{1,63}$)[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z](?:[a-z0-9-]*[a-z0-9])?)*$/
+	}),
+	Object.freeze({
 		// BARTER: goods/services as a first-class tradable "asset".
 		// UNLIKE every other entry it is NOT a crypto: a barter listing is
 		// the wares themselves (described in the listing's Terms), valued
@@ -1612,7 +1691,10 @@ export const COIN_PRIVACY_CLASS: Readonly<Record<NativeCoinTicker, CoinPrivacyCl
 		SOL: 'transparent',
 		ETH: 'transparent',
 		XRP: 'transparent',
-		ECX: 'transparent'
+		ECX: 'transparent',
+		HIVE: 'transparent',
+		STEEM: 'transparent',
+		BTS: 'transparent'
 	});
 
 /** Morphit's privacy coins (every class but `transparent`), in display order. */

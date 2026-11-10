@@ -114,6 +114,9 @@ export interface InstanceState {
 		readonly eth: string | null;
 		readonly xrp: string | null;
 		readonly ecx: string | null;
+		readonly hive: string | null;
+		readonly steem: string | null;
+		readonly bts: string | null;
 		/** USDT per-network explorer URL overrides.
 		 *  Each field is either a `https://…/{txid}…` template
 		 *  (operator override) or null (use frontend bundled
@@ -245,6 +248,9 @@ const FALLBACK: InstanceState = {
 		eth: null,
 		xrp: null,
 		ecx: null,
+		hive: null,
+		steem: null,
+		bts: null,
 		usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 		usdc: { erc20: null, spl: null, base: null, polygon: null },
 		dai: { erc20: null, polygon: null, base: null, arbitrum: null }
@@ -358,6 +364,9 @@ export function initInstance(): Promise<void> {
 								eth: result.data.chat_link_urls.eth ?? null,
 								xrp: result.data.chat_link_urls.xrp ?? null,
 								ecx: result.data.chat_link_urls.ecx ?? null,
+								hive: result.data.chat_link_urls.hive ?? null,
+								steem: result.data.chat_link_urls.steem ?? null,
+								bts: result.data.chat_link_urls.bts ?? null,
 								usdt: result.data.chat_link_urls.usdt ?? {
 									erc20: null,
 									trc20: null,
@@ -391,6 +400,9 @@ export function initInstance(): Promise<void> {
 								eth: null,
 								xrp: null,
 								ecx: null,
+								hive: null,
+								steem: null,
+								bts: null,
 								usdt: { erc20: null, trc20: null, spl: null, bep20: null },
 								usdc: { erc20: null, spl: null, base: null, polygon: null },
 								dai: { erc20: null, polygon: null, base: null, arbitrum: null }

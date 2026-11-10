@@ -329,7 +329,7 @@ const ALLOWED_PARTIAL_LISTS: readonly { file: string; set: string; why: string }
 	...SUPPORTED_LOCALES.filter(({ code }) => !['fa', 'pl', 'zh-CN'].includes(code)).map(
 		({ code: l }) => ({
 			file: `${LOCALES_DIR}${l}.json`,
-			set: 'ARRR DCR ETH SOL XRP',
+			set: 'ARRR BTS DCR ETH HIVE SOL STEEM XRP',
 			why: 'the word-of-mouth FAQ names a few coin communities "and more"'
 		})
 	)

@@ -39,6 +39,7 @@ function bad(scope: string, msg: string): void {
 
 const modal = readFileSync(resolve(WEB, 'src/lib/components/AddressShareModal.svelte'), 'utf8');
 const select = readFileSync(resolve(WEB, 'src/lib/components/AssetChoiceSelect.svelte'), 'utf8');
+const payload = readFileSync(resolve(WEB, 'src/lib/chat/payload.ts'), 'utf8');
 const flatModal = modal.replace(/\s+/g, ' ');
 const flatSelect = select.replace(/\s+/g, ' ');
 
@@ -134,20 +135,30 @@ if (/e\.stopPropagation\(\)/.test(flatSelect)) {
 		);
 	}
 	if (
-		/const reuseBlocked = \$derived\(\s*requireAmount &&\s*method !== 'blurt' &&\s*\(sharedBefore \|\| reuseCheckedFor !== /.test(modal) &&
-		/addressLooksValid &&\s*!reuseBlocked &&/.test(modal)
+		/const reuseBlocked = \$derived\(\s*requireAmount &&\s*!isAccountNameCoin\(method\) &&\s*\(sharedBefore \|\| reuseCheckedFor !== /.test(modal) &&
+		/addressLooksValid &&\s*!reuseBlocked &&/.test(modal) &&
+		// v1.24.0: only the coins whose address IS an account are exempt.
+		(payload.match(/const ACCOUNT_NAME_COIN[^{]*\{([^}]*)\}/)?.[1] ?? '')
+			.split(',')
+			.map((e) => e.trim())
+			.filter((e) => /:\s*true$/.test(e))
+			.map((e) => e.split(':')[0]!.trim())
+			.sort()
+			.join(',') === 'blurt,bts,hive,steem'
 	) {
-		ok('where a crypto-for-crypto seller is paid, a reused address is refused, and none is shared before the reuse check answers (a Blurt account is exempt)');
+		ok('where a crypto-for-crypto seller is paid, a reused address is refused, and none is shared before the reuse check answers (accounts — BLURT, HIVE, STEEM, BTS — are exempt)');
 	} else {
 		bad(
 			'payment check',
 			'a reused address can be shared to be paid for a crypto-for-crypto trade — an earlier payment to it, or the same payment cited in two chats, would pass.'
 		);
 	}
-	if (/const memoMissing = \$derived\(requireAmount && method === 'blurt' && \(!useMemo \|\| memo === ''\)\)/.test(modal) && /!reuseBlocked &&\s*!memoMissing &&/.test(modal)) {
-		ok("a crypto-for-crypto seller's BLURT ask keeps its memo");
+	// v1.24.0: every account-name coin's ask (BLURT, HIVE, STEEM, BTS) — the
+	// account is the same in every trade, so the memo is what ties a payment.
+	if (/const memoMissing = \$derived\(\s*requireAmount && isAccountNameCoin\(method\) && \(!useMemo \|\| memo === ''\)\s*\)/.test(modal) && /!reuseBlocked &&\s*!memoMissing &&/.test(modal)) {
+		ok("a crypto-for-crypto seller's ask in an account-name coin (BLURT, HIVE, STEEM, BTS) keeps its memo");
 	} else {
-		bad('payment check', "a BLURT ask can be shared without its memo — an earlier transfer from the same payer would then pass.");
+		bad('payment check', "an account-name coin's ask can be shared without its memo — any earlier transfer into the account would then pass.");
 	}
 	if (/\/\[1-9\]\/\.test\(trimmedAmount\)/.test(modal)) {
 		ok('an amount of zero is not an amount');

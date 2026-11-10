@@ -149,7 +149,10 @@
 		'sol',
 		'eth',
 		'xrp',
-		'ecx'
+		'ecx',
+		'hive',
+		'steem',
+		'bts'
 	];
 	const visibleMethods = $derived(
 		allowedMethods && allowedMethods.length > 0

@@ -30,7 +30,10 @@
  *     addresses on XRP Ledger mainnet, with optional `?dt=N`
  *     destination tag query param for exchange-hosted addresses;
  *     parsed by Xaman/Xumm, Crossmark, Bifrost, GemWallet
-	 *   - BLURT: bare account name (no widely-supported scheme)
+	 *   - ECX: bare address (an eCash address is also a Bitcoin
+	 *     address, so no `bitcoin:` link may open a Bitcoin wallet)
+	 *   - BLURT, HIVE, STEEM, BTS: bare account name (no widely-
+	 *     supported scheme)
 	 *   - USDT/USDC/DAI: no widely-supported single URI scheme across
 	 *          the multiple EVM/Solana/Tron networks each asset ships
 	 *          (USDT: ERC-20/TRC-20/SPL/BEP-20; USDC: ERC-20/SPL/Base/

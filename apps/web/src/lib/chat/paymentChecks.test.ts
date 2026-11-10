@@ -25,6 +25,9 @@ import {
 	PAYMENT_CHECK_FIRST_PERIOD_MS,
 	PAYMENT_CHECK_NOT_FOUND_FOR_MS,
 	PAYMENT_CHECK_UNAVAILABLE_FOR_MS,
+	PAYMENT_CHECK_3S_CHAIN_INTERVAL_MS,
+	PAYMENT_CHECK_3S_CHAIN_NOT_FOUND_FOR_MS,
+	isCheckedPaymentAsset,
 	verdictOf,
 	watchPaymentCheck,
 	type PaymentCheckInput,
@@ -408,5 +411,93 @@ describe('v1.23.2: the real number of confirmations, and how old the answer is',
 			confirmationLine({ confirmations: 5, required: 3, checkedAtMs: now - 12 * 60_000 }, now)
 				.staleMinutes
 		).toBeNull();
+	});
+});
+
+describe('v1.24.0: HIVE and STEEM payments, checked by transaction id', () => {
+	const HTX = 'c'.repeat(40);
+	const hive: PaymentCheckInput = {
+		asset: 'hive',
+		txid: HTX,
+		address: 'alice',
+		memo: 'k3m9qz2a',
+		asked: '1.234'
+	};
+	it('the coins the instance can be asked about', () => {
+		expect(['btc', 'xmr', 'hive', 'steem'].every(isCheckedPaymentAsset)).toBe(true);
+		expect(['bts', 'blurt', 'ltc', 'usdt'].some(isCheckedPaymentAsset)).toBe(false);
+	});
+	it('seen in a block not irreversible yet: shown arriving, but it releases nothing', async () => {
+		answers.push(found('1.234', 2));
+		const s = await checkOnce(hive);
+		expect(s).toMatchObject({ phase: 'seen', confirmations: 2, pending: true, short: false });
+		expect(verdictOf(s)).toBe('checking');
+		answers.length = 0;
+		answers.push(found('1.234', 3));
+		const done = await checkOnce(hive);
+		expect(done).not.toHaveProperty('pending');
+		expect(verdictOf(done)).toBe('seen');
+		expect(asks.at(-1)).toEqual({
+			asset: 'hive',
+			txid: HTX,
+			address: 'alice',
+			txKey: undefined,
+			memo: 'k3m9qz2a'
+		});
+	});
+	it('v1.24.0 review: a transfer into the account without the ask memo is not this trade’s', async () => {
+		answers.push({ ok: true, data: { ...found('0', 3).data, memo_mismatch: true } });
+		const s = await checkOnce(hive);
+		expect(s).toMatchObject({ phase: 'seen', short: true, wrongMemo: true });
+		expect(verdictOf(s)).toBe('mismatch');
+	});
+	it('v1.24.0 review: an ask without a memo binds nothing — seen is the receiver’s own call', async () => {
+		answers.push(found('1.234', 3));
+		const { memo: _m, ...noMemo } = hive;
+		const s = await checkOnce(noMemo);
+		expect(s).toMatchObject({ phase: 'seen', unbound: true });
+		expect(verdictOf(s)).toBe('unasked');
+		expect(asks.at(-1)).not.toHaveProperty('memo');
+	});
+	it('short is short at once, irreversible or not', async () => {
+		answers.push(found('1.233', 1));
+		expect(verdictOf(await checkOnce(hive))).toBe('mismatch');
+	});
+	it('a BTC payment at 1/3 is still "seen" as before (only these chains wait)', async () => {
+		answers.push(found('0.001', 1));
+		const s = await checkOnce({ asset: 'btc', txid: TXID, address: 'bc1qy', asked: '0.001' });
+		expect(s).not.toHaveProperty('pending');
+		expect(verdictOf(s)).toBe('seen');
+	});
+	it('asked every 6 s while confirming, then stops', async () => {
+		vi.useFakeTimers();
+		answers.push(found('1.234', 1), found('1.234', 2), found('1.234', 3), found('1.234', 3));
+		const w = watchPaymentCheck({ ...hive, address: 'alice.w1' });
+		const stop = w.subscribe(() => {});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(get(w)).toMatchObject({ confirmations: 1 });
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_3S_CHAIN_INTERVAL_MS);
+		expect(get(w)).toMatchObject({ confirmations: 2 });
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_3S_CHAIN_INTERVAL_MS);
+		expect(get(w)).toMatchObject({ confirmations: 3 });
+		const n = asks.length;
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_INTERVAL_MS * 5);
+		expect(asks.length).toBe(n);
+		stop();
+	});
+	it('an id the nodes still do not know after 3 minutes turns long (the seller may settle it)', async () => {
+		vi.useFakeTimers();
+		answers.push(notFound);
+		const w = watchPaymentCheck({ ...hive, address: 'alice.w2' });
+		const stop = w.subscribe(() => {});
+		await vi.advanceTimersByTimeAsync(0);
+		await vi.advanceTimersByTimeAsync(
+			PAYMENT_CHECK_3S_CHAIN_NOT_FOUND_FOR_MS - PAYMENT_CHECK_3S_CHAIN_INTERVAL_MS
+		);
+		expect(get(w)).toEqual({ phase: 'not_found' });
+		await vi.advanceTimersByTimeAsync(PAYMENT_CHECK_3S_CHAIN_INTERVAL_MS * 2);
+		expect(get(w)).toEqual({ phase: 'not_found', long: true });
+		expect(PAYMENT_CHECK_3S_CHAIN_NOT_FOUND_FOR_MS).toBeLessThan(PAYMENT_CHECK_NOT_FOUND_FOR_MS);
+		stop();
 	});
 });

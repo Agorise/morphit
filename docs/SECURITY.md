@@ -892,7 +892,7 @@ code concerns but should shape deployment posture:
   the orderbook. However, Morphit itself never facilitates the
   atomic trade — two users agree in Morphit's encrypted chat (or
   anywhere else), and the per-asset settlement transfer
-  (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, or ECX) happens
+  (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, or BTS) happens
   between their own wallets. The operator hosts a reader over
   public chain data, not a money-transmission service.
 - **Takedown requests.** Orders live on the Blurt blockchain and
@@ -1071,6 +1071,18 @@ Not in place: a quorum of RPC operators for these
 reads. The indexer reads each answer from one node of its pool; a
 periodic chain-consistency sample is an alarm, not a filter.
 
+HIVE and STEEM payments (v1.24.0) are checked the way BTC and XMR
+ones are, through the operator's indexer (`/v1/payment-check`), which
+asks those chains' public API nodes
+(`MORPHIT_INDEXER_HIVE_PAYMENT_NODES`, `MORPHIT_INDEXER_STEEM_PAYMENT_NODES`).
+Two node operators must agree on the block and the amount, so one
+hostile node cannot show a payment that was never made; the indexer's
+operator still chooses the nodes. Only a transfer carrying the memo of
+the seller's ask counts, so a buyer cannot cite someone else's payment
+into the same (reused) account as his own. The nodes learn the
+transaction id, the seller's account and the memo, all public on those
+chains once paid.
+
 ### tradeStatus lock-on-engagement (audit F-40)
 
 The trade-status entry for a given `orderPermlink` is
@@ -1227,16 +1239,18 @@ ADR-0010 §4 for the relay's in-memory key posture.
 
 ### Price-feed posture
 
-BLURT/USD comes from **`api.blurt.blog` first**: whenever its value
-is plausible, it is the price (`apps/indexer/src/indexer/price/factory.ts`).
-Only when it fails or is implausible does the indexer fall back to an
+BLURT/USD comes from **`api.blurt.blog` and the Cexius exchange's
+BLURT/USDT first** (v1.24.0): the two plausible answers averaged, or
+either one alone when the other fails
+(`apps/indexer/src/indexer/price/factory.ts`). Only when both fail or are
+implausible does the indexer fall back to an
 outlier-rejected median across independent external feeds (CoinGecko,
 CoinPaprika, CryptoCompare, and — for the assets they list —
 Kraken/Binance/Coinbase/OKX/Bybit, plus the optional key-gated
 CoinCap/Messari); a feed that returns nothing is dropped from the
-median, never replaced by a guess. So one provider does decide the
-price in normal operation, and could skew it within the plausibility
-band. A hidden-only (zero-clearnet) node does not call these at all:
+median, never replaced by a guess. So two providers decide the price in
+normal operation (one alone while the other is down), and either can
+skew it within the plausibility band. A hidden-only (zero-clearnet) node does not call these at all:
 it takes the federation price, the median of peers' own prices. Behind
 the external median sit the opt-in self-sovereign morphit_native
 source and the static floor, so the chain degrades rather than breaks.

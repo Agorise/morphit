@@ -646,6 +646,9 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  ETH chat-link URL:    ${answers.chatLinkExplorers.eth}`);
 	console.log(`  XRP chat-link URL:    ${answers.chatLinkExplorers.xrp}`);
 	console.log(`  ECX chat-link URL:    ${answers.chatLinkExplorers.ecx}`);
+	console.log(`  HIVE chat-link URL:   ${answers.chatLinkExplorers.hive}`);
+	console.log(`  STEEM chat-link URL:  ${answers.chatLinkExplorers.steem}`);
+	console.log(`  BTS chat-link URL:    ${answers.chatLinkExplorers.bts}`);
 	// multi-network chat-link URLs.  Each
 	// asset spans 4 chains; summarize as "all defaults" if every
 	// URL matches its bundled default, otherwise "customized".

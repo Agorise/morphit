@@ -118,6 +118,7 @@
 		type ThreadFact
 	} from '$lib/chat/cryptoLegs';
 	import {
+		isCheckedPaymentAsset,
 		verdictOf,
 		watchPaymentCheck,
 		type PaymentCheckInput,
@@ -965,7 +966,7 @@
 	let showShipmentModal = $state(false);
 	/** Q5 — Mark-as-sent prefill from an incoming address pill
 	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/
-	 *  ETH/XRP/ECX — every coin but BLURT, which pays via the
+	 *  ETH/XRP/ECX/HIVE/STEEM/BTS — every coin but BLURT, which pays via the
 	 *  separate PayBlurtModal path).  Held separately from
 	 *  showFundsSentModal so the composer-level "I sent it"
 	 *  button (no prefill) and the pill-level Mark-as-sent
@@ -1120,7 +1121,7 @@
 
 	/** Q5 — Mark-as-sent click on an incoming address pill
 	 *  (BTC/XMR/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/
-	 *  ETH/XRP/ECX).  Captures the seller's specified method+amount
+	 *  ETH/XRP/ECX/HIVE/STEEM/BTS).  Captures the seller's specified method+amount
 	 *  and opens FundsSentModal pre-filled. Critical for the
 	 *  Monero amount-jitter flow: the buyer's funds-sent echo
 	 *  MUST carry the same jittered amount the seller asked for,
@@ -1995,19 +1996,22 @@
 		return { receipt, to, reused, sharedAt };
 	});
 
-	/** What to ask the instance about (BTC/XMR paid to a shared address). */
+	/** What to ask the instance about (BTC/XMR paid to a shared address;
+	 *  v1.24.0: HIVE/STEEM paid to a shared account). */
 	const legCheckInput = $derived.by((): PaymentCheckInput | null => {
 		const p = legPayment;
 		// A txid already cited for another order is not checked as this one's:
 		// its receipt card must not show it arriving (L5).
 		if (p === null || p.reused || p.to === null || p.to.address === undefined) return null;
 		const asset = p.receipt.method;
-		if ((asset !== 'btc' && asset !== 'xmr') || p.receipt.kind !== 'funds_sent') return null;
+		if (!isCheckedPaymentAsset(asset) || p.receipt.kind !== 'funds_sent') return null;
 		return {
 			asset,
 			txid: p.receipt.txid,
 			address: p.to.address,
 			...(p.receipt.txKey !== undefined ? { txKey: p.receipt.txKey } : {}),
+			// v1.24.0: a HIVE / STEEM ask's memo, which ties the payment to it.
+			...(p.to.memo !== undefined && asset !== 'btc' && asset !== 'xmr' ? { memo: p.to.memo } : {}),
 			...(p.to.amount !== undefined ? { asked: p.to.amount } : {}),
 			...(Number.isFinite(p.sharedAt) ? { sharedAtMs: p.sharedAt } : {})
 		};
@@ -2023,6 +2027,7 @@
 					legCheckInput.txid,
 					legCheckInput.address,
 					legCheckInput.txKey ?? '',
+					legCheckInput.memo ?? '',
 					legCheckInput.asked ?? '',
 					legCheckInput.sharedAtMs ?? ''
 				].join('\u0000')
@@ -2039,9 +2044,10 @@
 		});
 	});
 
-	/** The payment leg's verdict for the buttons: the live check for BTC/XMR;
+	/** The payment leg's verdict for the buttons: the live check for
+	 *  BTC/XMR/HIVE/STEEM;
 	 *  the chain verification of a BLURT receipt (tradeStatus, blurtVerify);
-	 *  "no address" for a BTC/XMR payment with no address of that coin shared
+	 *  "no address" for a BTC/XMR/HIVE/STEEM payment with no address of that coin shared
 	 *  before it; "not confirmed here" for a coin without a check. A txid
 	 *  already cited by an earlier receipt is not a new payment. */
 	const legVerdict = $derived.by((): PaymentCheckVerdict | null => {
@@ -2052,7 +2058,7 @@
 		// be this trade's payment (and he was never asked to be paid in it).
 		if (p.to === null) return 'no_address';
 		if (legCheckInput !== null) return legCheck === null ? 'checking' : verdictOf(legCheck);
-		if (p.receipt.method === 'btc' || p.receipt.method === 'xmr') return 'no_address';
+		if (isCheckedPaymentAsset(p.receipt.method)) return 'no_address';
 		if (p.receipt.method === 'blurt') {
 			// Checked against the seller's own ask in this thread (blurtLegCheck),
 			// not the one-leg trade record — which the other leg, a reload or a

@@ -2,7 +2,7 @@
  * Morphit chat — structured payload encode/decode (Phase F).
  *
  * Buyers and sellers exchange receiving addresses for the traded
- * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX) and "funds sent"
+ * asset (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, ECX, HIVE, STEEM, BTS) and "funds sent"
  * acknowledgments inside encrypted chat messages.  The chat layer
  * below this module treats the inner plaintext as an opaque
  * string — encryption, broadcast, and indexer storage don't care
@@ -389,6 +389,25 @@ const XRP_TXID_RE = /^[a-fA-F0-9]{64}$/;
  *  when they actually send. */
 const BLURT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
+/** HIVE and STEEM "addresses" are account names too (is_valid_account_name
+ *  in both chains' code): 3-16 characters, dot-separated parts of at least 3,
+ *  each starting with a letter and ending with a letter or digit, letters,
+ *  digits and dashes between.  Each such name is a valid Blurt name too, so
+ *  the same name can be an account on all three chains, which is why the
+ *  chat card names the coin in words. */
+const HIVE_STEEM_ACCOUNT_RE = /^(?=.{3,16}$)[a-z][a-z0-9-]+[a-z0-9](?:\.[a-z][a-z0-9-]+[a-z0-9])*$/;
+
+/** A BitShares account name (bitshares-core is_valid_name): 1-63
+ *  characters, dot-separated labels, each starting with a letter and ending
+ *  with a letter or digit, letters, digits and dashes between. */
+const BTS_ACCOUNT_RE =
+	/^(?=.{1,63}$)[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z](?:[a-z0-9-]*[a-z0-9])?)*$/;
+
+/** HIVE, STEEM and BTS transaction ids: 40 hex characters (RIPEMD-160, the
+ *  Graphene format Blurt shares).  Either case is accepted (explorers show
+ *  them lowercase). */
+const GRAPHENE_TXID_RE = /^[0-9a-fA-F]{40}$/;
+
 /** Order permlink: matches the orderbook's permlink shape — a
  *  Blurt permlink, lowercase alphanumeric + dash, 3..256 chars.
  *  Bounded so payloads can't sneak large strings into the
@@ -645,10 +664,53 @@ export function jitterBlurtAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
+/** Amount-jitter for HIVE and STEEM: 3 decimals like BLURT (1.000 HIVE),
+ *  account-based.  Jitter range: up to 99 thousandths (0.099 HIVE or STEEM,
+ *  the same steps as BLURT). Round-UP-only, CSPRNG-derived. */
+export function jitterHiveSteemAmount(base: string): string {
+	if (!AMOUNT_RE.test(base)) {
+		throw new Error('jitterHiveSteemAmount: invalid base amount');
+	}
+	const [whole = '0', frac = ''] = base.split('.');
+	const fracPadded = (frac + '000').slice(0, 3);
+	const baseMilli = BigInt(whole) * 1000n + BigInt(fracPadded);
+
+	const buf = new Uint8Array(1);
+	crypto.getRandomValues(buf);
+	const jitterMilli = BigInt((buf[0] ?? 0) % 100);
+	const totalMilli = baseMilli + jitterMilli;
+
+	const wholeOut = totalMilli / 1000n;
+	const fracOut = totalMilli % 1000n;
+	return `${wholeOut.toString()}.${fracOut.toString().padStart(3, '0')}`;
+}
+
+/** Amount-jitter for BitShares (BTS): 5 decimals (1 BTS = 100,000 units).
+ *  Jitter range: up to 999 units (under 0.01 BTS, a tiny fraction of a US
+ *  cent). Round-UP-only, CSPRNG-derived. */
+export function jitterBtsAmount(base: string): string {
+	if (!AMOUNT_RE.test(base)) {
+		throw new Error('jitterBtsAmount: invalid base amount');
+	}
+	const [whole = '0', frac = ''] = base.split('.');
+	const fracPadded = (frac + '00000').slice(0, 5);
+	const baseUnits = BigInt(whole) * 100_000n + BigInt(fracPadded);
+
+	const buf = new Uint8Array(2);
+	crypto.getRandomValues(buf);
+	const r = ((buf[0] ?? 0) << 8) | (buf[1] ?? 0);
+	const totalUnits = baseUnits + BigInt(r % 1000);
+
+	const wholeOut = totalUnits / 100_000n;
+	const fracOut = totalUnits % 100_000n;
+	return `${wholeOut.toString()}.${fracOut.toString().padStart(5, '0')}`;
+}
+
 /** Amount-jitter for Solana.  Solana uses 9
  *  decimals (1 SOL = 1,000,000,000 lamports) — unique smallest-
  *  unit precision among Morphit's tradable assets.  BTC family is 8
- *  decimals, USDT/USDC/DAI is 6, BLURT is 3, XMR is 12.  SOL
+ *  decimals, USDT/USDC/DAI is 6, BLURT/HIVE/STEEM is 3, BTS is 5, XMR is
+ *  12.  SOL
  *  needs its own jitter calibration because no existing function
  *  has 9-decimal arithmetic.
  *
@@ -816,6 +878,8 @@ export function jitterAmountForAsset(asset: ChatAssetTicker, base: string): stri
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
+	if (asset === 'hive' || asset === 'steem') return jitterHiveSteemAmount(base);
+	if (asset === 'bts') return jitterBtsAmount(base);
 	if (asset === 'sol') return jitterSolAmount(base);
 	if (asset === 'eth') return jitterEthAmount(base);
 	if (asset === 'xrp') return jitterXrpAmount(base);
@@ -932,6 +996,9 @@ export type ChatAssetTicker =
 	| 'eth'
 	| 'xrp'
 	| 'ecx'
+	| 'hive'
+	| 'steem'
+	| 'bts'
 	| 'barter';
 
 /** The same set as the canonical registry's tickers, lowercased — proven by the
@@ -979,8 +1046,45 @@ const CHAT_PAYMENT_METHOD: Readonly<Record<ChatAssetTicker, boolean>> = Object.f
 	eth: true,
 	xrp: true,
 	ecx: true,
+	hive: true,
+	steem: true,
+	bts: true,
 	barter: false
 });
+
+/** The coins whose "address" is an account name (v1.24.0): BLURT, HIVE, STEEM
+ *  and BTS. Such an address is the same in every trade (a new one means a new
+ *  account, which costs a fee), so the address-share window does not demand a
+ *  never-shared one for them. A Record over ChatAssetTicker, so a coin added to
+ *  the union does not compile until it is classified here. */
+const ACCOUNT_NAME_COIN: Readonly<Record<ChatAssetTicker, boolean>> = Object.freeze({
+	btc: false,
+	xmr: false,
+	blurt: true,
+	usdt: false,
+	usdc: false,
+	dai: false,
+	bch: false,
+	ltc: false,
+	dash: false,
+	doge: false,
+	zec: false,
+	arrr: false,
+	dcr: false,
+	sol: false,
+	eth: false,
+	xrp: false,
+	ecx: false,
+	hive: true,
+	steem: true,
+	bts: true,
+	barter: false
+});
+
+/** True when `m`'s address is an account name (see ACCOUNT_NAME_COIN). */
+export function isAccountNameCoin(m: ChatAssetTicker): boolean {
+	return ACCOUNT_NAME_COIN[m] === true;
+}
 
 /** True when `m` is a coin a chat address / funds-sent message may name. */
 export function isChatPaymentMethod(m: unknown): m is Exclude<ChatAssetTicker, 'barter'> {
@@ -1359,6 +1463,19 @@ export function isValidXmrAddress(s: string): boolean {
 	return XMR_STANDARD_RE.test(s) || XMR_SUBADDRESS_RE.test(s) || XMR_INTEGRATED_RE.test(s);
 }
 
+/** Validate a HIVE or STEEM account name (the "address" of a transfer on
+ *  those chains). */
+export function isValidHiveSteemAccount(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return HIVE_STEEM_ACCOUNT_RE.test(s);
+}
+
+/** Validate a BitShares account name (the "address" of a BTS transfer). */
+export function isValidBtsAccount(s: string): boolean {
+	if (typeof s !== 'string') return false;
+	return BTS_ACCOUNT_RE.test(s);
+}
+
 /** Validate a BLURT account name (the "address" for BLURT
  *  transfers).  Uses the canonical account regex; multi-segment
  *  names with dots are accepted. */
@@ -1660,6 +1777,8 @@ export function isValidAddress(method: ChatAssetTicker, addr: string): boolean {
 	if (method === 'eth') return isValidEthAddress(addr);
 	if (method === 'xrp') return isValidXrpAddress(addr);
 	if (method === 'ecx') return isValidEcxAddress(addr);
+	if (method === 'hive' || method === 'steem') return isValidHiveSteemAccount(addr);
+	if (method === 'bts') return isValidBtsAccount(addr);
 	// Barter is goods, not a coin: no address.
 	if (method === 'barter') return false;
 	// Every ticker is handled above: a new coin does not compile until it has
@@ -1690,6 +1809,9 @@ export function isValidTxid(method: ChatAssetTicker, txid: string): boolean {
 	if (method === 'xrp') return isValidXrpTxid(txid);
 	// eCash keeps Bitcoin's transaction format.
 	if (method === 'ecx') return BTC_TXID_RE.test(txid);
+	if (method === 'hive' || method === 'steem' || method === 'bts') {
+		return GRAPHENE_TXID_RE.test(txid);
+	}
 	// Barter is goods, not a coin: no transaction id.
 	if (method === 'barter') return false;
 	// Every ticker is handled above: a new coin does not compile until it has
@@ -1737,9 +1859,10 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		}
 	}
 	if (p.memo !== undefined && p.memo !== '') {
-		// Phase F.5 audit fix (F-3) — memo is BLURT-only.
-		if (p.method !== 'blurt') {
-			throw new Error('payload: memo is only valid for blurt method');
+		// Phase F.5 audit fix (F-3) — memo is BLURT-only; v1.24.0: the
+		// account-name coins (HIVE, STEEM, BTS) carry the trade's memo too.
+		if (!isAccountNameCoin(p.method)) {
+			throw new Error('payload: memo is only valid for an account-name coin');
 		}
 		if (!MEMO_RE.test(p.memo)) {
 			throw new Error('payload: invalid memo');
@@ -1902,9 +2025,10 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		}
 	}
 	if (p.memo !== undefined && p.memo !== '') {
-		// Phase F.5 audit fix (F-3) — memo is BLURT-only.
-		if (p.method !== 'blurt') {
-			throw new Error('payload: memo is only valid for blurt method');
+		// Phase F.5 audit fix (F-3) — memo is BLURT-only; v1.24.0: the
+		// account-name coins (HIVE, STEEM, BTS) carry the trade's memo too.
+		if (!isAccountNameCoin(p.method)) {
+			throw new Error('payload: memo is only valid for an account-name coin');
 		}
 		if (!MEMO_RE.test(p.memo)) {
 			throw new Error('payload: invalid memo');
@@ -2390,8 +2514,9 @@ function optionalFieldsAddress(
 	let memo: string | undefined;
 	if (Object.hasOwn(o, 'memo')) {
 		if (typeof o.memo !== 'string' || !MEMO_RE.test(o.memo)) return null;
-		// Phase F.5 audit fix (F-3) — memo is BLURT-only.
-		if (base.method !== 'blurt') return null;
+		// Phase F.5 audit fix (F-3) — memo is BLURT-only; v1.24.0: and the
+		// other account-name coins (HIVE, STEEM, BTS).
+		if (!isAccountNameCoin(base.method)) return null;
 		memo = o.memo;
 	}
 	// inline-fix — pre-existing latent bug: USDT
@@ -2551,8 +2676,9 @@ function optionalFieldsFundsSent(
 	let memo: string | undefined;
 	if (Object.hasOwn(o, 'memo')) {
 		if (typeof o.memo !== 'string' || !MEMO_RE.test(o.memo)) return null;
-		// Phase F.5 audit fix (F-3) — memo is BLURT-only.
-		if (base.method !== 'blurt') return null;
+		// Phase F.5 audit fix (F-3) — memo is BLURT-only; v1.24.0: and the
+		// other account-name coins (HIVE, STEEM, BTS).
+		if (!isAccountNameCoin(base.method)) return null;
 		memo = o.memo;
 	}
 	// inline-fix — symmetric to optionalFieldsAddress.
@@ -2941,6 +3067,10 @@ export function buildPaymentUri(p: AddressPayload): string {
 	// address; `ecash:` is the address prefix of XEC, a different coin. The
 	// bare address only.
 	if (p.method === 'ecx') return p.address;
+	// Hive, Steem and BitShares define no payment URI that wallets agree on
+	// (Hive's hive://sign/ links carry a whole signed-operation request, not
+	// an address and an amount): the bare account name, as for BLURT.
+	if (p.method === 'hive' || p.method === 'steem' || p.method === 'bts') return p.address;
 	// Every ticker is handled above: a new coin does not compile until it has
 	// its own payment link (or an explicit bare-address case) here.
 	const unhandled: never = p.method;

@@ -229,6 +229,32 @@ const EXPECTATIONS: AssetExpectation[] = [
 		expectedUriScheme: 'bare-address',
 		txidShapeAcceptable: 'a'.repeat(64),
 		txidShapeUnacceptable: 'a'.repeat(63)
+	},
+	// Hive, Steem, BitShares (ADR-0054): account names, no payment scheme any
+	// wallet agrees on (the link is the account name), 40-hex transaction ids.
+	{
+		ticker: 'HIVE',
+		chatTicker: 'hive',
+		expectedJitterDecimals: 3,
+		expectedUriScheme: 'bare-address',
+		txidShapeAcceptable: 'a'.repeat(40),
+		txidShapeUnacceptable: 'a'.repeat(64)
+	},
+	{
+		ticker: 'STEEM',
+		chatTicker: 'steem',
+		expectedJitterDecimals: 3,
+		expectedUriScheme: 'bare-address',
+		txidShapeAcceptable: 'a'.repeat(40),
+		txidShapeUnacceptable: 'a'.repeat(64)
+	},
+	{
+		ticker: 'BTS',
+		chatTicker: 'bts',
+		expectedJitterDecimals: 5,
+		expectedUriScheme: 'bare-address',
+		txidShapeAcceptable: 'a'.repeat(40),
+		txidShapeUnacceptable: 'a'.repeat(39)
 	}
 ];
 
@@ -322,7 +348,10 @@ for (const exp of EXPECTATIONS) {
 			SOL: 'So11111111111111111111111111111111111111112',
 			ETH: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
 			XRP: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh',
-			ECX: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
+			ECX: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+			HIVE: 'hiveio',
+			STEEM: 'steemit',
+			BTS: 'open.ledger-dex'
 		};
 		const addr = sampleAddrs[exp.ticker];
 		if (!addr) {

@@ -72,6 +72,29 @@ export const DEFAULT_BTC_FEE_EXPLORERS: readonly string[] = [
 	...DEFAULT_BTC_CLEARNET_EXPLORERS
 ];
 
+/** v1.24.0: HAfAH bases (Hive account history, plain GET JSON) asked for a
+ *  trade's HIVE payment (indexer fee/grapheneTxCheck.ts), one per operator:
+ *  the Hive core developers' api.hive.blog, then @gtg, @techcoderx,
+ *  @mahdiyari and Actifit. Clearnet only: no Tor / I2P Hive node is known. */
+export const DEFAULT_HIVE_PAYMENT_NODES: readonly string[] = [
+	'https://api.hive.blog/hafah-api',
+	'https://api.openhive.network/hafah-api',
+	'https://techcoderx.com/hafah-api',
+	'https://rpc.mahdiyari.info/hafah-api',
+	'https://hiveapi.actifit.io/hafah-api'
+] as const;
+
+/** v1.24.0: Steem JSON-RPC nodes asked for a trade's STEEM payment, one per
+ *  operator: Steemit's own, then @justyy, steememory, @moecki and @pennsif
+ *  (github.com/DoctorLai/simple-steem-docker steem-rpc-nodes.txt). */
+export const DEFAULT_STEEM_PAYMENT_NODES: readonly string[] = [
+	'https://api.steemit.com',
+	'https://api.justyy.com',
+	'https://api.steememory.com',
+	'https://api.moecki.online',
+	'https://api.pennsif.net'
+] as const;
+
 /** onion-monero-blockchain-explorer instances on Tor: the same software as
  *  xmrchain.net, so the same JSON API (`/api/outputs?…&txprove=1`,
  *  `/api/transaction/<txid>`, `/api/networkinfo`). */

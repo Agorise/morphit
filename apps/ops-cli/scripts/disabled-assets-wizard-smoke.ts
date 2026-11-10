@@ -28,7 +28,7 @@ type Scenario = {
 
 const scenarios: Scenario[] = [
 	{
-		name: 'Category-B filter returns the 14 trade-only cryptos + BARTER (15 total) from canonical registry',
+		name: 'Category-B filter returns the 17 trade-only cryptos + BARTER (18 total) from canonical registry',
 		check: () => {
 			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map((a) => a.ticker);
 			return (
@@ -46,8 +46,11 @@ const scenarios: Scenario[] = [
 				catB.includes('ETH') &&
 				catB.includes('XRP') &&
 				catB.includes('ECX') &&
+				catB.includes('HIVE') &&
+				catB.includes('STEEM') &&
+				catB.includes('BTS') &&
 				catB.includes('BARTER') &&
-				catB.length === 15
+				catB.length === 18
 			);
 		}
 	},
