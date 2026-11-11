@@ -48,9 +48,19 @@ describe('fast copy read, then its chain copy lands (review C, M3)', () => {
 		expect(isUnread(peer, 'o1', iso(4_000), false)).toBe(true);
 	});
 
-	it('a replay of the very message read (same time) keeps the cover', () => {
+	// v1.24.1 — every push now carries its message's time, and one at the read
+	// message's time may be another message signed in the same head block:
+	// keeping the cover would hide it on this device for good. (The message
+	// read is answered as read by the indexer's ack mapping, /v1/chat-read-state.)
+	it('a push of the same time as the message read ends the cover: it may be another message', () => {
 		markConversationRead(peer, 'o1', A, { newestIsFast: true });
 		noteFastChatPush(peer, 'o1', A.getTime());
+		expect(isUnread(peer, 'o1', iso(3_000), false)).toBe(true);
+	});
+
+	it('an announcement of an OLDER message keeps the cover', () => {
+		markConversationRead(peer, 'o1', A, { newestIsFast: true });
+		noteFastChatPush(peer, 'o1', A.getTime() - 3_000);
 		expect(isUnread(peer, 'o1', iso(3_000), false)).toBe(false);
 	});
 

@@ -79,6 +79,7 @@ import { logger } from '$log';
 import { checkChatOrder, noReplyLimitRefusal, noReplyLimits } from '$indexer/chatGates';
 import { enqueueChatPush } from '$indexer/chatPushEnqueue';
 import { inSavepoint } from '$indexer/savepoint';
+import { sentAtFromExpiry } from '$indexer/chatSentAt';
 
 const log = logger('chat');
 
@@ -414,8 +415,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	try {
 		const insertRes = await client.query<{ id: string }>(
 			`INSERT INTO chat_messages (
-				sender, recipient, ciphertext, header, created_at, source_trx_id, order_permlink
-			) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
+				sender, recipient, ciphertext, header, created_at, source_trx_id, order_permlink,
+				sent_at
+			) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
 			RETURNING id::text`,
 			[
 				ctx.signer,
@@ -439,7 +441,14 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				// >>> THREADING MODEL INV-5 (server tag point). Read
 				// >>> docs/CHAT-THREADING-MODEL.md before touching this line.
 				// >>> Guarded by chat-order-tag-storage-smoke (tamper-tested).
-				claimedPermlink ?? null
+				claimedPermlink ?? null,
+				// v1.24.1 (migration v74): the sender's signed time, by the rule
+				// the fast path dates its copy with, so a read ack of that copy
+				// also covers this row (api/chatReadState.ts). Unknown without
+				// the transaction (a replay from the event log).
+				ctx.transaction === undefined
+					? null
+					: sentAtFromExpiry(ctx.transaction.expiration, ctx.blockTime)
 			]
 		);
 		// Bus emit: canonical pair (lo, hi) so subscribers can

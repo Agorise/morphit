@@ -29,6 +29,9 @@
  *   }
  *
  * Items sorted by last_read_at DESC (most recently read first).
+ *
+ * `last_read_at` is the ack as written, except (v1.24.1) an ack of a message's
+ * fast copy, which is given as that message's block time: see the query.
  */
 
 import { Hono } from 'hono';
@@ -57,11 +60,64 @@ export function chatReadStateRoute(db: Database): Hono {
 			return c.json(errorBody('bad_request', 'invalid account name'), 400);
 		}
 
+		// v1.24.1 — a thread's ack that is a fast copy's signed time reads as
+		// that message's block time. A device that read the message before its
+		// block was applied (the fast path) acked the time it was shown with:
+		// the sender's signed time, earlier than the block time its row carries
+		// (chat_messages.sent_at, migration v74). Every other device of the
+		// reader then compared that row against the ack and showed the thread
+		// unread until it was opened there too. The ack is that copy's when a
+		// message of the thread was signed at exactly the ack's time and landed
+		// within 75 s of it (the client's 60 s expiry, and a little for the
+		// stamp), and no message of the thread has the ack's time as its block
+		// time: the signed time is a head block's time (the client builds the
+		// expiry from it), so an ack of an earlier message's row can carry the
+		// same instant, and must stay what it is. The earliest such message is
+		// the one read — unless another message of the peer's lands in the same
+		// stretch (after the ack, up to that message's block) signed at or after
+		// the ack, or at an unknown time: one sent later than the message read,
+		// or with it in the same head block, which the reader has not seen (a
+		// message can miss a block and land with the next one). Then the ack
+		// stays what it is: never hide a message to cure a phantom. A legacy peer-wide ack ('*') names no discussion a
+		// message is in, so it is left as it is.
 		const sql = `
-			SELECT peer_account AS peer, order_permlink, last_read_at
-			FROM chat_read_state
-			WHERE reader_account = $1
-			ORDER BY last_read_at DESC
+			SELECT r.peer_account AS peer, r.order_permlink,
+				COALESCE(
+					(
+						SELECT MIN(m.created_at)
+						FROM chat_messages m
+						WHERE LEAST(m.sender, m.recipient) = LEAST($1, r.peer_account)
+							AND GREATEST(m.sender, m.recipient) = GREATEST($1, r.peer_account)
+							AND m.created_at > r.last_read_at
+							AND m.created_at <= r.last_read_at + INTERVAL '75 seconds'
+							AND m.sent_at = r.last_read_at
+							AND COALESCE(m.order_permlink, '') = r.order_permlink
+							AND NOT EXISTS (
+								SELECT 1
+								FROM chat_messages u
+								WHERE LEAST(u.sender, u.recipient) = LEAST($1, r.peer_account)
+									AND GREATEST(u.sender, u.recipient) = GREATEST($1, r.peer_account)
+									AND COALESCE(u.order_permlink, '') = r.order_permlink
+									AND u.sender = r.peer_account
+									AND u.id <> m.id
+									AND u.created_at > r.last_read_at
+									AND u.created_at <= m.created_at
+									AND (u.sent_at IS NULL OR u.sent_at >= r.last_read_at)
+							)
+							AND NOT EXISTS (
+								SELECT 1
+								FROM chat_messages b
+								WHERE LEAST(b.sender, b.recipient) = LEAST($1, r.peer_account)
+									AND GREATEST(b.sender, b.recipient) = GREATEST($1, r.peer_account)
+									AND b.created_at = r.last_read_at
+									AND COALESCE(b.order_permlink, '') = r.order_permlink
+							)
+					),
+					r.last_read_at
+				) AS last_read_at
+			FROM chat_read_state r
+			WHERE r.reader_account = $1
+			ORDER BY r.last_read_at DESC
 			LIMIT $2
 		`;
 

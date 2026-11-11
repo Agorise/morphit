@@ -924,13 +924,15 @@ against the bug they claim to guard (`ops/test/*-harness.sh`, mutation-based):
   repeat.
 - `globalChatActivityStream.test.ts` — the browser half of the frame contract.
   The indexer smoke asserts the route emits exactly `{ peer, order, inbound, at }`
-  with `at: null` on a live ping; this asserts the browser refuses a frame
-  missing `order` or `inbound`, and carries a replayed `at` through unchanged.
+  (`at: null` on a live ping until v1.24.1; since then the message's own time,
+  as on a replay, and the smoke tells a replay by its coming before `ready`);
+  this asserts the browser refuses a frame missing `order` or `inbound`, and
+  carries `at` through unchanged.
   Two deliberate exceptions, so the claim is not read wider than it is: `peer` is
   guarded three times over — here, in the store, and again in the listing — so
   removing any one of them changes nothing and an assertion about it would be
-  over-determined; and `at` is optional by design, because a live ping has no
-  original time to carry. Renaming `order` or `inbound` on either side fails a
+  over-determined; and `at` is optional by design, because an indexer older
+  than v1.24.1 sent none on a live ping. Renaming `order` or `inbound` on either side fails a
   test, which was previously a silent, federation-wide breakage.
 
 Two things about that list are worth stating plainly, because they are the

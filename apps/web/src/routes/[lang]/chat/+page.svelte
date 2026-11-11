@@ -229,14 +229,17 @@
 		// changed — i.e. on the ~60s durable poll — which is the very lag the fast
 		// path exists to avoid.
 		void $fastPendingTick;
-		// `fastOnly` is set only on the placeholder cards pushed below (v1.21.14
-		// full chat audit, W-M3: their time is the device's, never a read cursor).
+		// `fastOnly` is set only on the placeholder cards pushed below. Their time
+		// is never a read cursor as such (v1.21.14 full chat audit, W-M3); since
+		// v1.24.1 `timedAt` carries the pushed message's own time when the push
+		// had it, which is (ackThreadRead, as a fast copy's ack).
 		const withFlags: Array<
 			(typeof visible)[number] & {
 				unread: boolean;
 				folder: ReturnType<typeof folderOf>;
 				pending: boolean;
 				fastOnly?: true;
+				timedAt?: string;
 			}
 		> = visible.map((c) => {
 			const order = c.order?.permlink ?? '';
@@ -297,8 +300,9 @@
 			// carries the true subject on first paint.
 			const resolved = p.orderPermlink ? pendingOrders.get(p.orderPermlink) : undefined;
 			withFlags.push({
-				// Dated by the push, not by the chain: never a read cursor (W-M3).
+				// Dated by the push: never a read cursor as such (W-M3).
 				fastOnly: true as const,
+				...(p.timed ? { timedAt: new Date(p.atMs).toISOString() } : {}),
 				peer: p.peer,
 				last_message_at: new Date(p.atMs).toISOString(),
 				message_count: 1,
@@ -861,7 +865,12 @@
 				// v1.21.14 full chat audit, W-L4: each thread at its own newest
 				// message time — a bare device clock running behind the chain left
 				// them unread (ackThreadRead).
-				ackThreadRead(c.peer, c.order?.permlink ?? '', 'fastOnly' in c ? undefined : c.last_message_at);
+				ackThreadRead(
+					c.peer,
+					c.order?.permlink ?? '',
+					'fastOnly' in c ? c.timedAt : c.last_message_at,
+					'fastOnly' in c
+				);
 			}
 		}
 	}
@@ -872,7 +881,12 @@
 	 *  badge decrements alongside the move. */
 	function handleArchive(row: InboxRow): void {
 		const order = row.order?.permlink ?? '';
-		ackThreadRead(row.peer, order, 'fastOnly' in row ? undefined : row.last_message_at);
+		ackThreadRead(
+			row.peer,
+			order,
+			'fastOnly' in row ? row.timedAt : row.last_message_at,
+			'fastOnly' in row
+		);
 		// v1.7.7 — hand over the thread's newest BLOCK time; see chatFolders.watermark().
 		archiveThread(row.peer, order, row.last_message_at);
 		showToast($_('chat.inbox.archive_toast') as string, 'info');

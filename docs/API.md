@@ -1337,10 +1337,16 @@ SSE (Server-Sent Events) streams for real-time data:
 - `GET /v1/chat-activity/:account/stream` — GLOBAL (all-conversations)
   activity pings for one account, so the inbox list + notification
   badges update sub-second without per-conversation streams. Emits
-  `chat_activity` with `{"peer":"<account>"}` ONLY — no ciphertext,
-  header, or message id (privacy: metadata is on-chain-public; content
-  stays end-to-end encrypted and is re-fetched same-origin on the ping).
-  A `ready` event on connect signals the stream is live.
+  `chat_activity` with `{"peer", "order", "inbound", "at"}` ONLY — the
+  other account, the order the thread is about (`""` for none, `null` from
+  the durable path), whether the message was received, and the message's
+  time in milliseconds (its block time, or the sender's signed time): on a
+  replay, and since v1.24.1 on a live ping too; `null` on the durable path
+  and from an indexer older than v1.24.1). No ciphertext, header,
+  or message id (privacy: metadata is on-chain-public; content stays
+  end-to-end encrypted and is re-fetched same-origin on the ping). On
+  connect, recent messages the account missed are replayed first, then a
+  `ready` event signals the stream is live.
 
 The server does not support `Last-Event-ID` resume: on reconnect a
 client gets a fresh `snapshot` (orderbook, directory) and should

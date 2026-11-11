@@ -1639,10 +1639,13 @@
 	 *  than the last ack was seen, and opening the thread again in this tab does
 	 *  not ack again what this tab already acked (chainAckMemory.ts).
 	 *
-	 *  Known limit: a FAST copy carries its signing time, a few seconds before
-	 *  its block's. Leaving within those seconds acks just short of it, and its
-	 *  chain copy may still get an offline notice. Acking further ahead would
-	 *  silence a NEXT message sent in that gap, which is worse. */
+	 *  Known limit: a FAST copy carries its signing time, before its block's
+	 *  (seconds through the head tailer; up to about a minute for one relayed
+	 *  before its block, by this instance or a peer). Leaving before its chain
+	 *  copy lands acks just short of it, and that copy may still get an offline
+	 *  notice. Acking further ahead would silence a NEXT message sent in that
+	 *  gap, which is worse. (Unread on the reader's other devices is covered: the
+	 *  indexer answers such an ack as the message's block time, v1.24.1.) */
 	const CHAIN_ACK_COALESCE_MS = 5 * 60_000;
 	/** Newest message time shown while the tab was visible. */
 	let seenAtMs: number | null = null;

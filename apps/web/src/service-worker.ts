@@ -82,7 +82,7 @@ import {
 	wantsServerCopy
 } from '$lib/net/dynamicPaths';
 import { DEFAULT_BRAND_NAME, sanitizeBrandName } from '$lib/brand/brandName';
-import { chatThreadFromClickPath, chatPeerMatches } from '$lib/notifications/chatThread';
+import { chatPushTabMessage, chatPeerMatches } from '$lib/notifications/chatThread';
 import { ReloadStashKeys, SW_STASH_PUT, SW_STASH_TAKE } from '$lib/auth/reloadStash';
 import { isSilencedAt, readSilenceState } from '$lib/notifications/silenceState';
 
@@ -433,6 +433,7 @@ self.addEventListener('push', (event: PushEvent) => {
 		category?: unknown;
 		clickPath?: unknown;
 		eventId?: unknown;
+		eventAt?: unknown;
 	};
 	try {
 		const text = event.data?.text();
@@ -557,15 +558,9 @@ self.addEventListener('push', (event: PushEvent) => {
 				// badge + archived-resurrect path was dead code in production.
 				//
 				// Both categories name a chat thread; only the ?order scope differs.
-				const chatThread =
-					category === 'chat' || category === 'order' ? chatThreadFromClickPath(clickPath) : null;
-				for (const client of tabs) {
-					client.postMessage({
-						type: 'CHAT_PUSH',
-						category,
-						...(chatThread ? { peer: chatThread.peer, order: chatThread.order } : {})
-					});
-				}
+				// v1.24.1 — with the message's own time (chatPushTabMessage).
+				const tabMessage = chatPushTabMessage(category, clickPath, payload.eventAt);
+				for (const client of tabs) client.postMessage(tabMessage);
 			} catch {
 				// Best-effort; the notification already showed.
 			}

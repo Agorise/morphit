@@ -59,11 +59,13 @@ export function subscribeChatActivity(fn: Listener): () => void {
  *  Deliberately a subscription rather than importing chatUnread here:
  *  chatUnread already imports THIS module, so calling into it directly would
  *  close an import cycle. The dependency arrow stays one-way. */
-/** v1.7.5 — `atMs` is the message's REAL time, present only on REPLAYED events
- *  (a browser that was closed when the message landed; see the indexer's
- *  chatActivityStream replay). Live pushes omit it and mean "now", which is true
- *  to within the push latency. Honouring it is what stops a replayed old message
- *  from being dated to this instant and lighting a badge already cleared. */
+/** `atMs` is the message's REAL time: on REPLAYED events since v1.7.5 (a
+ *  browser that was closed when the message landed; see the indexer's
+ *  chatActivityStream replay), and since v1.24.1 on live pings and Web Pushes
+ *  too (absent only from an older indexer or service worker: then it means
+ *  "now"). Honouring it is what stops a replayed old message from being dated
+ *  to this instant and lighting a badge already cleared, and what lets the
+ *  durable row and the read cursor judge a live one on the chain's clock. */
 type FastPushListener = (peer: string, orderPermlink: string, atMs?: number) => void;
 const fastPushListeners = new Set<FastPushListener>();
 
@@ -302,10 +304,11 @@ function onActivity(data: string): void {
 		// `fire()` still reconciles, which is all the durable path needs.
 		if (d.inbound === true && typeof d.peer === 'string' && d.peer && typeof d.order === 'string') {
 			if (folderOf(d.peer, d.order) === 'archived') restoreThread(d.peer, d.order);
-			// `at` is present on REPLAYED events (a browser that was closed when the
-			// message landed) and carries the message's real block time. Passing it
-			// through is what stops a replayed old message from being dated to now
-			// and lighting a badge the user already cleared.
+			// `at` is the message's own time: the original block time on a REPLAYED
+			// event (a browser that was closed when the message landed), and since
+			// v1.24.1 on a live one too. Passing it through is what stops a replayed
+			// old message from being dated to now and lighting a badge the user
+			// already cleared, and lets the durable row reconcile a live one.
 			emitFastPush(d.peer, d.order, typeof d.at === 'number' ? d.at : undefined);
 		}
 		if (typeof d.peer === 'string' && d.peer) {
@@ -716,7 +719,12 @@ export function startGlobalChatActivity(): () => void {
 	// update promptly even when this tab is inactive and its own stream/poll is
 	// throttled. This is what lets an untouched tab badge like Element does.
 	const onSwMessage = (ev: MessageEvent): void => {
-		const data = ev.data as { type?: unknown; peer?: unknown; order?: unknown } | null;
+		const data = ev.data as {
+			type?: unknown;
+			peer?: unknown;
+			order?: unknown;
+			at?: unknown;
+		} | null;
 		if (data && data.type === 'CHAT_PUSH') {
 			// v1.5.0 fast archived-restore — if the push names an ARCHIVED thread,
 			// pull it back into the Inbox immediately (Gmail-style) rather than
@@ -735,7 +743,10 @@ export function startGlobalChatActivity(): () => void {
 				// No spam risk and no gate duplicated here: the fast-notify gate
 				// upstream refuses to push for anyone but an established
 				// counterparty, so no push means no bump.
-				emitFastPush(data.peer, order);
+				// v1.24.1 — with the message's own time (the push's `eventAt`), so
+				// the badge reconciles with the durable row and the read cursor on
+				// the chain's clock (chatUnread.ts, FastPending).
+				emitFastPush(data.peer, order, typeof data.at === 'number' ? data.at : undefined);
 				// v1.8.9 — and if this tab is ALREADY showing that peer's thread,
 				// take the OS notification back down.
 				//

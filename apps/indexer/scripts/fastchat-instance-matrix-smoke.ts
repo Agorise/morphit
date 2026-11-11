@@ -446,12 +446,15 @@ async function startInstance(
 			const ctrl = new AbortController();
 			const t = setTimeout(() => ctrl.abort(), timeoutMs);
 			try {
-				const r = await fetch(url.replace(/^https:\/\/peer-(\d+)\.example/, 'http://127.0.0.1:$1'), {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(body),
-					signal: ctrl.signal
-				});
+				const r = await fetch(
+					url.replace(/^https:\/\/peer-(\d+)\.example/, 'http://127.0.0.1:$1'),
+					{
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify(body),
+						signal: ctrl.signal
+					}
+				);
 				return { status: r.status, body: await r.text() };
 			} finally {
 				clearTimeout(t);
@@ -548,7 +551,10 @@ async function watchInbox(activity: Hono, account: string, oneWayMs: number): Pr
 	// Opened the way a signed-in browser opens it: with a stream ticket its
 	// account signed (v1.21.14, S-M8).
 	const T = await smokeTickets;
-	const res = await activity.request(T.path(`/${account}/stream`, account), T.as(account, { method: 'GET' }));
+	const res = await activity.request(
+		T.path(`/${account}/stream`, account),
+		T.as(account, { method: 'GET' })
+	);
 	const reader = res.body?.getReader();
 
 	// Armed per direction, NOT once per case — and REPLAYED frames are discarded
@@ -566,13 +572,15 @@ async function watchInbox(activity: Hono, account: string, oneWayMs: number): Pr
 	// — comfortably after the watcher is armed. It then resolves the wait, and
 	// the case reports an arrival it never sent, with an elapsed time below the
 	// modelled floor. A replayed frame is distinguishable at the wire level and
-	// always has been: the route sends `at: <original block time>` on a replay
-	// and `at: null` on a live ping. So the test can simply refuse to count one,
-	// which is both the honest fix and one that keeps working if the ring's
-	// contents change. The ring is also cleared per case in runPair; this is the
+	// always has been: the route sends the replay BEFORE its `ready` event, and
+	// live pings after it. (Until v1.24.1 a live ping also carried `at: null`;
+	// it now carries the message's time, as a replay does.) So the test can
+	// simply refuse to count a frame read before `ready`, which is both the
+	// honest fix and one that keeps working if the ring's contents change. The ring is also cleared per case in runPair; this is the
 	// belt to that pair of braces.
 	let waiting: ((v: { at: number; raw: string }) => void) | null = null;
 	let lastFrame: string | null = null;
+	let live = false;
 
 	if (reader !== undefined) {
 		void (async () => {
@@ -582,26 +590,27 @@ async function watchInbox(activity: Hono, account: string, oneWayMs: number): Pr
 					const { done, value } = await reader.read();
 					if (done) break;
 					if (value === undefined) continue;
-					const text = dec.decode(value);
-					if (text.includes('chat_activity')) lastFrame = text;
-					// Only an INBOUND ping lights an inbox. The account's own outgoing
-					// message pings this stream too (it is a participant stream) and
-					// must not be mistaken for a message arriving.
-					if (!text.includes('"inbound":true')) continue;
-					// A REPLAYED frame, not a live one. `at` carries the event's
-					// original time on a replay and null on a live ping
-					// (chatActivityStream.ts), so this is the wire's own statement
-					// of which it is. Counting a replay as an arrival is how a case
-					// measures the previous case's message. See the note above.
-					if (!text.includes('"at":null')) continue;
-					// The hop from the instance to the person's browser.
-					setTimeout(() => {
-						const w = waiting;
-						if (w !== null) {
-							waiting = null;
-							w({ at: Date.now(), raw: text });
-						}
-					}, oneWayMs);
+					for (const text of dec.decode(value).split('\n\n')) {
+						if (text.includes('event: ready')) live = true;
+						// A REPLAYED frame, not a live one: the replay is sent before
+						// `ready` (chatActivityStream.ts), so this is the wire's own
+						// statement of which it is. Counting a replay as an arrival is how
+						// a case measures the previous case's message. See the note above.
+						if (!live) continue;
+						if (text.includes('chat_activity')) lastFrame = text;
+						// Only an INBOUND ping lights an inbox. The account's own outgoing
+						// message pings this stream too (it is a participant stream) and
+						// must not be mistaken for a message arriving.
+						if (!text.includes('"inbound":true')) continue;
+						// The hop from the instance to the person's browser.
+						setTimeout(() => {
+							const w = waiting;
+							if (w !== null) {
+								waiting = null;
+								w({ at: Date.now(), raw: text });
+							}
+						}, oneWayMs);
+					}
 				}
 			} catch {
 				/* cancelled — expected at the end of a case */
@@ -661,12 +670,7 @@ async function runPair(
 	);
 	const b = sameInstance
 		? a
-		: await startInstance(
-				recipientKind,
-				() => (aPort === 0 ? [] : [aPort]),
-				false,
-				hiddenRttMs
-			);
+		: await startInstance(recipientKind, () => (aPort === 0 ? [] : [aPort]), false, hiddenRttMs);
 	aPort = a.port;
 	bPort = b.port;
 
@@ -789,21 +793,23 @@ async function runPair(
 			typeof parsed.peer === 'string' &&
 			(parsed.peer as string).length > 0 &&
 			typeof parsed.order === 'string' &&
-			// `at` is the fourth field, and the only one whose SEMANTICS were
-			// never checked on either side. On a LIVE ping it must be null: the
-			// browser reads a number here as "this is a replay, and it happened
-			// then", and compares it against the reader's cursor. A live ping
-			// carrying a time — the arrival time, say — would be indistinguishable
-			// from a replay, and a replay carrying null would be dated to the
-			// moment it was read and re-light a badge the user had cleared. The
-			// browser's half of this is in globalChatActivityStream.test.ts.
-			parsed.at === null;
+			// `at` is the fourth field: the message's own time (its block time,
+			// or the sender's signed time), a number on a live ping as on a
+			// replay since v1.24.1. The browser dates the badge by it and
+			// compares it with the reader's cursor and the durable row, both on
+			// the chain's clock. A live ping without it was dated by the
+			// browser's clock on arrival, which the durable row never reaches,
+			// and a message read on another device stayed on the badge; a frame
+			// carrying the ARRIVAL time instead would do the same. The browser's
+			// half of this is in globalChatActivityStream.test.ts.
+			typeof parsed.at === 'number' &&
+			Number.isFinite(parsed.at);
 		if (shapeOk) ok(`${label}: the frame carries exactly the fields the browser parses`);
 		else
 			bad(
 				`${label}: the activity frame does not match what the browser requires`,
 				`got keys [${keys.join(', ')}], expected [${expected.join(', ')}] with inbound:true, ` +
-					`string peer, string order and at:null (got at:${JSON.stringify(parsed.at)}) — ` +
+					`string peer, string order and a numeric at (got at:${JSON.stringify(parsed.at)}) — ` +
 					'see globalChatActivityStream.test.ts'
 			);
 	}
@@ -871,7 +877,13 @@ await runPair('privacy → privacy', 'hidden', 'hidden', false);
 // band, and each run is held to the same floor-and-ceiling check as everything
 // above — the floor is what stops a slow run from passing by not travelling.
 for (const band of HIDDEN_BANDS) {
-	await runPair(`privacy → privacy [${band.label} ${band.rttMs}ms]`, 'hidden', 'hidden', false, band.rttMs);
+	await runPair(
+		`privacy → privacy [${band.label} ${band.rttMs}ms]`,
+		'hidden',
+		'hidden',
+		false,
+		band.rttMs
+	);
 }
 
 // ── HOW MUCH SLOWER A NETWORK COULD GET ─────────────────────────────

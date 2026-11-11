@@ -71,6 +71,8 @@ const enqueue = read(join(ROOT, 'src/indexer/chatPushEnqueue.ts'));
 const migrations = read(join(ROOT, 'src/db/migrations.ts'));
 const schema = readFileSync(join(ROOT, 'src/db/schema.sql'), 'utf8'); // SQL comments kept
 const sw = read(join(WEB, 'src/service-worker.ts'));
+// v1.24.1: the message the SW posts is built by chatPushTabMessage.
+const tabMessage = read(join(WEB, 'src/lib/notifications/chatThread.ts'));
 const globalStream = read(join(WEB, 'src/lib/chat/globalChatActivityStream.ts'));
 
 // ── Dedup ────────────────────────────────────────────────────────────
@@ -190,7 +192,10 @@ scenario('service worker pokes every tab with CHAT_PUSH on push', () => {
 	// lines, so a single-line regex here was a FALSE NEGATIVE (the wiring was
 	// present and working). Flatten before matching.
 	assert(
-		/postMessage\(\s*\{\s*type: 'CHAT_PUSH'/.test(flat(sw)),
+		/postMessage\(\s*\{\s*type: 'CHAT_PUSH'/.test(flat(sw)) ||
+			(/client\.postMessage\(tabMessage\)/.test(sw) &&
+				/tabMessage = chatPushTabMessage\(/.test(sw) &&
+				/type: 'CHAT_PUSH'/.test(tabMessage)),
 		'SW does not postMessage CHAT_PUSH'
 	);
 });

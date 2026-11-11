@@ -141,7 +141,10 @@ check(
 );
 check(
 	'the read endpoint returns the discussion',
-	/SELECT peer_account AS peer, order_permlink, last_read_at/.test(api)
+	// v1.24.1: aliased (r.…), with last_read_at worked out (an ack of a fast copy).
+	/SELECT (?:r\.)?peer_account AS peer, (?:r\.)?order_permlink,[\s\S]{0,1600}?AS last_read_at/.test(
+		api
+	)
 );
 
 // ─── schema + migration ──────────────────────────────────────────────
@@ -208,7 +211,7 @@ check(
 );
 check(
 	'mark-all-read walks discussions',
-	/ackThreadRead\(c\.peer, c\.order\?\.permlink \?\? '', /.test(inbox)
+	/ackThreadRead\(\s*c\.peer,\s*c\.order\?\.permlink \?\? '',/.test(inbox)
 );
 check(
 	'the unread badge counts unread discussions, excluding archived',
@@ -269,7 +272,8 @@ check(
 );
 check(
 	'…and a stale durable row cannot veto a newer push',
-	/landed >= at/.test(unreadMod) || /landed\s*>=\s*at/.test(unreadMod)
+	// v1.24.1: the pending entry is { at, seen } — `at` the message's own time.
+	/landed\s*>=\s*(?:p\.)?at\b/.test(unreadMod)
 );
 check(
 	'the card re-derives when a push lands (reads the tick)',

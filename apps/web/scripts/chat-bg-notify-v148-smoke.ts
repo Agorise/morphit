@@ -30,7 +30,8 @@ const pingBody = m?.[1] ?? '';
 
 check(
 	'the activity-ping handler polls unconditionally (updates the badge even when hidden)',
-	/void poll\(\);/.test(pingBody) && !/document\.hidden/.test(pingBody)
+	// v1.24.1: through pollNow(), which also records when the last poll ran.
+	/(void poll|pollNow)\(\);/.test(pingBody) && !/document\.hidden/.test(pingBody)
 );
 check(
 	'the interval backstop is still present (idle polling stays gated is fine)',

@@ -17,9 +17,9 @@
  * Runs from startAmbientChannels() alongside the title/favicon/badge channels.
  * No live session (locked, or signed out — also by another tab) → count 0, no
  * request: like the activity stream, a poll names the account to the operator,
- * so a remembered name alone never starts one. Polls every 5 s (POLL_MS) and pauses
- * while the tab is hidden; a focus/visibility change forces an immediate poll
- * so a returning user sees a fresh count.
+ * so a remembered name alone never starts one. Polls every 5 s (POLL_MS), about once
+ * a minute while the tab is hidden (HIDDEN_POLL_MS); a focus/visibility change or
+ * a lock/unlock forces an immediate poll so a returning user sees a fresh count.
  */
 
 import { get, writable } from 'svelte/store';
@@ -27,6 +27,7 @@ import { getConversations, getChatReadState } from '$lib/indexer/client';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
 import { hasAnySession } from '$stores/identity';
 import {
+	sanitizeBlockTime,
 	readState,
 	isUnread,
 	mergeRemoteReadState,
@@ -49,10 +50,19 @@ import {
 /** How often to re-poll the conversation list while the tab is visible.
  *  Fastchat target: a peer's ping / new message must surface (inbox green
  *  dot + avatar-menu dot + tab badge) within ~6 s, so poll at 5 s to stay
- *  comfortably under that after request latency. Paused while hidden, so
- *  only foreground tabs poll this often. (A push/SSE feed would make this
- *  sub-second — future optimization; 5 s meets the "6 s max" requirement.) */
+ *  comfortably under that after request latency. A hidden tab polls only
+ *  every HIDDEN_POLL_MS, so only foreground tabs poll this often. (A push/SSE
+ *  feed would make this sub-second — future optimization; 5 s meets the "6 s
+ *  max" requirement.) */
 const POLL_MS = 5_000;
+
+/** v1.24.1 — while the tab is hidden, a poll about this often. The badge must
+ *  follow a read made on another device (the phone) or in another tab, which
+ *  no activity event announces; before, a hidden tab polled only on activity,
+ *  so it showed what had been read elsewhere until it was looked at. Two
+ *  small requests a minute for a background tab, none while locked or signed
+ *  out. */
+export const HIDDEN_POLL_MS = 60_000;
 
 /** Last-fetched conversation list (peer + last_message_at only). Recount
  *  runs against this cache when read-state changes, avoiding a refetch. */
@@ -67,8 +77,8 @@ let convos: ReadonlyArray<{
 }> = [];
 
 /** v1.5.5 — OPTIMISTIC fast-chat overlay: threads a Web Push has told us about
- *  but the indexer hasn't published yet. Keyed `peer\u0000order`, value = when the
- *  push arrived.
+ *  but the indexer hasn't published yet. Keyed `peer\u0000order`; the value is
+ *  a FastPending (the message's time and when its push arrived here).
  *
  *  WHY. `convos` is DB-derived, and the FAST path is deliberately ephemeral: the
  *  head-block tailer emits to SSE and enqueues the push, but it does NOT write
@@ -118,33 +128,56 @@ export function threadIsUnread(
 	lastMessageIsMine: boolean
 ): boolean {
 	if (isUnread(peer, orderPermlink, lastMessageAt, lastMessageIsMine)) return true;
-	const at = fastPending.get(fastKey(peer, orderPermlink));
-	if (at === undefined) return false;
-	if (Date.now() - at > FAST_PENDING_TTL_MS) return false;
+	const p = fastPending.get(fastKey(peer, orderPermlink));
+	if (p === undefined) return false;
+	if (Date.now() - p.seen > FAST_PENDING_TTL_MS) return false;
 	// The durable row landed and already had its say above — don't re-judge it.
 	const landed = new Date(lastMessageAt).getTime();
-	if (Number.isFinite(landed) && landed >= at) return false;
-	return pushUnread(peer, orderPermlink, at);
+	if (Number.isFinite(landed) && landed >= p.at) return false;
+	return pushUnread(peer, orderPermlink, p);
 }
 
 /**
- * Is a pushed message (`at`: when its push reached THIS device, on this
- * device's clock — or its chain time, for a replay) still unread?
+ * Is a pushed message still unread?
  *
- * v1.21.14 full chat audit, W-M3: the read cursor is now a chain time (the
- * newest message seen), never the device clock. A push is dated by the device
- * clock, so it is judged first against when this device last acknowledged
- * the thread — device time against device time — and the stored cursor only
- * when this device has not acknowledged it since the page loaded.
+ * v1.21.14 full chat audit, W-M3: the read cursor is a chain time (the newest
+ * message seen), never the device clock. So the push is judged against this
+ * device's own acknowledgement by when it ARRIVED here (`seen`, device time
+ * against device time), and against the stored cursor by the message's time
+ * (`at`, chain time against chain time).
  */
-function pushUnread(peer: string, orderPermlink: string, at: number): boolean {
+function pushUnread(peer: string, orderPermlink: string, p: FastPending): boolean {
 	const acked = lastLocalAck(peer, orderPermlink);
-	if (acked !== null && acked >= at) return false;
+	if (acked !== null && acked >= p.seen) return false;
 	// A Web Push is inbound by definition — nobody pushes you your own message.
-	return isUnread(peer, orderPermlink, new Date(at).toISOString(), false);
+	return isUnread(peer, orderPermlink, new Date(p.at).toISOString(), false);
 }
 
-const fastPending = new Map<string, number>();
+/**
+ * A thread a push announced. `at`: the newest pushed message's own time — its
+ * block time, or the sender's signed time for a message relayed before its
+ * block (by this instance's broadcast relay or a peer instance's push; never
+ * later than that server's clock) — or, when a push carried
+ * no usable time, when it arrived here. `seen`: when that newest message's
+ * push reached THIS device, on this device's clock.
+ *
+ * v1.24.1 — a live push used to carry no time, so `at` was the device clock
+ * when it arrived: a little later than the message's block time, and so never
+ * reached by the durable row's `last_message_at`. A message read ELSEWHERE
+ * (the phone, another tab: neither sets this tab's local ack) then stayed
+ * counted here against the chain-time cursor for the whole TTL, and on a
+ * hidden tab until it was looked at — the owner's "(2)" with nothing new in
+ * the inbox. Pushes now carry the message's time (the Web Push's `eventAt`,
+ * the live activity ping's `at`), so the durable row reconciles them, and the
+ * read cursor judges them, on the chain's clock.
+ */
+interface FastPending {
+	at: number;
+	seen: number;
+	/** `at` came with the push (a chain-side time), not from this device. */
+	timed: boolean;
+}
+const fastPending = new Map<string, FastPending>();
 
 /** Discard an optimistic entry once the real conversation catches up or it goes
  *  stale. Generous vs the ~60s durable lag, since the cost of holding one is a
@@ -160,20 +193,27 @@ function fastKey(peer: string, order: string): string {
  * v1.5.5 — record that a Web Push announced a message on (peer, order), and
  * light the badge NOW rather than waiting for the indexer.
  *
- * Called from the CHAT_PUSH service-worker handler. Idempotent; the newest
- * timestamp wins.
+ * Called from the CHAT_PUSH service-worker handler and the activity stream.
+ * Idempotent: the newest message wins, so the same message announced twice
+ * (the stream and the Web Push), or an older one announced late, changes
+ * nothing.
  */
 export function noteFastChatPush(peer: string, orderPermlink: string, atMs?: number): void {
 	if (!peer) return;
-	// v1.7.5 — `atMs` is the message's real time, for REPLAYED events (a browser
-	// that was closed when the message landed; see chatActivityStream's replay).
-	// Defaulting to now() is right for a live push — it just arrived — but wrong
-	// for a replay: it would date a 4-minute-old message to this instant, push it
-	// past the user's read cursor, and light a badge for something they already
-	// read. Live callers pass nothing and keep the old behaviour.
-	fastPending.set(fastKey(peer, orderPermlink), atMs ?? Date.now());
+	// `atMs` is the message's own time (v1.7.5 for replays, v1.24.1 for every
+	// push). Dating a message to its arrival here would put it past the user's
+	// read cursor and keep it out of the durable row's reach. A missing,
+	// invalid or far-future time falls back to now.
+	const now = Date.now();
+	const told = atMs === undefined ? null : sanitizeBlockTime(new Date(atMs), now);
+	const at = told === null ? now : told.getTime();
+	const key = fastKey(peer, orderPermlink);
+	const prev = fastPending.get(key);
+	if (prev === undefined || at > prev.at) {
+		fastPending.set(key, { at, seen: now, timed: told !== null });
+	}
 	// A message newer than a fast copy read here is not that copy's chain twin.
-	noteThreadActivity(peer, orderPermlink, atMs);
+	noteThreadActivity(peer, orderPermlink, told === null ? undefined : at);
 	fastPendingTick.update((n) => n + 1);
 	recount();
 }
@@ -195,14 +235,21 @@ export function noteFastChatPush(peer: string, orderPermlink: string, atMs?: num
  * (with full order details) takes its place. Peer is stored lower-cased in the
  * key; Blurt account names are already lower-case, so nothing is lost.
  */
-export function listFastPending(): { peer: string; orderPermlink: string; atMs: number }[] {
-	const out: { peer: string; orderPermlink: string; atMs: number }[] = [];
-	for (const [key, atMs] of fastPending) {
+export function listFastPending(): {
+	peer: string;
+	orderPermlink: string;
+	atMs: number;
+	/** `atMs` is the message's own time (v1.24.1), usable as a read ack;
+	 *  false when the push carried none and it is this device's clock. */
+	timed: boolean;
+}[] {
+	const out: { peer: string; orderPermlink: string; atMs: number; timed: boolean }[] = [];
+	for (const [key, { at: atMs, timed }] of fastPending) {
 		const sep = key.indexOf('\u0000');
 		if (sep < 0) continue;
 		const peer = key.slice(0, sep);
 		const orderPermlink = key.slice(sep + '\u0000'.length);
-		if (peer) out.push({ peer, orderPermlink, atMs });
+		if (peer) out.push({ peer, orderPermlink, atMs, timed });
 	}
 	return out;
 }
@@ -231,7 +278,12 @@ function badgeEligible(
 /** Recompute the chat badge from the cached conversations + current
  *  read-state. Cheap; safe to call on every read-state / folder change. */
 function recount(): void {
-	const me = getUserBlurtAccount();
+	// v1.24.1 — the same gate as poll(): a locked tab shows no chat count. A
+	// push used to reach here with the REMEMBERED name while the tab was
+	// locked, where the read state is empty, so every message pushed while the
+	// user slept counted — read on the phone or not — until the tab was looked
+	// at and the poll found no session.
+	const me = get(hasAnySession) ? getUserBlurtAccount() : null;
 	if (!me) {
 		setCategoryCount('chat', 0);
 		return;
@@ -285,8 +337,9 @@ function recount(): void {
 	// the real conversation carries the message (its last_message_at has caught
 	// up past the push), or once it's simply stale.
 	const now = Date.now();
-	for (const [key, at] of fastPending) {
-		if (now - at > FAST_PENDING_TTL_MS) {
+	for (const [key, p] of fastPending) {
+		const at = p.at;
+		if (now - p.seen > FAST_PENDING_TTL_MS) {
 			fastPending.delete(key);
 			continue;
 		}
@@ -314,19 +367,27 @@ function recount(): void {
 		) {
 			continue;
 		}
-		// Judge it by the SAME read-state rule as a real conversation, treating
-		// the push's arrival as the message time. Without this the entry would
+		// Judge it by the SAME read-state rule as a real conversation, the
+		// message's time standing for its row's (pushUnread). Without this the entry would
 		// count unconditionally and OPENING the thread wouldn't clear the badge
 		// — it would sit lit until the TTL expired.
 		// A Web Push is inbound by definition — nobody pushes you your own message
 		// — so `false` here is a statement of fact, not a default.
-		if (!pushUnread(peer, order, at)) {
+		if (!pushUnread(peer, order, p)) {
 			fastPending.delete(key);
 			continue;
 		}
 		n++;
 	}
 	setCategoryCount('chat', n);
+}
+
+/** For tests only: forget everything this module holds between tests. */
+export function __resetChatUnreadForTests(): void {
+	fastPending.clear();
+	convos = [];
+	blocksLoadedFor = null;
+	lastPolledAccount = null;
 }
 
 /**
@@ -339,9 +400,17 @@ function recount(): void {
  * device's own "seen" mark is set, which clears the push badge and moves no
  * cursor.
  */
-export function ackThreadRead(peer: string, orderPermlink: string, lastMessageAt?: string): void {
+export function ackThreadRead(
+	peer: string,
+	orderPermlink: string,
+	lastMessageAt?: string,
+	/** v1.24.1 — the time is a pushed message's own (its fast copy's), not
+	 *  its row's: cover the row here as the thread view does (readState
+	 *  fastCopyAcks). In memory only, as that cover is. */
+	fastCopy = false
+): void {
 	const ack = lastMessageAt !== undefined ? readAckTimestamp(new Date(lastMessageAt)) : null;
-	if (ack !== null) markConversationRead(peer, orderPermlink, ack);
+	if (ack !== null) markConversationRead(peer, orderPermlink, ack, { newestIsFast: fastCopy });
 	else markSeenLocally(peer, orderPermlink);
 }
 
@@ -366,8 +435,20 @@ export function markAllChatRead(): void {
 		if (!isUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true)) continue;
 		ackThreadRead(c.peer, order, c.last_message_at);
 	}
-	// Threads only a push has announced so far (no row yet): seen here.
-	for (const { peer, orderPermlink } of listFastPending()) ackThreadRead(peer, orderPermlink);
+	// Threads only a push has announced so far (no row yet), and still counted:
+	// acked at the pushed message's own time when the push carried it (v1.24.1:
+	// a read cursor on this device, with the fast-copy cover so its row stays
+	// read here when it lands), else seen here only. Never one the badge does
+	// not count (archived, hidden, blocked): its cursor may be newer than the
+	// push. (One read already is not here: the read recounted, and dropped it.)
+	for (const [key, p] of fastPending) {
+		const sep = key.indexOf('\u0000');
+		const peer = key.slice(0, sep);
+		const order = key.slice(sep + 1);
+		if (!badgeEligible({ peer, order: order ? { permlink: order } : null }, meLc, hidden, blocked))
+			continue;
+		ackThreadRead(peer, order, p.timed ? new Date(p.at).toISOString() : undefined, true);
+	}
 	recount();
 }
 
@@ -447,10 +528,18 @@ async function poll(): Promise<void> {
 export function startChatUnreadChannel(): () => void {
 	if (typeof window === 'undefined') return () => {};
 
-	void poll();
+	let lastPollAt = 0;
+	const pollNow = (): void => {
+		lastPollAt = Date.now();
+		void poll();
+	};
+	pollNow();
 
+	// A hidden tab: about once a minute (each poll recounts, which also ends a
+	// push past its TTL). Background timers are batched to the minute in
+	// Chrome, so the threshold leaves one tick of slack.
 	const timer = window.setInterval(() => {
-		if (!document.hidden) void poll();
+		if (!document.hidden || Date.now() - lastPollAt >= HIDDEN_POLL_MS - POLL_MS) pollNow();
 	}, POLL_MS);
 
 	// Reading a conversation (markConversationRead) writes read-state, which
@@ -470,8 +559,19 @@ export function startChatUnreadChannel(): () => void {
 	const unsubHidden = hiddenAccounts.subscribe(() => recount());
 	const unsubBlocked = blockedAccounts.subscribe(() => recount());
 
+	// v1.24.1 — a lock (the idle timeout, or another tab) drops the count at
+	// once and an unlock brings a fresh one; a hidden tab used to notice
+	// neither until it was looked at. (Fires once on subscribe; the poll above
+	// covers that one.)
+	let sessionSeen = get(hasAnySession);
+	const unsubSession = hasAnySession.subscribe((live) => {
+		if (live === sessionSeen) return;
+		sessionSeen = live;
+		pollNow();
+	});
+
 	const onVisible = (): void => {
-		if (!document.hidden) void poll();
+		if (!document.hidden) pollNow();
 	};
 	document.addEventListener('visibilitychange', onVisible);
 
@@ -485,11 +585,12 @@ export function startChatUnreadChannel(): () => void {
 	// is that the favicon/title badge updates while the user is on another tab so
 	// they see there's a new message when they glance back. The ping is
 	// event-driven (fires only on a real new message for this account), so a poll
-	// per ping is cheap even when hidden. The interval backstop above stays gated
-	// to avoid idle polling; the event stream covers the hidden-tab case.
+	// per ping is cheap even when hidden. The interval backstop above polls a
+	// hidden tab only about once a minute (v1.24.1: a read on another device
+	// sends no ping); the event stream covers a hidden tab's new messages.
 	const stopActivityStream = startGlobalChatActivity();
 	const unsubActivity = subscribeChatActivity(() => {
-		void poll();
+		pollNow();
 	});
 	// v1.5.5 — a Web Push names the thread it's about, so light that thread's
 	// badge immediately instead of waiting for the indexer. The poll above is
@@ -524,9 +625,8 @@ export function startChatUnreadChannel(): () => void {
 		// push's own ~6s latency, and both happen wherever the user is standing —
 		// this is an AMBIENT channel, not the chat page's.
 		//
-		// Wall-clock is the honest activity time here: the push carries no message
-		// timestamp, and it means "a message just landed", so now ≈ message time to
-		// within the push latency. `resurrectArchivedOnNewActivity` only acts when
+		// The activity time is the message's own (v1.24.1: every push carries it;
+		// now, when one carries none). `resurrectArchivedOnNewActivity` only acts when
 		// the activity POSTDATES the archive, so a thread archived after its last
 		// message still stays put — the property that keeps the Archived tab from
 		// dumping itself into the Inbox.
@@ -540,9 +640,14 @@ export function startChatUnreadChannel(): () => void {
 		// resurrect only acts when activity POSTDATES the archive, and the badge is
 		// judged against the read cursor — so dating an old message to now() would
 		// wrongly un-archive a thread the user archived afterwards, and light a
-		// badge they'd already cleared. Live pushes pass nothing and mean "now",
-		// which for them is true to within the push latency.
-		const atIso = new Date(atMs ?? Date.now()).toISOString();
+		// badge they'd already cleared. The archive's own time is the later of
+		// this device's clock and the thread's newest block time (chatFolders
+		// watermark); on a clock running fast that can hold a new message back
+		// here, but the activity stream has already restored a pushed thread
+		// (globalChatActivityStream restoreThread). An invalid or far-future
+		// time is not used (it would also throw here).
+		const told = atMs === undefined ? null : sanitizeBlockTime(new Date(atMs));
+		const atIso = (told ?? new Date()).toISOString();
 		resurrectArchivedOnNewActivity([{ peer, orderPermlink: order, lastMessageAt: atIso }]);
 		noteFastChatPush(peer, order, atMs);
 	});
@@ -553,6 +658,7 @@ export function startChatUnreadChannel(): () => void {
 		unsubFolders();
 		unsubHidden();
 		unsubBlocked();
+		unsubSession();
 		unsubFastPush();
 		document.removeEventListener('visibilitychange', onVisible);
 		unsubActivity();

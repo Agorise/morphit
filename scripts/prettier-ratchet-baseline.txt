@@ -29,7 +29,6 @@ apps/indexer/scripts/disabled-assets-parse-smoke.ts
 apps/indexer/scripts/disabled-payment-methods-parse-smoke.ts
 apps/indexer/scripts/dns-rebinding-defense-smoke.ts
 apps/indexer/scripts/explorer-urls-smoke.ts
-apps/indexer/scripts/fastchat-instance-matrix-smoke.ts
 apps/indexer/scripts/fastchat-three-leg-smoke.ts
 apps/indexer/scripts/fastpath-order-scope-smoke.ts
 apps/indexer/scripts/federated-price-smoke.ts

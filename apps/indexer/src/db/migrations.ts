@@ -1457,6 +1457,28 @@ COMMENT ON COLUMN indexer_state.repeat_trades_through_block IS
 COMMENT ON COLUMN indexer_state.review_signals_redo_due IS
     'Signals B and D to be looked at again under the v1.23.5 rule at the next start (v73).';
 `
+	},
+	{
+		version: 74,
+		description:
+			"chat_messages.sent_at (v1.24.1): the sender's signed time, so a read ack of a message's fast copy also covers its row. Additive.",
+		sql: `
+-- ─── v74: chat_messages.sent_at (the sender's signed time) ───
+-- (v1.24.1.) A message relayed by an instance before its block (the fast
+-- path: this instance's broadcast relay, or a peer instance's push) is shown
+-- dated by the sender's signed time, read off the transaction's expiration
+-- (sentAtFromExpiry, indexer/chatSentAt.ts); its row here, written when its block
+-- is applied, is dated by the block. A device that read the fast copy acks
+-- its signed time, earlier than the block time, so every other device of the
+-- reader showed the thread unread once the row landed. sent_at is that signed
+-- time, by the same rule (capped at the block time), so the read-state answer
+-- can recognise such an ack and give the block time instead
+-- (api/chatReadState.ts). NULL for a message applied without its transaction
+-- (a replay from the event log) and for rows indexed before v74.
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+COMMENT ON COLUMN chat_messages.sent_at IS
+    'The sender''s signed time (transaction expiration minus the client''s 60 s lead, capped at the block time), v74; NULL when not known.';
+`
 	}
 ];
 

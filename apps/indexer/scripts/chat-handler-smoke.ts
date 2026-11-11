@@ -624,12 +624,17 @@ await scenario('#5: bypass-success persists order_permlink on insert', async () 
 	);
 	assertEqual(r, { ok: true }, 'result');
 	const insertQ = mock.queries[3];
-	// Per the v25 column order: sender, recipient, ciphertext,
-	// header, created_at, source_trx_id, order_permlink.
-	const lastParam = insertQ.params[insertQ.params.length - 1];
-	if (lastParam !== 'morphit-2026-05-01-xyz') {
+	// The order_permlink parameter, found by its place in the column list
+	// (v25 put it last; v74 added sent_at after it).
+	const cols = /INSERT INTO chat_messages \(([^)]*)\)/
+		.exec(insertQ.text)?.[1]
+		?.split(',')
+		.map((c) => c.trim());
+	const at = cols?.indexOf('order_permlink') ?? -1;
+	const permlinkParam = at >= 0 ? insertQ.params[at] : undefined;
+	if (permlinkParam !== 'morphit-2026-05-01-xyz') {
 		throw new Error(
-			`expected order_permlink to be persisted as last param; got ${JSON.stringify(lastParam)}`
+			`expected order_permlink to be persisted; got ${JSON.stringify(permlinkParam)}`
 		);
 	}
 });

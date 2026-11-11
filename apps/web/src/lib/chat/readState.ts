@@ -180,29 +180,41 @@ export function markConversationRead(
  * the expiry. Without this, the chain copy's `last_message_at` lit the badge
  * and the inbox border again for a message already read. A different message
  * on the thread reaches this device as a push or live ping, which cancels the
- * cover (noteThreadActivity). In memory only: a reload forgets it.
+ * cover (noteThreadActivity). In memory only: a reload forgets it. Since
+ * v1.24.1 the indexer answers an ack of a fast copy that it receives on chain
+ * (the thread view's) as the message's block time (/v1/chat-read-state), which
+ * every device then follows.
  */
 const fastCopyAcks = new Map<string, number>();
 /** How long after a fast copy's time its chain copy can land: the 60 s
  *  expiry the client signs, plus a little for the stamp's rounding. */
 export const FAST_COPY_CHAIN_WINDOW_MS = 75_000;
 /** A push or live ping for this thread (`atMs`: the message's own time, when
- *  known). Anything newer than the fast copy acknowledged — or of unknown time
- *  — ends that copy's cover. */
+ *  known). Anything not older than the fast copy acknowledged — or of unknown
+ *  time — ends that copy's cover.
+ *
+ *  v1.24.1 — a push of the SAME time ends it too. Until then only a replay
+ *  carried a time and a live push none (so every live push ended the cover);
+ *  now every push does, and one at the read message's time is either that
+ *  message again or another signed in the same head block, which no time can
+ *  tell apart. Keeping the cover would hide the second for good on this
+ *  device; ending it can show the first as unread here until the indexer's
+ *  answer to the ack (its block time, /v1/chat-read-state) arrives. */
 export function noteThreadActivity(peer: string, orderPermlink: string, atMs?: number): void {
 	const key = threadKey(peer, orderPermlink);
 	const at = fastCopyAcks.get(key);
 	if (at === undefined) return;
-	if (atMs === undefined || !(atMs <= at)) fastCopyAcks.delete(key);
+	if (atMs === undefined || !(atMs < at)) fastCopyAcks.delete(key);
 }
 
 /**
  * When THIS device last acknowledged a thread, on THIS device's clock (in
  * memory only). v1.21.14 full chat audit, W-M3: the stored cursor is a chain
  * time (the newest message seen), never the device clock — but a fast-push
- * badge (chatUnread) is dated by the device clock when the push arrived. Such
- * a badge is judged against this, device time against device time, so neither
- * clock's skew decides whether a thread reads as unread.
+ * badge (chatUnread) also records when the push arrived, on the device clock.
+ * That is judged against this, device time against device time, and the
+ * message's own time against the cursor, so neither clock's skew decides
+ * whether a thread reads as unread.
  */
 const localAcks = new Map<string, number>();
 export function lastLocalAck(peer: string, orderPermlink: string): number | null {

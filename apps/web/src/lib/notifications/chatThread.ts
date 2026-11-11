@@ -46,6 +46,31 @@ export function chatThreadFromClickPath(
 	}
 }
 
+/**
+ * What the service worker tells every open tab about a chat or order push
+ * (v1.5.0): the thread it names, so the tab lights that thread's badge at once,
+ * and (v1.24.1) the message's own time, the push's `eventAt` (its block time,
+ * or the sender's signed time), so the tab reconciles that badge with the
+ * durable row and the read cursor on the chain's clock. Metadata only, never
+ * the notification's content. PURE.
+ */
+export function chatPushTabMessage(
+	category: 'order' | 'chat' | 'feedback',
+	clickPath: string,
+	eventAt: unknown
+): { type: 'CHAT_PUSH'; category: string; peer?: string; order?: string; at?: number } {
+	// Both categories name a chat thread; only the ?order scope differs.
+	const thread =
+		category === 'chat' || category === 'order' ? chatThreadFromClickPath(clickPath) : null;
+	const at = typeof eventAt === 'string' ? Date.parse(eventAt) : NaN;
+	return {
+		type: 'CHAT_PUSH',
+		category,
+		...(thread ? { peer: thread.peer, order: thread.order } : {}),
+		...(Number.isFinite(at) ? { at } : {})
+	};
+}
+
 /** True when both paths name a chat thread with the SAME peer. Compares the
  *  PEER only, deliberately: a notification about someone you are already
  *  talking to is noise whichever order thread it arrived under. */

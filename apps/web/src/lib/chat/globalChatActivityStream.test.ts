@@ -230,13 +230,45 @@ describe('globalChatActivityStream — an inbound ping becomes an inbox card', (
 	});
 
 	it('falls back to now() when the indexer sends no time at all', async () => {
-		// The live case: `at: null`. There is no original time to carry, so the
-		// moment of arrival IS the message's time — and a card with no time cannot
-		// be compared against a read cursor at all.
+		// An indexer older than v1.24.1 sent its live pings with `at: null`.
+		// With no original time to carry, the moment of arrival stands in for the
+		// message's time — a card with no time cannot be compared against a read
+		// cursor at all.
 		const before = Date.now();
 		const { pending } = await startAndDeliver(INDEXER_FRAME);
 		const hit = pending.find((p) => p.peer === INDEXER_FRAME.peer);
 		expect(hit?.atMs).toBeGreaterThanOrEqual(before);
 		expect(hit?.atMs).toBeLessThanOrEqual(Date.now());
+	});
+
+	// v1.24.1 — the Web Push path. The service worker forwards the push's
+	// `eventAt` as `at`; dropping it here dated every pushed message by this
+	// device's clock on arrival, which the durable row never reaches, and a
+	// message read on the phone stayed on a background tab's badge.
+	it("files a Web Push with the message's own time, as the service worker forwards it", async () => {
+		const sw = new EventTarget();
+		const had = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
+		Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: sw });
+		try {
+			const { startGlobalChatActivity, subscribeFastPush } = await import(
+				'./globalChatActivityStream'
+			);
+			const { listFastPending, noteFastChatPush } = await import('$lib/notifications/chatUnread');
+			const unsub = subscribeFastPush((peer, order, atMs) => noteFastChatPush(peer, order, atMs));
+			stop = startGlobalChatActivity();
+			const at = Date.now() - 45_000;
+			sw.dispatchEvent(
+				new MessageEvent('message', {
+					data: { type: 'CHAT_PUSH', category: 'order', peer: 'frank', order: 'sell-9', at }
+				})
+			);
+			unsub();
+			const hit = listFastPending().find((p) => p.peer === 'frank' && p.orderPermlink === 'sell-9');
+			expect(hit, 'the push must still file a pending card').toBeDefined();
+			expect(hit?.atMs, 'the message time must be carried through').toBe(at);
+		} finally {
+			if (had) Object.defineProperty(navigator, 'serviceWorker', had);
+			else delete (navigator as unknown as Record<string, unknown>).serviceWorker;
+		}
 	});
 });

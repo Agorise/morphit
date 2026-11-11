@@ -127,6 +127,7 @@ describe('chatActivityStreamRoute', () => {
 		// notify this person" — and an INBOUND ping now requires it, exactly as
 		// the web push and the cold-start replay always have. See the case below
 		// for what happens without it.
+		const blockTime = new Date(Date.now() - 2_000);
 		chatEventBus.emitFast({
 			lo: 'alice',
 			hi: 'erin',
@@ -134,7 +135,7 @@ describe('chatActivityStreamRoute', () => {
 			recipient: 'alice',
 			ciphertext: 'SECRETCIPHERTEXTBLOB==',
 			header: { client_tag: 'x' },
-			createdAt: new Date(),
+			createdAt: blockTime,
 			clientTag: 'x',
 			orderPermlink: null,
 			replayable: true
@@ -142,6 +143,10 @@ describe('chatActivityStreamRoute', () => {
 
 		const frame = await readUntil(reader, 'chat_activity');
 		expect(frame).toContain('"peer":"erin"');
+		// v1.24.1 — with the message's own time, as the replay sends it: a live
+		// ping dated by the browser's clock on arrival was never reached by the
+		// durable row, so a message read on another device stayed on the badge.
+		expect(frame).toContain(`"at":${blockTime.getTime()}`);
 		// The ciphertext from the fast event must NOT appear on the wire.
 		expect(frame).not.toContain('SECRETCIPHERTEXTBLOB');
 		expect(frame).not.toContain('ciphertext');

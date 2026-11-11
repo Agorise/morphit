@@ -94,11 +94,14 @@ vi.mock('$blurt/ops/profile', async (importOriginal) => {
 	return { ...actual, getUserBlurtAccount: () => ME };
 });
 
-// A live session (polling names the account, so it needs one).
+// A live session (polling names the account, so it needs one); a test can lock it.
+const session = vi.hoisted(() => ({ live: null as null | { set(v: boolean): void } }));
 vi.mock('$stores/identity', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$stores/identity')>();
-	const { readable } = await import('svelte/store');
-	return { ...actual, hasAnySession: readable(true) };
+	const { writable } = await import('svelte/store');
+	const live = writable(true);
+	session.live = live;
+	return { ...actual, hasAnySession: live };
 });
 
 vi.mock('$lib/chat/blocks', async () => {
@@ -114,10 +117,17 @@ vi.mock('$lib/utils/hiddenAccounts', async () => {
 	return { hiddenAccounts: writable(new Set<string>()) };
 });
 
-import { getConversations } from '$lib/indexer/client';
+import { getConversations, getChatReadState } from '$lib/indexer/client';
 import { setPersonStorageTier } from '$lib/storage/personStorage';
-import { markConversationRead } from '$lib/chat/readState';
-import { startChatUnreadChannel, listFastPending, noteFastChatPush } from './chatUnread';
+import { clearReadState, markConversationRead, getLastVisited } from '$lib/chat/readState';
+import {
+	startChatUnreadChannel,
+	listFastPending,
+	noteFastChatPush,
+	__resetChatUnreadForTests,
+	threadIsUnread,
+	markAllChatRead
+} from './chatUnread';
 import { unreadCount } from './index';
 import {
 	archiveThread,
@@ -293,5 +303,311 @@ describe('cp514 — listFastPending round-trips a fast push (optimistic inbox ca
 		const hit = listFastPending().find((p) => p.peer === peer);
 		expect(hit).toBeDefined();
 		expect(hit?.orderPermlink).toBe('');
+	});
+});
+
+// ── v1.24.1 — the morning "(2)" ──────────────────────────────────────────────
+// Owner: "every morning … that browser tab says that i have 2 notifications. i
+// click on that tab … the badge disappears and there's nothing new in my inbox."
+//
+// Three causes, each with its test below:
+//  1. A live push carried no time, so it was dated by THIS device's clock on
+//     arrival: later than the message's block time, so never reached by the
+//     durable row's `last_message_at`. A message read ELSEWHERE (the phone,
+//     another tab) stayed counted against the chain-time cursor until the TTL.
+//     Pushes now carry the message's time (the plumbing is tested where it is
+//     sent: the service worker, the activity stream, the indexer's ping).
+//  2. A hidden tab polled and recounted only on activity, so neither a read
+//     elsewhere nor the TTL's end reached it until it was looked at.
+//  3. A locked tab (the idle timeout) still counted pushes, against an empty
+//     read state; looking at it ran the poll, which found no session: 0.
+describe('v1.24.1 — a background or locked tab shows only what is unread', () => {
+	let stop: (() => void) | null = null;
+	const T0 = '2026-11-09T20:00:00.000Z'; // an old message, read
+	const T1 = '2026-11-10T03:00:00.000Z'; // tonight's first message (chain time)
+	const T2 = '2026-11-10T03:00:30.000Z'; // and its second
+	const ms = (iso: string): number => new Date(iso).getTime();
+	const plus = (iso: string, s: number): string => new Date(ms(iso) + s * 1000).toISOString();
+
+	function durable(lastMessageAt: string) {
+		vi.mocked(getConversations).mockResolvedValue({
+			ok: true,
+			data: {
+				items: [
+					{
+						peer: PEER,
+						order: { permlink: ORDER },
+						last_message_at: lastMessageAt,
+						last_message_is_mine: false
+					}
+				]
+			}
+		} as never);
+	}
+	function readElsewhere(at: string) {
+		vi.mocked(getChatReadState).mockResolvedValue({
+			ok: true,
+			data: { items: [{ peer: PEER, order_permlink: ORDER, last_read_at: at }] }
+		} as never);
+	}
+	function hide(hidden: boolean) {
+		Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+		Object.defineProperty(document, 'visibilityState', {
+			configurable: true,
+			get: () => (hidden ? 'hidden' : 'visible')
+		});
+	}
+	async function start(atIso: string) {
+		vi.setSystemTime(ms(atIso));
+		stop = startChatUnreadChannel();
+		await vi.advanceTimersByTimeAsync(0);
+	}
+	/** A push for a message of chain time `msgIso`, reaching this device `lagMs` later. */
+	function push(msgIso: string | null, lagMs = 3_000, from?: string) {
+		vi.setSystemTime(ms(from ?? msgIso ?? T1) + lagMs);
+		fastPushListener!(PEER, ORDER, msgIso === null ? undefined : ms(msgIso));
+	}
+	const chat = (): number => get(unreadCount).chat;
+
+	beforeEach(() => {
+		localStorage.clear();
+		setPersonStorageTier('local');
+		clearChatFolders();
+		__reloadChatFolders();
+		fastPushListener = null;
+		__resetChatUnreadForTests();
+		clearReadState();
+		vi.useFakeTimers();
+		durable(T0);
+		readElsewhere(T0);
+	});
+
+	afterEach(() => {
+		stop?.();
+		stop = null;
+		hide(false);
+		session.live!.set(true);
+		vi.useRealTimers();
+		vi.mocked(getConversations).mockReset();
+		vi.mocked(getChatReadState).mockReset();
+	});
+
+	it('1. a message read on another device clears once its durable row lands', async () => {
+		await start(T0);
+		push(T1);
+		expect(chat()).toBe(1);
+		durable(T1);
+		readElsewhere(T1);
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(chat()).toBe(0);
+	});
+
+	it('1b. …and so does one only the push knew of, read elsewhere before its row lands', async () => {
+		await start(T0);
+		push(T1);
+		readElsewhere(T1);
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(chat()).toBe(0);
+	});
+
+	it('2. a hidden tab learns of a read made elsewhere within about a minute', async () => {
+		await start(T0);
+		hide(true);
+		push(T1);
+		expect(chat()).toBe(1);
+		durable(T1);
+		readElsewhere(T1);
+		await vi.advanceTimersByTimeAsync(2 * 60_000);
+		expect(chat()).toBe(0);
+	});
+
+	it('2b. a hidden tab drops a push its records never confirm, once its 10 minutes end', async () => {
+		await start(T0);
+		hide(true);
+		push(null);
+		expect(chat()).toBe(1);
+		// The poll is answered with the same old row: nothing for it to reconcile.
+		await vi.advanceTimersByTimeAsync(11 * 60_000);
+		expect(chat()).toBe(0);
+	});
+
+	it('2c. control: an unread message stays on the hidden tab', async () => {
+		await start(T0);
+		hide(true);
+		push(T1);
+		durable(T1);
+		await vi.advanceTimersByTimeAsync(2 * 60_000);
+		expect(chat()).toBe(1);
+	});
+
+	it('3. a locked tab counts no push, the lock clears the count at once, unlock brings it back', async () => {
+		await start(T0);
+		hide(true);
+		push(T1);
+		expect(chat()).toBe(1);
+		session.live!.set(false);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(chat()).toBe(0);
+		push(T2);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(chat()).toBe(0);
+		session.live!.set(true);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(chat(), 'the message pushed while locked is unread').toBe(1);
+	});
+
+	it('a second message stays lit when the first one’s row lands (read here)', async () => {
+		await start(T0);
+		push(T1);
+		markConversationRead(PEER, ORDER, new Date(T1)); // read here
+		expect(chat()).toBe(0);
+		push(T2);
+		expect(chat()).toBe(1);
+		durable(T1); // the first message's row: the second is not in it
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(chat()).toBe(1);
+		durable(T2);
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(chat(), 'now judged by its own row').toBe(1);
+	});
+
+	it('an older message announced late does not pull the newer one back', async () => {
+		await start(T0);
+		push(T2);
+		push(T1, 5_000, T2); // T1's Web Push arrives after T2's ping
+		durable(T1);
+		readElsewhere(T1); // the first one read on the phone, not the second
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(chat()).toBe(1);
+	});
+
+	it('a push delivered hours late (a computer waking) for a message already read lights nothing', async () => {
+		durable(T1);
+		readElsewhere(T1);
+		await start(T1);
+		push(T1, 3 * 60 * 60_000);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(chat()).toBe(0);
+	});
+
+	it('a device clock running fast still lights the badge, and a read here still clears it', async () => {
+		// This device is 15 minutes ahead of the chain. The read here happens
+		// before the message (device time), so it must not cover it; the 10
+		// minutes are counted on this device's clock from the push's arrival.
+		const SKEW = 15 * 60_000;
+		await start(T0);
+		vi.setSystemTime(ms(T1) - 60_000 + SKEW);
+		markConversationRead(PEER, ORDER, new Date(T0));
+		push(T1, 3_000 + SKEW);
+		expect(chat()).toBe(1);
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(chat()).toBe(1);
+		markConversationRead(PEER, ORDER, new Date(T1));
+		expect(chat()).toBe(0);
+	});
+
+	it('a far-future time is not trusted: the push still ends after 10 minutes', async () => {
+		await start(T0);
+		hide(true);
+		vi.setSystemTime(ms(T1));
+		fastPushListener!(PEER, ORDER, ms(T1) + 30 * 24 * 60 * 60_000);
+		expect(chat()).toBe(1);
+		await vi.advanceTimersByTimeAsync(11 * 60_000);
+		expect(chat()).toBe(0);
+	});
+
+	it('a time too large to be a date does not break the count', async () => {
+		await start(T0);
+		vi.setSystemTime(ms(T1));
+		fastPushListener!(PEER, ORDER, 1e16);
+		expect(chat()).toBe(1);
+	});
+
+	// The inbox card asks threadIsUnread, the badge recount(): the same rule.
+	const card = (lastMessageAt: string): boolean =>
+		threadIsUnread(PEER, ORDER, lastMessageAt, false);
+
+	it('the card: a message read on another device is not unread, before or after its row', async () => {
+		await start(T0);
+		push(T1);
+		expect(card(T0)).toBe(true);
+		readElsewhere(T1);
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(card(T0), 'judged by the read cursor while only the push knows it').toBe(false);
+		expect(card(T1), 'and by its row once it lands').toBe(false);
+	});
+
+	it('the card: a device clock running fast, and a duplicate after a read here', async () => {
+		const SKEW = 15 * 60_000;
+		await start(T0);
+		vi.setSystemTime(ms(T1) - 60_000 + SKEW);
+		markConversationRead(PEER, ORDER, new Date(T0));
+		push(T1, 3_000 + SKEW);
+		await vi.advanceTimersByTimeAsync(9 * 60_000);
+		expect(card(T0), 'still within its 10 minutes on this clock').toBe(true);
+		// Read here, as the thread view acks it: the copy's own time.
+		markConversationRead(PEER, ORDER, new Date(T1), { newestIsFast: true });
+		expect(card(T0)).toBe(false);
+		// The same message announced again a moment later (its Web Push after
+		// its live ping): it must not count as news.
+		vi.setSystemTime(Date.now() + 2_000);
+		fastPushListener!(PEER, ORDER, ms(T1));
+		expect(card(T0), 'the same message announced again is still read').toBe(false);
+	});
+
+	it('Mark all read acks a pushed-only thread at the message’s own time, and its row stays read', async () => {
+		await start(T0);
+		push(T1);
+		expect(chat()).toBe(1);
+		markAllChatRead();
+		expect(chat()).toBe(0);
+		expect(getLastVisited(PEER, ORDER), 'a read cursor at the message’s own time').toBe(T1);
+		durable(plus(T1, 4));
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect(chat(), 'its row, a few seconds later, is the message read').toBe(0);
+	});
+
+	it('Mark all read never moves a cursor back over a pushed thread already read', async () => {
+		await start(T0);
+		push(T1);
+		markConversationRead(PEER, ORDER, new Date(T2)); // read further
+		markAllChatRead();
+		expect(getLastVisited(PEER, ORDER)).toBe(T2);
+	});
+
+	it('Mark all read leaves a pushed thread the badge does not count (archived)', async () => {
+		await start(T0);
+		push(T1);
+		archiveThread(PEER, ORDER);
+		const before = getLastVisited(PEER, ORDER);
+		markAllChatRead();
+		expect(getLastVisited(PEER, ORDER)).toBe(before);
+	});
+
+	it('a push before the first poll answers is judged when it does', async () => {
+		vi.setSystemTime(ms(T1) + 3_000);
+		let answer: (v: unknown) => void = () => {};
+		vi.mocked(getConversations).mockReturnValueOnce(
+			new Promise((r) => {
+				answer = r;
+			}) as never
+		);
+		stop = startChatUnreadChannel();
+		fastPushListener!(PEER, ORDER, ms(T1));
+		answer({
+			ok: true,
+			data: {
+				items: [
+					{
+						peer: PEER,
+						order: { permlink: ORDER },
+						last_message_at: T0,
+						last_message_is_mine: false
+					}
+				]
+			}
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(chat()).toBe(1);
 	});
 });

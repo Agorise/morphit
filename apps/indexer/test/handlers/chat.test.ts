@@ -129,6 +129,68 @@ describe('chat handler — layer 1 block-list gate', () => {
 	});
 });
 
+describe('chat handler — v1.24.1 sent_at (migration v74)', () => {
+	// The row carries the sender's signed time by the rule the fast path dates
+	// its copy with, so a read ack of that copy also covers the row
+	// (api/chatReadState.ts).
+	const passing = () =>
+		makeMockClient([
+			{ match: 'FROM blocks', rows: [{ exists: false }] },
+			{ match: 'admitted', rows: [{ admitted: true }] },
+			{ match: 'unique_fan_in', rows: [{ unique_fan_in: '1', per_pair_count: null }] },
+			{ match: 'INSERT INTO chat_messages', rows: [{ id: '1' }] },
+			{ match: 'FROM push_subscriptions', rows: [] }
+		]);
+	const inserted = (mock: ReturnType<typeof makeMockClient>) =>
+		mock.queries.find((q) => q.text.includes('INSERT INTO chat_messages'));
+
+	it('stores the signed time: the expiration less the client’s 60 s lead', async () => {
+		const mock = passing();
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				payload: goodPayload(),
+				blockTime: new Date('2026-11-10T03:00:06Z'),
+				transaction: {
+					ref_block_num: 1,
+					ref_block_prefix: 1,
+					expiration: '2026-11-10T03:01:00',
+					operations: [],
+					signatures: []
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		const q = inserted(mock);
+		expect(q?.text).toContain('sent_at');
+		expect(q?.params[7]).toEqual(new Date('2026-11-10T03:00:00Z'));
+	});
+
+	it('never later than the block, and unknown without the transaction', async () => {
+		const late = passing();
+		await handler(
+			makeCtx({
+				signer: 'alice',
+				payload: goodPayload(),
+				blockTime: new Date('2026-11-10T03:00:06Z'),
+				transaction: {
+					ref_block_num: 1,
+					ref_block_prefix: 1,
+					expiration: '2026-11-10T03:59:00',
+					operations: [],
+					signatures: []
+				}
+			}),
+			late.client
+		);
+		expect(inserted(late)?.params[7]).toEqual(new Date('2026-11-10T03:00:06Z'));
+		const replay = passing();
+		await handler(makeCtx({ signer: 'alice', payload: goodPayload() }), replay.client);
+		expect(inserted(replay)?.params[7]).toBeNull();
+	});
+});
+
 describe('chat handler — layer 2 stranger-fee admission gate', () => {
 	it('rejects stranger_fee_required when pair has no exchange and no fee', async () => {
 		const mock = makeMockClient([

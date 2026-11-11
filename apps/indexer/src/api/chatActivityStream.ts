@@ -226,10 +226,15 @@ export function chatActivityStreamRoute(opts: {
 					// this ping can name the exact thread — which is what lets the client
 					// light the badge NOW instead of re-polling a table that won't know
 					// about this message for another ~45-63s.
+					// v1.24.1 — with the message's time (`createdAt`, as the replay
+					// below sends it): a live ping dated by the browser's clock on
+					// arrival was never reached by the durable row, so a message read
+					// on another device stayed on a background tab's badge.
 					pushActivity(
 						ev.sender === account ? ev.recipient : ev.sender,
 						ev.orderPermlink ?? '',
-						ev.recipient === account
+						ev.recipient === account,
+						ev.createdAt.getTime()
 					);
 				});
 

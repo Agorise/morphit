@@ -46,8 +46,20 @@ describe('the inbox acks through ackThreadRead, with the row’s time', () => {
 		// handleOpen, handleMarkAllRead, handleArchive.
 		expect(acks).toHaveLength(3);
 		expect(acks[0]).toBe('peer, orderPermlink, lastMessageAt');
+		// v1.24.1: a push-only card acks at the pushed message's own time when
+		// its push carried one (`timedAt`, a chain time), as a fast copy's ack.
 		for (const a of acks.slice(1))
-			expect(a).toMatch(/'fastOnly' in \w+ \? undefined : \w+\.last_message_at$/);
+			expect(a.replace(/\s+/g, ' ').trim()).toMatch(
+				/'fastOnly' in (\w+) \? \1\.timedAt : \1\.last_message_at, 'fastOnly' in \1$/
+			);
+	});
+
+	it('a push-only card carries a time to ack with only when its push gave one (never the device clock)', () => {
+		// listFastPending's atMs is this device's clock when the push carried no
+		// time: `timedAt` must come from a timed entry only (v1.24.1).
+		expect(script(INBOX).replace(/\s+/g, ' ')).toContain(
+			'...(p.timed ? { timedAt: new Date(p.atMs).toISOString() } : {})'
+		);
 	});
 
 	it('a card’s click hands handleOpen that time too (none for a push-only card)', () => {

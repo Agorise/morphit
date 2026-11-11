@@ -69,6 +69,9 @@ console.log('\n── fast-badge-push-contract (v1.7.5) ────────
 
 const enqueue = read('apps/indexer/src/indexer/chatPushEnqueue.ts');
 const sw = read('apps/web/src/service-worker.ts');
+// v1.24.1: the message the SW posts to the tabs is built by chatPushTabMessage
+// (chatThread.ts, unit-tested in chatThread.test.ts), which the SW calls.
+const tabMsg = read('apps/web/src/lib/notifications/chatThread.ts');
 /** Comment lines stripped: a fix's own comment necessarily NAMES the anti-pattern
  *  it removed, and scanning raw source would flag that documentation as the bug. */
 const swCode = sw
@@ -106,17 +109,22 @@ check(
 	/const category = isOrderSignal \? 'order' : 'chat';/.test(enqueue)
 );
 check(
+	'the SW builds its tab message with chatPushTabMessage, from the push itself',
+	/chatPushTabMessage\(category, clickPath, payload\.eventAt\)/.test(sw) &&
+		/client\.postMessage\(tabMessage\)/.test(sw)
+);
+check(
 	'the SW parses the thread for BOTH chat and order categories',
-	/category === 'chat' \|\| category === 'order'/.test(sw),
+	/category === 'chat' \|\| category === 'order'/.test(tabMsg),
 	"parsing only 'chat' skips the order-scoped push — the one whose path has the peer"
 );
 check(
 	'the SW recovers the thread by parsing the clickPath',
-	/chatThreadFromClickPath\(clickPath\)/.test(sw)
+	/chatThreadFromClickPath\(clickPath\)/.test(tabMsg)
 );
 check(
 	'the SW forwards peer + order on the CHAT_PUSH message',
-	/type: 'CHAT_PUSH',[\s\S]{0,140}?peer: chatThread\.peer, order: chatThread\.order/.test(sw)
+	/type: 'CHAT_PUSH',[\s\S]{0,140}?peer: thread\.peer, order: thread\.order/.test(tabMsg)
 );
 check(
 	'the SW pokes EVERY open tab, including backgrounded ones',
@@ -168,7 +176,10 @@ check(
 );
 check(
 	'the bridge lights the badge straight off the push',
-	/emitFastPush\(data\.peer, order\)/.test(bridge)
+	// v1.24.1: with the message's own time when the SW forwards one.
+	/emitFastPush\(data\.peer, order(?:, typeof data\.at === 'number' \? data\.at : undefined)?\)/.test(
+		bridge
+	)
 );
 check(
 	'the badge channel subscribes to the fast push',
