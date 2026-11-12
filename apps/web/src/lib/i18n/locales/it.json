@@ -383,6 +383,7 @@
 			"placeholder_other_key": "Questo messaggio è stato cifrato per un'altra chiave posting del tuo account, quindi questa sessione non può aprirlo. Accedi con quella chiave per leggerlo.",
 			"sending": "invio…",
 			"failed_label": "Fallito",
+			"not_sent_label": "Non ancora inviato",
 			"retry": "Riprova",
 			"retry_aria": "Riprova l'invio di questo messaggio",
 			"peer_not_ready": "Questo destinatario non ha ancora aperto la chat Morphit. Quando lo farà, il tuo messaggio verrà inviato al tentativo successivo.",
@@ -503,7 +504,7 @@
 				"yes": "Sì, cancellala",
 				"no": "No, tienila"
 			},
-			"chain_unreachable": "Non è stato possibile raggiungere la blockchain per verificare le chiavi di questo contatto, quindi il messaggio non è stato inviato. Su Tor e I2P succede spesso, perché le connessioni impiegano più tempo a stabilirsi. Non c’è nulla che non va: riprova tra un momento.",
+			"chain_unreachable": "La rete Blurt non ha risposto in tempo, quindi questo messaggio non è ancora partito. L'invio viene ritentato automaticamente finché questa chat resta aperta; «Riprova» lo invia subito.",
 			"pub_pin_key_changed": "Non inviato: la chiave di questa persona è cambiata. Succede quando reimposta le sue chiavi, oppure quando qualcuno cerca di leggere i tuoi messaggi. Apri ⋮ → Verifica contatto e confronta il nuovo numero di sicurezza con questa persona tramite un altro canale prima di accettarlo.",
 			"pub_pin_posting_key_changed": "Non inviato: le chiavi dell'account di questa persona sono cambiate dall'ultima volta che avete chattato. Succede quando qualcuno reimposta o aggiunge chiavi, oppure quando qualcuno cerca di leggere i tuoi messaggi. Apri ⋮ → Verifica contatto e confronta il numero di sicurezza con questa persona tramite un altro canale prima di accettarlo.",
 			"pub_pin_withdrawn": "Non abbiamo potuto inviare in sicurezza: il tuo server dice che questa persona non ha più la chiave che aveva segnalato prima, ma una chiave registrata sulla blockchain non può sparire. Il server potrebbe essere fuori sincrono o inventare dati. Riprova più tardi oppure usa un'altra istanza Morphit."
@@ -720,6 +721,7 @@
 			"confirm": "Invia BLURT",
 			"paying": "Invio in corso…",
 			"success_toast": "BLURT inviato. Ricevuta pubblicata nella chat.",
+			"success_toast_receipt_pending": "BLURT inviato. La ricevuta arriverà nella chat appena la rete risponde, finché questa chat resta aperta; se esci prima, contrassegna i fondi inviati con questa txid: {txid}",
 			"error": {
 				"password_required": "Inserisci la tua password.",
 				"bad_password": "Password errata.",

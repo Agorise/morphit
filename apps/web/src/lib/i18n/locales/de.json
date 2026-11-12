@@ -383,6 +383,7 @@
 			"placeholder_other_key": "Diese Nachricht wurde für einen anderen Posting-Schlüssel deines Kontos verschlüsselt, daher kann diese Sitzung sie nicht öffnen. Melde dich mit diesem Schlüssel an, um sie zu lesen.",
 			"sending": "wird gesendet…",
 			"failed_label": "Fehlgeschlagen",
+			"not_sent_label": "Noch nicht gesendet",
 			"retry": "Erneut versuchen",
 			"retry_aria": "Diese Nachricht erneut senden",
 			"peer_not_ready": "Dieser Empfänger hat Morphit-Chat noch nicht geöffnet. Sobald er es tut, geht deine Nachricht beim erneuten Versuch durch.",
@@ -503,7 +504,7 @@
 				"yes": "Ja, löschen",
 				"no": "Nein, behalten"
 			},
-			"chain_unreachable": "Die Blockchain war nicht erreichbar, um die Schlüssel dieses Kontakts zu prüfen, daher wurde die Nachricht nicht gesendet. Über Tor und I2P kommt das häufiger vor, weil Verbindungen länger brauchen. Es ist nichts verkehrt — versuchen Sie es gleich noch einmal.",
+			"chain_unreachable": "Das Blurt-Netzwerk hat nicht rechtzeitig geantwortet, daher ist diese Nachricht noch nicht unterwegs. Das Senden wird automatisch erneut versucht, solange dieser Chat offen ist; „Erneut versuchen“ sendet sie sofort.",
 			"pub_pin_key_changed": "Nicht gesendet: Der Schlüssel dieser Person hat sich geändert. Das passiert, wenn sie ihre Schlüssel zurücksetzt — oder wenn jemand versucht, deine Nachrichten mitzulesen. Öffne ⋮ → Kontakt verifizieren und vergleiche die neue Sicherheitsnummer über einen anderen Kanal mit ihr, bevor du sie akzeptierst.",
 			"pub_pin_posting_key_changed": "Nicht gesendet: Die Kontoschlüssel dieser Person haben sich seit eurem letzten Chat geändert. Das passiert, wenn jemand Schlüssel zurücksetzt oder hinzufügt — oder wenn jemand versucht, deine Nachrichten mitzulesen. Öffne ⋮ → Kontakt verifizieren und vergleiche die Sicherheitsnummer über einen anderen Kanal mit ihr, bevor du sie akzeptierst.",
 			"pub_pin_withdrawn": "Konnten nicht sicher senden: Dein Server sagt, diese Person habe den Schlüssel, den er zuvor gemeldet hat, nicht mehr — aber ein auf der Blockchain gespeicherter Schlüssel kann nicht verschwinden. Der Server ist möglicherweise nicht synchron oder erfindet Daten. Versuche es später erneut oder nutze eine andere Morphit-Instanz."
@@ -720,6 +721,7 @@
 			"confirm": "BLURT senden",
 			"paying": "Wird gesendet…",
 			"success_toast": "BLURT gesendet. Quittung im Chat veröffentlicht.",
+			"success_toast_receipt_pending": "BLURT gesendet. Die Quittung erscheint im Chat, sobald das Netzwerk antwortet, solange dieser Chat offen ist; gehst du vorher, markiere die gesendeten Mittel mit dieser txid: {txid}",
 			"error": {
 				"password_required": "Gib dein Passwort ein.",
 				"bad_password": "Falsches Passwort.",

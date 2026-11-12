@@ -202,6 +202,42 @@ export const PEER_NO_POSTING_KEY_SENTINEL = 'peer_no_posting_key';
  *  this long, so a history full of messages costs one lookup, not one each.
  *  Retry asks at once. */
 export const KEY_LOOKUP_RETRY_MS = 30_000;
+
+/** v1.24.2 — a SEND that cannot look up the recipient's posting keys (the
+ *  indexer's chain read did not answer in time) asks again after each of these
+ *  waits before the message is shown as not sent. The message stays "sending"
+ *  meanwhile: the user did nothing wrong, and a node that was slow to answer
+ *  (the first read after a quiet spell, a node the indexer then rests) almost
+ *  always answers the next time. Before, the first miss showed a red "Failed",
+ *  and a send within 30 s of a missed warm-up lookup failed at once on that
+ *  cached miss without asking at all. Nothing is broadcast, and no fee taken,
+ *  until the keys are in. */
+export const SEND_KEY_LOOKUP_WAITS_MS: readonly number[] = [3_000, 8_000];
+
+/** A send stops waiting on the network (it shows as not sent yet, and the
+ *  background retry takes it over) once a single lookup has taken this long:
+ *  over Tor/I2P one try can take most of a minute, and nobody should watch
+ *  "sending…" for several of them. */
+export const SEND_KEY_LOOKUP_SLOW_TRY_MS = 20_000;
+
+/** v1.24.2 — a message not sent because the network did not answer is sent
+ *  again by itself this often while the conversation is open (and at once when
+ *  the device comes back online), oldest first: the user did nothing wrong and
+ *  should not have to press anything. */
+export const NOT_YET_SENT_RETRY_MS = 30_000;
+
+/** One network verdict per round: once a send has used up its waits on a
+ *  network that does not answer, the sends queued right behind it (more
+ *  waiting messages resent together, or a new one) do not each repeat the
+ *  whole round — within this long of that verdict they show as not sent yet at
+ *  once, and the background resend takes them, oldest first. */
+export const NETWORK_VERDICT_HOLD_MS = 5_000;
+
+/** v1.24.2 — the lookup made as the conversation opens (warmUpKeys), while the
+ *  user types, is asked again after each of these if it missed, in the
+ *  background, as long as the conversation is open: the keys are then usually
+ *  in before Send is pressed, and the user never waits on a slow node. */
+export const WARM_UP_KEY_LOOKUP_WAITS_MS: readonly number[] = [5_000, 15_000, 30_000];
 /** LocalMessage.error prefix for a broadcast the network or the instance
  *  refused: the rest is a `common.broadcast_err.*` key (the wording every
  *  chain-write screen uses — "Broadcast rejected due to insufficient
@@ -719,6 +755,9 @@ export interface ChatControllerDeps {
 	/** Wait before retrying a history page. Injected for tests; absent, a
 	 *  real timer. */
 	sleep?(ms: number): Promise<void>;
+	/** v1.24.2 — call `cb` when the device comes back online; returns the
+	 *  unsubscribe. Default: the window's `online` event (none without one). */
+	onOnline?(cb: () => void): () => void;
 	/** Called when the SSE stream's connected/disconnected state
 	 *  flips.  Used to render a "Live" pip in the conversation
 	 *  header.  No-op default — runtime callers wire this up if
@@ -1054,6 +1093,15 @@ function errorToSentinel(err: unknown): string {
 	return String(err);
 }
 
+/** The window's `online` event, where there is a window that has events. */
+function windowOnline(cb: () => void): () => void {
+	if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+		return () => undefined;
+	}
+	window.addEventListener('online', cb);
+	return () => window.removeEventListener('online', cb);
+}
+
 /** A sender's key could not be looked up (the chain or the indexer did not
  *  answer): a reason that passes, unlike a pin verdict. W-M8. */
 class KeyLookupUnavailable extends Error {
@@ -1203,6 +1251,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	/** Retry: every negative or failed key answer is asked again, and the
 	 *  peer's posting keys are read afresh. */
 	function forgetKeyMisses(): void {
+		networkMissAt = null;
 		peerPubUnknown = false;
 		peerPubFailed = null;
 		postingPubsFailed.clear();
@@ -1227,7 +1276,21 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 * refused. Nothing is sent to a chat key any more, so neither is asked.)
 	 */
 	function warmUpKeys(): void {
-		void postingPubsOf(deps.peer).catch(() => undefined);
+		void (async () => {
+			const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+			for (let attempt = 0; ; attempt++) {
+				try {
+					await postingPubsOf(deps.peer);
+					return;
+				} catch (err) {
+					const wait = WARM_UP_KEY_LOOKUP_WAITS_MS[attempt];
+					if (err instanceof PubPinError || wait === undefined || destroyed) return;
+					await sleep(wait);
+					if (destroyed || postingPubsCache.has(deps.peer)) return;
+					postingPubsFailed.delete(deps.peer);
+				}
+			}
+		})();
 	}
 
 	/** A key lookup that failed, as LocalMessage.error: a pin verdict keeps its
@@ -1275,6 +1338,80 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		return sealed;
 	}
 
+	/** The peer's posting keys for a send (see SEND_KEY_LOOKUP_WAITS_MS): a
+	 *  cached miss is never the answer, and a lookup that could not be made is
+	 *  asked again after each wait. A pin verdict is an answer: never retried. */
+	async function postingPubsForSend(account: string): Promise<Uint8Array[] | null> {
+		const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+		if (networkMissAt !== null && nowMs() - networkMissAt < NETWORK_VERDICT_HOLD_MS) {
+			throw new KeyLookupUnavailable();
+		}
+		const missed = (err: unknown): never => {
+			if (!(err instanceof PubPinError)) networkMissAt = nowMs();
+			throw err;
+		};
+		for (let attempt = 0; ; attempt++) {
+			postingPubsFailed.delete(account);
+			const startedAt = nowMs();
+			try {
+				const pubs = await postingPubsOf(account);
+				networkMissAt = null;
+				return pubs;
+			} catch (err) {
+				const wait = SEND_KEY_LOOKUP_WAITS_MS[attempt];
+				if (err instanceof PubPinError || wait === undefined || destroyed) return missed(err);
+				if (nowMs() - startedAt >= SEND_KEY_LOOKUP_SLOW_TRY_MS) return missed(err);
+				await sleep(wait);
+				if (destroyed) throw err;
+			}
+		}
+	}
+
+	/** When a send last ended on a network that did not answer (see
+	 *  NETWORK_VERDICT_HOLD_MS); cleared by an answer and by Retry. */
+	let networkMissAt: number | null = null;
+
+	/** Sends get past the key lookup and encryption one at a time, in the order
+	 *  they were made (v1.24.2): a message waiting on a slow network is never
+	 *  overtaken by a later one, which would reach the chain — and the other
+	 *  person — first. */
+	let sealQueue: Promise<unknown> = Promise.resolve();
+	function sealInOrder<T>(step: () => Promise<T>): Promise<T> {
+		const run = sealQueue.then(step, step);
+		sealQueue = run.catch(() => undefined);
+		return run;
+	}
+
+	/** Own messages not sent because the network did not answer. */
+	function notYetSent(): LocalMessage[] {
+		return messages.filter(
+			(m) => m.sender === deps.me && m.state === 'failed' && m.error === CHAIN_UNREACHABLE_SENTINEL
+		);
+	}
+
+	/** Send them again, oldest first (each one's retry joins the seal queue in
+	 *  this order). Only with a live session: a locked one has nothing to send
+	 *  them with, and must not turn them into "session locked". */
+	function retryNotYetSent(): void {
+		if (destroyed || deps.getLiveIdentity() === null) return;
+		for (const m of notYetSent()) void retryMessage(m.localSeq);
+	}
+
+	let notYetSentTimer: ReturnType<typeof setTimeout> | null = null;
+	function onOnline(): void {
+		retryNotYetSent();
+	}
+	let unsubOnline: () => void = () => undefined;
+	/** While any message waits to be sent, try again every NOT_YET_SENT_RETRY_MS.
+	 *  (A closed conversation has no messages left, so it schedules nothing.) */
+	function scheduleNotYetSentRetry(): void {
+		if (notYetSentTimer !== null || notYetSent().length === 0) return;
+		notYetSentTimer = setTimeout(() => {
+			notYetSentTimer = null;
+			retryNotYetSent();
+		}, NOT_YET_SENT_RETRY_MS);
+	}
+
 	async function sealAnyFormat(
 		text: string,
 		live: LiveIdentity,
@@ -1282,7 +1419,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	): Promise<{ ok: true; envelope: SealedEnvelope } | { ok: false; error: string }> {
 		let pubs: Uint8Array[] | null;
 		try {
-			pubs = await postingPubsOf(deps.peer);
+			pubs = await postingPubsForSend(deps.peer);
 		} catch (err) {
 			return { ok: false, error: lookupSentinel(err) };
 		}
@@ -2668,6 +2805,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return { ok: false, error: SESSION_LOCKED_SENTINEL };
 		}
 
+		// v1.24.2 — older messages still waiting for the network go first, in
+		// order: their retries join the seal queue ahead of this one.
+		retryNotYetSent();
+
 		const clientTag = deps.generateClientTag();
 		// keep-history mode (the DEFAULT) caches our own plaintext so it
 		// survives navigating away and back, as a fast path (the durable source
@@ -2701,12 +2842,22 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// (the default) adds a self-copy so we can reread our own message from
 		// chain; the opt-in "destroy on leave" mode omits it.
 		const includeSelfCopy = keepHistory;
-		const sealed = await seal(trimmed, live, includeSelfCopy);
+		const epoch = lockEpoch;
+		const sealed = await sealInOrder(() => seal(trimmed, live, includeSelfCopy));
+		// v1.24.2 — locked while it waited its turn or looked up the keys: the key
+		// it would sign with is gone. Not kept as unsent: the lock forgot them all.
+		if (epoch !== lockEpoch) {
+			local.state = 'failed';
+			local.error = SESSION_LOCKED_SENTINEL;
+			emit();
+			return { ok: false, error: SESSION_LOCKED_SENTINEL };
+		}
 		if (!sealed.ok) {
 			local.state = 'failed';
 			local.error = sealed.error;
 			rememberUnsent(local);
 			emit();
+			scheduleNotYetSentRetry();
 			return { ok: false, error: sealed.error };
 		}
 		const envelope = sealed.envelope;
@@ -3046,13 +3197,21 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// they may have published one since.
 		const includeSelfCopy = shouldAttachSelfCopy(deps.chatSecurityMode?.());
 		forgetKeyMisses();
-		const sealed = await seal(text, live, includeSelfCopy);
+		const epoch = lockEpoch;
+		const sealed = await sealInOrder(() => seal(text, live, includeSelfCopy));
+		if (epoch !== lockEpoch) {
+			target.state = 'failed';
+			target.error = SESSION_LOCKED_SENTINEL;
+			emit();
+			return;
+		}
 		if (!sealed.ok) {
 			target.state = 'failed';
 			target.error = sealed.error;
 			delete target.errorValues;
 			rememberUnsent(target);
 			emit();
+			scheduleNotYetSentRetry();
 			return;
 		}
 		const envelope = sealed.envelope;
@@ -3343,6 +3502,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			restoreUnconfirmed();
 			restoreUnsent();
 			warmUpKeys();
+			// v1.24.2 — messages that waited, unsent, for the network (restored
+			// above) go out by themselves; at once when the device is back online.
+			scheduleNotYetSentRetry();
+			unsubOnline = (deps.onOnline ?? windowOnline)(onOnline);
 
 			// Phase E.5 — wire up SSE if the dep is provided. The
 			// stream delivers a snapshot followed by appended
@@ -3408,6 +3571,11 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			if (destroyed) return;
 			destroyed = true;
 			controllerLockHooks.delete(onSessionLocked);
+			if (notYetSentTimer !== null) {
+				clearTimeout(notYetSentTimer);
+				notYetSentTimer = null;
+			}
+			unsubOnline();
 			historyAbort.abort();
 			if (streamUnsubscribe !== null) {
 				streamUnsubscribe();

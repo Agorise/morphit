@@ -383,6 +383,7 @@
 			"placeholder_other_key": "This message was encrypted for another posting key of your account, so this session can't open it. Sign in with that key to read it.",
 			"sending": "sending…",
 			"failed_label": "Failed",
+			"not_sent_label": "Not sent yet",
 			"retry": "Retry",
 			"retry_aria": "Retry sending this message",
 			"peer_not_ready": "This recipient hasn't opened Morphit chat yet. Once they do, your message will go through on retry.",
@@ -503,7 +504,7 @@
 				"yes": "Yes, delete it",
 				"no": "No, keep it"
 			},
-			"chain_unreachable": "We couldn't reach the blockchain to check this person's keys, so the message wasn't sent. This is common on Tor and I2P, where connections take a while to build. Nothing is wrong — try again in a moment.",
+			"chain_unreachable": "The Blurt network didn't answer in time, so this message hasn't gone out yet. It's tried again automatically while this chat is open; Retry sends it now.",
 			"pub_pin_key_changed": "Not sent: this person's key changed. That happens when they reset their keys — or when someone is trying to read your messages. Open ⋮ → Verify peer and compare the new safety number with them over another channel before you accept it.",
 			"pub_pin_posting_key_changed": "Not sent: this person's account keys have changed since you last chatted. That happens when someone resets or adds keys — or when someone is trying to read your messages. Open ⋮ → Verify peer and compare the safety number with them over another channel before you accept it.",
 			"pub_pin_withdrawn": "We couldn't safely send: your server says this person no longer has the key it reported before, but a key recorded on the blockchain can't disappear. The server may be out of sync, or fabricating data. Try again later, or use another Morphit instance."
@@ -720,6 +721,7 @@
 			"confirm": "Send BLURT",
 			"paying": "Sending…",
 			"success_toast": "BLURT sent. Receipt posted to chat.",
+			"success_toast_receipt_pending": "BLURT sent. The receipt goes to the chat as soon as the network answers, while this chat is open; if you leave first, mark the funds sent with this txid: {txid}",
 			"error": {
 				"password_required": "Enter your password.",
 				"bad_password": "Wrong password.",

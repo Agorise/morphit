@@ -198,6 +198,12 @@
 	 *  time is the broadcast latency, decoupled from follower/SSE lag. */
 	const isSending = $derived(message.state === 'pending');
 	const isFailed = $derived(message.state === 'failed');
+	/** v1.24.2 — not sent because the Blurt network did not answer (the send
+	 *  asked again first, and it is sent again by itself while the chat is
+	 *  open). The user did nothing wrong: shown calmly, as a message waiting,
+	 *  never as a red failure. */
+	const isNotYetSent = $derived(isFailed && message.error === 'chain_unreachable');
+	const isHardFailed = $derived(isFailed && !isNotYetSent);
 	/** A provisional copy the chain never recorded (see `unrecorded` in
 	 *  chatService.ts). Kept on screen — it was read — but never passed off as
 	 *  an ordinary message: dashed outline, dimmed, and a note beneath. */
@@ -825,19 +831,19 @@
 			class:self-end={isOutgoing}
 			class:self-start={!isOutgoing}
 			class:cursor-pointer={timestampRevealable}
-			class:bg-morphit-emerald-bubble={isOutgoing && !isFailed}
-			class:text-ink-950={isOutgoing && !isFailed}
-			class:bg-ink-200={!isOutgoing && !isFailed}
-			class:text-ink-900={!isOutgoing && !isFailed}
-			class:dark:bg-ink-800={!isOutgoing && !isFailed}
-			class:dark:text-ink-100={!isOutgoing && !isFailed}
-			class:ring-2={isFailed}
-			class:ring-red-500={isFailed}
-			class:bg-red-50={isFailed}
-			class:dark:bg-red-950={isFailed}
-			class:text-red-900={isFailed}
-			class:dark:text-red-200={isFailed}
-			class:opacity-80={isSending}
+			class:bg-morphit-emerald-bubble={isOutgoing && !isHardFailed}
+			class:text-ink-950={isOutgoing && !isHardFailed}
+			class:bg-ink-200={!isOutgoing && !isHardFailed}
+			class:text-ink-900={!isOutgoing && !isHardFailed}
+			class:dark:bg-ink-800={!isOutgoing && !isHardFailed}
+			class:dark:text-ink-100={!isOutgoing && !isHardFailed}
+			class:ring-2={isHardFailed}
+			class:ring-red-500={isHardFailed}
+			class:bg-red-50={isHardFailed}
+			class:dark:bg-red-950={isHardFailed}
+			class:text-red-900={isHardFailed}
+			class:dark:text-red-200={isHardFailed}
+			class:opacity-80={isSending || isNotYetSent}
 			class:opacity-70={isUnrecorded}
 			class:border={isUnrecorded}
 			class:border-dashed={isUnrecorded}
@@ -1723,9 +1729,13 @@
 				{#if isSending}
 					<span aria-live="polite">{$_('chat.message.sending')}</span>
 				{:else if isFailed}
-					<span class="text-red-700 dark:text-red-300">
-						{$_('chat.message.failed_label')}
-					</span>
+					{#if isNotYetSent}
+						<span>{$_('chat.message.not_sent_label')}</span>
+					{:else}
+						<span class="text-red-700 dark:text-red-300">
+							{$_('chat.message.failed_label')}
+						</span>
+					{/if}
 					<!-- No Retry when the chain has it and the
 					     indexers refused it: a resend would be refused the same way. -->
 					{#if message.error !== ON_CHAIN_NOT_ACCEPTED_SENTINEL}
@@ -1792,7 +1802,13 @@
 		     prose; unrecognized error strings are shown as-is because
 		     they're useful technical details. -->
 		{#if isFailed && message.error}
-			<p class="break-words text-xs text-red-700 dark:text-red-300">
+			<p
+				class="break-words text-xs"
+				class:text-red-700={isHardFailed}
+				class:dark:text-red-300={isHardFailed}
+				class:text-ink-500={isNotYetSent}
+				class:dark:text-ink-400={isNotYetSent}
+			>
 				{#if message.error.startsWith(BROADCAST_ERR_PREFIX)}
 					<!-- The network or the instance refused the send: the wording
 					     every chain-write screen uses (out of BLURT: "Broadcast

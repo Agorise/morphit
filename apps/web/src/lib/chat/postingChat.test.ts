@@ -27,7 +27,12 @@ import {
 	pinnedPostingKeysInStore,
 	postingEnvelopeCrypto,
 	CHAIN_UNREACHABLE_SENTINEL,
-	KEY_LOOKUP_RETRY_MS,
+	SEND_KEY_LOOKUP_WAITS_MS,
+	WARM_UP_KEY_LOOKUP_WAITS_MS,
+	NOT_YET_SENT_RETRY_MS,
+	NETWORK_VERDICT_HOLD_MS,
+	SEND_KEY_LOOKUP_SLOW_TRY_MS,
+	SESSION_LOCKED_SENTINEL,
 	PEER_NOT_FOUND_SENTINEL,
 	PEER_NO_POSTING_KEY_SENTINEL,
 	DECRYPT_YIELD_EVERY,
@@ -626,29 +631,386 @@ describe('lookups: as few as possible, and none remembered wrongly (review H3, M
 		c.destroy();
 	});
 
-	it('a failed lookup is asked again only after a pause (one lookup, not one per message); Retry asks at once', async () => {
+	// v1.24.2 — the owner: "let's not scare the user with that error message,
+	// that is horrible ux. a deterrent in fact" and "those sort of things must
+	// all be done in the background so the user always feels comfortable."
+	// A SEND used to fail at once, red, on a missed lookup — even on one missed
+	// up to 30 s earlier by the warm-up, without asking. Now: the warm-up asks
+	// again in the background; a send asks itself and again after each of
+	// SEND_KEY_LOOKUP_WAITS_MS, "sending" meanwhile, in the order sends were
+	// made; a message the network still did not answer for is sent again by
+	// itself every NOT_YET_SENT_RETRY_MS. Nothing is broadcast before the keys.
+	const failing = () =>
+		vi.fn(async (_a: string): Promise<Uint8Array[] | null> => {
+			throw new Error('timed out');
+		});
+	/** The warm-up's waits held still, so a test sees only the send's own. */
+	const stillWarmUp = (waits: number[]) => async (ms: number) => {
+		if (WARM_UP_KEY_LOOKUP_WAITS_MS.includes(ms) && !SEND_KEY_LOOKUP_WAITS_MS.includes(ms)) {
+			return new Promise<void>(() => undefined);
+		}
+		waits.push(ms);
+	};
+
+	it('a send asks for the keys itself, and again after each wait, "sending" meanwhile, before it shows as not sent', async () => {
+		const w = world([]);
+		const posting = failing();
+		const waits: number[] = [];
+		const states: string[] = [];
+		let c: Awaited<ReturnType<typeof view>> | null = null;
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				await stillWarmUp(waits)(ms);
+				if (SEND_KEY_LOOKUP_WAITS_MS.includes(ms)) states.push(c!.snapshot()[0]!.state);
+			}
+		});
+		c = await view(d);
+		expect(posting).toHaveBeenCalledTimes(1); // the warm-up, missed
+		await c.sendMessage('one');
+		expect(posting).toHaveBeenCalledTimes(1 + 1 + SEND_KEY_LOOKUP_WAITS_MS.length);
+		expect(waits).toEqual([...SEND_KEY_LOOKUP_WAITS_MS]);
+		expect(states).toEqual(SEND_KEY_LOOKUP_WAITS_MS.map(() => 'pending'));
+		expect(c.snapshot()[0]!.error).toBe(CHAIN_UNREACHABLE_SENTINEL);
+		expect(d.sent).toHaveLength(0); // nothing broadcast, no fee
+		c.destroy();
+	});
+
+	it('a send on a healthy network waits for nothing', async () => {
+		const w = world([]);
+		const waits: number[] = [];
+		const d = deps(w, buyer, seller.name, {
+			sleep: async (ms) => {
+				waits.push(ms);
+			}
+		});
+		const c = await view(d);
+		await c.sendMessage('one');
+		expect(waits).toEqual([]);
+		expect(d.sent).toHaveLength(1);
+		c.destroy();
+	});
+
+	it('the warm-up asks again in the background, so the keys are in before Send', async () => {
+		const w = world([]);
+		let misses = 2;
+		const posting = vi.fn(async (a: string) => {
+			if (misses-- > 0) throw new Error('timed out');
+			return w.postingKeys.get(a) ?? null;
+		});
+		const waits: number[] = [];
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				waits.push(ms);
+			}
+		});
+		const c = await view(d);
+		expect(waits).toEqual(WARM_UP_KEY_LOOKUP_WAITS_MS.slice(0, 2));
+		expect(posting).toHaveBeenCalledTimes(3);
+		await c.sendMessage('one');
+		expect(posting).toHaveBeenCalledTimes(3); // the keys were in
+		expect(d.sent).toHaveLength(1);
+		c.destroy();
+	});
+
+	it('a send whose keys come in on a later try goes out with no failure shown', async () => {
 		const w = world([]);
 		let down = true;
 		const posting = vi.fn(async (a: string) => {
 			if (down) throw new Error('timed out');
 			return w.postingKeys.get(a) ?? null;
 		});
-		const d = deps(w, buyer, seller.name, { fetchPostingPubs: posting });
+		const waits: number[] = [];
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				await stillWarmUp(waits)(ms);
+				down = false; // the network answers after the first wait
+			}
+		});
 		const c = await view(d);
-		expect(posting).toHaveBeenCalledTimes(1); // the warm-up
+		await c.sendMessage('hey, if you need any help, just let me know');
+		expect(c.snapshot()[0]!.error).toBeNull();
+		expect(d.sent).toHaveLength(1);
+		c.destroy();
+	});
+
+	it('messages reach the chain in the order they were sent, even when the first waited on the network', async () => {
+		const w = world([]);
+		let down = true;
+		const posting = vi.fn(async (a: string) => {
+			if (down) throw new Error('timed out');
+			return w.postingKeys.get(a) ?? null;
+		});
+		let wake: () => void = () => undefined;
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: (ms) =>
+				SEND_KEY_LOOKUP_WAITS_MS.includes(ms)
+					? new Promise<void>((r) => (wake = r))
+					: new Promise<void>(() => undefined)
+		});
+		const c = await view(d);
+		const a = c.sendMessage('first');
+		await vi.advanceTimersByTimeAsync(0); // 'first' waits on the network
+		down = false;
+		const b = c.sendMessage('second'); // its keys would be in now
+		await vi.advanceTimersByTimeAsync(0);
+		expect(d.sent).toHaveLength(0); // 'second' does not overtake
+		wake();
+		await Promise.all([a, b]);
+		expect(c.snapshot().map((m) => m.text)).toEqual(['first', 'second']);
+		const tagOf = (p: Record<string, unknown>) => (p.header as Record<string, unknown>).client_tag;
+		expect(d.sent.map(tagOf)).toEqual(
+			c.snapshot().map((m) => (m as { clientTag: string | null }).clientTag)
+		);
+		c.destroy();
+	});
+
+	it('a message not sent yet is sent again by itself, and a new message sends it first', async () => {
+		const w = world([]);
+		let down = true;
+		const posting = vi.fn(async (a: string) => {
+			if (down) throw new Error('timed out');
+			return w.postingKeys.get(a) ?? null;
+		});
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				if (WARM_UP_KEY_LOOKUP_WAITS_MS.includes(ms)) return new Promise<void>(() => undefined);
+			}
+		});
+		const c = await view(d);
 		await c.sendMessage('one');
+		expect(c.snapshot()[0]!.error).toBe(CHAIN_UNREACHABLE_SENTINEL);
+		down = false;
+		await vi.advanceTimersByTimeAsync(NOT_YET_SENT_RETRY_MS);
+		expect(c.snapshot()[0]!.state).not.toBe('failed');
+		expect(d.sent).toHaveLength(1);
+		c.destroy();
+
+		// And without waiting for the timer: the next message takes it along.
+		down = true;
+		const d2 = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				if (WARM_UP_KEY_LOOKUP_WAITS_MS.includes(ms)) return new Promise<void>(() => undefined);
+			}
+		});
+		const c2 = await view(d2);
+		await c2.sendMessage('older');
+		down = false;
+		await c2.sendMessage('newer');
+		await vi.advanceTimersByTimeAsync(0);
+		const mine = c2.snapshot().filter((m) => m.text === 'older' || m.text === 'newer');
+		expect(mine.map((m) => [m.text, m.state === 'failed'])).toEqual([
+			['older', false],
+			['newer', false]
+		]);
+		expect(d2.sent).toHaveLength(2);
+		const tags = mine.map((m) => (m as { clientTag: string | null }).clientTag);
+		expect(d2.sent.map((p) => (p.header as Record<string, unknown>).client_tag)).toEqual(tags);
+		c2.destroy();
+	});
+
+	it('a lock while a send waits ends it as "session locked", and nothing is sent — even if the network is back', async () => {
+		const w = world([]);
+		let down = true;
+		const posting = vi.fn(async (a: string) => {
+			if (down) throw new Error('timed out');
+			return w.postingKeys.get(a) ?? null;
+		});
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				if (WARM_UP_KEY_LOOKUP_WAITS_MS.includes(ms)) return new Promise<void>(() => undefined);
+				clearOwnSentPlaintextCache(); // the session locks during the wait…
+				down = false; // …and the network answers again
+			}
+		});
+		const c = await view(d);
+		const outcome = await c.sendMessage('one');
+		expect(outcome).toEqual({ ok: false, error: SESSION_LOCKED_SENTINEL });
+		expect(d.sent).toHaveLength(0);
+		c.destroy();
+	});
+
+	it('a closed conversation stops asking', async () => {
+		const w = world([]);
+		const posting = failing();
+		let c: Awaited<ReturnType<typeof view>> | null = null;
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				if (WARM_UP_KEY_LOOKUP_WAITS_MS.includes(ms)) return new Promise<void>(() => undefined);
+				c?.destroy();
+			}
+		});
+		c = await view(d);
+		await c.sendMessage('one');
+		expect(posting).toHaveBeenCalledTimes(2); // the warm-up and the send's own ask
+		expect(d.sent).toHaveLength(0);
+		expect(vi.getTimerCount()).toBe(0); // nothing left scheduled
+		await vi.advanceTimersByTimeAsync(NOT_YET_SENT_RETRY_MS * 2);
+		expect(posting).toHaveBeenCalledTimes(2); // and no background resend after closing
+	});
+
+	it('several waiting messages resent together: one round of waits, the rest at once', async () => {
+		const w = world([]);
+		const posting = failing();
+		const waits: number[] = [];
+		const d = deps(w, buyer, seller.name, { fetchPostingPubs: posting, sleep: stillWarmUp(waits) });
+		const c = await view(d);
+		await c.sendMessage('one');
+		await vi.advanceTimersByTimeAsync(NETWORK_VERDICT_HOLD_MS); // a fresh round for 'two'
 		await c.sendMessage('two');
+		waits.length = 0;
+		const asked = posting.mock.calls.length;
+		await vi.advanceTimersByTimeAsync(NOT_YET_SENT_RETRY_MS); // the background resend
+		await vi.advanceTimersByTimeAsync(0);
+		expect(waits).toEqual([...SEND_KEY_LOOKUP_WAITS_MS]); // one round, not two
+		expect(posting.mock.calls.length - asked).toBe(1 + SEND_KEY_LOOKUP_WAITS_MS.length);
 		expect(c.snapshot().map((m) => m.error)).toEqual([
 			CHAIN_UNREACHABLE_SENTINEL,
 			CHAIN_UNREACHABLE_SENTINEL
 		]);
-		expect(posting).toHaveBeenCalledTimes(1);
-		await vi.advanceTimersByTimeAsync(KEY_LOOKUP_RETRY_MS);
-		await c.sendMessage('three');
-		expect(posting).toHaveBeenCalledTimes(2);
+		c.destroy();
+	});
+
+	it('a lock while the lookup is in flight, which then answers: session locked, nothing sent', async () => {
+		const w = world([]);
+		let lockNext = false;
+		const posting = vi.fn(async (a: string) => {
+			if (!lockNext) throw new Error('timed out'); // the warm-up misses
+			clearOwnSentPlaintextCache(); // the session locks mid-lookup…
+			return w.postingKeys.get(a) ?? null; // …which then answers
+		});
+		const d = deps(w, buyer, seller.name, { fetchPostingPubs: posting, sleep: stillWarmUp([]) });
+		const c = await view(d);
+		lockNext = true;
+		const outcome = await c.sendMessage('one');
+		expect(outcome).toEqual({ ok: false, error: SESSION_LOCKED_SENTINEL });
+		expect(d.sent).toHaveLength(0);
+		c.destroy();
+	});
+
+	it('a lock during a retry’s lookup, which then answers: nothing is sent', async () => {
+		const w = world([]);
+		let phase: 'down' | 'lock' = 'down';
+		const posting = vi.fn(async (a: string) => {
+			if (phase === 'down') throw new Error('timed out');
+			clearOwnSentPlaintextCache(); // the session locks mid-lookup…
+			return w.postingKeys.get(a) ?? null; // …which then answers
+		});
+		const d = deps(w, buyer, seller.name, { fetchPostingPubs: posting, sleep: stillWarmUp([]) });
+		const c = await view(d);
+		await c.sendMessage('one');
+		phase = 'lock';
+		await c.retryMessage(c.snapshot()[0]!.localSeq);
+		expect(d.sent).toHaveLength(0);
+		c.destroy();
+	});
+
+	it('a single try that took over 20 s (a slow hidden network) ends the waiting', async () => {
+		const w = world([]);
+		let slow = false;
+		const posting = vi.fn(async (_a: string): Promise<Uint8Array[] | null> => {
+			if (slow) await new Promise((r) => setTimeout(r, SEND_KEY_LOOKUP_SLOW_TRY_MS));
+			throw new Error('timed out');
+		});
+		const waits: number[] = [];
+		const d = deps(w, buyer, seller.name, { fetchPostingPubs: posting, sleep: stillWarmUp(waits) });
+		const c = await view(d);
+		slow = true;
+		const sending = c.sendMessage('one');
+		await vi.advanceTimersByTimeAsync(SEND_KEY_LOOKUP_SLOW_TRY_MS);
+		await sending;
+		expect(waits).toEqual([]);
+		expect(c.snapshot()[0]!.error).toBe(CHAIN_UNREACHABLE_SENTINEL);
+		c.destroy();
+	});
+
+	it('back online: a waiting message is resent at once', async () => {
+		const w = world([]);
+		let down = true;
+		const posting = vi.fn(async (a: string) => {
+			if (down) throw new Error('timed out');
+			return w.postingKeys.get(a) ?? null;
+		});
+		let online: () => void = () => undefined;
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: stillWarmUp([]),
+			onOnline: (cb) => {
+				online = cb;
+				return () => (online = () => undefined);
+			}
+		});
+		const c = await view(d);
+		await c.sendMessage('one');
+		down = false;
+		online();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(d.sent).toHaveLength(1);
+		c.destroy();
+	});
+
+	it('a changed key set is an answer: the send stops at once, no retry', async () => {
+		const w = world([]);
+		const waits: number[] = [];
+		const d = deps(w, buyer, seller.name, {
+			sleep: async (ms) => {
+				waits.push(ms);
+			},
+			pinPostingKey: async () => {
+				throw new PubPinError('pub_pin_posting_key_changed', 'seller-bo', 'changed');
+			}
+		});
+		const c = await view(d);
+		await c.sendMessage('one');
+		expect(c.snapshot()[0]!.error).toBe('pub_pin_posting_key_changed');
+		expect(waits).toEqual([]);
+		c.destroy();
+	});
+
+	it('a pin verdict from the lookup itself is an answer too: no retry', async () => {
+		const w = world([]);
+		const waits: number[] = [];
+		const posting = vi.fn(async (_a: string): Promise<Uint8Array[] | null> => {
+			throw new PubPinError('pub_pin_withdrawn', 'seller-bo', 'withdrawn');
+		});
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				waits.push(ms);
+			}
+		});
+		const c = await view(d);
+		await c.sendMessage('one');
+		expect(c.snapshot()[0]!.error).toBe('pub_pin_withdrawn');
+		expect(waits).toEqual([]);
+		c.destroy();
+	});
+
+	it('Retry asks at once', async () => {
+		const w = world([]);
+		let down = true;
+		const posting = vi.fn(async (a: string) => {
+			if (down) throw new Error('timed out');
+			return w.postingKeys.get(a) ?? null;
+		});
+		const d = deps(w, buyer, seller.name, {
+			fetchPostingPubs: posting,
+			sleep: async (ms) => {
+				if (WARM_UP_KEY_LOOKUP_WAITS_MS.includes(ms)) return new Promise<void>(() => undefined);
+			}
+		});
+		const c = await view(d);
+		await c.sendMessage('one');
+		expect(c.snapshot()[0]!.error).toBe(CHAIN_UNREACHABLE_SENTINEL);
 		down = false;
 		await c.retryMessage(c.snapshot()[0]!.localSeq);
-		expect(posting).toHaveBeenCalledTimes(3);
 		expect(c.snapshot()[0]!.error).toBeNull();
 		c.destroy();
 	});
@@ -668,7 +1030,13 @@ describe('lookups: as few as possible, and none remembered wrongly (review H3, M
 			throw new Error('unreachable');
 		});
 		const c = createConversationController(
-			deps(w, buyer, seller.name, { ...pinStore, fetchPostingPubs: posting })
+			deps(w, buyer, seller.name, {
+				...pinStore,
+				fetchPostingPubs: posting,
+				// The warm-up's background retries (v1.24.2) are for sending; held
+				// still here, so the count below is about reading alone.
+				sleep: () => new Promise<void>(() => undefined)
+			})
 		);
 		c.start();
 		await vi.runOnlyPendingTimersAsync();

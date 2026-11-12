@@ -354,6 +354,31 @@ describe('v1.23.2 Chat Security: "delete this chat from this computer after you 
 		lockSpy.released = 0;
 	});
 
+	// v1.24.2 — the new message is scrolled to at once; a send that takes a
+	// while (a slow network) does not yank a reader who scrolled up meanwhile.
+	it('a send scrolls to the new message at once, and not again when it ends', async () => {
+		let finish: (o: { ok: boolean }) => void = () => undefined;
+		ctl.outcome = new Promise((r) => (finish = r)) as never;
+		const scrolls = vi.spyOn(Element.prototype, 'scrollTo');
+		try {
+			const v = await render(PEER, 'buy');
+			const box = v.target.querySelector('textarea') as HTMLTextAreaElement;
+			box.value = 'hello';
+			box.dispatchEvent(new Event('input', { bubbles: true }));
+			v.flushSync();
+			scrolls.mockClear();
+			v.button((b) => (b.textContent ?? '').trim() === 'chat.composer.send')!.click();
+			await v.settle();
+			expect(scrolls).toHaveBeenCalled();
+			const atSend = scrolls.mock.calls.length;
+			finish({ ok: true });
+			await v.settle();
+			expect(scrolls.mock.calls.length).toBe(atSend);
+		} finally {
+			scrolls.mockRestore();
+		}
+	});
+
 	it('Yes, delete it → leaving this chat locks Morphit in every tab', async () => {
 		const v = await render(PEER, 'buy');
 		// An unsent message is saved as a plain-text draft while the chat keeps.
@@ -561,18 +586,23 @@ describe('W-L5: a failed send keeps the modal open and says so', () => {
 			orderPermlink: ORDER
 		});
 		const ts = await import('$lib/trades/tradeStatus');
-		for (const ok of [false, true]) {
+		// v1.24.2: a receipt waiting on the network goes out by itself — a calm
+		// toast that says so; only a real failure asks for the txid by hand.
+		const cases: [{ ok: true } | { ok: false; error: string }, string][] = [
+			[{ ok: false, error: 'session_locked' }, 'chat.pay_blurt.success_toast_no_chat_with_txid'],
+			[{ ok: false, error: 'chain_unreachable' }, 'chat.pay_blurt.success_toast_receipt_pending'],
+			[{ ok: true }, 'chat.pay_blurt.success_toast']
+		];
+		for (const [outcome, toast] of cases) {
 			ts.clearAllTradeStates();
-			ctl.outcome = ok ? { ok: true } : { ok: false, error: 'chain_unreachable' };
+			ctl.outcome = outcome;
 			toasts.length = 0;
 			const v = await render(PEER, 'buy', 'BLURT');
 			await v.push([{ text: pay }]);
 			v.button((b) => (b.textContent ?? '').includes('chat.address.pay_now'))!.click();
 			await v.settle();
 			await v.settle();
-			expect(toasts).toEqual([
-				ok ? 'chat.pay_blurt.success_toast' : 'chat.pay_blurt.success_toast_no_chat_with_txid'
-			]);
+			expect(toasts).toEqual([toast]);
 			document.body.innerHTML = '';
 		}
 	});
@@ -591,6 +621,35 @@ describe('v1.23.4: "Share your … address" goes once my address is in the chat 
 			orderPermlink: ORDER
 		});
 	}
+	// v1.24.2: a card waiting on the network goes out by itself — the button
+	// coming back would invite a second card. A card that really failed does not
+	// count: the button is back for it.
+	it('a message waiting on the network says so inside the live log, so it is announced', async () => {
+		const v = await render(PEER, 'buy');
+		await v.push([
+			{ sender: ME, state: 'failed', error: 'chain_unreachable', createdAt: null, text: 'hi' }
+		]);
+		const log = v.target.querySelector('[role="log"][aria-live="polite"]');
+		expect(log?.textContent).toContain('chat.message.not_sent_label');
+		document.body.innerHTML = '';
+	});
+
+	it('a card waiting on the network keeps it hidden; a card that failed does not', async () => {
+		const ts = await import('$lib/trades/tradeStatus');
+		for (const [error, hidden] of [
+			['chain_unreachable', true],
+			['broadcast_err:insufficient_funds', false]
+		] as const) {
+			ts.clearAllTradeStates();
+			const v = await render(PEER, 'sell', 'BTC');
+			await v.push([
+				{ sender: ME, state: 'failed', error, createdAt: null, text: await card('btc') }
+			]);
+			expect(shareButton(v.target) === null).toBe(hidden);
+			document.body.innerHTML = '';
+		}
+	});
+
 	it('a BTC order: my BTC address card, even still sending, hides it at once', async () => {
 		const ts = await import('$lib/trades/tradeStatus');
 		ts.clearAllTradeStates();
@@ -775,6 +834,19 @@ describe('v1.21.17: a crypto-for-crypto trade, one step at a time', () => {
 			)
 		).toBe(true);
 		v.destroy();
+	});
+
+	it('v1.24.2: his XMR address waiting on the network counts as shared — the button does not come back', async () => {
+		for (const [error, shared] of [
+			['chain_unreachable', true],
+			['broadcast_err:insufficient_funds', false]
+		] as const) {
+			const v = await render(PEER, 'buy', 'BLURT');
+			await v.push([{ ...(await addressMsg()), state: 'failed', error, createdAt: null }]);
+			expect(has(v, 'chat.address.share_button_aria_asset')).toBe(!shared);
+			v.destroy();
+			document.body.innerHTML = '';
+		}
 	});
 
 	it('the buyer’s payment seen at 0 confirmations: "Send BLURT"; the receipt shows the check', async () => {
@@ -1494,8 +1566,9 @@ describe('v1.21.17: a crypto-for-crypto trade, one step at a time', () => {
 			v.button((b) => (b.textContent ?? '').trim() === 'chat.funds_sent.send')!.click();
 			await v.settle();
 			expect(ctl.sent).toHaveLength(1);
-			v.button((b) => (b.textContent ?? '').trim() === 'common.cancel')!.click();
-			await v.settle();
+			// v1.24.2: the receipt waits in the chat and goes out by itself, so the
+			// window closes as for a send — nothing here is the user's to fix.
+			expect(v.button((b) => (b.textContent ?? '').trim() === 'common.cancel')).toBeUndefined();
 			expect(has(v, 'chat.funds_sent.button_aria')).toBe(false);
 		});
 		it('paid less: no "Send XMR" unless his wallet says otherwise', async () => {

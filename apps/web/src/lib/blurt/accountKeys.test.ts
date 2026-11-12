@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	ACCOUNT_KEYS_REUSE_MS,
+	ACCOUNT_KEYS_RETRY_WAIT_MS,
 	ACCOUNT_KEYS_TIMEOUT_MS,
 	fetchAccountKeys,
 	fetchAccountKeysForSigning
@@ -42,22 +43,26 @@ describe('fetchAccountKeys', () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
-	it('a server that never answers: rejected at the deadline, and the request is aborted', async () => {
-		let signal: AbortSignal | undefined;
+	it('a server that never answers: each try aborted at the deadline; rejected after the quiet second try', async () => {
+		const signals: AbortSignal[] = [];
 		const f = vi.fn((_u: URL, init?: RequestInit) => {
-			signal = init?.signal ?? undefined;
+			if (init?.signal) signals.push(init.signal);
 			return never<Response>();
 		});
-		const p = fetchAccountKeys(ORIGIN, 'bob', f as never);
-		const settled = p.then(
-			() => 'resolved',
-			() => 'rejected'
+		let outcome = 'pending';
+		void fetchAccountKeys(ORIGIN, 'bob', f as never).then(
+			() => (outcome = 'resolved'),
+			() => (outcome = 'rejected')
 		);
 		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_TIMEOUT_MS - 1);
-		expect(signal?.aborted).toBe(false);
+		expect(signals[0]?.aborted).toBe(false);
 		await vi.advanceTimersByTimeAsync(1);
-		expect(await settled).toBe('rejected');
-		expect(signal?.aborted).toBe(true);
+		expect(signals[0]?.aborted).toBe(true);
+		expect(outcome).toBe('pending'); // v1.24.2: asked once more, quietly
+		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_RETRY_WAIT_MS + ACCOUNT_KEYS_TIMEOUT_MS);
+		expect(outcome).toBe('rejected');
+		expect(f).toHaveBeenCalledTimes(2);
+		expect(signals[1]?.aborted).toBe(true);
 	});
 
 	it('a server that sends headers and then stalls the body: rejected at the deadline too', async () => {
@@ -68,7 +73,7 @@ describe('fetchAccountKeys', () => {
 			() => 'resolved',
 			() => 'rejected'
 		);
-		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_TIMEOUT_MS);
+		await vi.advanceTimersByTimeAsync(2 * ACCOUNT_KEYS_TIMEOUT_MS + ACCOUNT_KEYS_RETRY_WAIT_MS);
 		expect(await settled).toBe('rejected');
 	});
 
@@ -104,24 +109,50 @@ describe('fetchAccountKeys', () => {
 	it('a failed lookup is not kept either', async () => {
 		let n = 0;
 		const g = vi.fn(async () =>
-			++n === 1
+			++n <= 2
 				? new Response('{}', { status: 502 })
 				: new Response(JSON.stringify(body), { status: 200 })
 		);
-		await expect(fetchAccountKeys(ORIGIN, 'eve', g as never)).rejects.toThrow(/502/);
+		const first = expect(fetchAccountKeys(ORIGIN, 'eve', g as never)).rejects.toThrow(/502/);
+		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_RETRY_WAIT_MS);
+		await first;
 		expect((await fetchAccountKeys(ORIGIN, 'eve', g as never))?.memo_key).toBe('BLTm');
 	});
-});
 
-describe('fetchAccountKeysForSigning (posting an order, unlocking the active key)', () => {
-	it('asks once more after a 502 before failing', async () => {
+	// v1.24.2 — whoever asks (a chat send, Verify peer, a shared address, a
+	// review, pairing): one failure is asked again, quietly, before the caller
+	// hears of it. A node that was slow once is not an error on anyone's screen.
+	it('a refused request (4xx) is not asked again: it would be refused the same way', async () => {
+		const g = vi.fn(async () => new Response('{}', { status: 429 }));
+		await expect(fetchAccountKeys(ORIGIN, 'lou', g as never)).rejects.toThrow(/429/);
+		expect(g).toHaveBeenCalledTimes(1);
+	});
+
+	it('one failure is asked again quietly, and the caller only sees the answer', async () => {
 		let n = 0;
 		const g = vi.fn(async () =>
 			++n === 1
 				? new Response('{}', { status: 502 })
 				: new Response(JSON.stringify(body), { status: 200 })
 		);
-		expect((await fetchAccountKeysForSigning(ORIGIN, 'fay', g as never))?.memo_key).toBe('BLTm');
+		const p = fetchAccountKeys(ORIGIN, 'kim', g as never);
+		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_RETRY_WAIT_MS);
+		expect((await p)?.memo_key).toBe('BLTm');
+		expect(g).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe('fetchAccountKeysForSigning (posting an order, unlocking the active key)', () => {
+	it('asks once more after a 502 before failing (and no more than that)', async () => {
+		let n = 0;
+		const g = vi.fn(async () =>
+			++n === 1
+				? new Response('{}', { status: 502 })
+				: new Response(JSON.stringify(body), { status: 200 })
+		);
+		const p = fetchAccountKeysForSigning(ORIGIN, 'fay', g as never);
+		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_RETRY_WAIT_MS);
+		expect((await p)?.memo_key).toBe('BLTm');
 		expect(g).toHaveBeenCalledTimes(2);
 	});
 
@@ -135,14 +166,18 @@ describe('fetchAccountKeysForSigning (posting an order, unlocking the active key
 				: Promise.resolve(new Response(JSON.stringify(body), { status: 200 }))
 		);
 		const p = fetchAccountKeysForSigning(ORIGIN, 'gus', g as never);
-		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_TIMEOUT_MS);
+		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_TIMEOUT_MS + ACCOUNT_KEYS_RETRY_WAIT_MS);
 		expect((await p)?.memo_key).toBe('BLTm');
 		expect(g).toHaveBeenCalledTimes(2);
 	});
 
 	it('gives up after the second failure, and does not retry "no such account"', async () => {
 		const bad = vi.fn(async () => new Response('{}', { status: 502 }));
-		await expect(fetchAccountKeysForSigning(ORIGIN, 'hal', bad as never)).rejects.toThrow(/502/);
+		const failed = expect(fetchAccountKeysForSigning(ORIGIN, 'hal', bad as never)).rejects.toThrow(
+			/502/
+		);
+		await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_RETRY_WAIT_MS);
+		await failed;
 		expect(bad).toHaveBeenCalledTimes(2);
 		const none = vi.fn(async () => new Response('{}', { status: 404 }));
 		expect(await fetchAccountKeysForSigning(ORIGIN, 'ivy', none as never)).toBeNull();

@@ -383,6 +383,7 @@
 			"placeholder_other_key": "Ta wiadomość została zaszyfrowana dla innego klucza posting twojego konta, więc ta sesja nie może jej otworzyć. Zaloguj się tym kluczem, aby ją przeczytać.",
 			"sending": "wysyłanie…",
 			"failed_label": "Nieudane",
+			"not_sent_label": "Jeszcze nie wysłano",
 			"retry": "Ponów",
 			"retry_aria": "Ponów wysyłanie tej wiadomości",
 			"peer_not_ready": "Ten odbiorca jeszcze nie otworzył czatu Morphit. Gdy to zrobi, Twoja wiadomość zostanie wysłana po ponowieniu próby.",
@@ -503,7 +504,7 @@
 				"yes": "Tak, usuń go",
 				"no": "Nie, zachowaj go"
 			},
-			"chain_unreachable": "Nie udało się połączyć z blockchainem, aby sprawdzić klucze tego kontaktu, więc wiadomość nie została wysłana. W sieciach Tor i I2P zdarza się to często, bo nawiązanie połączenia trwa dłużej. Nic złego się nie stało — spróbuj ponownie za chwilę.",
+			"chain_unreachable": "Sieć Blurt nie odpowiedziała na czas, więc ta wiadomość jeszcze nie wyszła. Wysyłka jest ponawiana automatycznie, dopóki ten czat jest otwarty; „Ponów” wyśle ją od razu.",
 			"pub_pin_key_changed": "Nie wysłano: klucz tej osoby się zmienił. Dzieje się tak, gdy zresetuje swoje klucze — albo gdy ktoś próbuje czytać twoje wiadomości. Otwórz ⋮ → Zweryfikuj rozmówcę i porównaj z tą osobą nowy numer bezpieczeństwa innym kanałem, zanim go zaakceptujesz.",
 			"pub_pin_posting_key_changed": "Nie wysłano: klucze konta tej osoby zmieniły się od waszej ostatniej rozmowy. Dzieje się tak, gdy ktoś zresetuje lub doda klucze — albo gdy ktoś próbuje czytać twoje wiadomości. Otwórz ⋮ → Zweryfikuj rozmówcę i porównaj z tą osobą numer bezpieczeństwa innym kanałem, zanim go zaakceptujesz.",
 			"pub_pin_withdrawn": "Nie udało się bezpiecznie wysłać: Twój serwer twierdzi, że ta osoba nie ma już klucza, który wcześniej zgłaszał, ale klucz zapisany w blockchainie nie może zniknąć. Serwer może być niezsynchronizowany lub zmyślać dane. Spróbuj ponownie później albo użyj innej instancji Morphit."
@@ -720,6 +721,7 @@
 			"confirm": "Wyślij BLURT",
 			"paying": "Wysyłanie…",
 			"success_toast": "BLURT wysłany. Potwierdzenie opublikowane w czacie.",
+			"success_toast_receipt_pending": "BLURT wysłany. Potwierdzenie trafi do czatu, gdy tylko sieć odpowie, dopóki ten czat jest otwarty; jeśli wyjdziesz wcześniej, oznacz środki jako wysłane tym txid: {txid}",
 			"error": {
 				"password_required": "Wprowadź hasło klucza aktywnego.",
 				"bad_password": "Nieprawidłowe hasło.",

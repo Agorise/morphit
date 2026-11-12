@@ -1052,12 +1052,28 @@
 	 *  sendMessage never throws, so every modal closed whatever happened.
 	 *  `sendFromModal` throws when the node did not take the message, which
 	 *  is what keeps the modal open with its error. */
-	async function sendFromModal(payload: string): Promise<void> {
+	/** v1.24.2 — a message not sent because the network did not answer: it goes
+	 *  out by itself (chatService, NOT_YET_SENT_RETRY_MS), so everything that
+	 *  asks "did I already send this?" counts it as still sending — or the
+	 *  "Share your address" button would come back and a second card follow. */
+	function waitingToSend(m: { state: string; error?: string | null }): boolean {
+		return m.state === 'failed' && m.error === 'chain_unreachable';
+	}
+
+	/** Sends a modal's payload. True once it went out; false when it waits in
+	 *  the chat for the network and goes out by itself (v1.24.2). */
+	async function sendFromModal(payload: string): Promise<boolean> {
 		if (!controller) throw new Error('controller_not_ready');
-		const outcome = await controller.sendMessage(payload);
+		const sending = controller.sendMessage(payload);
 		await tick();
 		scrollToBottom(true);
-		if (!outcome.ok) throw new Error(outcome.error);
+		const outcome = await sending;
+		// v1.24.2 — the network did not answer: the message waits in the chat,
+		// "not sent yet", and goes out by itself (chatService, NOT_YET_SENT_RETRY_MS).
+		// The window closes as for a send; nothing here is the user's to fix, and
+		// sending it again from the window would post it twice.
+		if (!outcome.ok && outcome.error !== 'chain_unreachable') throw new Error(outcome.error);
+		return outcome.ok;
 	}
 
 	async function handleAddressShare(payload: string): Promise<void> {
@@ -1246,8 +1262,18 @@
 			const wire = encodeFundsSentPayload(fundsSent);
 			// W-L5: the success toast only when the receipt really went out;
 			// otherwise the txid, for posting it by hand (the bubble has Retry).
-			await sendFromModal(wire);
-			showToast($_('chat.pay_blurt.success_toast') as string, 'success');
+			// v1.24.2: a receipt waiting on the network goes out by itself while
+			// this chat is open — said so, calmly; the txid stays in the note, so a
+			// receipt is never lost if they leave first.
+			const posted = await sendFromModal(wire);
+			showToast(
+				posted
+					? ($_('chat.pay_blurt.success_toast') as string)
+					: ($_('chat.pay_blurt.success_toast_receipt_pending', {
+							values: { txid: args.trxId }
+						}) as string),
+				'success'
+			);
 		} catch {
 			// Chat broadcast failed but the on-chain transfer
 			// already landed.  Surface the txid for manual recovery.
@@ -1897,7 +1923,8 @@
 			// A message that failed to post told the peer nothing — except my own
 			// receipt: the money it records has left, so it still counts, or
 			// "Send" would come back (legLedger.ts).
-			if (m.state === 'failed' && !(mine && d.kind === 'funds_sent')) continue;
+			// v1.24.2: one waiting on the network goes out by itself — still sending.
+			if (m.state === 'failed' && !waitingToSend(m) && !(mine && d.kind === 'funds_sent')) continue;
 			const order = d.payload.orderPermlink ?? m.orderPermlink ?? null;
 			const at = m.createdAt ? m.createdAt.getTime() : NaN;
 			if (d.kind === 'address') {
@@ -2233,7 +2260,8 @@
 		if (!orderPermlink) return false;
 		const facts: SharedAddressFact[] = [];
 		for (const m of messages) {
-			if (m.sender !== me || m.decryptFailed || m.state === 'failed') continue;
+			if (m.sender !== me || m.decryptFailed || (m.state === 'failed' && !waitingToSend(m)))
+				continue;
 			const d = decodePayload(m.text);
 			if (d.kind !== 'address') continue;
 			facts.push({
@@ -2610,12 +2638,15 @@
 	async function handleSend(text: string): Promise<void> {
 		if (!controller) return;
 
-		await controller.sendMessage(text);
+		const sending = controller.sendMessage(text);
 
-		// After send, always force-scroll to bottom — the user
-		// sending IS an expression of attention on the conversation.
+		// The message is in the transcript at once: scroll to it now — the user
+		// sending IS an expression of attention on the conversation. Not again
+		// when the send ends, which may be a while on a slow network (v1.24.2):
+		// a reader who scrolled up meanwhile is not yanked back down.
 		await tick();
 		scrollToBottom(true);
+		await sending;
 	}
 
 	function handleRetry(localSeq: number): void {

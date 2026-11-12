@@ -37,6 +37,20 @@ import { DEFAULT_USER_FACING_TIMEOUT_MS } from '@morphit/rpc-pool';
 import type { BlurtClient, ChainAccount } from '$blurt/client';
 import { primaryPostingKey } from '$indexer/postingKeyBackfill';
 import { errorBody, isAccountName } from '$api/shared';
+import { logger } from '$log';
+
+const log = logger('account-keys');
+
+/** v1.24.2 — why a person's key lookup could not be answered, in the log (the
+ *  reason and the time it took, never the account: who is about to write to
+ *  whom is nobody's business). Before, these 502s left no trace, so a send
+ *  that failed on "the network didn't answer" could not be explained after. */
+function logUnanswered(
+	reason: 'deadline' | 'no_quorum' | 'unreachable' | 'incomplete',
+	startedAt: number
+): void {
+	log.warn('account_keys_unanswered', { reason, ms: Date.now() - startedAt });
+}
 
 
 interface AccountKeysBody {
@@ -111,6 +125,7 @@ export function accountKeysRoute(
 		// read the fast path already uses for keys: two operators agreeing on
 		// every authority and the memo key, a majority of those that answered.
 		let agreed: ReadonlyMap<string, ChainAccount> | null;
+		const startedAt = Date.now();
 		const deadline = new AbortController();
 		const timer = setTimeout(
 			() => deadline.abort(),
@@ -125,11 +140,17 @@ export function accountKeysRoute(
 				signal: deadline.signal
 			});
 		} catch {
+			logUnanswered('unreachable', startedAt);
 			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
 		} finally {
 			clearTimeout(timer);
 		}
 		if (agreed === null) {
+			// The read decides nothing when fewer than two operators gave the same
+			// keys — they disagreed, or too few answered (nodes down or resting;
+			// the pool swallows their failures) — and when the deadline came
+			// first. Only the deadline can be told apart here.
+			logUnanswered(deadline.signal.aborted ? 'deadline' : 'no_quorum', startedAt);
 			return c.json(errorBody('internal', 'Blurt RPC operators did not agree on this account yet'), 502);
 		}
 		const acct = agreed.get(account) ?? null;
@@ -142,6 +163,7 @@ export function accountKeysRoute(
 		// blocks. Treat that as an upstream failure rather than emitting a
 		// body the client-side verifier would choke on.
 		if (!isAuthority(acct.owner) || !isAuthority(acct.active) || !isAuthority(acct.posting) || typeof acct.memo_key !== 'string') {
+			logUnanswered('incomplete', startedAt);
 			return c.json(errorBody('internal', 'incomplete account data from the Blurt network'), 502);
 		}
 

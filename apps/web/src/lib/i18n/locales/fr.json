@@ -383,6 +383,7 @@
 			"placeholder_other_key": "Ce message a été chiffré pour une autre clé de posting de votre compte, cette session ne peut donc pas l'ouvrir. Connectez-vous avec cette clé pour le lire.",
 			"sending": "envoi…",
 			"failed_label": "Échec",
+			"not_sent_label": "Pas encore envoyé",
 			"retry": "Réessayer",
 			"retry_aria": "Réessayer l'envoi de ce message",
 			"peer_not_ready": "Ce destinataire n'a pas encore ouvert le chat Morphit. Quand il le fera, votre message passera lors d'une nouvelle tentative.",
@@ -503,7 +504,7 @@
 				"yes": "Oui, la supprimer",
 				"no": "Non, la garder"
 			},
-			"chain_unreachable": "La blockchain n'a pas pu être jointe pour vérifier les clés de ce contact, le message n'a donc pas été envoyé. C'est courant sur Tor et I2P, où les connexions mettent plus de temps à s'établir. Rien d'anormal — réessayez dans un instant.",
+			"chain_unreachable": "Le réseau Blurt n'a pas répondu à temps : ce message n'est donc pas encore parti. L'envoi est réessayé automatiquement tant que cette discussion reste ouverte ; « Réessayer » l'envoie maintenant.",
 			"pub_pin_key_changed": "Non envoyé : la clé de cette personne a changé. Cela arrive quand elle réinitialise ses clés — ou quand quelqu'un essaie de lire vos messages. Ouvrez ⋮ → Vérifier le contact et comparez le nouveau numéro de sécurité avec elle par un autre canal avant de l'accepter.",
 			"pub_pin_posting_key_changed": "Non envoyé : les clés du compte de cette personne ont changé depuis votre dernière conversation. Cela arrive quand quelqu'un réinitialise ou ajoute des clés — ou quand quelqu'un essaie de lire vos messages. Ouvrez ⋮ → Vérifier le contact et comparez le numéro de sécurité avec elle par un autre canal avant de l'accepter.",
 			"pub_pin_withdrawn": "Envoi sécurisé impossible : votre serveur affirme que cette personne n'a plus la clé qu'il signalait auparavant, mais une clé enregistrée sur la blockchain ne peut pas disparaître. Le serveur est peut-être désynchronisé, ou fabrique des données. Réessayez plus tard, ou utilisez une autre instance Morphit."
@@ -720,6 +721,7 @@
 			"confirm": "Envoyer BLURT",
 			"paying": "Envoi…",
 			"success_toast": "BLURT envoyé. Reçu publié dans la discussion.",
+			"success_toast_receipt_pending": "BLURT envoyé. Le reçu sera publié dans la discussion dès que le réseau répondra, tant que cette discussion reste ouverte ; si vous la quittez avant, marquez les fonds envoyés avec ce txid : {txid}",
 			"error": {
 				"password_required": "Saisissez votre mot de passe.",
 				"bad_password": "Mot de passe incorrect.",

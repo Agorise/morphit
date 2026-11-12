@@ -7,10 +7,11 @@
  * hedged answer, the fastest node's, so a single hostile pool node could name
  * its own key and read that message.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { accountKeysRoute } from '$api/accountKeys';
+import { accountKeysRoute, ACCOUNT_KEYS_DEADLINE_CLEARNET_MS } from '$api/accountKeys';
 import type { ChainAccount } from '$blurt/client';
+import { setLogSink } from '$log';
 
 const auth = (key: string) => ({ weight_threshold: 1, account_auths: [], key_auths: [[key, 1]] });
 const account = (posting: string, memo = 'BLTmemo'): ChainAccount =>
@@ -118,5 +119,79 @@ describe('a key operators agreed on here also serves the fast path (review findi
 		}).request('/alice/keys');
 		expect(await lookup('alice', { budget: 'ticket' })).toBe('BLTreal');
 		expect(reads).toBe(0);
+	});
+});
+
+// v1.24.2 — a lookup that could not be answered leaves a trace in the log (the
+// reason and the time it took), never the account: before, these 502s left
+// nothing, so a chat send that failed on "the network didn't answer" could not
+// be explained after.
+describe('account keys: an unanswered lookup is logged by its reason only', () => {
+	const capture = async (blurt: unknown) => {
+		const records: { event: string; context: Record<string, unknown> }[] = [];
+		const restore = setLogSink((r) => records.push(r as never));
+		try {
+			const res = await accountKeysRoute(blurt as never).request('/alice/keys');
+			return { status: res.status, records };
+		} finally {
+			restore();
+		}
+	};
+
+	it('operators that do not agree: no_quorum', async () => {
+		const r = await capture(pool([account('BLTa'), account('BLTb')]));
+		expect(r.status).toBe(502);
+		const hit = r.records.find((x) => x.event === 'account_keys_unanswered');
+		expect(hit?.context.reason).toBe('no_quorum');
+		expect(typeof hit?.context.ms).toBe('number');
+		expect(JSON.stringify(r.records)).not.toContain('alice');
+	});
+
+	it('the deadline came first (nodes slow or resting): deadline', async () => {
+		vi.useFakeTimers();
+		try {
+			const pending = capture({
+				// As the real read does: it stops at the deadline and decides nothing.
+				getAccountsAgreed: (_n: unknown, _k: unknown, o: { signal: AbortSignal }) =>
+					new Promise((resolve) => o.signal.addEventListener('abort', () => resolve(null)))
+			});
+			await vi.advanceTimersByTimeAsync(ACCOUNT_KEYS_DEADLINE_CLEARNET_MS);
+			const r = await pending;
+			expect(r.status).toBe(502);
+			const hit = r.records.find((x) => x.event === 'account_keys_unanswered');
+			expect(hit?.context.reason).toBe('deadline');
+			expect(hit?.context.ms).toBe(ACCOUNT_KEYS_DEADLINE_CLEARNET_MS);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('incomplete account data: incomplete', async () => {
+		const broken = { ...account('BLTa'), posting: undefined } as unknown as ChainAccount;
+		const r = await capture(pool([broken, broken]));
+		expect(r.status).toBe(502);
+		expect(r.records.find((x) => x.event === 'account_keys_unanswered')?.context.reason).toBe(
+			'incomplete'
+		);
+	});
+
+	// Defensive: the real read does not throw when nodes are down (it decides
+	// nothing: no_quorum), but a throw is logged as such.
+	it('the read itself throws: unreachable', async () => {
+		const r = await capture({
+			getAccountsAgreed: async () => {
+				throw new Error('every node timed out');
+			}
+		});
+		expect(r.status).toBe(502);
+		expect(r.records.find((x) => x.event === 'account_keys_unanswered')?.context.reason).toBe(
+			'unreachable'
+		);
+	});
+
+	it('an answer is not logged', async () => {
+		const r = await capture(pool([account('BLTa'), account('BLTa')]));
+		expect(r.status).toBe(200);
+		expect(r.records.some((x) => x.event === 'account_keys_unanswered')).toBe(false);
 	});
 });

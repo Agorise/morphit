@@ -39,9 +39,12 @@ check(
 	'the meta line only renders for pending or failed (clean once sent)',
 	/\{#if isSending \|\| isFailed\}/.test(src)
 );
+// v1.24.2: and while a message waits, not sent, for the network to answer
+// (isNotYetSent) — never once it was sent.
 check(
-	'the bubble is dimmed only while actively sending (opacity-80 on isSending)',
-	/class:opacity-80=\{isSending\}/.test(src) && !/class:opacity-80=\{isInFlight\}/.test(src)
+	'the bubble is dimmed only while sending or not sent yet (opacity-80 on isSending)',
+	/class:opacity-80=\{isSending \|\| isNotYetSent\}/.test(src) &&
+		!/class:opacity-80=\{[^}]*isInFlight/.test(src)
 );
 
 if (failures === 0) {

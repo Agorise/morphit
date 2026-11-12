@@ -66,7 +66,7 @@ export async function fetchAccountKeys(
 	inFlight.set(fetchImpl, m);
 	const pending = m.get(url);
 	if (pending !== undefined) return pending;
-	const p = fetchAccountKeysOnce(indexerOrigin, account, fetchImpl)
+	const p = fetchAccountKeysQuietly(indexerOrigin, account, fetchImpl)
 		.then((value) => {
 			const r = recent.get(fetchImpl) ?? new Map();
 			recent.set(fetchImpl, r);
@@ -81,22 +81,52 @@ export async function fetchAccountKeys(
 	return p;
 }
 
+/** The indexer answered with an error status (a 404 is "no such account",
+ *  never thrown). A 4xx is the request's own fault: asked again, it would be
+ *  refused the same way (v1.24.2). */
+export class AccountKeysStatusError extends Error {
+	constructor(readonly status: number) {
+		super(`indexer /v1/account/:name/keys returned ${status}`);
+		this.name = 'AccountKeysStatusError';
+	}
+}
+
+/** v1.24.2 — how long a lookup that failed waits before it asks once more. */
+export const ACCOUNT_KEYS_RETRY_WAIT_MS = 1_500;
+
+/** Every lookup, whoever asks (a chat send, Verify peer, a shared address, a
+ *  review, pairing a phone, an order): one failure — the indexer's 502 when its
+ *  RPC operators could not agree in time, or the browser's own timeout — is
+ *  asked again once, quietly, before the caller hears of it. The indexer rests
+ *  a node that failed, so the second read usually goes to others. The person
+ *  did nothing wrong, and a node that was slow once should not show up as an
+ *  error on their screen (v1.24.2; until then only posting an order and
+ *  unlocking the active key asked twice). "No such account" (null) is an
+ *  answer and is not asked again. Shared by everyone waiting on the lookup. */
+async function fetchAccountKeysQuietly(
+	indexerOrigin: string,
+	account: string,
+	fetchImpl: typeof fetch
+): Promise<AccountAuthorities | null> {
+	try {
+		return await fetchAccountKeysOnce(indexerOrigin, account, fetchImpl);
+	} catch (err) {
+		if (err instanceof AccountKeysStatusError && err.status >= 400 && err.status < 500) throw err;
+		await new Promise((r) => setTimeout(r, ACCOUNT_KEYS_RETRY_WAIT_MS));
+		return fetchAccountKeysOnce(indexerOrigin, account, fetchImpl);
+	}
+}
+
 /** For a step that moves money or signs (posting an order, unlocking the
- *  active key): one failed lookup — the indexer's 502 when its RPC operators
- *  could not agree in time, or the browser's own timeout — is asked again once
- *  before the person is shown an error. The indexer rests a node that failed,
- *  so the second read usually goes to others. "No such account" (null) is an
- *  answer and is not retried. */
+ *  active key). Since v1.24.2 every lookup asks a second time after a failure
+ *  (fetchAccountKeysQuietly), so this is the ordinary lookup; kept as the name
+ *  those callers use. */
 export async function fetchAccountKeysForSigning(
 	indexerOrigin: string,
 	account: string,
 	fetchImpl: typeof fetch = fetch
 ): Promise<AccountAuthorities | null> {
-	try {
-		return await fetchAccountKeys(indexerOrigin, account, fetchImpl);
-	} catch {
-		return fetchAccountKeys(indexerOrigin, account, fetchImpl);
-	}
+	return fetchAccountKeys(indexerOrigin, account, fetchImpl);
 }
 
 async function fetchAccountKeysOnce(
@@ -132,7 +162,7 @@ async function fetchAccountKeysOnce(
 			aborted
 		]);
 		if (res.status === 404) return null;
-		if (!res.ok) throw new Error(`indexer /v1/account/:name/keys returned ${res.status}`);
+		if (!res.ok) throw new AccountKeysStatusError(res.status);
 		body = (await Promise.race([res.json(), aborted])) as Partial<AccountKeysResponse>;
 	} finally {
 		clearTimeout(timer);

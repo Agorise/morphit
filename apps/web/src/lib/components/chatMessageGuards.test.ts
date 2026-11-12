@@ -314,6 +314,37 @@ describe('W-M5: a message too long to deliver says so', () => {
 	});
 });
 
+describe('v1.24.2: a message the network did not answer for is shown calmly', () => {
+	// The owner: "let's not scare the user with that error message, that is
+	// horrible ux. a deterrent in fact." The user did nothing wrong and nothing
+	// was charged: "Not sent yet" and Retry, never a red "Failed".
+	it('not sent yet: no red, no "Failed", the calm reason, and Retry', async () => {
+		const retried: number[] = [];
+		const t = await mount({
+			me: 'alice',
+			peer: 'bob',
+			message: msg({ sender: 'alice', state: 'failed', error: 'chain_unreachable', text: 'hi' }),
+			onRetry: (s: number) => retried.push(s)
+		});
+		expect(t.textContent).toContain('chat.message.not_sent_label');
+		expect(t.textContent).not.toContain('chat.message.failed_label');
+		expect(t.textContent).toContain('chat.security.chain_unreachable');
+		expect(t.innerHTML).not.toMatch(/red-/);
+		button(t, 'chat.message.retry')!.click();
+		expect(retried).toEqual([7]);
+	});
+
+	it('a real failure stays red', async () => {
+		const t = await mount({
+			me: 'alice',
+			peer: 'bob',
+			message: msg({ sender: 'alice', state: 'failed', error: 'message_too_long', text: 'x' })
+		});
+		expect(t.textContent).toContain('chat.message.failed_label');
+		expect(t.innerHTML).toMatch(/ring-red-500/);
+	});
+});
+
 describe('posting-key-only chat (v1.21.14): the "not verified" note says which case it is', () => {
 	it('an older-format message: the calm note, never the key-change warning', async () => {
 		const t = await mount({
