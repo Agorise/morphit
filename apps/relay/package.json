@@ -19,7 +19,7 @@
 	},
 	"dependencies": {
 		"@beblurt/dblurt": "^0.17.0",
-		"@hono/node-server": "^1.19.17",
+		"@hono/node-server": "^1.19.18",
 		"@morphit/hidden-transport": "*",
 		"@morphit/operator-config": "*",
 		"@morphit/rpc-pool": "*",
@@ -28,7 +28,7 @@
 		"@session.js/keypair": "1.0.8",
 		"@session.js/mnemonic": "1.0.6",
 		"@session.js/types": "1.0.19",
-		"hono": "^4.13.12",
+		"hono": "^4.13.16",
 		"pg": "^8.13.0",
 		"tsx": "^4.19.0",
 		"undici": "^7.29.1",

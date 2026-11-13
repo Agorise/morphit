@@ -66,7 +66,7 @@
 		"@morphit/hidden-transport": "*",
 		"@morphit/operator-config": "*",
 		"@noble/secp256k1": "^2.3.0",
-		"hono": "^4.13.12",
+		"hono": "^4.13.16",
 		"js-yaml": "^4.3.2",
 		"undici": "^7.29.1",
 		"yaml": "^1.10.3"

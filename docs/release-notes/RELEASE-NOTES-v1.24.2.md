@@ -40,6 +40,17 @@ problem.
 
 Upgrade as usual. Nothing to configure.
 
+Two web-server libraries are updated in the indexer, the relay and the MCP server:
+
+- `@hono/node-server` 1.19.19 (GHSA-jpvv-r467-5p4w). The older version read a backslash in a
+  request's path as a slash, so a path the reverse proxy in front of a node lets through could reach a
+  route the proxy is meant to block. A request whose path holds a raw backslash is now refused, with
+  status 400. No Morphit address contains one.
+- `hono` 4.13.18 (GHSA-h7mg-cq63-vhpq, GHSA-4m76-xfj5-7975, GHSA-3gg2-335m-rxc6). With the older
+  version, a path holding an encoded line break (such as `%0A`) skipped the middleware set for every
+  path. It got its "not found" answer without the security headers. Every request now passes through
+  that middleware.
+
 When your indexer cannot answer a key lookup, it now logs why: `account_keys_unanswered` with a
 `reason` and the time it took (`ms`). The account looked up is never logged. The reasons:
 
@@ -125,5 +136,17 @@ site whose Blurt nodes are slow sees a few more of these requests, never a flood
     - "Share your address" staying hidden for a waiting card, in a one-leg and in a two-leg trade.
   - `accountKeysQuorum.test.ts`: each log reason, never naming the account.
   - Every part, undone on its own, fails a test or a smoke: 26 mutations.
+- **Dependencies:**
+  - `@hono/node-server` 1.19.17 → 1.19.19 (GHSA-jpvv-r467-5p4w, a backslash in the path read as a
+    separator). The indexer's and the relay's `package.json` now require `^1.19.18`. The update also
+    refuses a `%` in a `serveStatic` path, which Morphit does not use.
+  - `hono` 4.13.12 → 4.13.18 (GHSA-h7mg-cq63-vhpq: RegExpRouter skipped wildcard middleware, as for a
+    path with an encoded line terminator; GHSA-4m76-xfj5-7975, `mount()`, and GHSA-3gg2-335m-rxc6,
+    the `css` helper, neither used here). The root's, the indexer's and the relay's `package.json` now
+    require `^4.13.16`. The setup-time checks 4.13.16 adds (`/x*` routes, duplicate parameter names,
+    patterns that match an empty string) find nothing in Morphit's routes. The validator, CSRF, JWT and
+    `serveStatic` changes do not touch Morphit, which does not use them.
+  - The lockfile changes only those two packages, one shared copy each. The new floors keep any
+    install off an affected version.
 - **Smokes:** `chat-sent-state-smoke` requires the not-yet-sent bubble to be dimmed, and still never
   a sent one.
