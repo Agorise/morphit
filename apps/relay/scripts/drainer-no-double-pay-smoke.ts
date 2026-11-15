@@ -24,7 +24,9 @@ if (!url) {
 }
 
 const { RelayQueueDrainer } = await import('../src/queue/drainer.ts');
-const { BroadcastOutcomeUnknownError } = await import('../src/blurt/client.ts');
+const { BroadcastOutcomeUnknownError, BroadcastNotSentError } = await import(
+	'../src/blurt/client.ts'
+);
 
 let failures = 0;
 let scenarios = 0;
@@ -676,6 +678,233 @@ await check(
 		assert(landed(m.state.history) === 0 && m.state.sends === 0, 'sent while the attempt was open');
 	}
 );
+
+// ─── Two drainers on one row (security report, 2026-11-14) ───────────────
+// A drainer's claim stays valid only while its stamp is younger than the
+// retry backoff (1 minute at error_count 0); the head read before signing
+// walks several nodes and can take longer. A second drainer then takes the
+// row again. Each scenario runs two real drainers on the real table; the
+// first one's head read is held open until the second has done its part.
+
+/** A gate: `wait()` blocks until `open()`. */
+function gate(): { wait: () => Promise<void>; open: () => void; reached: Promise<void> } {
+	let open!: () => void;
+	let reach!: () => void;
+	const opened = new Promise<void>((r) => (open = r));
+	const reached = new Promise<void>((r) => (reach = r));
+	return {
+		wait: () => {
+			reach();
+			return opened;
+		},
+		open,
+		reached
+	};
+}
+/** A chain shared by two drainers. `hold` delays the head read (before
+ *  signing). Every send lands and its reply is lost, so nothing marks the row
+ *  sent and the row stays open to a second drainer. Mirrors the real client:
+ *  a failure before the send is a BroadcastNotSentError. */
+function racingChain(
+	history: Array<{ trx_id: string; op: [string, Record<string, unknown>] }>,
+	ids: { n: number },
+	hold?: () => Promise<void>
+) {
+	const state = { sends: 0 };
+	const blurt = {
+		broadcastTransfer: async (a: {
+			from: string;
+			to: string;
+			amountBlurt: number;
+			memo?: string;
+			onSigned?: (i: { txid: string; expirationMs: number }) => Promise<void>;
+		}) => {
+			const txid = (++ids.n).toString(16).padStart(40, '0');
+			const expirationMs = Date.now() + 120_000;
+			try {
+				if (hold) await hold();
+				await a.onSigned?.({ txid, expirationMs });
+			} catch (err) {
+				throw new BroadcastNotSentError(err instanceof Error ? err.message : String(err));
+			}
+			state.sends++;
+			history.push({
+				trx_id: txid,
+				op: [
+					'transfer',
+					{
+						from: a.from,
+						to: a.to,
+						amount: `${a.amountBlurt.toFixed(3)} BLURT`,
+						memo: a.memo ?? ''
+					}
+				]
+			});
+			throw new BroadcastOutcomeUnknownError(txid, expirationMs, 'all RPC endpoints unavailable');
+		},
+		settleTransfer: async () => 'unknown' as const
+	};
+	return { state, blurt };
+}
+/** A db for one drainer: its claim can wait at `claimGate` (after its
+ *  SELECT), and with `claimedLongAgo` its claim writes a stamp two minutes
+ *  old — as if its head read had already taken that long — so the stamp it
+ *  holds stays exactly the one it wrote. */
+function drainerDb(o: { claimGate?: () => Promise<void>; claimedLongAgo?: boolean } = {}) {
+	const CLAIM = 'SET broadcast_attempt_at = clock_timestamp()';
+	return {
+		...db,
+		query: async (t: string, p?: readonly unknown[]) => {
+			if (t.includes(CLAIM)) {
+				if (o.claimGate) await o.claimGate();
+				if (o.claimedLongAgo) t = t.replace(CLAIM, `${CLAIM} - INTERVAL '2 minutes'`);
+			}
+			return pool.query(t, p as unknown[]);
+		}
+	};
+}
+type Hist = Array<{ trx_id: string; op: [string, Record<string, unknown>] }>;
+
+await check(
+	'a second drainer that takes the row while the first is still before signing: one payment, not two',
+	async () => {
+		await freshTable();
+		const history: Hist = [];
+		const ids = { n: 0 };
+		const slow = gate();
+		const a = racingChain(history, ids, slow.wait);
+		const b = racingChain(history, ids);
+		const dA = new RelayQueueDrainer(
+			config as never,
+			drainerDb({ claimedLongAgo: true }) as never,
+			a.blurt as never
+		);
+		const dB = new RelayQueueDrainer(config as never, drainerDb() as never, b.blurt as never);
+		const runA = dA.drainOnce();
+		await slow.reached; // A has claimed, and is still reading the head
+		await dB.drainOnce(); // B takes the row, signs and sends
+		slow.open();
+		await runA; // A's head read ends
+		assert(landed(history) === 1, `${landed(history)} transfers landed for one row (expected 1)`);
+		const r = await row();
+		assert(
+			r.error_count === 0,
+			`the drainer that lost the row counted a failure: ${r.error_count}`
+		);
+		// A's txid is 1 (taken before its head read), B's is 2.
+		assert(
+			(r.last_error ?? '').startsWith(`outcome_unknown trx_id=${'2'.padStart(40, '0')} `),
+			`the record of the payment that went out is not B's: ${r.last_error}`
+		);
+	}
+);
+
+await check(
+	'two drainers both before signing: the one whose claim was taken over does not send',
+	async () => {
+		await freshTable();
+		const history: Hist = [];
+		const ids = { n: 0 };
+		const slowA = gate();
+		const slowB = gate();
+		const a = racingChain(history, ids, slowA.wait);
+		const b = racingChain(history, ids, slowB.wait);
+		const dA = new RelayQueueDrainer(
+			config as never,
+			drainerDb({ claimedLongAgo: true }) as never,
+			a.blurt as never
+		);
+		const dB = new RelayQueueDrainer(config as never, drainerDb() as never, b.blurt as never);
+		const runA = dA.drainOnce();
+		await slowA.reached; // A has claimed, and is still reading the head
+		const runB = dB.drainOnce();
+		await slowB.reached; // B has claimed too, and is reading the head
+		slowA.open();
+		await runA; // A signs while B's bare 'in_flight' is on the row
+		slowB.open();
+		await runB;
+		assert(landed(history) === 1, `${landed(history)} transfers landed for one row (expected 1)`);
+		const r = await row();
+		assert(r.error_count === 0, `a failure was counted: ${r.error_count}`);
+	}
+);
+
+await check(
+	'a second drainer that read the row before the first signed, and claims it after: one payment, not two',
+	async () => {
+		await freshTable();
+		const history: Hist = [];
+		const ids = { n: 0 };
+		const slow = gate();
+		const claimB = gate();
+		const a = racingChain(history, ids, slow.wait);
+		const b = racingChain(history, ids);
+		const dA = new RelayQueueDrainer(
+			config as never,
+			drainerDb({ claimedLongAgo: true }) as never,
+			a.blurt as never
+		);
+		const dB = new RelayQueueDrainer(
+			config as never,
+			drainerDb({ claimGate: claimB.wait }) as never,
+			b.blurt as never
+		);
+		const runA = dA.drainOnce();
+		await slow.reached; // A has claimed, and is still reading the head
+		const runB = dB.drainOnce();
+		await claimB.reached; // B has read the row (bare in_flight) and is about to claim
+		slow.open();
+		await runA; // A signs, records its transaction, sends
+		claimB.open();
+		await runB; // B claims on what it read
+		assert(landed(history) === 1, `${landed(history)} transfers landed for one row (expected 1)`);
+	}
+);
+
+await check('a row stopped at the retry limit after the drainer read it is not sent', async () => {
+	await freshTable();
+	const history: Hist = [];
+	const ids = { n: 0 };
+	const claim = gate();
+	const c = racingChain(history, ids);
+	const d = new RelayQueueDrainer(
+		config as never,
+		drainerDb({ claimGate: claim.wait }) as never,
+		c.blurt as never
+	);
+	const run = d.drainOnce();
+	await claim.reached;
+	// Held: the indexer's foreign-code heal raises error_count past the limit.
+	await pool.query(`UPDATE relay_pending_transfers SET error_count = 1000000`);
+	claim.open();
+	await run;
+	assert(landed(history) === 0, `${landed(history)} transfers landed for a held row`);
+	// Not claimed either: the held row is left exactly as the hold left it.
+	const r = (
+		await pool.query(`SELECT last_error, broadcast_attempt_at FROM relay_pending_transfers`)
+	).rows[0];
+	assert(
+		r.last_error === null && r.broadcast_attempt_at === null,
+		`the held row was claimed: last_error=${r.last_error}`
+	);
+});
+
+await check('a row held while the drainer reads the head is not sent', async () => {
+	await freshTable();
+	const history: Hist = [];
+	const ids = { n: 0 };
+	const slow = gate();
+	const c = racingChain(history, ids, slow.wait);
+	const d = new RelayQueueDrainer(config as never, drainerDb() as never, c.blurt as never);
+	const run = d.drainOnce();
+	await slow.reached;
+	await pool.query(`UPDATE relay_pending_transfers SET error_count = 1000000`);
+	slow.open();
+	await run;
+	assert(landed(history) === 0, `${landed(history)} transfers landed for a held row`);
+	const r = await row();
+	assert(r.error_count === 1000000, `the hold was changed: error_count ${r.error_count}`);
+});
 
 await pool.end();
 await admin.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);

@@ -27,12 +27,26 @@
  * unsettled rows cannot starve new payments.
  *
  * NEVER PAY TWICE (D1 + wave 4).
- *   1. The row is CLAIMED by an atomic compare-and-set on
- *      broadcast_attempt_at, committed on its own (it also keeps two drainers
- *      off one row).
+ *   1. The row is CLAIMED by an atomic compare-and-set on the row as it was
+ *      read (broadcast_attempt_at AND last_error), committed on its own, and
+ *      only while it may still be sent (error_count below the limit).
  *   2. The transfer is signed ONCE; its txid and SIGNED expiration are
  *      committed ('in_flight trx_id=… exp=…') BEFORE any node is sent the
- *      bytes. If that write fails, nothing is sent.
+ *      bytes, and only while the claim is still this drainer's (the stamp it
+ *      wrote) and the row is not stopped. If that write does not happen,
+ *      nothing is sent.
+ *   Two drainers (security report, 2026-11-14). A claim is not a lease that
+ *   lasts: the drain query takes a row again once its stamp is older than the
+ *   retry backoff (1 minute at first), and the head read before signing walks
+ *   the nodes one after another, so it can take longer. The claim used to
+ *   compare only the stamp, and the signed record was not tied to the claim:
+ *   a second drainer could take the row while the first was still before
+ *   signing, and both sent. Now the first one's record fails (the stamp is no
+ *   longer its own) and it stops without sending or counting anything; and a
+ *   drainer that read the row before another recorded its signed transaction
+ *   loses its claim (last_error changed under the same stamp). One relay per
+ *   database runs one drainer, so this needed two relays on one database —
+ *   but the guarantee no longer depends on that.
  *   3. An unconfirmed send becomes 'outcome_unknown trx_id=… exp=… checks=N'.
  *   4. An unsettled row is settled (BlurtClient.settleTransfer) only once the
  *      signed expiration has passed: found in history → done; absent per >= 2
@@ -583,30 +597,59 @@ export class RelayQueueDrainer {
 		}
 
 		// Claim + stamp, committed BEFORE anything is signed: an atomic
-		// compare-and-set on the attempt stamp we read, so a concurrent
-		// drainer (or a second cycle) that already claimed the row loses.
-		const claim = await this.db.query(
+		// compare-and-set on the row exactly as it was read — its attempt stamp
+		// AND its last_error — and only while it may still be sent. Comparing
+		// last_error too matters: another drainer that claimed with this same
+		// stamp records its signed transaction there, so a drainer that read
+		// the row before that record must lose (see "Two drainers" in the
+		// header).
+		const claim = await this.db.query<{ token: string }>(
 			`UPDATE relay_pending_transfers
 			    SET broadcast_attempt_at = clock_timestamp(),
 			        last_error = $3
 			  WHERE id = $1
 			    AND broadcast_at IS NULL
-			    AND broadcast_attempt_at::text IS NOT DISTINCT FROM $2::text`,
-			[row.id, row.attempt_token ?? null, IN_FLIGHT]
+			    AND error_count < $5
+			    AND broadcast_attempt_at::text IS NOT DISTINCT FROM $2::text
+			    AND last_error IS NOT DISTINCT FROM $4::text
+			  RETURNING broadcast_attempt_at::text AS token`,
+			[
+				row.id,
+				row.attempt_token ?? null,
+				IN_FLIGHT,
+				row.last_error ?? null,
+				this.config.queueMaxRetries
+			]
 		);
-		if ((claim.rowCount ?? 0) !== 1) return 'wait';
+		const token = claim.rows[0]?.token;
+		if ((claim.rowCount ?? 0) !== 1 || typeof token !== 'string') return 'wait';
 
 		// Record WHICH signed transaction is about to go out — txid and signed
-		// expiration — BEFORE any node sees it. If this write fails, the client
-		// sends nothing (BroadcastNotSentError).
+		// expiration — BEFORE any node sees it, and only while the claim is
+		// still OURS (the stamp we wrote: every claim writes a new one) and the
+		// row was not stopped meanwhile. Otherwise another drainer took the row
+		// (our claim outlived the retry backoff while we read the head), or the
+		// row was held: we send nothing, and count nothing — the row is not
+		// ours to judge. If this write fails, the client sends nothing
+		// (BroadcastNotSentError).
+		let lostClaim = false;
 		const onSigned = async (info: { txid: string; expirationMs: number }): Promise<void> => {
 			const w = await this.db.query(
 				`UPDATE relay_pending_transfers SET last_error = $2
-				  WHERE id = $1 AND broadcast_at IS NULL`,
-				[row.id, `${IN_FLIGHT_SIGNED}${info.txid} exp=${info.expirationMs}`]
+				  WHERE id = $1 AND broadcast_at IS NULL
+				    AND error_count < $4
+				    AND broadcast_attempt_at::text = $3::text`,
+				[
+					row.id,
+					`${IN_FLIGHT_SIGNED}${info.txid} exp=${info.expirationMs}`,
+					token,
+					this.config.queueMaxRetries
+				]
 			);
-			if ((w.rowCount ?? 0) !== 1)
-				throw new Error('could not record the signed transaction; not sending');
+			if ((w.rowCount ?? 0) !== 1) {
+				lostClaim = true;
+				throw new Error('the row is no longer claimed by this drainer; not sending');
+			}
 		};
 		let confirmation;
 		try {
@@ -656,6 +699,12 @@ export class RelayQueueDrainer {
 					trx_id: err.txid,
 					cause: causeText(err.reason)
 				});
+				return 'wait';
+			}
+			// Our claim was lost before anything was sent: the row belongs to
+			// whoever holds it now. Not a failure of this row.
+			if (lostClaim) {
+				log.warn('row_claim_lost', { row_id: row.id, kind: row.kind });
 				return 'wait';
 			}
 			// BroadcastNotSentError — nothing left this process (head read,

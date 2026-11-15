@@ -13,7 +13,9 @@
  * reported. If anything was found, every payout the relay has not sent yet is
  * HELD for the operator — moved past the relay's retry limit with a reason,
  * where `morphit-ops` lists failed broadcasts and can re-queue them — because
- * code that ran on this database may have queued some of them. Never throws:
+ * code that ran on this database may have queued some of them. A row that
+ * holds the relay's record of a signed payment keeps that record instead of
+ * the reason, so it is listed as "may have been sent". Never throws:
  * a failure is logged and the indexer carries on.
  */
 import { readFileSync } from 'node:fs';
@@ -43,9 +45,17 @@ export async function healForeignDatabaseCode(
 	try {
 		const dropped = await dropRoutinesNotInSchema(db, schemaSql, { currentSchemaOnly: true });
 		if (dropped.length === 0) return { dropped, held: 0 };
+		// A row whose last_error is the relay's record of a SIGNED payment that
+		// may be on chain keeps that record: overwritten, the transaction id is
+		// gone, the operator's list shows the row as "not sent" instead of "may
+		// have been sent", and re-queuing it could pay twice. Held all the same.
 		const held = await db.query(
 			`UPDATE relay_pending_transfers
-			    SET error_count = GREATEST(error_count, $1), last_error = $2, last_error_at = NOW()
+			    SET error_count = GREATEST(error_count, $1),
+			        last_error = CASE
+			          WHEN last_error LIKE 'outcome_unknown%' OR last_error LIKE 'in_flight trx_id=%'
+			          THEN last_error ELSE $2 END,
+			        last_error_at = NOW()
 			  WHERE broadcast_at IS NULL`,
 			[HELD_ERROR_COUNT, HELD_REASON]
 		);
