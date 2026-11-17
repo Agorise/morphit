@@ -111,7 +111,7 @@ all of them:
   random tail down to the coin's smallest unit, so the on-chain amount can't be
   matched to your posted order.
 - **Shielded-address-aware validation.** ZEC (`zs1` Sapling, `u1` Unified),
-  ARRR (`zs1`), Monero (standard `4…` and subaddresses `8…`) are validated by
+  ARRR (`zs1` Sapling, `pirate1` Ironwood), Monero (standard `4…` and subaddresses `8…`) are validated by
   shape without ever requiring or storing a viewing key.
 
 **ZEC, ARRR, DASH and DCR are trade-only** — you can't pay the listing fee

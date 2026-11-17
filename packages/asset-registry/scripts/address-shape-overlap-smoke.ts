@@ -69,7 +69,7 @@ const SPECIMENS: Record<string, string[]> = {
 	DASH: ['XwnLY8qaFu8aGM9XRdcaQ9XgnnQ8AbnXkc', '7gnwGHt17heGpG9Crfeh4KGpYNFugPhJdh'],
 	DOGE: ['DPHwLrG5Cm5R8KCNNfMcXSEoVbCRBkXxhf', '9oWnzfQwHJxQwgKZBJjBPNxhSEy7sCwbtL', 'A7M2sPo9o6KBdaA1V8tNuS9YqQ8eJ9YHHb'],
 	ZEC: ['t1RKFygRTZxfP7Z3uW4kBJjGNB6cqxQyEmA', 't3JXcyHRZqv6sgCnJiR9Zc4sXh9pK77HQjE', 'zs1' + 'q'.repeat(75), 'u1' + 'q'.repeat(80)],
-	ARRR: ['zs1' + 'q'.repeat(75)],
+	ARRR: ['zs1' + 'q'.repeat(75), 'pirate1nyj2pmhm04kqnthyq9egfz0tpkn7n0r94rzw0f9qmcrw4r5t8fuzt6y34qqnj767zauswg0rqqt'],
 	DCR: ['Dsmcfb6dGoZBaBdF8u1QFcKsuyaPgxR8N7d', 'DcaBzU8eM3o5dC6Phx8nDQAVa1iSYHwSc9N'],
 	SOL: ['So11111111111111111111111111111111111111112', '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM'],
 	ETH: ['0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'],

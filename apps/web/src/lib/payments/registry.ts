@@ -283,9 +283,9 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// (assetExclusion); when the traded asset is something
 		// else, ARRR appears as a selectable payment-rail chip.
 		// Single-network mainnet.  The `arrr:` URI (BIP-21-style)
-		// handles the single address format: zs1 Sapling shielded
-		// (bech32) — Pirate Chain has no transparent option, every
-		// transaction goes through the shielded pool by construction.
+		// handles both address formats: zs1 Sapling and pirate1
+		// Ironwood (both bech32) — Pirate Chain has no transparent
+		// option, every transaction is shielded by construction.
 		//
 		// CP32 LL #36 INVARIANT: every tradable asset MUST also
 		// be wired as a payment rail.  A later change ships ARRR with the

@@ -112,6 +112,22 @@ describe('every coin’s chat messages round-trip', () => {
 		});
 	}
 
+	it('arrr: an Ironwood pirate1 address message (Pirate Chain 6.0)', () => {
+		const address =
+			'pirate1nyj2pmhm04kqnthyq9egfz0tpkn7n0r94rzw0f9qmcrw4r5t8fuzt6y34qqnj767zauswg0rqqt';
+		const back = decodePayload(
+			encodeAddressPayload({ v: 1, kind: 'morphit_addr', method: 'arrr', address } as never)
+		);
+		expect(back.kind).toBe('address');
+		if (back.kind !== 'address') return;
+		expect(back.payload.method).toBe('arrr');
+		expect(back.payload.address).toBe(address);
+		// A Pirate Chain address is never a Zcash one.
+		expect(() =>
+			encodeAddressPayload({ v: 1, kind: 'morphit_addr', method: 'zec', address } as never)
+		).toThrow();
+	});
+
 	it('refuses barter and unknown coins on both sides', () => {
 		expect(() =>
 			encodeAddressPayload({

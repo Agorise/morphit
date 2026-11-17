@@ -81,6 +81,15 @@ Distinct from the existing 11 accent classes (BTC amber-500, USDT amber-400, USD
 - Users coming from the Pirate Chain community see their chain's framing as factual — no Morphit copy compares ARRR's privacy posture against XMR, ZEC, or other privacy coins.
 - Lesson: same-format-different-chain visual collision (zs1 prefix shared between ZEC Sapling and ARRR). Both are first-class privacy chains on Morphit; both legitimately use the `zs1` prefix because both derive from the Zcash Sapling protocol. Future audits should look for similar visual-collision risks when adding chains with shared protocol lineage.
 
+## Update (v1.24.4): Ironwood `pirate1` addresses
+
+Pirate Chain 6.0 added a second shielded pool, Ironwood, active on mainnet since 2026-10-03
+(block 4,161,185). Its payment addresses are plain bech32 with the prefix `pirate` over 43 bytes:
+`pirate1` + 75 characters, 82 in all (Pirate Chain `src/chainparams.cpp`, `src/zcash/Zcash.h`).
+`zs1` Sapling addresses still receive. The "single address format" decision above no longer holds:
+the ARRR address check accepts both `zs1` and `pirate1`. A `pirate1` address cannot be mistaken for
+a Zcash one; a `zs1` address still can, so the order's asset field still decides.
+
 ## References
 
 - ADR-0026 (Transparent-chain privacy framework — established the `privacyFeatures` struct).

@@ -38,6 +38,7 @@
 
 import { ASSETS as CANONICAL } from '../src/index';
 import { ASSETS as FRONTEND } from '../../../apps/web/src/lib/assets/registry';
+import { isValidAddress, isValidArrrAddress } from '../../../apps/web/src/lib/chat/payload';
 
 let failed = 0;
 let passed = 0;
@@ -137,6 +138,42 @@ if (canonArrr) {
 		}
 	}
 	if (rejectAllPassed) pass(`addressShape REJECTS all ${REJECTS.length} adversarial inputs`);
+}
+
+// ── Scenario 4 — Ironwood `pirate1` addresses (Pirate Chain 6.0, mainnet since 2026-10-03) ──
+// Pirate Chain's node encodes an Ironwood payment address as plain bech32 with
+// the prefix "pirate" (src/chainparams.cpp IRONWOOD_PAYMENT_ADDRESS) over 43
+// bytes (src/zcash/Zcash.h): "pirate1" + 75 characters, 82 in all. zs1 Sapling
+// addresses still receive. These two carry real bech32 checksums.
+{
+	const IRONWOOD = ['pirate1nyj2pmhm04kqnthyq9egfz0tpkn7n0r94rzw0f9qmcrw4r5t8fuzt6y34qqnj767zauswg0rqqt', 'pirate1tdh52h3p5nplyvq4hd8jt22q9pzw6fgjdy0txqky9v6l5qlgs9jv6wuqus62rxdqgvnygmu0nfj'];
+	const IRONWOOD_REJECTS: Array<[string, string]> = [
+		['pirate1 too short (74)', 'pirate1' + 'q'.repeat(74)],
+		['pirate1 too long (76)', 'pirate1' + 'q'.repeat(76)],
+		['testnet prefix pirate-test1', 'pirate-test1' + 'q'.repeat(75)],
+		['pirate2 prefix', 'pirate2' + 'q'.repeat(75)],
+		['pirate1 with b in data', 'pirate1b' + 'q'.repeat(74)],
+		['upper-case PIRATE1', 'PIRATE1' + 'Q'.repeat(75)],
+		['Ironwood viewing key prefix', 'pirate-viewing-key1' + 'q'.repeat(75)],
+		['trailing whitespace', 'pirate1nyj2pmhm04kqnthyq9egfz0tpkn7n0r94rzw0f9qmcrw4r5t8fuzt6y34qqnj767zauswg0rqqt ']
+	];
+	const checks: Array<[string, (a: string) => boolean]> = [
+		['canonical addressShape', (a) => !!canonArrr && canonArrr.addressShape.test(a)],
+		['frontend addressValidator', (a) => {
+			const fe = FRONTEND.find((x) => x.ticker === 'arrr');
+			return !!fe && fe.addressValidator(a);
+		}],
+		['chat isValidArrrAddress', (a) => isValidArrrAddress(a)],
+		['chat isValidAddress(arrr)', (a) => isValidAddress('arrr', a)]
+	];
+	for (const [name, ok] of checks) {
+		const acceptAll = IRONWOOD.every((a) => ok(a));
+		if (acceptAll) pass(`${name} ACCEPTS Ironwood pirate1 addresses`);
+		else fail(`${name} ACCEPTS Ironwood pirate1 addresses`, IRONWOOD.filter((a) => !ok(a)).join(', '));
+		const wrong = IRONWOOD_REJECTS.filter(([, a]) => ok(a)).map(([n]) => n);
+		if (wrong.length === 0) pass(`${name} REJECTS all ${IRONWOOD_REJECTS.length} near-miss pirate1 inputs`);
+		else fail(`${name} REJECTS near-miss pirate1 inputs`, `accepted: ${wrong.join('; ')}`);
+	}
 }
 
 const total = passed + failed;

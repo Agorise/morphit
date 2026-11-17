@@ -600,8 +600,8 @@
 			"address_placeholder_zec": "t1… t3… zs1… 或 u1…",
 			"address_invalid_zec": "这不像是有效的 Zcash 地址。",
 			"pill_method_zec": "Zcash 地址",
-			"address_placeholder_arrr": "您的 ARRR 地址 (zs1...)",
-			"address_invalid_arrr": "不是有效的 Pirate Chain 地址。预期 `zs1` 前缀 + 75 个 bech32 数据字符（总共 78 个字符）。",
+			"address_placeholder_arrr": "您的 ARRR 地址 (zs1... 或 pirate1...)",
+			"address_invalid_arrr": "不是有效的 Pirate Chain 地址。预期 `zs1` 前缀 + 75 个 bech32 数据字符（总共 78 个字符），或 `pirate1` 前缀 + 75 个（总共 82 个字符）。",
 			"pill_method_arrr": "Pirate Chain (ARRR)",
 			"address_placeholder_dcr": "您的 DCR 地址 (Ds... 或 Dc...)",
 			"address_invalid_dcr": "不是有效的 Decred 地址。预期 `Ds` 或 `Dc` 前缀 + 33 个 base58 字符（总共 35 个字符）。",
@@ -912,16 +912,16 @@
 			"usdt": "泰达稳定币。与美元 1:1 锚定。在四个网络上交易：ERC-20（以太坊）、TRC-20（波场）、SPL（索拉纳）、BEP-20（BNB 智能链）。发送前选择网络 — 跨网络无法恢复。",
 			"bch": "BCH — 比特币现金，透明、去中心化，区块比 BTC 更大",
 			"ltc": "LTC — 莱特币，比特币的快速低费分叉(自 2011 年)。{brand} 上仅供交易。使用莱特币钱包(Electrum-LTC、Litewallet、硬件钱包);接受 L… 旧版、M… 现代 P2SH 和 ltc1… SegWit 地址。",
-			"dash": "Dash — 源自 Bitcoin 的混合 PoW + PoS 币，具有协调 PrivateSend（主节点协调的可选混合）的主节点。透明基础层。交易 + 挂单费用。",
+			"dash": "Dash — 源自 Bitcoin 的混合 PoW + PoS 币，具有协调 PrivateSend（主节点协调的可选混合）的主节点。透明基础层。在 {brand} 上仅可交易：挂单费用以 BLURT/BTC/XMR 支付。",
 			"usdc": "USD Coin 稳定币。中心化——Circle 可冻结任何地址。仅交易。",
 			"dai": "DAI — MakerDAO 锚定美元稳定币。多网络（ERC-20/Polygon/Base/Arbitrum，全部 EVM）。仅交易。部分由 USDC 支持。",
 			"doge": "Dogecoin — 2013 年公平启动的 PoW 币。链透明、去中心化，与 Litecoin 合并挖矿。仅交易：不能支付挂单费用。",
 			"zec": "Zcash — PoW 链，具有 zk-SNARK shielded 交易（Sapling + Orchard 池）以及透明地址（t1/t3，像 Bitcoin）。每次交易接收者选择地址类型。仅交易：不能支付挂单费用。",
-			"arrr": "Pirate Chain — PoW 币，通过 Sapling zk-SNARK 池实现链级 shielded 交易（无透明地址选项）。发送者、接收者和金额按构造在链上隐藏。交易 + 挂单费用。",
+			"arrr": "ARRR — Pirate Chain。PoW 币，每笔交易都是 shielded（按构造私密），通过 Sapling 池或较新的 Ironwood 池；没有透明地址。在 {brand} 上仅可交易：挂单费用以 BLURT/BTC/XMR 支付。请使用 Pirate Chain 钱包（Treasure Chest、Pirate.Black、Verus）；有两种地址格式，都是 shielded：zs1 Sapling（78 个字符，外观与 Zcash Sapling 相同）和 pirate1 Ironwood（82 个字符）。",
 			"dcr": "Decred。一种由持有者投票决定如何运作的币。账本像 Bitcoin 一样公开，钱包内提供可选的隐私模式。",
 			"sol": "Solana — 具有 Proof-of-History 排序的高吞吐量 PoS 加密货币。透明基础层，基金会 + 验证者社区治理，SPL 代币生态系统。仅交易：不能支付挂单费用。",
-			"eth": "Ethereum — Proof-of-Stake 智能合约平台。透明基础层；无原生混合协议（第三方混合器在许多司法管辖区被制裁）。钱包端地址轮换是主要的隐私手段。交易 + 挂单费用。",
-			"xrp": "Ripple (XRP) — XRP Ledger 上面向支付的联邦拜占庭协议加密货币。透明基础层；协议层没有隐私。destination tag 是标识符（用于交易所路由），不是隐私功能。钱包端地址轮换是主要的隐私手段。交易 + 挂单费用。",
+			"eth": "Ethereum — Proof-of-Stake 智能合约平台。透明基础层；无原生混合协议（第三方混合器在许多司法管辖区被制裁）。钱包端地址轮换是主要的隐私手段。在 {brand} 上仅可交易：挂单费用以 BLURT/BTC/XMR 支付。",
+			"xrp": "Ripple (XRP) — XRP Ledger 上面向支付的联邦拜占庭协议加密货币。透明基础层；协议层没有隐私。destination tag 是标识符（用于交易所路由），不是隐私功能。钱包端地址轮换是主要的隐私手段。在 {brand} 上仅可交易：挂单费用以 BLURT/BTC/XMR 支付。",
 			"ecx": "ECX — eCash。比特币的一次分叉（第 973,728 个区块，2026 年 10 月 29 日），增加了驱动链；不是 XEC。在 {brand} 上仅用于交易。地址格式与比特币相同（`1…`、`3…`、`bc1…`）：请用 eCash 钱包支付，绝不要用比特币钱包。分叉前的币，以及之后从这类币收到的币，都可能在两条链上存在：请在交易前拆分（只有拆分才能让两条链彼此分开）。和比特币一样透明。",
 			"hive": "HIVE — Hive。2020 年社区从 Steem 分出的链：选出的见证人，3 秒出块，转账免手续费。在 {brand} 上仅用于交易。地址就是账户名（3-16 个字符），同一个名字可能也存在于 Blurt、Steem 或 BitShares 上：请核对币种。付款时带上交易的备注；用你自己的账户接收，绝不用交易所的。像 Blurt 一样透明。",
 			"steem": "STEEM — Steem。Hive 和 Blurt 分出的 2016 年老链：选出的见证人，3 秒出块，转账免手续费。在 {brand} 上仅用于交易。地址就是账户名（3-16 个字符），同一个名字可能也存在于 Blurt、Hive 或 BitShares 上：请核对币种。付款时带上交易的备注；用你自己的账户接收，绝不用交易所的。像 Blurt 一样透明。",
@@ -1785,7 +1785,7 @@
 			},
 			"what_is_arrr": {
 				"q": "Pirate Chain (ARRR) 是什么，为什么在 {brand} 上？",
-				"a": "Pirate Chain（ARRR）是一种**每笔**付款都私密的币：发送方、接收方和金额始终隐藏。它完全没有公开（透明）地址。它出现在 {brand} 上，是为了让人们可以点对点、无需证件地交易它。\n\n在 {brand} 上，ARRR **仅用于交易**：你可以买卖它，但不能用它支付挂单费（挂单费用 BLURT、BTC 或 XMR 支付）。\n\n**地址**以 `zs1` 开头，长 78 个字符。它们看起来和 Zcash 地址一模一样，所以请确认订单写的是 ARRR，并用 Pirate Chain 钱包收款。\n\n站点运营者可以在自己的站点关闭 ARRR；其他 Morphit 站点仍然可以交易它。更多建议：[ARRR 隐私指南](/privacy/arrr)。"
+				"a": "Pirate Chain（ARRR）是一种**每笔**付款都私密的币：发送方、接收方和金额始终隐藏。它完全没有公开（透明）地址。它出现在 {brand} 上，是为了让人们可以点对点、无需证件地交易它。\n\n在 {brand} 上，ARRR **仅用于交易**：你可以买卖它，但不能用它支付挂单费（挂单费用 BLURT、BTC 或 XMR 支付）。\n\n**地址**有两种，都是私密的：`zs1`（78 个字符，较早的 Sapling 地址）和 `pirate1`（82 个字符，较新的 Ironwood 地址）。`zs1` 地址看起来和 Zcash 地址一模一样，所以请确认订单写的是 ARRR，并用 Pirate Chain 钱包收款。\n\n站点运营者可以在自己的站点关闭 ARRR；其他 Morphit 站点仍然可以交易它。更多建议：[ARRR 隐私指南](/privacy/arrr)。"
 			},
 			"what_is_dcr": {
 				"q": "Decred (DCR) 是什么，为什么在 {brand} 上？",
@@ -2248,7 +2248,7 @@
 			},
 			"discoverability": {
 				"title": "可发现性",
-				"body": "联邦使用 公开区块链和 RSS 进行订单簿分发、交易最终确认和用户信誉。"
+				"body": "联邦使用 公开区块链和 RSS 进行订单簿分发、交易最终确认和交易者信誉。"
 			},
 			"encrypted_chat": {
 				"title": "加密聊天",
@@ -3286,7 +3286,7 @@
 			"description": "Zcash：2016 年推出，zk-SNARK shielded 交易（Sapling + Orchard 池）以及透明地址（t1/t3，像 Bitcoin）。公平启动，founder reward 减半时间表。每次交易接收者选择与其立场匹配的地址类型。仅在 {brand} 上交易——不能支付挂单费用。"
 		},
 		"pay_arrr": {
-			"description": "使用 Pirate Chain (ARRR) 付款。Pirate Chain 是一种工作量证明加密货币，通过 Sapling zk-SNARK 池提供链级 shielded 交易——发送方、接收方和金额在链上默认隐藏。单一地址格式（zs1 Sapling shielded）。使用 Pirate Chain 钱包，如 Treasure Chest、Pirate.Black 或 Verus 集成的 Pirate 钱包。"
+			"description": "使用 Pirate Chain (ARRR) 付款。Pirate Chain 是一种工作量证明加密货币，每笔交易都是 shielded，通过 Sapling 池或较新的 Ironwood 池——发送方、接收方和金额在链上默认隐藏。两种地址格式，都是 shielded：zs1（Sapling）和 pirate1（Ironwood）。使用 Pirate Chain 钱包，如 Treasure Chest、Pirate.Black 或 Verus 集成的 Pirate 钱包。"
 		},
 		"pay_dcr": {
 			"description": "使用 Decred (DCR) 付款。Decred 是一种具有链上治理的混合 Proof-of-Work + Proof-of-Stake 加密货币。链在基础层是透明的；可选的 CoinShuffle++ 混合（通过 dcrwallet）为启用它的用户打破交易图。使用 Decred 钱包，如 dcrwallet 或 Decrediton。"
@@ -3396,7 +3396,7 @@
 				"dai": "DAI — 由 MakerDAO 治理的锚定美元稳定币。代币无管理员冻结（相对 USDT/USDC 的优势），但通过 PSM 部分由 USDC 支持。在 Ethereum、Polygon、Base 和 Arbitrum 上可用。",
 				"doge": "Dogecoin (DOGE) — 2013 年公平启动的 PoW 币。透明基础层，通过 PoW 去中心化，与 Litecoin 合并挖矿以提供哈希安全。无原生隐私升级。在 {brand} 上仅交易：不能支付挂单费用。",
 				"zec": "Zcash (ZEC) — PoW 币，具有 zk-SNARK shielded 交易（Sapling + Orchard 池）以及透明地址（t1/t3，像 Bitcoin）。每次交易接收者选择与其首选立场匹配的地址类型。shielded-到-shielded 在链上隐藏发送者、接收者和金额。",
-				"arrr": "Pirate Chain (ARRR) — 通过 Sapling zk-SNARK 池实现链级 shielded 交易的工作量证明加密货币。发送者、接收者和金额按构造在链上隐藏。交易 + 挂单费用。",
+				"arrr": "Pirate Chain (ARRR) — 每笔转账都是 shielded（Sapling 池或 Ironwood 池）的工作量证明加密货币：发送者、接收者和金额按构造在链上隐藏。两种地址格式：zs1 Sapling（bech32，78 个字符）和 pirate1 Ironwood（bech32，82 个字符）。在 {brand} 上仅可交易；挂单费用仍以 BLURT/BTC/XMR 支付。",
 				"dcr": "Decred (DCR)。一种由社区投票决定项目如何运作的币。它的账本像 Bitcoin 一样公开可见，钱包提供可选的隐私模式。没有中央发行方——没有人能冻结你的币。",
 				"sol": "Solana — 具有 Proof-of-History 排序的高吞吐量 PoS 加密货币。透明基础层，无原生混合协议。钱包端地址轮换是主要的隐私手段。",
 				"eth": "Ethereum (ETH) — Proof-of-Stake 智能合约平台。透明基础层；无原生混合协议。注意合约接收者（向没有 `payable receive()` 或 `fallback()` 的合约发送 ETH 将被回滚；币没丢失，但交易失败且您支付 gas）。",
@@ -3721,10 +3721,10 @@
 				"caveats": "shielded-to-shielded 交易在链上隐藏发送方、接收方和金额。混合交易（shielded-to-transparent 或 transparent-to-shielded）暴露一方。Transparent-to-transparent 暴露双方。如果您的目标是最小化关联性，请使用 shielded 地址（zs1 或 u1）并要求对方从 shielded 地址发送。钱包支持各不相同：Zashi（移动，Electric Coin Co 官方，Sapling + Orchard）、Zecwallet（桌面，Sapling）、Nighthawk（移动，Sapling）——并非每个钱包都支持每种地址类型，因此在分享您发布的地址之前，请验证对方的钱包处理您发布的地址类型。"
 			},
 			"arrr": {
-				"one_line": "通过 Sapling zk-SNARK 池实现的链级 shielded 交易；每次转账按构造隐藏发送者、接收者和金额。",
-				"intro": "Pirate Chain (ARRR) 于 2018 年作为 Zcash 代码库的分叉推出，配置为只允许 Sapling 屏蔽池 (shielded pool) 一种交易类型。每笔转账都通过零知识证明 (zk-SNARKs)，在链上隐藏发送方、接收方和金额。Pirate Chain 在该链生命周期早期就关闭了透明 (transparent) 池，并强制将所有透明余额迁移到屏蔽池——没有任何透明地址选项。地址使用 Sapling `zs1` 格式（bech32，总长 78 字符），视觉上与 Zcash Sapling 地址相同。\n\n下面的实践涵盖了即便在链级屏蔽下仍然有意义的钱包侧卫生——链上 payload 是隐私的，但你在链下共享的内容（你公开了哪些地址、与哪些对手方交易）才是将你在 {brand} 上的多次交易随时间串联起来的关键。",
+				"one_line": "通过 Sapling 和 Ironwood 池实现的链级 shielded 交易；每次转账按构造隐藏发送者、接收者和金额。",
+				"intro": "Pirate Chain (ARRR) 于 2018 年作为 Zcash 代码库的分叉推出，配置为每笔交易都经过屏蔽 (shielded)，没有透明交易。每笔转账都通过零知识证明 (zk-SNARKs)，在链上隐藏发送方、接收方和金额。Pirate Chain 在该链生命周期早期就关闭了透明 (transparent) 池，并强制将所有透明余额迁移到屏蔽池——没有任何透明地址选项。地址有两种屏蔽格式：Sapling `zs1`（bech32，总长 78 字符），视觉上与 Zcash Sapling 地址相同；以及自 2026 年 10 月 Ironwood 升级以来的 Ironwood `pirate1`（bech32，总长 82 字符）。\n\n下面的实践涵盖了即便在链级屏蔽下仍然有意义的钱包侧卫生——链上 payload 是隐私的，但你在链下共享的内容（你公开了哪些地址、与哪些对手方交易）才是将你在 {brand} 上的多次交易随时间串联起来的关键。",
 				"meta_description": "{brand} 上 Pirate Chain 交易的隐私实践：链级 shielded 交易、新地址习惯和钱包兼容性。",
-				"caveats": "Pirate Chain 的链级屏蔽隐藏发送方、接收方和金额——但它并不消除链下的可关联性。\n\n- **每笔交易共享新鲜地址。**使用同一个 `zs1` 地址在多个 {brand} 上架订单中会让观察者将你的订单关联起来，即便链本身什么都不透露。为每笔交易生成新的接收地址（Pirate Chain 钱包从你的 HD 种子派生这些地址）。\n- **钱包兼容性。**并非每个钱包都支持 Pirate Chain（主要选项是 Treasure Chest、Pirate.Black 和 Verus 集成的 Pirate）。在就价格达成一致之前，确认对手方有兼容的钱包。\n- **网络层隐私仍然重要。**通过 Tor 或钱包的隐私模式广播交易，可以让你的家庭 IP 不出现在链对你的视野中。\n- **与 Zcash Sapling 地址的视觉冲突。**Pirate Chain 的 `zs1` 地址看起来与 Zcash 的 `zs1` 地址完全相同。{brand} 的 per-asset 选项卡和 placeholder 会区分，但如果你从其他场景复制地址，请确认它属于你打算在其上发送的链。"
+				"caveats": "Pirate Chain 的链级屏蔽隐藏发送方、接收方和金额——但它并不消除链下的可关联性。\n\n- **每笔交易共享新鲜地址。**使用同一个地址在多个 {brand} 上架订单中会让观察者将你的订单关联起来，即便链本身什么都不透露。为每笔交易生成新的接收地址（Pirate Chain 钱包从你的 HD 种子派生这些地址）。\n- **钱包兼容性。**并非每个钱包都支持 Pirate Chain（主要选项是 Treasure Chest、Pirate.Black 和 Verus 集成的 Pirate）。在就价格达成一致之前，确认对手方有兼容的钱包。\n- **网络层隐私仍然重要。**通过 Tor 或钱包的隐私模式广播交易，可以让你的家庭 IP 不出现在链对你的视野中。\n- **与 Zcash Sapling 地址的视觉冲突。**Pirate Chain 的 `zs1` 地址看起来与 Zcash 的 `zs1` 地址完全相同（`pirate1` 地址只属于 Pirate Chain）。{brand} 的 per-asset 选项卡和 placeholder 会区分，但如果你从其他场景复制地址，请确认它属于你打算在其上发送的链。"
 			},
 			"dcr": {
 				"one_line": "具有链上治理 (Politeia) 和钱包端可选 CoinShuffle++ (CSPP) 混合的混合 PoW/PoS 加密货币。",

@@ -234,20 +234,22 @@ const ZEC_TXID_RE = /^[0-9a-f]{64}$/;
 
 /** ARRR address.  Pirate Chain forked from
  *  the Zcash codebase and ships chain-level default-shielded
- *  transactions via the Sapling zk-SNARK pool.  Only one
- *  address format exists:
+ *  transactions.  Two address formats receive, both shielded:
  *
- *  - `zs1` (Sapling shielded): bech32, `zs1` prefix + 75 bech32
+ *  - `zs1` (Sapling): bech32, `zs1` prefix + 75 bech32
  *    data chars = 78 chars total.
+ *  - `pirate1` (Ironwood, Pirate Chain 6.0, mainnet since
+ *    2026-10-03): bech32, `pirate1` prefix + 75 bech32 data
+ *    chars = 82 chars total.
  *
  *  No transparent (t1/t3) format — Pirate Chain forcibly
  *  migrated all transparent funds to the shielded pool early
- *  in the chain's life.  No Unified Address (u1) format —
- *  Pirate Chain does not implement Zcash's NU5/Orchard pool.
+ *  in the chain's life.  No Unified Address (u1) format.
  *
- *  Visually indistinguishable from Zcash Sapling addresses.
- *  Context (order asset field, instance config) disambiguates
- *  which chain receives the transaction.
+ *  A `zs1` address is visually indistinguishable from a Zcash
+ *  Sapling one; context (order asset field, instance config)
+ *  disambiguates which chain receives the transaction.  A
+ *  `pirate1` address is Pirate Chain's alone.
  *
  *  Permissive shape check; chain-binding happens on the
  *  receiving wallet side.  Bech32 alphabet excludes `1`, `b`,
@@ -256,6 +258,7 @@ const ZEC_TXID_RE = /^[0-9a-f]{64}$/;
  *  patterns).
  */
 const ARRR_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
+const ARRR_IRONWOOD_RE = /^pirate1[02-9ac-hj-np-z]{75}$/;
 
 /** ARRR txid: 64 lowercase hex chars.  Same shape as ZEC and
  *  the BTC family on the wire; shielded payload is hidden inside
@@ -1665,15 +1668,13 @@ export function isValidZecTxid(s: string): boolean {
 	return ZEC_TXID_RE.test(s);
 }
 
-/** Validate a ARRR address shape.  Pirate
- *  Chain has only one address format: `zs1` Sapling shielded
- *  (bech32, exactly 78 chars).  No transparent (t1/t3) — all
- *  Pirate Chain transactions go through the Sapling shielded
- *  pool.  No Unified Address (u1) — Pirate Chain doesn't
- *  implement Zcash's Orchard pool. */
+/** Validate an ARRR address shape: `zs1` Sapling (bech32,
+ *  exactly 78 chars) or `pirate1` Ironwood (bech32, exactly
+ *  82 chars).  No transparent (t1/t3) — every Pirate Chain
+ *  transaction is shielded.  No Unified Address (u1). */
 export function isValidArrrAddress(s: string): boolean {
 	if (typeof s !== 'string') return false;
-	return ARRR_ZS_RE.test(s);
+	return ARRR_ZS_RE.test(s) || ARRR_IRONWOOD_RE.test(s);
 }
 
 /** Validate an ARRR txid shape.  Same 64-char lowercase hex
@@ -2981,9 +2982,9 @@ export function buildPaymentUri(p: AddressPayload): string {
 	if (p.method === 'arrr') {
 		// Pirate Chain uses the `arrr:` URI scheme — BIP-21-style
 		// shape.  Same form as BTC's `bitcoin:`
-		// scheme with `amount` as decimal ARRR.  ARRR addresses
-		// are unambiguous within the URI scheme: only one format
-		// exists (zs1 Sapling shielded, bech32, 78 chars).
+		// scheme with `amount` as decimal ARRR.  Both ARRR address
+		// formats go in as they are: zs1 Sapling (bech32, 78
+		// chars) and pirate1 Ironwood (bech32, 82 chars).
 		// Pirate Chain wallets (Treasure Chest / Pirate.Black /
 		// Verus) recognize the `arrr:` scheme; the shape mirrors
 		// Zcash's ZIP-321 URI conventions since Pirate Chain

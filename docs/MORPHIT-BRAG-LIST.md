@@ -743,7 +743,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 337. **Zcash (ZEC) peer-to-peer with per-address privacy choice.** Trade ZEC peer to peer — non-custodial, no KYC. Two address families coexist on the same chain: transparent (`t1`/`t3`, publicly-visible like Bitcoin legacy) and shielded (`zs1` Sapling, `u1` Unified Address) that hide sender, recipient, and amount via zk-SNARKs. Pick the address type that fits each trade's privacy posture — trade-only on Morphit.
 
-338. **Pirate Chain (ARRR) peer-to-peer with chain-level shielded transactions.** Trade ARRR peer to peer — non-custodial, no KYC. Pirate Chain runs only the Sapling zk-SNARK shielded pool, so every transfer hides sender, recipient, and amount by construction (no transparent address option at all). Single address format (`zs1` Sapling), trade-only on Morphit.
+338. **Pirate Chain (ARRR) peer-to-peer with chain-level shielded transactions.** Trade ARRR peer to peer — non-custodial, no KYC. Every Pirate Chain transfer is shielded, through the Sapling pool or the newer Ironwood pool, so sender, recipient, and amount are hidden by construction (no transparent address option at all). Both address formats are accepted, `zs1` Sapling and `pirate1` Ironwood, and ARRR is trade-only on Morphit.
 
 339. **Decred (DCR) peer-to-peer with hybrid PoW/PoS consensus and on-chain governance.** Trade DCR peer to peer — non-custodial, no KYC. Every block is mined by PoW miners AND voted on by 5 PoS ticket-holders, so neither group alone can change protocol rules. On-chain governance via Politeia lets stakeholders propose, debate, and ratify changes — trade-only on Morphit.
 
@@ -791,4 +791,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*352 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 9 November, 2026.*
+*352 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 17 November, 2026.*

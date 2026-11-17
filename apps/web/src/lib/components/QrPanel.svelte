@@ -16,8 +16,8 @@
  *   - ZEC: ZIP-321 URI (`zcash:t1...?amount=0.5` for transparent;
  *     `zcash:zs1...?amount=0.5` for shielded; `zcash:u1...?amount=0.5`
  *     for Unified Address)
- *   - ARRR: BIP-21-style URI (`arrr:zs1...?amount=0.5`) —
- *     single Sapling shielded format on Pirate Chain
+ *   - ARRR: BIP-21-style URI (`arrr:zs1...?amount=0.5` or
+ *     `arrr:pirate1...?amount=0.5`) — Sapling or Ironwood, both shielded
  *   - DCR: BIP-21-style URI (`decred:Ds...?amount=1.5`) —
  *     both Ds P2PKH and Dc P2SH formats on Decred
  *   - SOL: Solana Pay URI (`solana:9wzd...?amount=1.5`) —

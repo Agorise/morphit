@@ -2070,7 +2070,7 @@ Pirate Chain (ARRR) is a coin where **every** payment is private: the sender, th
 
 On Morphit, ARRR is **trade-only**: you can buy and sell it, but you can't pay listing fees with it (those are paid in BLURT, BTC or XMR).
 
-**Addresses** start with `zs1` and are 78 characters long. They look exactly like Zcash addresses, so check that the order says ARRR, and receive with a Pirate Chain wallet.
+**Addresses** come in two kinds, and both are private: `zs1` (78 characters, the older Sapling kind) and `pirate1` (82 characters, the newer Ironwood kind). A `zs1` address looks exactly like a Zcash address, so check that the order says ARRR, and receive with a Pirate Chain wallet.
 
 A site's operator can switch ARRR off for their site; other Morphit sites can still trade it. More tips: [ARRR privacy guide](/privacy/arrr).
 

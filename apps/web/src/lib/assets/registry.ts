@@ -223,17 +223,21 @@ const ZEC_U_RE = /^u1[02-9ac-hj-np-z]{30,300}$/;
 const validateZec: AddressValidator = (s) =>
 	ZEC_T_RE.test(s) || ZEC_ZS_RE.test(s) || ZEC_U_RE.test(s);
 
-// ARRR address regex.  Pirate Chain ships
-// chain-level default-shielded transactions via the Sapling zk-SNARK
-// pool.  Only one address format: `zs1` Sapling shielded
-// (bech32, 78 chars total — same shape as Zcash Sapling addresses).
+// ARRR address regexes.  Every Pirate Chain address is shielded; two
+// formats receive:
+//   - `zs1` Sapling (bech32, 78 chars total — same shape as Zcash
+//     Sapling addresses).
+//   - `pirate1` Ironwood (bech32, 82 chars total), the pool Pirate
+//     Chain 6.0 added; mainnet since 2026-10-03 (block 4,161,185).
+//     The node encodes it as plain bech32 with the prefix "pirate"
+//     over a 43-byte address (chainparams.cpp, zcash/Zcash.h).
 // No transparent addresses — Pirate Chain forcibly migrated all
 // transparent funds to the shielded pool early in the chain's
-// life.  No Unified Address (`u1`) format — Pirate Chain does
-// not implement Zcash's NU5/Orchard pool.
+// life.  No Unified Address (`u1`) format.
 const ARRR_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
+const ARRR_IRONWOOD_RE = /^pirate1[02-9ac-hj-np-z]{75}$/;
 
-const validateArrr: AddressValidator = (s) => ARRR_ZS_RE.test(s);
+const validateArrr: AddressValidator = (s) => ARRR_ZS_RE.test(s) || ARRR_IRONWOOD_RE.test(s);
 
 // DCR address regex.  Decred uses base58check
 // with two address types used for receiving payments:

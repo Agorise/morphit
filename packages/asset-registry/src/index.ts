@@ -783,8 +783,8 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// transaction goes through the Sapling shielded pool via
 		// zk-SNARK proofs.  Sender, recipient, and amount are
 		// hidden on-chain by construction.  No transparent
-		// address type — only Sapling shielded (`zs1`-prefixed
-		// bech32 addresses, 78 chars total).  No warning chip
+		// address type — only shielded ones (`zs1` Sapling and
+		// `pirate1` Ironwood, both bech32).  No warning chip
 		// needed; the chain is decentralized.
 		privacyWarningKey: null,
 		privacyFeatures: {
@@ -807,15 +807,19 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 			optInPrivacyTech: ['shielded-pools'],
 			privacyGuideKey: 'arrr'
 		},
-		// Pirate Chain Sapling address format:
-		//   - `zs1` prefix + 75 bech32 data chars = 78 chars total
-		// Same shape as Zcash Sapling addresses (visually
-		// indistinguishable — context from the order/asset field
-		// disambiguates).  Bech32 alphabet excludes `1`, `b`,
-		// `i`, `o` to avoid visual ambiguity (we use
+		// Pirate Chain address formats (both shielded, both bech32):
+		//   - `zs1` Sapling: prefix + 75 data chars = 78 chars total.
+		//     Same shape as Zcash Sapling addresses (visually
+		//     indistinguishable — context from the order/asset field
+		//     disambiguates).
+		//   - `pirate1` Ironwood (Pirate Chain 6.0, mainnet since
+		//     2026-10-03): prefix + 75 data chars = 82 chars total;
+		//     the node's IRONWOOD_PAYMENT_ADDRESS prefix "pirate"
+		//     over a 43-byte address.  Pirate Chain's alone.
+		// Bech32 alphabet excludes `1`, `b`, `i`, `o` (we use
 		// [02-9ac-hj-np-z] for the data portion, matching the
 		// LTC MWEB and Zcash Sapling patterns).
-		addressShape: /^zs1[02-9ac-hj-np-z]{75}$/
+		addressShape: /^(zs1[02-9ac-hj-np-z]{75}|pirate1[02-9ac-hj-np-z]{75})$/
 	}),
 	Object.freeze<AssetEntry>({
 		ticker: 'DCR',
