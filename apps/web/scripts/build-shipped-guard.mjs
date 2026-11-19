@@ -3,7 +3,7 @@
  *
  * WHY THIS EXISTS. Federated operators must serve @morphit's EXACT frontend bytes
  * to pass the on-chain build-integrity check — a local rebuild is not
- * byte-reproducible and trips the scary red tamper banner. The release ships a
+ * byte-identical to the release and trips the scary red tamper banner. The release ships a
  * canonical prebuilt frontend (apps/web/build, marked with a `.shipped` file).
  *
  * The catch: `morphit-ops upgrade` runs the code of the version you're upgrading
@@ -42,7 +42,7 @@ if (existsSync(marker) && existsSync(indexHtml)) {
 }
 if (existsSync(marker) && !existsSync(indexHtml)) {
 	console.error(
-		'apps/web: a .shipped marker is present but build/index.html is MISSING — the shipped frontend is incomplete and would 500-loop at "/". Rebuilding from source so this node still serves (note: a local rebuild is not byte-reproducible and may show the build-integrity banner until the next clean upgrade).'
+		'apps/web: a .shipped marker is present but build/index.html is MISSING — the shipped frontend is incomplete and would 500-loop at "/". Rebuilding from source so this node still serves (note: a local rebuild is not byte-identical to the release and may show the build-integrity banner until the next clean upgrade).'
 	);
 	// fall through to the real build
 }

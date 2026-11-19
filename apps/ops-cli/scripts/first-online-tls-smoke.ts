@@ -5,8 +5,11 @@
  * PATH (curl answers, so the box is "online"; `ss` says whether port 80 is
  * held; certbot records its arguments and can be told to succeed) and checks
  * the certificate step:
- *  - with port 80 held (BunkerWeb up) certbot writes into the web build
- *    (--webroot), never its own server on the held port (--standalone);
+ *  - with port 80 held by BunkerWeb, certbot's manual mode with Morphit's two
+ *    hooks (BunkerWeb answers Let's Encrypt's check from its own folder and
+ *    never passes it on to the web build; v1.24.6), never its own server on
+ *    the held port (--standalone); held by another web server, the web build
+ *    (--webroot); BunkerWeb without the hooks: the web build, and said;
  *  - with port 80 free it uses --standalone;
  *  - a failed attempt is not repeated on the next tick: attempts back off
  *    (5 min, then doubling) so Let's Encrypt's failed-validation limit is never
@@ -43,7 +46,13 @@ const check = (name: string, ok: boolean, detail = ''): void => {
 
 interface Box {
 	dir: string;
-	run(opts: { port80: boolean; certbotOk: boolean; now: number }): {
+	run(opts: {
+		port80: boolean;
+		certbotOk: boolean;
+		now: number;
+		bunkerweb?: boolean;
+		hooks?: boolean;
+	}): {
 		out: string;
 		certbot: string[];
 	};
@@ -66,7 +75,13 @@ const box = (www = ''): Box => {
 		chmodSync(join(bin, name), 0o755);
 	};
 	stub('curl', 'exit 0');
-	for (const n of ['systemctl', 'logger', 'apt-get', 'docker', 'chgrp', 'chmod']) stub(n, 'exit 0');
+	for (const n of ['systemctl', 'logger', 'apt-get', 'chgrp', 'chmod']) stub(n, 'exit 0');
+	// BunkerWeb's edge, when running: `docker ps` with its image's label lists it.
+	stub(
+		'docker',
+		`case "$*" in *"label=bunkerweb.type=bunkerweb"*) [ -f "${join(dir, 'bunkerweb')}" ] && echo 0123abcd ;; esac\nexit 0`
+	);
+	mkdirSync(join(dir, 'hooks'));
 	stub(
 		'ss',
 		`[ -f "${join(dir, 'port80')}" ] && echo 'LISTEN 0 4096 0.0.0.0:80 0.0.0.0:*'; exit 0`
@@ -78,13 +93,20 @@ const box = (www = ''): Box => {
 	);
 	return {
 		dir,
-		run({ port80, certbotOk, now }) {
+		run({ port80, certbotOk, now, bunkerweb = true, hooks = true }) {
 			for (const [f, on] of [
 				['port80', port80],
-				['certbot-ok', certbotOk]
+				['certbot-ok', certbotOk],
+				['bunkerweb', bunkerweb]
 			] as const) {
 				if (on) writeFileSync(join(dir, f), '');
 				else rmSync(join(dir, f), { force: true });
+			}
+			for (const h of ['certbot-bunkerweb-auth.sh', 'certbot-bunkerweb-cleanup.sh']) {
+				if (hooks) {
+					writeFileSync(join(dir, 'hooks', h), '#!/bin/sh\n');
+					chmodSync(join(dir, 'hooks', h), 0o755);
+				} else rmSync(join(dir, 'hooks', h), { force: true });
 			}
 			writeFileSync(join(dir, 'now'), String(now));
 			writeFileSync(join(dir, 'certbot.log'), '');
@@ -98,7 +120,8 @@ const box = (www = ''): Box => {
 					MORPHIT_FIRST_ONLINE_ENV: join(dir, 'first-online.env'),
 					MORPHIT_FIRST_ONLINE_INDEXER_ENV: join(dir, 'indexer.env'),
 					MORPHIT_FIRST_ONLINE_RELAY_ENV: join(dir, 'relay.env'),
-					MORPHIT_FIRST_ONLINE_LE_LIVE: join(dir, 'live')
+					MORPHIT_FIRST_ONLINE_LE_LIVE: join(dir, 'live'),
+					MORPHIT_CERTBOT_HOOK_DIR: join(dir, 'hooks')
 				}
 			});
 			return {
@@ -114,10 +137,12 @@ const T0 = 1_800_000_000;
 	const b = box();
 	let r = b.run({ port80: true, certbotOk: false, now: T0 });
 	check(
-		'port 80 held: certbot writes into the web build, not its own server on the held port',
+		"port 80 held by BunkerWeb: through its own Let's Encrypt folder (manual, Morphit's hooks), not its own server, not the web build",
 		r.certbot.length === 1 &&
-			r.certbot[0]!.includes(`--webroot --webroot-path ${join(b.dir, 'apps/web/build')}`) &&
-			!r.certbot[0]!.includes('--standalone'),
+			r.certbot[0]!.includes(
+				`--manual --preferred-challenges http --manual-auth-hook ${join(b.dir, 'hooks', 'certbot-bunkerweb-auth.sh')} --manual-cleanup-hook ${join(b.dir, 'hooks', 'certbot-bunkerweb-cleanup.sh')}`
+			) &&
+			!/--standalone|--webroot/.test(r.certbot[0]!),
 		r.certbot.join(' | ')
 	);
 	r = b.run({ port80: true, certbotOk: false, now: T0 + 60 });
@@ -137,6 +162,30 @@ const T0 = 1_800_000_000;
 			existsSync(join(b.dir, 'state', 'tls.done')) &&
 			!existsSync(join(b.dir, 'state', 'tls.next')) &&
 			!existsSync(join(b.dir, 'state', 'tls.tries'))
+	);
+	rmSync(b.dir, { recursive: true, force: true });
+}
+{
+	const b = box();
+	const r = b.run({ port80: true, certbotOk: true, now: T0, bunkerweb: false });
+	check(
+		'port 80 held by another web server: certbot writes into the web build',
+		r.certbot.length === 1 &&
+			r.certbot[0]!.includes(`--webroot --webroot-path ${join(b.dir, 'apps/web/build')}`) &&
+			!/--standalone|--manual/.test(r.certbot[0]!),
+		r.certbot.join(' | ')
+	);
+	rmSync(b.dir, { recursive: true, force: true });
+}
+{
+	const b = box();
+	const r = b.run({ port80: true, certbotOk: true, now: T0, hooks: false });
+	check(
+		'BunkerWeb without the hooks: the web build is tried, and that is said',
+		r.certbot.length === 1 &&
+			r.certbot[0]!.includes('--webroot') &&
+			/certbot hooks are not in .*sudo morphit-ops upgrade writes them again/.test(r.out),
+		`${r.certbot.join(' | ')} ${r.out.slice(-300)}`
 	);
 	rmSync(b.dir, { recursive: true, force: true });
 }

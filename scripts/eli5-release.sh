@@ -45,11 +45,20 @@
 #     release job anchored, and requires the tarball's own verify.json (the list
 #     every instance serves at /verify.json) to name the same hash for every
 #     bootstrap file (page, service worker, entry scripts). Never a
-#     laptop build: cross-machine Vite/Rollup output is not reproducible, and a
-#     laptop-built manifest puts a red "Build integrity check failed" banner on
+#     laptop build: a plain laptop build (no SOURCE_DATE_EPOCH) is not
+#     byte-identical, and a laptop-built manifest puts a red "Build integrity check failed" banner on
 #     the live site (learned 2026-07-08, v1.1.5). The served copy is checked
 #     only after the upgrade (BLOCK 6): whatever that box serves must never be
 #     what is anchored.
+#   • BLOCK 3 then checks that the tarball is exactly the signed tag, plus the
+#     website built from it (scripts/verify-release-build.mjs, v1.24.6): every
+#     file of the tag byte for byte and nothing else, and the website rebuilt
+#     from the tag on this machine, file for file. The release job on the build
+#     server packs the tarball; without this, a build server that had been
+#     broken into could have packed other code and it would have been anchored.
+#     The anchored manifest still comes from the tarball, never from a laptop
+#     build: the rebuild only proves the two are the same (release.yml builds
+#     with SOURCE_DATE_EPOCH, so they are).
 #   • BLOCK 3 starts with `npm ci --ignore-scripts`: the laptop's repo is
 #     refreshed by unpacking the release tarball over it, which updates the code
 #     but NOT node_modules (v1.20.0's payload builder died on an older installed
@@ -160,10 +169,11 @@ rm -f /tmp/morphit-anchor.env /tmp/morphit-v${VERSION}.tar.gz /tmp/morphit-build
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/distribution-anchor.env -o /tmp/morphit-anchor.env
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/morphit-v${VERSION}.tar.gz -o /tmp/morphit-v${VERSION}.tar.gz
 node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env --tarball /tmp/morphit-v${VERSION}.tar.gz > /tmp/morphit-build-manifest.json
+node scripts/verify-release-build.mjs --tag v${VERSION} --tarball /tmp/morphit-v${VERSION}.tar.gz
 MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=/tmp/morphit-build-manifest.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > /tmp/morphit-release.json
 ./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts /tmp/morphit-release.json --dry-run
 \`\`\`
-The dry-run prints the payload; its \`distribution\` block carries the \`ipfs_cid\`. If it ran, Block 3 is done. Only if the payload line stops with "this release has no IPFS CID" is there more to do: it prints the one command to run on morphit.io and how to retry.
+The \`verify-release-build\` line rebuilds the website from your signed tag and compares the whole tarball with it; it ends with "✓ The tarball is exactly the signed tag v${VERSION}, plus the website built from it." If it says anything else, stop here: do not broadcast. The dry-run prints the payload; its \`distribution\` block carries the \`ipfs_cid\`. If it ran, Block 3 is done. Only if the payload line stops with "this release has no IPFS CID" is there more to do: it prints the one command to run on morphit.io and how to retry.
 
 ---
 

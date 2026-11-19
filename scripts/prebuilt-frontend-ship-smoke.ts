@@ -2,8 +2,9 @@
  * Morphit — prebuilt-frontend shipping smoke.
  *
  * THE BUG THIS EXISTS TO CATCH. A federated operator who REBUILDS the frontend
- * locally cannot match @morphit's on-chain build-integrity hashes (Morphit builds
- * are not byte-reproducible across machines), so an honest instance trips the
+ * locally cannot match @morphit's on-chain build-integrity hashes (a plain local
+ * build, without the release's SOURCE_DATE_EPOCH, is not byte-identical), so an
+ * honest instance trips the
  * scary red "Build integrity check failed" banner. The fix (option A) ships the
  * CANONICAL prebuilt frontend in the release and has the install + upgrade DEPLOY
  * those exact bytes instead of rebuilding — with a rebuild FALLBACK if the
@@ -81,7 +82,7 @@ check('release drops the .shipped marker after building the canonical frontend',
 // ─── 5. build-offline-bundle.sh ships the prebuilt frontend (USB / air-gapped) ───
 // The online tarball shipping the frontend is not enough: an air-gapped node
 // installed from a USB bundle can't build it on-target either (memory-heavy,
-// non-byte-reproducible, and an incomplete build 500-loops the site). The offline
+// not byte-identical to the release, and an incomplete build 500-loops the site). The offline
 // bundle MUST carry the prebuilt, .shipped frontend too — a gap that once let an
 // offline node ship with no servable site.
 const bundle = read('scripts/build-offline-bundle.sh');

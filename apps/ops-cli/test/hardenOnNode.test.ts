@@ -14,6 +14,7 @@
  *  - M5: placeholders (vX.Y.Z, <cid>), a gpg | sudo tee mixing two machines,
  *    and "run the playbook" with no command.
  */
+import { manualAuthArgs } from '../src/lib/acmeBunkerweb.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -118,9 +119,9 @@ describe('harden on a running node', () => {
 		const md = readFileSync(join(root, 'morphit-hardening-checklist.md'), 'utf8');
 		expect(md).not.toMatch(/sudo cp -r ops\/bunkerweb/);
 		expect(md).not.toMatch(/certbot certonly --standalone/);
-		expect(md).toContain(
-			`sudo certbot certonly --webroot --webroot-path ${root}/apps/web/build -d trade.alice.net`
-		);
+		// BunkerWeb answers Let's Encrypt's check from its own folder, never the web build (v1.24.6)
+		expect(md).toContain(`sudo certbot certonly ${manualAuthArgs().join(' ')} -d trade.alice.net`);
+		expect(md).not.toMatch(/--webroot/);
 		// running → no question about whether BunkerWeb will be used
 		expect(choiceCalls.filter((c) => /BunkerWeb sit in front/.test(c.q))).toHaveLength(0);
 	});

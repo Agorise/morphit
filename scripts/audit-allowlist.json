@@ -205,14 +205,6 @@
       "title": "SvelteKit: Private `query.batch` functions could collide, producing unexpected parameter / function combinations",
       "lastReviewed": "2026-11-17",
       "rationale": "Affects SvelteKit remote functions (`query.batch`) on a SvelteKit server. Morphit's site is a static adapter-static build with no SvelteKit server and no remote functions (no *.remote.ts, no imports from $app/server). The fix is SvelteKit 3.3.0 (a major); patch with that upgrade."
-    },
-    "GHSA-fc5q-39xc-vjpf": {
-      "package": "picomatch",
-      "severity": "high",
-      "category": "dev-build-only",
-      "title": "picomatch vulnerable to ReDoS through single-branch repeated extglobs",
-      "lastReviewed": "2026-11-17",
-      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (a production install has no picomatch). Every copy comes from apps/web's devDependencies (tinyglobby under @typescript-eslint and svelte-check's fdir at 4.0.7; chokidar/anymatch/micromatch under tailwindcss at 2.3.2), matching globs written in our own config against our own file names. Every published picomatch, up to 4.0.7, is in the advisory's range, so no fixed version exists yet; update when one lands."
     }
   }
 }

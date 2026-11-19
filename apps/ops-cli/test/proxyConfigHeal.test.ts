@@ -2401,7 +2401,7 @@ describe("the frontend is built from this release's pinned nginx base", () => {
 		expect(out.forwarding).toBe('refreshed');
 		expect(s.refreshes).toBe(1);
 		expect(s.info.join(' ')).toMatch(
-			/pinned base image \(nginx:1\.30\.5-alpine, label read back\)/
+			/pinned base image \(nginx:1\.30\.7-alpine, label read back\)/
 		);
 	});
 	it('still on an older base after the rebuild: a calm warning with the command', async () => {

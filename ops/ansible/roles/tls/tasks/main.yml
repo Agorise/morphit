@@ -6,11 +6,14 @@
 # First issuance on a fresh install: nothing holds port 80 yet (BunkerWeb
 # starts later in the play), so certbot's standalone server answers the
 # challenge.  RENEWAL cannot work that way — BunkerWeb holds port 80 from then
-# on — so once BunkerWeb is up, the bunkerweb role switches the renewal to the
-# webroot authenticator: Let's Encrypt's request goes through BunkerWeb to the
-# frontend, which serves /.well-known/ from the web build certbot writes into
-# (checked there by a test renewal).  A re-run on a box where something
-# already holds port 80 issues through that same webroot.
+# on — so once BunkerWeb is up, the bunkerweb role switches the renewal to
+# BunkerWeb's own Let's Encrypt folder (checked there by a test renewal).
+# BunkerWeb answers /.well-known/acme-challenge/ itself, from a folder in its
+# container, and never passes that path on to the web build (v1.24.6; up to
+# v1.24.4 the web build was used, which no BunkerWeb answers).  The two certbot
+# hooks below put Let's Encrypt's file into that folder, so nothing is stopped.
+# A re-run on a box where something already holds port 80 issues the same way
+# (or through the web build when BunkerWeb is not used).
 
 ---
 - name: Install certbot
@@ -19,6 +22,27 @@
       - certbot
     state: present
     update_cache: true
+
+# The same two files apps/ops-cli/src/lib/acmeBunkerweb.ts writes on upgrade
+# (test/acmeBunkerweb.test.ts keeps them identical).
+- name: Ensure the folder for Morphit's certbot hooks exists
+  ansible.builtin.file:
+    path: /usr/local/lib/morphit
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install the certbot hooks for BunkerWeb's own Let's Encrypt folder
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/lib/morphit/{{ item }}"
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - certbot-bunkerweb-auth.sh
+    - certbot-bunkerweb-cleanup.sh
 
 - name: Check if cert already exists
   ansible.builtin.stat:
@@ -62,12 +86,14 @@
     - not tls_cert_stat.stat.exists
     - tls_acme_probe.status is defined
 
-- name: Request initial cert (standalone when port 80 is free, else through the web build)
+- name: Request initial cert (standalone when port 80 is free, else through BunkerWeb's own Let's Encrypt folder)
   ansible.builtin.command:
     cmd: >-
       certbot certonly --non-interactive --agree-tos
-      {{ '--webroot --webroot-path ' ~ (morphit_repo_path ~ '/apps/web/build') | quote
-         if (tls_port80.stdout | default('') | trim | length) > 0 else '--standalone' }}
+      {{ '--standalone' if (tls_port80.stdout | default('') | trim | length) == 0
+         else ('--manual --preferred-challenges http --manual-auth-hook /usr/local/lib/morphit/certbot-bunkerweb-auth.sh --manual-cleanup-hook /usr/local/lib/morphit/certbot-bunkerweb-cleanup.sh'
+               if (enable_bunkerweb | default(true) | bool)
+               else '--webroot --webroot-path ' ~ (morphit_repo_path ~ '/apps/web/build') | quote) }}
       --email {{ tls_acme_email }}
       --server {{ tls_certbot_server }}
       --cert-name {{ morphit_domain }}
@@ -89,8 +115,10 @@
   ansible.builtin.command:
     cmd: >-
       certbot certonly --non-interactive --agree-tos
-      {{ '--webroot --webroot-path ' ~ (morphit_repo_path ~ '/apps/web/build') | quote
-         if (tls_port80.stdout | default('') | trim | length) > 0 else '--standalone' }}
+      {{ '--standalone' if (tls_port80.stdout | default('') | trim | length) == 0
+         else ('--manual --preferred-challenges http --manual-auth-hook /usr/local/lib/morphit/certbot-bunkerweb-auth.sh --manual-cleanup-hook /usr/local/lib/morphit/certbot-bunkerweb-cleanup.sh'
+               if (enable_bunkerweb | default(true) | bool)
+               else '--webroot --webroot-path ' ~ (morphit_repo_path ~ '/apps/web/build') | quote) }}
       --email {{ tls_acme_email }}
       --server {{ tls_certbot_server }}
       --cert-name {{ morphit_domain }}

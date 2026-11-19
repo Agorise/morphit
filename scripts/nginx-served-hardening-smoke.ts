@@ -3,9 +3,11 @@
  *
  * Runs a REAL nginx on each shipped config — ops/bunkerweb/frontend/nginx.conf,
  * ops/nginx/web.conf, ops/nginx/relay.conf, ops/nginx/indexer.conf — with only
- * the certificate paths, document roots and upstream ports swapped (TLS and
- * `http2` listeners are kept, so the config is checked as the distro nginx
- * would load it), and checks what visitors and the upstreams really get:
+ * the certificate paths, document roots and upstream ports swapped (TLS
+ * listeners are kept, so the config is checked as the distro nginx would load
+ * it), and checks what visitors and the upstreams really get:
+ *   - no HTTP/2 offered on a TLS listener (v1.24.6: CVE-2026-123633 and
+ *     CVE-2026-123007, until nginx 1.30.7);
  *   - `nginx -t` accepts each config (relay.conf once used `http2 on;`, which
  *     the nginx 1.24 that Ubuntu 24.04 ships does not know);
  *   - no nginx version in the Server header or in an error page, on every
@@ -327,9 +329,35 @@ async function runChecks(
 	const versionShown = (g: Got): boolean =>
 		/\d/.test(String(g.headers.server ?? '')) || /nginx\/\d/.test(g.body);
 
+	// v1.24.6: no HTTP/2 until nginx 1.30.7 (CVE-2026-123633, CVE-2026-123007
+	// let a stranger run code through nginx's HTTP/2 code). A browser asking
+	// for h2 is answered with HTTP/1.1.
+	if (tls) {
+		const r = spawnSync(
+			'openssl',
+			[
+				's_client',
+				'-connect',
+				`127.0.0.1:${port}`,
+				'-servername',
+				'morphit.test',
+				'-alpn',
+				'h2,http/1.1'
+			],
+			{ input: '', encoding: 'utf8', timeout: 20_000 }
+		);
+		const alpn = /^ALPN protocol: (\S+)/m.exec(r.stdout ?? '')?.[1] ?? null;
+		check(
+			`${L}: no HTTP/2 offered (a browser asking for h2 gets HTTP/1.1)`,
+			alpn === 'http/1.1' || /No ALPN negotiated/.test(r.stdout ?? ''),
+			`ALPN: ${alpn ?? 'no answer'}`
+		);
+	}
+
 	// web.conf on a slow line: a first visit asks for every file of the site at
-	// once; over HTTP/2 the connection cap counts each download, and at 40 the
-	// rest got 429 (v1.21.8). 200 files at once at 8 KB/s must all arrive.
+	// once and the connection cap counts them: over HTTP/2 each download, over
+	// HTTP/1.1 each connection; at 40 the rest got 429 (v1.21.8). 200 files at
+	// once at 8 KB/s must all arrive.
 	if (c.file.endsWith('web.conf')) {
 		if (!has('curl')) check(`${L}: (slow-visitor check skipped: no curl here)`, true);
 		else {

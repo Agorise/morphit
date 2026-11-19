@@ -623,9 +623,8 @@ expect(
 			return kept.length > max ? 429 : 200;
 		};
 	};
-	const { BW_LIMIT_REQ_URL, BW_LIMIT_REQ_RATE, BW_LIMIT_CONN_MAX_HTTP2 } = await import(
-		'../src/commands/upgrade.ts'
-	);
+	const { BW_LIMIT_REQ_URL, BW_LIMIT_REQ_RATE, BW_LIMIT_CONN_MAX_HTTP2, BW_LIMIT_CONN_MAX_HTTP1 } =
+		await import('../src/commands/upgrade.ts');
 	for (const [label, rel] of [
 		['ansible.j2', 'ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2'],
 		['env.example', 'ops/bunkerweb/bunkerweb.env.example']
@@ -675,6 +674,16 @@ expect(
 			`${label}: a visitor may download ≥ 256 files at once over HTTP/2 (two connections of nginx's 128)`,
 			settings.USE_LIMIT_CONN !== 'no' && conn >= 256,
 			`LIMIT_CONN_MAX_HTTP2=${settings.LIMIT_CONN_MAX_HTTP2 ?? '(BunkerWeb default 100)'}`
+		);
+		expect(
+			`${label}: HTTP/2 off until BunkerWeb ships nginx 1.30.7 (CVE-2026-123633, CVE-2026-123007)`,
+			settings.HTTP2 === 'no',
+			`HTTP2=${settings.HTTP2 ?? '(BunkerWeb default yes)'}`
+		);
+		expect(
+			`${label}: a visitor may hold ${BW_LIMIT_CONN_MAX_HTTP1} connections over HTTP/1.1, as the upgrade heal writes`,
+			settings.USE_LIMIT_CONN !== 'no' && settings.LIMIT_CONN_MAX_HTTP1 === BW_LIMIT_CONN_MAX_HTTP1,
+			`LIMIT_CONN_MAX_HTTP1=${settings.LIMIT_CONN_MAX_HTTP1 ?? '(BunkerWeb default 10)'}; heal: ${BW_LIMIT_CONN_MAX_HTTP1}`
 		);
 		expect(
 			`${label}: the request rule and download count are the ones the upgrade heal writes`,

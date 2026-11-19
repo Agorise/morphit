@@ -66,7 +66,7 @@ async function freshTable(): Promise<void> {
 		amount_blurt NUMERIC NOT NULL, amount_bp NUMERIC, reason TEXT NOT NULL,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), broadcast_at TIMESTAMPTZ, broadcast_trx_id TEXT,
 		last_error TEXT, last_error_at TIMESTAMPTZ, error_count INTEGER NOT NULL DEFAULT 0,
-		broadcast_attempt_at TIMESTAMPTZ)`);
+		broadcast_attempt_at TIMESTAMPTZ, claim_token TEXT, claim_lease_until TIMESTAMPTZ)`);
 	await pool.query(
 		`INSERT INTO relay_pending_transfers (recipient, kind, amount_blurt, reason) VALUES ('alice', 'liquid', 10, 'welcome_bonus_liquid')`
 	);
@@ -747,26 +747,34 @@ function racingChain(
 	return { state, blurt };
 }
 /** A db for one drainer: its claim can wait at `claimGate` (after its
- *  SELECT), and with `claimedLongAgo` its claim writes a stamp two minutes
- *  old — as if its head read had already taken that long — so the stamp it
- *  holds stays exactly the one it wrote. */
-function drainerDb(o: { claimGate?: () => Promise<void>; claimedLongAgo?: boolean } = {}) {
+ *  SELECT). With `leaseRanOut`, its claim is written 30 minutes in the past —
+ *  stamp and lease alike — as if its head read had already taken that long:
+ *  its lease (CLAIM_LEASE_MS, 20 minutes) has ended. With `ignoresLease`, its
+ *  drain query drops the lease condition — a drainer that does not honour
+ *  leases — so the scenario reaches the layers behind the lease. */
+function drainerDb(
+	o: { claimGate?: () => Promise<void>; leaseRanOut?: boolean; ignoresLease?: boolean } = {}
+) {
 	const CLAIM = 'SET broadcast_attempt_at = clock_timestamp()';
 	return {
 		...db,
 		query: async (t: string, p?: readonly unknown[]) => {
 			if (t.includes(CLAIM)) {
 				if (o.claimGate) await o.claimGate();
-				if (o.claimedLongAgo) t = t.replace(CLAIM, `${CLAIM} - INTERVAL '2 minutes'`);
+				if (o.leaseRanOut)
+					t = t.replaceAll('clock_timestamp()', `(clock_timestamp() - INTERVAL '30 minutes')`);
 			}
+			if (o.ignoresLease)
+				t = t.replace('AND (claim_lease_until IS NULL OR claim_lease_until < NOW())', '');
 			return pool.query(t, p as unknown[]);
 		}
 	};
 }
 type Hist = Array<{ trx_id: string; op: [string, Record<string, unknown>] }>;
+const TX = (n: number): string => n.toString(16).padStart(40, '0');
 
 await check(
-	'a second drainer that takes the row while the first is still before signing: one payment, not two',
+	"a second drainer that takes the row after the first one's lease ran out, while the first is still before signing: one payment, not two",
 	async () => {
 		await freshTable();
 		const history: Hist = [];
@@ -776,7 +784,7 @@ await check(
 		const b = racingChain(history, ids);
 		const dA = new RelayQueueDrainer(
 			config as never,
-			drainerDb({ claimedLongAgo: true }) as never,
+			drainerDb({ leaseRanOut: true }) as never,
 			a.blurt as never
 		);
 		const dB = new RelayQueueDrainer(config as never, drainerDb() as never, b.blurt as never);
@@ -793,7 +801,7 @@ await check(
 		);
 		// A's txid is 1 (taken before its head read), B's is 2.
 		assert(
-			(r.last_error ?? '').startsWith(`outcome_unknown trx_id=${'2'.padStart(40, '0')} `),
+			(r.last_error ?? '').startsWith(`outcome_unknown trx_id=${TX(2)} `),
 			`the record of the payment that went out is not B's: ${r.last_error}`
 		);
 	}
@@ -811,7 +819,7 @@ await check(
 		const b = racingChain(history, ids, slowB.wait);
 		const dA = new RelayQueueDrainer(
 			config as never,
-			drainerDb({ claimedLongAgo: true }) as never,
+			drainerDb({ leaseRanOut: true }) as never,
 			a.blurt as never
 		);
 		const dB = new RelayQueueDrainer(config as never, drainerDb() as never, b.blurt as never);
@@ -830,7 +838,7 @@ await check(
 );
 
 await check(
-	'a second drainer that read the row before the first signed, and claims it after: one payment, not two',
+	'a drainer that ignores leases, read the row before the first signed and claims after: one payment, not two',
 	async () => {
 		await freshTable();
 		const history: Hist = [];
@@ -839,18 +847,15 @@ await check(
 		const claimB = gate();
 		const a = racingChain(history, ids, slow.wait);
 		const b = racingChain(history, ids);
-		const dA = new RelayQueueDrainer(
-			config as never,
-			drainerDb({ claimedLongAgo: true }) as never,
-			a.blurt as never
-		);
+		const dA = new RelayQueueDrainer(config as never, drainerDb() as never, a.blurt as never);
 		const dB = new RelayQueueDrainer(
 			config as never,
-			drainerDb({ claimGate: claimB.wait }) as never,
+			drainerDb({ claimGate: claimB.wait, ignoresLease: true }) as never,
 			b.blurt as never
 		);
 		const runA = dA.drainOnce();
 		await slow.reached; // A has claimed, and is still reading the head
+		await age(5); // its stamp is past the retry backoff (its lease still runs)
 		const runB = dB.drainOnce();
 		await claimB.reached; // B has read the row (bare in_flight) and is about to claim
 		slow.open();
@@ -860,6 +865,301 @@ await check(
 		assert(landed(history) === 1, `${landed(history)} transfers landed for one row (expected 1)`);
 	}
 );
+
+// ─── Claim token and lease (the reporter's follow-up, 2026-11-18) ────────
+
+await check(
+	'a claim whose stamp is older than the retry backoff is not taken while its lease runs',
+	async () => {
+		await freshTable();
+		const history: Hist = [];
+		const ids = { n: 0 };
+		const slow = gate();
+		const a = racingChain(history, ids, slow.wait);
+		const b = racingChain(history, ids);
+		const dA = new RelayQueueDrainer(config as never, drainerDb() as never, a.blurt as never);
+		const dB = new RelayQueueDrainer(config as never, drainerDb() as never, b.blurt as never);
+		const runA = dA.drainOnce();
+		await slow.reached; // A has claimed, and is still reading the head
+		await age(5); // past the 1-minute retry backoff, well inside the lease
+		const rB = await dB.drainOnce();
+		slow.open();
+		await runA;
+		assert(
+			rB.attempted === 0 && b.state.sends === 0,
+			`a second drainer took a row whose lease runs (attempted ${rB.attempted}, sent ${b.state.sends})`
+		);
+		assert(landed(history) === 1, `${landed(history)} transfers landed for one row (expected 1)`);
+		const r = await row();
+		assert(
+			(r.last_error ?? '').startsWith(`outcome_unknown trx_id=${TX(1)} `),
+			`the payment that went out is not the first drainer's: ${r.last_error}`
+		);
+	}
+);
+
+await check(
+	'a drainer whose head read outlasted its lease sends nothing, counts a failure and ends its lease',
+	async () => {
+		await freshTable();
+		const history: Hist = [];
+		const ids = { n: 0 };
+		const a = racingChain(history, ids);
+		const dA = new RelayQueueDrainer(
+			config as never,
+			drainerDb({ leaseRanOut: true }) as never,
+			a.blurt as never
+		);
+		await dA.drainOnce();
+		assert(landed(history) === 0, `${landed(history)} transfers went out after the lease ended`);
+		const r = (
+			await pool.query(
+				`SELECT error_count, last_error, claim_lease_until FROM relay_pending_transfers`
+			)
+		).rows[0];
+		assert(r.error_count === 1, `not counted as a failure: error_count ${r.error_count}`);
+		assert(
+			/claim on the row; not sending/.test(r.last_error ?? ''),
+			`the reason does not say the claim ran out: ${r.last_error}`
+		);
+		assert(r.claim_lease_until === null, `the lease was not ended: ${r.claim_lease_until}`);
+	}
+);
+
+/** A chain whose send waits at `stall` AFTER the signed record is written
+ *  and the bytes are out (nothing lands; the transaction is already past its
+ *  expiration, so it can be settled at once), then answers "outcome unknown". */
+function stallingChain(ids: { n: number }, stall: () => Promise<void>) {
+	const state = { sends: 0 };
+	const blurt = {
+		broadcastTransfer: async (a: {
+			onSigned?: (i: { txid: string; expirationMs: number }) => Promise<void>;
+		}) => {
+			const txid = TX(++ids.n);
+			const expirationMs = Date.now() - 120_000;
+			try {
+				await a.onSigned?.({ txid, expirationMs });
+			} catch (err) {
+				throw new BroadcastNotSentError(err instanceof Error ? err.message : String(err));
+			}
+			state.sends++;
+			await stall();
+			throw new BroadcastOutcomeUnknownError(txid, expirationMs, 'all RPC endpoints unavailable');
+		},
+		settleTransfer: async () => 'unknown' as const
+	};
+	return { state, blurt };
+}
+/** A chain whose every send lands with its reply lost, and whose settle check
+ *  says `verdict` ("absent" unless given), after waiting at `settleGate`
+ *  when given. */
+function absentChain(
+	history: Hist,
+	ids: { n: number },
+	settleGate?: () => Promise<void>,
+	verdict: 'absent' | 'unknown' = 'absent'
+) {
+	const state = { sends: 0 };
+	const blurt = {
+		broadcastTransfer: async (a: {
+			from: string;
+			to: string;
+			amountBlurt: number;
+			memo?: string;
+			onSigned?: (i: { txid: string; expirationMs: number }) => Promise<void>;
+		}) => {
+			const txid = TX(++ids.n);
+			const expirationMs = Date.now() + 120_000;
+			try {
+				await a.onSigned?.({ txid, expirationMs });
+			} catch (err) {
+				throw new BroadcastNotSentError(err instanceof Error ? err.message : String(err));
+			}
+			state.sends++;
+			history.push({
+				trx_id: txid,
+				op: [
+					'transfer',
+					{
+						from: a.from,
+						to: a.to,
+						amount: `${a.amountBlurt.toFixed(3)} BLURT`,
+						memo: a.memo ?? ''
+					}
+				]
+			});
+			throw new BroadcastOutcomeUnknownError(txid, expirationMs, 'all RPC endpoints unavailable');
+		},
+		settleTransfer: async () => {
+			if (settleGate) await settleGate();
+			return verdict;
+		}
+	};
+	return { state, blurt };
+}
+
+await check(
+	'a drainer stalled past its lease after sending does not overwrite the record of the payment sent since',
+	async () => {
+		await freshTable();
+		const history: Hist = [];
+		const ids = { n: 0 };
+		const stall = gate();
+		const a = stallingChain(ids, stall.wait);
+		const b = absentChain(history, ids);
+		const dA = new RelayQueueDrainer(config as never, drainerDb() as never, a.blurt as never);
+		const dB = new RelayQueueDrainer(config as never, drainerDb() as never, b.blurt as never);
+		const runA = dA.drainOnce();
+		await stall.reached; // A signed tx 1 (already expired), sent it, and stalls
+		// Time passes: A's lease ends and its stamp is past the backoff.
+		await pool.query(
+			`UPDATE relay_pending_transfers SET claim_lease_until = NOW() - INTERVAL '1 second'`
+		);
+		await age(30);
+		await dB.drainOnce(); // B settles tx 1: absent past its expiration → counted
+		const settled = await row();
+		assert(
+			(settled.last_error ?? '').startsWith('not_landed'),
+			`B did not settle A's transaction: ${settled.last_error}`
+		);
+		await age(30);
+		await dB.drainOnce(); // B claims and sends tx 2; it lands, its reply is lost
+		assert(landed(history) === 1, `B's payment did not go out: ${landed(history)}`);
+		stall.open();
+		await runA; // A's send finally answers "outcome unknown" for tx 1
+		const r = await row();
+		assert(
+			(r.last_error ?? '').startsWith(`outcome_unknown trx_id=${TX(2)} `),
+			`the record of the payment that went out (tx 2) was replaced: ${r.last_error}`
+		);
+	}
+);
+
+/** Two settlers read the same unsettled attempt (tx 99). S2 settles it
+ *  (absent), claims the row and sends tx 1, whose reply is lost; then S1's
+ *  verdict on tx 99 arrives, `late`. It must not touch tx 1's record. */
+async function staleVerdict(late: 'absent' | 'unknown', checks: number): Promise<void> {
+	await freshTable();
+	const exp = Date.now() - 120_000;
+	await pool.query(
+		`UPDATE relay_pending_transfers
+		    SET last_error = $1, broadcast_attempt_at = NOW() - INTERVAL '30 minutes'`,
+		[`outcome_unknown trx_id=${TX(99)} exp=${exp} checks=${checks}`]
+	);
+	const history: Hist = [];
+	const ids = { n: 0 };
+	const slowSettle = gate();
+	const s1 = absentChain(history, ids, slowSettle.wait, late);
+	const s2 = absentChain(history, ids);
+	const d1 = new RelayQueueDrainer(config as never, drainerDb() as never, s1.blurt as never);
+	const d2 = new RelayQueueDrainer(config as never, drainerDb() as never, s2.blurt as never);
+	const run1 = d1.drainOnce();
+	await slowSettle.reached; // S1 read tx 99 and is asking the chain
+	await d2.drainOnce(); // S2 settles tx 99: absent → counted
+	await age(30);
+	await d2.drainOnce(); // S2 claims and sends tx 1; it lands, its reply is lost
+	slowSettle.open();
+	const r1 = await run1; // S1's verdict on tx 99 arrives
+	assert(r1.failed === 0, `S1 reported tx 99's settled failure a second time`);
+	const r = await row();
+	assert(
+		(r.last_error ?? '').startsWith(`outcome_unknown trx_id=${TX(1)} `),
+		`the record of the payment that went out (tx 1) was replaced: ${r.last_error}`
+	);
+	assert(r.error_count === 1, `the row's count was changed by tx 99's verdict: ${r.error_count}`);
+}
+
+await check(
+	'a stale "absent" verdict does not touch the attempt another drainer has made since',
+	() => staleVerdict('absent', 0)
+);
+await check(
+	'a stale "still unknown" verdict does not touch the attempt another drainer has made since',
+	() => staleVerdict('unknown', 0)
+);
+await check('a stale escalation does not stop the attempt another drainer has made since', () =>
+	staleVerdict('unknown', 29)
+);
+
+await check(
+	'a drainer that lost its claim does not count its failure against the drainer that holds the row',
+	async () => {
+		await freshTable();
+		const history: Hist = [];
+		const ids = { n: 0 };
+		const slow = gate();
+		// A's head read fails after B has taken the row: nothing of A's was signed.
+		const a = {
+			blurt: {
+				broadcastTransfer: async () => {
+					await slow.wait();
+					throw new BroadcastNotSentError('all RPC endpoints unavailable: fetch failed');
+				},
+				settleTransfer: async () => 'unknown' as const
+			}
+		};
+		const b = racingChain(history, ids);
+		const dA = new RelayQueueDrainer(
+			config as never,
+			drainerDb({ leaseRanOut: true }) as never,
+			a.blurt as never
+		);
+		const dB = new RelayQueueDrainer(config as never, drainerDb() as never, b.blurt as never);
+		const runA = dA.drainOnce();
+		await slow.reached;
+		await dB.drainOnce(); // B claims, sends; the reply is lost
+		slow.open();
+		await runA;
+		const r = await row();
+		assert(r.error_count === 0, `A's failure was counted against B's attempt: ${r.error_count}`);
+		assert(landed(history) === 1, `${landed(history)} transfers landed (expected 1)`);
+	}
+);
+
+await check('every claim writes a random token of its own', async () => {
+	await freshTable();
+	const tokens: string[] = [];
+	for (let i = 0; i < 2; i++) {
+		const d = new RelayQueueDrainer(
+			config as never,
+			drainerDb() as never,
+			{
+				broadcastTransfer: async () => {
+					tokens.push(
+						(await pool.query(`SELECT claim_token FROM relay_pending_transfers`)).rows[0]
+							.claim_token
+					);
+					throw new BroadcastNotSentError('all RPC endpoints unavailable: fetch failed');
+				},
+				settleTransfer: async () => 'unknown' as const
+			} as never
+		);
+		await d.drainOnce();
+		await age(30);
+	}
+	const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+	assert(
+		tokens.length === 2 && tokens.every((t) => uuid.test(t ?? '')),
+		`a claim did not write a random token: ${JSON.stringify(tokens)}`
+	);
+	assert(tokens[0] !== tokens[1], `two claims wrote the same token: ${tokens[0]}`);
+});
+
+await check('the outcome record ends the lease, so the settle check is not held up', async () => {
+	await freshTable();
+	const history: Hist = [];
+	const ids = { n: 0 };
+	const c = racingChain(history, ids);
+	const d = new RelayQueueDrainer(config as never, drainerDb() as never, c.blurt as never);
+	await d.drainOnce();
+	const r = (await pool.query(`SELECT last_error, claim_lease_until FROM relay_pending_transfers`))
+		.rows[0];
+	assert(
+		(r.last_error ?? '').startsWith('outcome_unknown'),
+		`the send was not recorded: ${r.last_error}`
+	);
+	assert(r.claim_lease_until === null, `the lease still runs: ${r.claim_lease_until}`);
+});
 
 await check('a row stopped at the retry limit after the drainer read it is not sent', async () => {
 	await freshTable();

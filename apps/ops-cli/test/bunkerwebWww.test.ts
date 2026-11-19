@@ -3,10 +3,22 @@
  * the settings-file change, the DNS verdict (against a real DNS server on
  * 127.0.0.1), and the heal's decisions on a simulated box: BunkerWeb that runs
  * the settings it last loaded, a certificate, certbot that Let's Encrypt only
- * lets add www when www really reaches the web build. The run against real
- * certbot 2.9.0, Pebble, nginx and docker compose is recorded in the audit.
+ * lets add www when its check really reaches this server. Since v1.24.6 the
+ * box answers /.well-known/acme-challenge/ the way BunkerWeb 1.5.10 does: from
+ * its own Let's Encrypt folder, never from the web build (up to v1.24.4 this
+ * double passed the path on to the web build, which no real BunkerWeb does,
+ * so the heal's www certificate passed here and failed on morphit.io). The run
+ * against real certbot 2.9.0, Pebble, nginx and docker compose is recorded in
+ * the audit; the run on morphit.io (v1.24.4) in the v1.24.6 release notes.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+	AUTH_HOOK,
+	CLEANUP_HOOK,
+	ensureAcmeHooks,
+	manualAuthArgs,
+	type HookFs
+} from '../src/lib/acmeBunkerweb.ts';
 import {
 	certbotArgs,
 	certNameOf,
@@ -101,7 +113,33 @@ class Box {
 	stickyCert = 0;
 	hasCertbot = true;
 	certbotOut: string | null = null;
+	/** BunkerWeb answers /.well-known/acme-challenge/ itself, from its own
+	 *  folder (1.5.10 does, always). false: a web server that passes it on. */
+	edgeAnswers = true;
+	/** Does `docker exec` into BunkerWeb work? */
+	edgeWritable = true;
+	edgeFiles = new Map<string, string>();
+	hooksWritable = true;
+	hookFiles = new Map<string, string>();
+	/** With edgeAnswers false: does that web server pass the path on to the build? */
 	servesChallenge = true;
+	/** Can Let's Encrypt's check for `n` with these certbot arguments reach this server? */
+	checkReaches(n: string, args: readonly string[]): boolean {
+		if (n === W && !((this.dns[W]?.addrs.length ?? 0) > 0 && this.ruleLive())) return false;
+		if (args.includes('--manual'))
+			return (
+				this.edgeAnswers &&
+				this.edgeWritable &&
+				args[args.indexOf('--manual-auth-hook') + 1] === AUTH_HOOK &&
+				this.hookFiles.has(AUTH_HOOK)
+			);
+		return !this.edgeAnswers && this.servesChallenge;
+	}
+	hookFs: HookFs = {
+		read: (p) => this.hookFiles.get(p) ?? null,
+		write: (p, t) => (this.hooksWritable ? (this.hookFiles.set(p, t), true) : false),
+		executable: (p) => this.hookFiles.has(p)
+	};
 	backupOk = true;
 	timeLeft = 30 * 60_000;
 	background = true;
@@ -238,7 +276,16 @@ class Box {
 		},
 		fetchFollow: (url) => {
 			const u = new URL(url);
-			if (u.hostname !== W || !this.ruleLive() || !this.servesChallenge) return null;
+			const pre = '/.well-known/acme-challenge/';
+			if (u.hostname === W && !this.ruleLive()) return null;
+			if (u.hostname !== W && u.hostname !== D) return null;
+			if (!u.pathname.startsWith(pre)) return null;
+			if (this.edgeAnswers)
+				return (
+					this.edgeFiles.get(u.pathname.slice(pre.length)) ??
+					'<!doctype html><html lang="en">  <head>    <meta charset="UTF-8" />404'
+				);
+			if (!this.servesChallenge) return '<html>app</html>';
 			return this.files.get(`${BUILD}${u.pathname}`) ?? null;
 		},
 		certNames: (n) => (n === D ? [...this.cert] : null),
@@ -247,11 +294,7 @@ class Box {
 			this.certbotCalls.push([...args]);
 			if (this.certbotOut !== null) return { ok: false, out: this.certbotOut };
 			const names = args.flatMap((a, i) => (args[i - 1] === '-d' ? [a] : []));
-			const reach = (n: string) =>
-				n === D || (this.dns[W]?.addrs.length ?? 0) > 0
-					? n !== W || (this.ruleLive() && this.servesChallenge)
-					: false;
-			if (!names.every(reach))
+			if (!names.every((n) => this.checkReaches(n, args)))
 				return {
 					ok: false,
 					out: 'Challenge failed for domain www…: unauthorized, Invalid response'
@@ -260,6 +303,13 @@ class Box {
 			return { ok: true, out: 'Successfully received certificate.' };
 		},
 		certPermissions: () => void this.perms++,
+		edgeChallenge: (t, b) => {
+			if (!this.edgeWritable || !this.edgeAnswers) return false;
+			if (b === null) this.edgeFiles.delete(t);
+			else this.edgeFiles.set(t, b);
+			return true;
+		},
+		ensureAcmeHooks: () => ensureAcmeHooks(this.hookFs),
 		buildDir: () => BUILD,
 		timeLeftMs: () => this.timeLeft,
 		inBackground: () => this.background,
@@ -396,7 +446,7 @@ pre_hook = docker stop bunkerweb
 post_hook = docker start bunkerweb
 `
 		);
-		const a = certbotArgs(D, [D, W], BUILD, fixed);
+		const a = certbotArgs(D, [D, W], { kind: 'bunkerweb' }, fixed);
 		const after = (f: string) => a[a.indexOf(f) + 1];
 		expect(after('--deploy-hook')).toBe('/usr/local/bin/copy-cert --to "mail"');
 		// not checked when read (renewals never check it; `cd x && …` must not stop certbot)
@@ -418,7 +468,7 @@ post_hook = docker start bunkerweb
 		expect(webrootFor(conf(), D, '/x')).toBe(BUILD);
 		expect(webrootFor('[renewalparams]\nwebroot_path = /srv/a, /srv/b\n', D, '/x')).toBe('/srv/a');
 		expect(webrootFor('', D, '/x')).toBe('/x');
-		expect(certbotArgs(D, [D, W], BUILD, conf())).toEqual([
+		expect(certbotArgs(D, [D, W], { kind: 'webroot', dir: BUILD }, conf())).toEqual([
 			'certonly',
 			'--non-interactive',
 			'--cert-name',
@@ -435,10 +485,41 @@ post_hook = docker start bunkerweb
 			'--key-type',
 			'ecdsa'
 		]);
+		// through BunkerWeb's own folder: certbot's manual mode with Morphit's two hooks
+		expect(certbotArgs(D, [D, W], { kind: 'bunkerweb' }, conf())).toEqual([
+			'certonly',
+			'--non-interactive',
+			'--cert-name',
+			D,
+			'--manual',
+			'--preferred-challenges',
+			'http',
+			'--manual-auth-hook',
+			AUTH_HOOK,
+			'--manual-cleanup-hook',
+			CLEANUP_HOOK,
+			'-d',
+			D,
+			'-d',
+			W,
+			'--account',
+			'0123abcd',
+			'--key-type',
+			'ecdsa'
+		]);
+		expect(manualAuthArgs()).toEqual([
+			'--manual',
+			'--preferred-challenges',
+			'http',
+			'--manual-auth-hook',
+			AUTH_HOOK,
+			'--manual-cleanup-hook',
+			CLEANUP_HOOK
+		]);
 		const staging = certbotArgs(
 			D,
 			[D],
-			BUILD,
+			{ kind: 'bunkerweb' },
 			conf('https://acme-staging-v02.api.letsencrypt.org/directory')
 		);
 		expect(staging.slice(staging.indexOf('--server'), staging.indexOf('--server') + 2)).toEqual([
@@ -449,10 +530,16 @@ post_hook = docker start bunkerweb
 			certbotArgs(
 				D,
 				[D],
-				BUILD,
+				{ kind: 'bunkerweb' },
 				'[renewalparams]\nkey_type = rsa\nrsa_key_size = 4096\nelliptic_curve = secp384r1\n'
 			)
-		).toEqual([...certbotArgs(D, [D], BUILD, ''), '--key-type', 'rsa', '--rsa-key-size', '4096']);
+		).toEqual([
+			...certbotArgs(D, [D], { kind: 'bunkerweb' }, ''),
+			'--key-type',
+			'rsa',
+			'--rsa-key-size',
+			'4096'
+		]);
 	});
 });
 
@@ -541,10 +628,12 @@ describe('the heal on a simulated box', () => {
 		});
 		expect(b.rt.request(`https://${W}/`, { verify: true })).toMatchObject({ code: '301' });
 		expect(b.cert).toEqual([D, W]);
-		expect(b.certbotCalls).toEqual([certbotArgs(D, [D, W], BUILD, conf())]);
+		expect(b.certbotCalls).toEqual([certbotArgs(D, [D, W], { kind: 'bunkerweb' }, conf())]);
 		expect(b.perms).toBe(1);
 		expect(b.applies).toEqual([`${W} added|true`, 'the certificate with www loaded|false']);
 		expect([...b.files.keys()].some((k) => k.includes('acme-challenge'))).toBe(false); // probe removed
+		expect(b.edgeFiles.size).toBe(0); // and from BunkerWeb's folder
+		expect(b.hookFiles.has(AUTH_HOOK) && b.hookFiles.has(CLEANUP_HOOK)).toBe(true);
 		expect(r.detail).toMatch(/now send every visitor to https:\/\/vigilante\.trading/);
 		expect(r.detail).toMatch(/passes a certificate check/);
 
@@ -651,7 +740,7 @@ describe('the heal on a simulated box', () => {
 		c.dns[W] = lk();
 		c.cert = [D, W];
 		const r2 = await run(c);
-		expect(c.certbotCalls).toEqual([certbotArgs(D, [D], BUILD, conf())]);
+		expect(c.certbotCalls).toEqual([certbotArgs(D, [D], { kind: 'bunkerweb' }, conf())]);
 		expect(c.cert).toEqual([D]);
 		expect(c.perms).toBe(1);
 		expect(c.applies).toEqual(['the certificate without www loaded|false']);
@@ -754,11 +843,55 @@ describe('the heal on a simulated box', () => {
 
 	it('the challenge file does not come back through www: Let’s Encrypt is not asked; the exact command is given', async () => {
 		const b = new Box();
-		b.servesChallenge = false;
+		b.edgeWritable = false;
 		const r = await run(b);
 		expect(b.certbotCalls).toEqual([]);
 		expect(r.verified).toBe(false);
-		expect(r.detail).toContain(`sudo certbot ${certbotArgs(D, [D, W], BUILD, conf()).join(' ')}`);
+		expect(r.detail).toContain(
+			`sudo certbot ${certbotArgs(D, [D, W], { kind: 'bunkerweb' }, conf()).join(' ')}`
+		);
+		expect(b.edgeFiles.size).toBe(0);
+	});
+
+	it('morphit.io on v1.24.4: renewal pausing BunkerWeb, www only behind its own folder — www is added through it', async () => {
+		const b = new Box();
+		const paused = conf()
+			.replace('authenticator = webroot\n', 'authenticator = standalone\n')
+			.replace(`webroot_path = ${BUILD},\n`, '')
+			.replace(`[[webroot_map]]\n${D} = ${BUILD}\n`, '')
+			.replace(
+				'key_type = ecdsa\n',
+				'key_type = ecdsa\npre_hook = docker stop bunkerweb\npost_hook = docker start bunkerweb\n'
+			);
+		b.files.set(RENEWAL, paused);
+		const r = await run(b);
+		expect(b.cert).toEqual([D, W]);
+		const call = b.certbotCalls[0]!;
+		expect(call).toEqual(certbotArgs(D, [D, W], { kind: 'bunkerweb' }, paused));
+		// the issuance never pauses BunkerWeb (its folder is what answers)
+		expect(call.join(' ')).not.toMatch(/docker stop|--pre-hook|--webroot/);
+		expect(r.detail).toMatch(/passes a certificate check/);
+		expect(b.edgeFiles.size).toBe(0);
+	});
+
+	it('a web server that passes the path on (not BunkerWeb): the web build is used', async () => {
+		const b = new Box();
+		b.edgeAnswers = false;
+		const r = await run(b);
+		expect(b.cert).toEqual([D, W]);
+		expect(b.certbotCalls).toEqual([
+			certbotArgs(D, [D, W], { kind: 'webroot', dir: BUILD }, conf())
+		]);
+		expect(r.detail).toMatch(/passes a certificate check/);
+	});
+
+	it('the hooks cannot be written and nothing else answers: not asked, and the hooks are named', async () => {
+		const b = new Box();
+		b.hooksWritable = false;
+		const r = await run(b);
+		expect(b.certbotCalls).toEqual([]);
+		expect(r.verified).toBe(false);
+		expect(r.detail).toMatch(/Morphit's certbot hooks could not be written/);
 	});
 
 	it('Let’s Encrypt refuses (rate limit): the certificate is as it was, said why', async () => {

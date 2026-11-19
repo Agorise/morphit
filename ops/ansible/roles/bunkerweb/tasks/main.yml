@@ -378,19 +378,25 @@
 
 # The certificate was issued with certbot's standalone server, which
 # cannot renew while BunkerWeb holds port 80.  Renew through BunkerWeb instead:
-# Let's Encrypt's request reaches the frontend, which serves /.well-known/ from
-# the web build.  `certbot reconfigure` (certbot 2.3+) runs a real test renewal
-# against Let's Encrypt's staging server and saves the new settings only when it
-# passes; the result is read back from the renewal file.  Older certbot: a real
-# renewal through the web build (once; it saves the webroot settings only on
-# success).  `morphit-ops upgrade` does the same on installed servers.
-- name: Renew the TLS certificate through BunkerWeb (webroot)
+# BunkerWeb answers Let's Encrypt's request (/.well-known/acme-challenge/) itself,
+# from its own folder in its container, and the tls role's two certbot hooks put
+# Let's Encrypt's file there (certbot's manual mode), so nothing is stopped.  (Up
+# to v1.24.4 this went to the web build, which BunkerWeb never passes that path
+# on to.)  `certbot reconfigure` (certbot 2.3+) runs a real test renewal against
+# Let's Encrypt's staging server and saves the new settings only when it passes;
+# the result is read back from the renewal file.  Older certbot: a real renewal
+# through the folder (once; it saves the settings only on success).
+# `morphit-ops upgrade` does the same on installed servers.
+- name: Renew the TLS certificate through BunkerWeb (its own Let's Encrypt folder)
   when:
     - not (morphit_tor_only | default(false))
     - not (morphit_offline_install | default(false))
   vars:
     tls_renewal_conf: "/etc/letsencrypt/renewal/{{ morphit_domain }}.conf"
-    tls_webroot: "{{ morphit_repo_path }}/apps/web/build"
+    tls_manual: >-
+      --manual --preferred-challenges http
+      --manual-auth-hook /usr/local/lib/morphit/certbot-bunkerweb-auth.sh
+      --manual-cleanup-hook /usr/local/lib/morphit/certbot-bunkerweb-cleanup.sh
   block:
     - name: Read how the certificate renews
       ansible.builtin.command: "grep -E '^authenticator *= *' {{ tls_renewal_conf | quote }}"
@@ -405,11 +411,11 @@
       failed_when: false
       when: tls_renew_auth.stdout is search('standalone')
 
-    - name: Switch the renewal to the web build (certbot reconfigure runs a test renewal first)
+    - name: Switch the renewal to BunkerWeb's own folder (certbot reconfigure runs a test renewal first)
       ansible.builtin.command:
         cmd: >-
           certbot reconfigure --non-interactive --cert-name {{ morphit_domain }}
-          --webroot --webroot-path {{ tls_webroot | quote }}
+          {{ tls_manual }}
       register: tls_reconfigure
       changed_when: tls_reconfigure.rc == 0
       failed_when: false
@@ -419,13 +425,13 @@
 
     # No -d: certbot renews every name on the certificate (the domain, and
     # www.<domain> when it has it); a -d list would replace them.
-    - name: Renew once through the web build (certbot older than 2.3)
+    - name: Renew once through BunkerWeb's own folder (certbot older than 2.3)
       ansible.builtin.command:
         cmd: >-
           certbot certonly --non-interactive --force-renewal --cert-name {{ morphit_domain }}
-          --webroot --webroot-path {{ tls_webroot | quote }}
-      register: tls_webroot_renew
-      changed_when: tls_webroot_renew.rc == 0
+          {{ tls_manual }}
+      register: tls_manual_renew
+      changed_when: tls_manual_renew.rc == 0
       failed_when: false
       when:
         - tls_renew_auth.stdout is search('standalone')
@@ -441,9 +447,9 @@
     - name: Report how the certificate renews
       ansible.builtin.debug:
         msg: >-
-          {{ "The TLS certificate now renews through BunkerWeb (a test renewal with Let's Encrypt passed; settings read back)."
-             if tls_renew_auth_after.stdout | default('') is search('webroot')
-             else "The TLS certificate could not be switched to renew through BunkerWeb yet (the domain may not point at this server). Nothing is broken now; `sudo morphit-ops upgrade` tries again, or on this server run: sudo certbot reconfigure --cert-name " ~ morphit_domain ~ " --webroot --webroot-path " ~ tls_webroot }}
+          {{ "The TLS certificate now renews through BunkerWeb's own Let's Encrypt folder, with nothing stopped (a test renewal with Let's Encrypt passed; settings read back)."
+             if tls_renew_auth_after.stdout | default('') is search('manual')
+             else "The TLS certificate could not be switched to renew through BunkerWeb yet (the domain may not point at this server). Nothing is broken now; `sudo morphit-ops upgrade` tries again." }}
       when: tls_renew_auth.stdout is search('standalone')
 
 - name: Print BunkerWeb verification reminder

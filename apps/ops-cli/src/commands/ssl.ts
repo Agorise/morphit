@@ -23,6 +23,14 @@
  * active" looked only at the timer, not at how certbot renews; and without
  * sudo an unreadable /etc/letsencrypt read as "No certificate found".
  *
+ * v1.24.6: behind BunkerWeb its commands go through BunkerWeb's own Let's
+ * Encrypt folder (certbot's manual mode with Morphit's two hooks,
+ * lib/acmeBunkerweb.ts): BunkerWeb answers /.well-known/acme-challenge/ itself
+ * and never passes it on to the web build, so the webroot commands it gave up
+ * to v1.24.4 could not work there. A webroot renewal behind BunkerWeb is
+ * flagged; a renewal that pauses BunkerWeb (the upgrade's fallback up to
+ * v1.24.4) works and is no longer called failing.
+ *
  * Mirrors the established command shape (doctor/harden): read-only by
  * default, advisory, never breaks the box.
  */
@@ -33,7 +41,8 @@ import { join } from 'node:path';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
 import { effectiveEnvValue } from '../lib/instanceOrigin.ts';
-import { renewalParam } from '../lib/tlsRenewHeal.ts';
+import { ownPauseHooks, renewalParam, rendersBunkerWeb } from '../lib/tlsRenewHeal.ts';
+import { manualAuthArgs } from '../lib/acmeBunkerweb.ts';
 import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
 import { startDotsSpinner } from '../init/spinner.ts';
 import { runAsync } from '../lib/spinRun.ts';
@@ -129,7 +138,11 @@ export interface CertbotCommands {
 	readonly standalone: string;
 	/** Port 80 free (nothing listens there, e.g. BunkerWeb not started yet). */
 	readonly standaloneFree: string;
-	/** Through the web build BunkerWeb serves: nothing is stopped. */
+	/** Through BunkerWeb's own Let's Encrypt folder (certbot's manual mode
+	 *  with Morphit's two hooks; lib/acmeBunkerweb.ts): nothing is stopped. */
+	readonly bunkerweb: string;
+	/** Through the web build, for a web server that passes the check on to it
+	 *  (BunkerWeb never does: it answers /.well-known/acme-challenge/ itself). */
 	readonly webroot: string;
 	readonly verifyRenewal: string;
 }
@@ -137,8 +150,7 @@ export interface CertbotCommands {
 /** Build the exact certbot commands for a domain, matching OPERATIONS
  *  §35. PURE. The `<your-email>` placeholder is intentional — the
  *  operator substitutes their address. `buildDir` is the install's web
- *  build (the webroot BunkerWeb serves) — the same command the upgrade
- *  prints. */
+ *  build. */
 export function buildCertbotCommands(
 	domain: string,
 	buildDir = '/opt/morphit/apps/web/build'
@@ -156,6 +168,7 @@ export function buildCertbotCommands(
 			`sudo certbot certonly --standalone ${tail} && ` +
 			`sudo systemctl start nginx`,
 		standaloneFree: `sudo certbot certonly --standalone ${tail}`,
+		bunkerweb: `sudo certbot certonly ${manualAuthArgs().join(' ')} ${tail}`,
 		webroot: `sudo certbot certonly --webroot --webroot-path ${buildDir} ${tail}`,
 		verifyRenewal: 'systemctl list-timers certbot.timer   # expect: certbot.timer, with a next run'
 	};
@@ -168,7 +181,12 @@ export type RenewalHow =
 	 *  but the file does not say how to renew it; else certbot does not know
 	 *  the certificate at all (copied in by hand). */
 	| { readonly kind: 'missing'; readonly confPresent?: boolean }
-	| { readonly kind: 'set'; readonly authenticator: string };
+	| {
+			readonly kind: 'set';
+			readonly authenticator: string;
+			/** The renewal file's whole text (its hooks decide some verdicts). */
+			readonly text?: string;
+	  };
 
 /** Whether that way works on this server, in words, and the fix. PURE. */
 export function renewalVerdict(
@@ -178,8 +196,13 @@ export function renewalVerdict(
 	buildDir: string,
 	/** The names on the certificate (default: just certName). */
 	names: readonly string[] = [certName]
-): { readonly tone: 'ok' | 'warn' | 'error' | 'info'; readonly text: string; readonly fix: string | null } {
-	const toWebroot = `sudo certbot reconfigure --cert-name ${certName} --webroot --webroot-path ${buildDir}`;
+): {
+	readonly tone: 'ok' | 'warn' | 'error' | 'info';
+	readonly text: string;
+	readonly fix: string | null;
+} {
+	const manual = manualAuthArgs().join(' ');
+	const toBunkerWeb = 'sudo morphit-ops upgrade --heals';
 	if (how.kind === 'unreadable')
 		return {
 			tone: 'info',
@@ -194,7 +217,7 @@ export function renewalVerdict(
 			// (www.<domain> too). `-d <domain>` alone made a second certificate,
 			// "<domain>-0001", whenever this one names more than the domain.
 			fix: bunkerRunning
-				? `sudo certbot certonly --cert-name ${certName} --force-renewal --webroot --webroot-path ${buildDir}`
+				? `sudo certbot certonly --cert-name ${certName} --force-renewal ${manual}`
 				: null
 		};
 	if (how.kind === 'missing') {
@@ -209,23 +232,46 @@ export function renewalVerdict(
 			text: `No renewal settings for it (${le}/renewal/${certName}.conf): certbot does not manage it, so it will not renew by itself.`,
 			fix: bunkerRunning
 				? `sudo sh -c 'cd ${le} && for d in live archive; do if [ -e $d/${certName} ]; then mv -T $d/${certName} $d/${certName}.unmanaged || exit 1; fi; done; ` +
-					`certbot certonly --cert-name ${certName} ${ds} --webroot --webroot-path ${buildDir} && exit 0; ` +
+					`certbot certonly --cert-name ${certName} ${ds} ${manual} && exit 0; ` +
 					`for d in live archive; do if [ -e $d/${certName}.unmanaged ] && [ ! -e $d/${certName} ]; then mv -T $d/${certName}.unmanaged $d/${certName}; fi; done; exit 1'`
 				: null
 		};
 	}
 	const a = how.authenticator;
-	if (bunkerRunning && (a === 'standalone' || a === 'nginx'))
+	const text = how.text ?? '';
+	if (bunkerRunning && rendersBunkerWeb(text))
+		return {
+			tone: 'ok',
+			text: "It renews through BunkerWeb's own Let's Encrypt folder: nothing is stopped.",
+			fix: null
+		};
+	const paused = bunkerRunning ? ownPauseHooks(text) : null;
+	if (paused !== null)
+		return {
+			tone: 'ok',
+			text: `It renews by pausing ${paused} for a few seconds; \`sudo morphit-ops upgrade\` switches it to BunkerWeb's own Let's Encrypt folder, which pauses nothing.`,
+			fix: null
+		};
+	if (bunkerRunning && (a === 'standalone' || a === 'nginx' || a === 'webroot'))
 		return {
 			tone: 'error',
 			text:
 				a === 'standalone'
 					? "It renews with certbot's standalone mode, which cannot work while BunkerWeb holds port 80: the renewal will fail."
-					: "It renews through a host nginx, but BunkerWeb serves this site: the renewal will fail.",
-			fix: toWebroot
+					: a === 'webroot'
+						? "It renews through the web build, but BunkerWeb answers Let's Encrypt's check itself and never passes it on there: the renewal will fail."
+						: 'It renews through a host nginx, but BunkerWeb serves this site: the renewal will fail.',
+			// The heal proves BunkerWeb's folder first, then writes the settings
+			// (a standalone or webroot file); certbot's own reconfigure for nginx.
+			fix:
+				a === 'nginx' ? `sudo certbot reconfigure --cert-name ${certName} ${manual}` : toBunkerWeb
 		};
 	if (a === 'webroot')
-		return { tone: 'ok', text: 'It renews through the web build (webroot): nothing is stopped.', fix: null };
+		return {
+			tone: 'ok',
+			text: 'It renews through the web build (webroot): nothing is stopped.',
+			fix: null
+		};
 	return { tone: 'ok', text: `It renews with certbot's ${a} mode.`, fix: null };
 }
 
@@ -287,7 +333,11 @@ function pathState(path: string): 'present' | 'absent' | 'unreadable' {
  *  relay's / indexer's public origin, then /etc/morphit/indexer.env. */
 export function readPublicOrigin(repoRoot: string, etcDir: string): string {
 	loadInstanceEnv(repoRoot);
-	for (const k of ['MORPHIT_INSTANCE_ORIGIN', 'MORPHIT_RELAY_PUBLIC_ORIGIN', 'MORPHIT_INDEXER_PUBLIC_ORIGIN']) {
+	for (const k of [
+		'MORPHIT_INSTANCE_ORIGIN',
+		'MORPHIT_RELAY_PUBLIC_ORIGIN',
+		'MORPHIT_INDEXER_PUBLIC_ORIGIN'
+	]) {
 		const v = (process.env[k] ?? '').trim();
 		if (v !== '' && domainFromOrigin(v) !== null) return v;
 	}
@@ -327,7 +377,9 @@ export async function runSsl(ctx: SslCtx, deps: SslDeps = {}): Promise<number> {
 	// runs it inside apps/ops-cli).
 	const repoRoot = deps.repoRoot ?? defaultRepoRoot();
 	const etcDir =
-		deps.etcDir ?? process.env.MORPHIT_ETC_DIR ?? `${process.env.MORPHIT_ENV_ROOT ?? ''}/etc/morphit`;
+		deps.etcDir ??
+		process.env.MORPHIT_ETC_DIR ??
+		`${process.env.MORPHIT_ENV_ROOT ?? ''}/etc/morphit`;
 	const first = ctx.positional[0];
 	const mode = first === 'setup' ? 'setup' : 'status';
 	// The mode word ('status'/'setup') is optional. The domain is the
@@ -363,8 +415,7 @@ export async function runSsl(ctx: SslCtx, deps: SslDeps = {}): Promise<number> {
 	}
 
 	if (domain === null) {
-		if ((deps.hiddenOnly ?? isHiddenOnlyNode)())
-			return noCertNeeded(c, json, null);
+		if ((deps.hiddenOnly ?? isHiddenOnlyNode)()) return noCertNeeded(c, json, null);
 		const root = typeof process.geteuid === 'function' && process.geteuid() === 0;
 		return say(
 			'warn',
@@ -391,7 +442,8 @@ export async function runSsl(ctx: SslCtx, deps: SslDeps = {}): Promise<number> {
 		facts = { domain, buildDir: join(repoRoot, 'apps', 'web', 'build'), le, bunker };
 		const certPath = join(le, 'live', domain, 'fullchain.pem');
 		certState = pathState(certPath);
-		if (certState === 'present') notAfter = await (deps.readCertNotAfter ?? opensslNotAfter)(certPath);
+		if (certState === 'present')
+			notAfter = await (deps.readCertNotAfter ?? opensslNotAfter)(certPath);
 		if (mode === 'status') timer = await (deps.timerState ?? renewalTimerState)();
 		const w = deps.which ?? which;
 		[hasCertbot, hasNginx] = await Promise.all([w('certbot'), w('nginx')]);
@@ -443,8 +495,11 @@ function readRenewal(le: string, domain: string): RenewalHow {
 	const st = pathState(p);
 	if (st === 'absent') return { kind: 'missing', confPresent: false };
 	try {
-		const a = renewalParam(readFileSync(p, 'utf8'), 'authenticator');
-		return a === null ? { kind: 'missing', confPresent: true } : { kind: 'set', authenticator: a };
+		const text = readFileSync(p, 'utf8');
+		const a = renewalParam(text, 'authenticator');
+		return a === null
+			? { kind: 'missing', confPresent: true }
+			: { kind: 'set', authenticator: a, text };
 	} catch {
 		return { kind: 'unreadable' };
 	}
@@ -508,7 +563,9 @@ async function runStatus(
 		if (timer === 'active') {
 			console.log(`  ${c.green('✓')} The renewal timer runs (certbot.timer).`);
 		} else if (timer === 'inactive') {
-			console.log(`  ${c.yellow('⚠')} The renewal timer is NOT running. Turn it on, on this server:`);
+			console.log(
+				`  ${c.yellow('⚠')} The renewal timer is NOT running. Turn it on, on this server:`
+			);
 			console.log('        sudo systemctl enable --now certbot.timer');
 		} else {
 			console.log(
@@ -527,7 +584,9 @@ async function runStatus(
 							: c.dim('•');
 			console.log(`  ${t} ${rv.text}`);
 			if (rv.fix !== null) {
-				console.log(`        ${rv.tone === 'info' ? 'Run it with sudo' : 'Fix it, on this server'}:  ${rv.fix}`);
+				console.log(
+					`        ${rv.tone === 'info' ? 'Run it with sudo' : 'Fix it, on this server'}:  ${rv.fix}`
+				);
 			}
 		}
 	}
@@ -550,9 +609,9 @@ function obtainCommand(
 	const b = f.bunker.presence;
 	if (b === 'running')
 		return {
-			how: 'through BunkerWeb, which holds port 80 here (nothing is stopped)',
-			cmd: cmds.webroot,
-			note: null
+			how: "through BunkerWeb's own Let's Encrypt folder, as BunkerWeb holds port 80 here (nothing is stopped)",
+			cmd: cmds.bunkerweb,
+			note: 'Its two hooks (/usr/local/lib/morphit/certbot-bunkerweb-*.sh) come with the install and with `sudo morphit-ops upgrade`.'
 		};
 	if (b === 'stopped' || f.bunker.configDir)
 		return {
@@ -563,7 +622,7 @@ function obtainCommand(
 	if (b === 'docker-not-answering')
 		return {
 			how: 'Docker did not answer, so whether BunkerWeb holds port 80 is not known; if it does, use',
-			cmd: cmds.webroot,
+			cmd: cmds.bunkerweb,
 			note: `If nothing listens on port 80, this works instead: ${cmds.standaloneFree}`
 		};
 	if (hasNginx)

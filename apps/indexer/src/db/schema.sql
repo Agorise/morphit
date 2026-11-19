@@ -3726,3 +3726,19 @@ COMMENT ON COLUMN indexer_state.review_signals_redo_due IS
 ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
 COMMENT ON COLUMN chat_messages.sent_at IS
     'The sender''s signed time (transaction expiration minus the client''s 60 s lead, capped at the block time), v74; NULL when not known.';
+
+-- ─── v75: relay_pending_transfers claim token + lease ───
+-- (v1.24.6, relay/queue/drainer.ts.) A payment-queue claim used its retry stamp
+-- (broadcast_attempt_at) as both the claim's identity and its lease: another
+-- drainer could take the row once the stamp was older than the retry backoff
+-- (1 minute at first), while the first could still be reading the chain head
+-- before signing. A claim now writes a random claim_token and a lease
+-- (claim_lease_until); no other drainer takes the row while the lease runs,
+-- and every write after the claim is tied to the token. NULL on rows no
+-- drainer has claimed since v75; a NULL lease has ended.
+ALTER TABLE relay_pending_transfers ADD COLUMN IF NOT EXISTS claim_token TEXT;
+ALTER TABLE relay_pending_transfers ADD COLUMN IF NOT EXISTS claim_lease_until TIMESTAMPTZ;
+COMMENT ON COLUMN relay_pending_transfers.claim_token IS
+    'Random token of the drainer claim that last took the row (v75); every write after a claim is tied to it.';
+COMMENT ON COLUMN relay_pending_transfers.claim_lease_until IS
+    'Until when that claim keeps every other drainer off the row (v75); NULL once the claim''s work on the row ended.';

@@ -28,13 +28,15 @@
  *
  * NEVER PAY TWICE (D1 + wave 4).
  *   1. The row is CLAIMED by an atomic compare-and-set on the row as it was
- *      read (broadcast_attempt_at AND last_error), committed on its own, and
- *      only while it may still be sent (error_count below the limit).
+ *      read (broadcast_attempt_at AND last_error), committed on
+ *      its own, only while it may still be sent (error_count below the limit).
+ *      The drain query skips a row whose lease runs. The claim writes a random
+ *      token and a lease.
  *   2. The transfer is signed ONCE; its txid and SIGNED expiration are
  *      committed ('in_flight trx_id=… exp=…') BEFORE any node is sent the
- *      bytes, and only while the claim is still this drainer's (the stamp it
- *      wrote) and the row is not stopped. If that write does not happen,
- *      nothing is sent.
+ *      bytes, and only while the claim is still this drainer's (its token),
+ *      its lease runs and the row is not stopped. If that write does not
+ *      happen, nothing is sent.
  *   Two drainers (security report, 2026-11-14). A claim is not a lease that
  *   lasts: the drain query takes a row again once its stamp is older than the
  *   retry backoff (1 minute at first), and the head read before signing walks
@@ -47,6 +49,26 @@
  *   loses its claim (last_error changed under the same stamp). One relay per
  *   database runs one drainer, so this needed two relays on one database —
  *   but the guarantee no longer depends on that.
+ *   Claim token and lease (the reporter's follow-up, 2026-11-18). A claim now
+ *   writes a random claim_token and a lease (claim_lease_until, CLAIM_LEASE_MS),
+ *   instead of using the retry stamp as both:
+ *     - no other drainer takes a row while its lease runs, however old the
+ *       stamp (the drain query skips it; a claim on an older read loses
+ *       anyway, since every claim writes a new stamp and last_error);
+ *     - the signed record is written only while the token is this drainer's
+ *       AND the lease runs, by the database's clock. A drainer whose head read
+ *       outlasted its lease sends nothing and counts a failure (it is not a
+ *       lost claim: nobody else has the row), so a node walk that never ends
+ *       in time reaches the operator instead of looping;
+ *     - every later write is tied to the claim too: the outcome-unknown record
+ *       (a drainer stalled past its lease must not overwrite the record of the
+ *       payment another drainer sent since), a counted failure, and every
+ *       settle write (only while the row still carries the attempt it was
+ *       read with). The writes that record a payment the chain CONFIRMED stay
+ *       untied on purpose: that payment is on chain whoever holds the row, and
+ *       a refused write would lose its record;
+ *     - every write that ends a drainer's work on the row ends its lease, so
+ *       a row waits out a lease only after a crash.
  *   3. An unconfirmed send becomes 'outcome_unknown trx_id=… exp=… checks=N'.
  *   4. An unsettled row is settled (BlurtClient.settleTransfer) only once the
  *      signed expiration has passed: found in history → done; absent per >= 2
@@ -70,6 +92,8 @@
  * The nodes' answer to an unconfirmed send is kept (`cause=` in last_error,
  * and in the log), so a refusal the chain repeats reaches the operator.
  */
+
+import { randomUUID } from 'node:crypto';
 
 import type { UnlockedConfig } from '$config';
 import type { Database } from '$db/pool';
@@ -108,8 +132,21 @@ interface PendingTransferRow {
 	/** broadcast_attempt_at as Postgres text (full microsecond precision) —
 	 *  the compare-and-set token; a JS Date would drop the microseconds. */
 	attempt_token: string | null;
+	/** The random token of the claim that last took the row (as read), and,
+	 *  once this drainer claims it, this drainer's own. */
+	claim_token: string | null;
 	last_error: string | null;
 }
+
+/** How long a claim keeps every other drainer off the row. Longer than the
+ *  work before signing can take: the head read walks the nodes one after
+ *  another, each with its own time limit (10 s clearnet, 60 s over Tor/I2P),
+ *  so the default list's 14 hidden and 6 clearnet nodes take 15 minutes when
+ *  none answers. Past it, this drainer signs
+ *  nothing. A row waits out a lease only after a crash: every write that ends
+ *  a drainer's work on a row ends its lease. */
+export const CLAIM_LEASE_MS = 20 * 60_000;
+const CLAIM_LEASE_SQL = `make_interval(secs => ${CLAIM_LEASE_MS / 1000})`;
 
 /** last_error at claim time, before anything is signed: nothing sent yet. */
 const IN_FLIGHT = 'in_flight';
@@ -151,6 +188,15 @@ function causeText(s: string): string {
 
 /** The SQL condition "this row's attempt may be on the network". */
 const ATTEMPT_OPEN_SQL = `(last_error LIKE '${OUTCOME_UNKNOWN}%' OR last_error LIKE '${IN_FLIGHT_SIGNED}%')`;
+/** "The row still carries the attempt it was read with" (`param` is the
+ *  parameter number of last_error as read). Every settle verdict is about
+ *  that one attempt; once another drainer has settled it and taken the row,
+ *  the row carries a newer one that the verdict must not touch. last_error
+ *  names the attempt exactly (its txid, and the checks so far), and every
+ *  claim rewrites it, so it never comes back to an older value. */
+function asReadSql(param: number): string {
+	return `AND last_error IS NOT DISTINCT FROM $${param}::text`;
+}
 
 function parseAttempt(row: PendingTransferRow): Attempt {
 	const e = row.last_error ?? '';
@@ -237,10 +283,10 @@ export class RelayQueueDrainer {
 	 *  operator trigger via /admin).
 	 *
 	 *  Concurrency: no transaction is held across a broadcast. Each row is
-	 *  CLAIMED by an atomic compare-and-set on broadcast_attempt_at (committed
-	 *  at once), so two drainers pointed at the same DB can never both send a
-	 *  row (Finding N23), and a crash leaves a durable "we were sending this"
-	 *  mark (D1). */
+	 *  CLAIMED by an atomic compare-and-set (committed at once) that writes a
+	 *  random claim token and a lease, so two drainers pointed at the same DB
+	 *  can never both send a row (Finding N23; "Two drainers" in the header),
+	 *  and a crash leaves a durable "we were sending this" mark (D1). */
 	async drainOnce(): Promise<QueueDrainResult> {
 		if (this.signingGate?.signingRefused() === true) {
 			await this.refreshStats();
@@ -331,10 +377,13 @@ export class RelayQueueDrainer {
 		const result = await this.db.query<PendingTransferRow>(
 			`SELECT id, recipient, kind, amount_blurt::text,
 			        amount_bp::text AS amount_bp, reason, error_count,
-			        broadcast_attempt_at, broadcast_attempt_at::text AS attempt_token, last_error
+			        broadcast_attempt_at, broadcast_attempt_at::text AS attempt_token,
+			        claim_token, last_error
 			   FROM relay_pending_transfers t
 			  WHERE broadcast_at IS NULL
 			    AND error_count < $1
+			    -- Another drainer's claim runs: not taken, however old its stamp.
+			    AND (claim_lease_until IS NULL OR claim_lease_until < NOW())
 			    -- A delegation that must wait for an older one to the same account
 			    -- is not taken: it would hold a batch slot every cycle (it is never
 			    -- stamped) and, sorted first, keep the older one from settling.
@@ -407,16 +456,21 @@ export class RelayQueueDrainer {
 			return 'done';
 		}
 		if (result === 'absent') {
-			await this.db.query(
+			const absent = await this.db.query(
 				`UPDATE relay_pending_transfers
 				    SET last_error = $2, last_error_at = NOW(), error_count = error_count + 1
-				  WHERE id = $1 AND broadcast_at IS NULL`,
+				  WHERE id = $1 AND broadcast_at IS NULL
+				    ${asReadSql(3)}`,
 				[
 					row.id,
 					`not_landed trx_id=${att.txid ?? '?'} (absent past its expiration per 2+ operators)` +
-						(att.cause !== '' ? ` — the nodes answered: ${att.cause}` : '')
+						(att.cause !== '' ? ` — the nodes answered: ${att.cause}` : ''),
+					row.last_error ?? null
 				]
 			);
+			// Another drainer settled this attempt and took the row since: the
+			// row now carries its attempt, which this verdict is not about.
+			if ((absent.rowCount ?? 0) !== 1) return 'wait';
 			log.warn('row_attempt_not_landed', {
 				row_id: row.id,
 				kind: row.kind,
@@ -428,17 +482,20 @@ export class RelayQueueDrainer {
 		const checks = att.checks + 1;
 		const max = this.config.queueMaxSettleChecks ?? DEFAULT_MAX_SETTLE_CHECKS;
 		if (checks >= max) {
-			await this.db.query(
+			const escalated = await this.db.query(
 				`UPDATE relay_pending_transfers
 				    SET last_error = $2, last_error_at = NOW(), error_count = GREATEST(error_count, $3)
-				  WHERE id = $1 AND broadcast_at IS NULL`,
+				  WHERE id = $1 AND broadcast_at IS NULL
+				    ${asReadSql(4)}`,
 				[
 					row.id,
 					`escalated: outcome of trx_id=${att.txid ?? '?'} still unknown after ${checks} checks — check the relay account's history for it before re-queueing` +
 						(att.cause !== '' ? ` — the nodes answered: ${att.cause}` : ''),
-					this.config.queueMaxRetries
+					this.config.queueMaxRetries,
+					row.last_error ?? null
 				]
 			);
+			if ((escalated.rowCount ?? 0) !== 1) return 'wait';
 			log.error('row_escalated_outcome_unknown', {
 				row_id: row.id,
 				trx_id: att.txid,
@@ -449,11 +506,13 @@ export class RelayQueueDrainer {
 		}
 		await this.db.query(
 			`UPDATE relay_pending_transfers SET last_error = $2, last_error_at = NOW()
-			  WHERE id = $1 AND broadcast_at IS NULL`,
+			  WHERE id = $1 AND broadcast_at IS NULL
+			    ${asReadSql(3)}`,
 			[
 				row.id,
 				`${OUTCOME_UNKNOWN} trx_id=${att.txid ?? '?'} exp=${att.expirationMs} checks=${checks}` +
-					(att.cause !== '' ? ` cause=${att.cause}` : '')
+					(att.cause !== '' ? ` cause=${att.cause}` : ''),
+				row.last_error ?? null
 			]
 		);
 		log.info('row_unsettled_waiting', { row_id: row.id, trx_id: att.txid, checks });
@@ -596,49 +655,62 @@ export class RelayQueueDrainer {
 			}
 		}
 
-		// Claim + stamp, committed BEFORE anything is signed: an atomic
+		// Claim + stamp + lease, committed BEFORE anything is signed: an atomic
 		// compare-and-set on the row exactly as it was read — its attempt stamp
-		// AND its last_error — and only while it may still be sent. Comparing
-		// last_error too matters: another drainer that claimed with this same
-		// stamp records its signed transaction there, so a drainer that read
-		// the row before that record must lose (see "Two drainers" in the
-		// header).
+		// AND its last_error — and only while it may still be sent. Every claim
+		// writes a new stamp and a new last_error, so a row another drainer
+		// claimed since is never claimed again on an old read; comparing
+		// last_error matters because a drainer that read the row before another
+		// recorded its signed transaction there must lose (see "Two drainers"
+		// in the header). The token is random, this claim's alone; the lease
+		// keeps every other drainer off the row while this one works
+		// (CLAIM_LEASE_MS; the drain query skips a row whose lease runs).
+		const token = randomUUID();
 		const claim = await this.db.query<{ token: string }>(
 			`UPDATE relay_pending_transfers
 			    SET broadcast_attempt_at = clock_timestamp(),
+			        claim_token = $6,
+			        claim_lease_until = clock_timestamp() + ${CLAIM_LEASE_SQL},
 			        last_error = $3
 			  WHERE id = $1
 			    AND broadcast_at IS NULL
 			    AND error_count < $5
 			    AND broadcast_attempt_at::text IS NOT DISTINCT FROM $2::text
 			    AND last_error IS NOT DISTINCT FROM $4::text
-			  RETURNING broadcast_attempt_at::text AS token`,
+			  RETURNING claim_token AS token`,
 			[
 				row.id,
 				row.attempt_token ?? null,
 				IN_FLIGHT,
 				row.last_error ?? null,
-				this.config.queueMaxRetries
+				this.config.queueMaxRetries,
+				token
 			]
 		);
-		const token = claim.rows[0]?.token;
-		if ((claim.rowCount ?? 0) !== 1 || typeof token !== 'string') return 'wait';
+		if ((claim.rowCount ?? 0) !== 1 || claim.rows[0]?.token !== token) return 'wait';
+		// From here on the row is this claim's: a counted failure is tied to it
+		// (recordFailure).
+		row.claim_token = token;
 
 		// Record WHICH signed transaction is about to go out — txid and signed
 		// expiration — BEFORE any node sees it, and only while the claim is
-		// still OURS (the stamp we wrote: every claim writes a new one) and the
-		// row was not stopped meanwhile. Otherwise another drainer took the row
-		// (our claim outlived the retry backoff while we read the head), or the
-		// row was held: we send nothing, and count nothing — the row is not
-		// ours to judge. If this write fails, the client sends nothing
-		// (BroadcastNotSentError).
+		// still OURS (our token), its lease still runs (by the database's clock)
+		// and the row was not stopped meanwhile. Otherwise:
+		//   - another drainer took the row, or the row was held: we send
+		//     nothing, and count nothing — the row is not ours to judge;
+		//   - our lease ran out (the head read took longer than CLAIM_LEASE_MS)
+		//     and nobody else has the row: we send nothing, and it counts as a
+		//     failure, so a node walk that never ends in time reaches the
+		//     operator instead of looping.
+		// If this write fails, the client sends nothing (BroadcastNotSentError).
 		let lostClaim = false;
 		const onSigned = async (info: { txid: string; expirationMs: number }): Promise<void> => {
 			const w = await this.db.query(
 				`UPDATE relay_pending_transfers SET last_error = $2
 				  WHERE id = $1 AND broadcast_at IS NULL
 				    AND error_count < $4
-				    AND broadcast_attempt_at::text = $3::text`,
+				    AND claim_token = $3::text
+				    AND claim_lease_until > clock_timestamp()`,
 				[
 					row.id,
 					`${IN_FLIGHT_SIGNED}${info.txid} exp=${info.expirationMs}`,
@@ -646,10 +718,26 @@ export class RelayQueueDrainer {
 					this.config.queueMaxRetries
 				]
 			);
-			if ((w.rowCount ?? 0) !== 1) {
-				lostClaim = true;
-				throw new Error('the row is no longer claimed by this drainer; not sending');
+			if ((w.rowCount ?? 0) === 1) return;
+			const why = await this.db.query<{ ours: boolean; stopped: boolean }>(
+				`SELECT claim_token IS NOT DISTINCT FROM $2::text AS ours,
+				        (broadcast_at IS NOT NULL OR error_count >= $3) AS stopped
+				   FROM relay_pending_transfers WHERE id = $1`,
+				[row.id, token, this.config.queueMaxRetries]
+			);
+			const state = why.rows[0];
+			if (state?.ours === true && state.stopped === false) {
+				log.warn('row_claim_lease_ran_out', {
+					row_id: row.id,
+					kind: row.kind,
+					lease_s: CLAIM_LEASE_MS / 1000
+				});
+				throw new Error(
+					`the head read took longer than this drainer's ${CLAIM_LEASE_MS / 60_000}-minute claim on the row; not sending`
+				);
 			}
+			lostClaim = true;
+			throw new Error('the row is no longer claimed by this drainer; not sending');
 		};
 		let confirmation;
 		try {
@@ -682,17 +770,33 @@ export class RelayQueueDrainer {
 		} catch (err) {
 			if (err instanceof BroadcastOutcomeUnknownError) {
 				// It may be on chain. Record WHICH signed transaction, so the
-				// settle step can find it exactly; NOT counted as an error.
-				await this.db.query(
+				// settle step can find it exactly; NOT counted as an error. Only
+				// while the row is still OURS: a drainer that stalled past its
+				// lease may find that another drainer has since settled this
+				// transaction (proven never to land) and sent the payment again —
+				// overwriting that drainer's record would let the next settle
+				// check look for ours instead, and send a third time.
+				const recorded = await this.db.query(
 					`UPDATE relay_pending_transfers
 					    SET last_error = $2,
-					        last_error_at = NOW()
-					  WHERE id = $1 AND broadcast_at IS NULL`,
+					        last_error_at = NOW(),
+					        claim_lease_until = NULL
+					  WHERE id = $1 AND broadcast_at IS NULL
+					    AND claim_token = $3::text`,
 					[
 						row.id,
-						`${OUTCOME_UNKNOWN} trx_id=${err.txid} exp=${err.expirationMs} checks=0 cause=${causeText(err.reason)}`
+						`${OUTCOME_UNKNOWN} trx_id=${err.txid} exp=${err.expirationMs} checks=0 cause=${causeText(err.reason)}`,
+						token
 					]
 				);
+				if ((recorded.rowCount ?? 0) !== 1) {
+					log.warn('row_outcome_unknown_after_claim_lost', {
+						row_id: row.id,
+						kind: row.kind,
+						trx_id: err.txid
+					});
+					return 'wait';
+				}
 				log.warn('row_outcome_unknown', {
 					row_id: row.id,
 					kind: row.kind,
@@ -717,12 +821,16 @@ export class RelayQueueDrainer {
 		// but the row still says 'in_flight': it must not go to recordFailure
 		// (which would make it look like a definite failure and re-send it).
 		// Left as is, the next cycle settles it from the history.
+		// Not tied to the claim, on purpose: the chain CONFIRMED this payment, so
+		// it is the row's payment whoever holds the row now, and a refused write
+		// would lose its record while the row stayed open to another send.
 		try {
 			await this.db.query(
 				`UPDATE relay_pending_transfers
 				    SET broadcast_at = NOW(),
 				        broadcast_trx_id = $2,
-				        last_error = NULL
+				        last_error = NULL,
+				        claim_lease_until = NULL
 				  WHERE id = $1 AND broadcast_at IS NULL`,
 				[row.id, confirmation.id]
 			);
@@ -794,15 +902,24 @@ export class RelayQueueDrainer {
 			// it is settled from the history instead. The failure is still
 			// counted, so a row that keeps failing stops and reaches the
 			// operator (second review 2026-10-08).
-			await this.db.query(
+			//
+			// Tied to the claim the failure is about (the token as read, or this
+			// drainer's own once it claimed): a drainer whose claim another one
+			// has since taken must not count its failure against that one's
+			// attempt, or stop a row that is being sent.
+			const w = await this.db.query(
 				`UPDATE relay_pending_transfers
 				    SET last_error = CASE WHEN last_error IS NOT NULL AND ${ATTEMPT_OPEN_SQL}
 				                          THEN last_error ELSE $2 END,
 				        last_error_at = NOW(),
-				        error_count = error_count + 1
-				  WHERE id = $1 AND broadcast_at IS NULL`,
-				[row.id, oneLine(message).slice(0, 500)]
+				        error_count = error_count + 1,
+				        claim_lease_until = NULL
+				  WHERE id = $1 AND broadcast_at IS NULL
+				    AND claim_token IS NOT DISTINCT FROM $3::text`,
+				[row.id, oneLine(message).slice(0, 500), row.claim_token ?? null]
 			);
+			if ((w.rowCount ?? 0) !== 1)
+				log.warn('row_failure_not_counted_claim_lost', { row_id: row.id });
 		} catch (dbErr) {
 			// If even the error-recording UPDATE fails, log loudly
 			// but don't propagate — we're already in an error path.

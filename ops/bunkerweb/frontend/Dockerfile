@@ -20,13 +20,13 @@
 # `morphit-ops upgrade`, which restarts it for you. You only need to
 # rebuild this image (`docker compose up -d --build frontend`) if you
 # run WITHOUT the docker-compose nginx.conf mount.
-# The base is pinned by digest (nginx 1.30.5, the stable line, on Alpine
+# The base is pinned by digest (nginx 1.30.7, the stable line, on Alpine
 # 3.24), so every box builds from the same bytes and a re-pushed tag cannot
 # change them; the digest is the multi-platform index from the official
 # image's repo-info.  The label lets `morphit-ops upgrade` see which base a
 # running frontend was built from and rebuild an older one.
-FROM nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
-LABEL org.morphit.frontend-base="nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94"
+FROM nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb
+LABEL org.morphit.frontend-base="nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb"
 
 # Drop the stock default server (it also listens on :80) and install
 # Morphit's routing as the only server block.

@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	dnsPrefetchWithCsp,
 	dumpSections,
+	hasHttp2,
 	healNginxVhosts,
 	isMorphitVhost,
 	planVhost,
@@ -99,6 +100,50 @@ server {
 	});
 });
 
+describe('HTTP/2 is off until nginx 1.30.7 (CVE-2026-123633, CVE-2026-123007)', () => {
+	const H2 = `server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2 default_server; # keep
+    http2 on;
+    # listen 8443 ssl http2;
+    server_name trade.example.org;
+    server_tokens off;
+}
+`;
+	it('`listen … http2` loses the word, `http2 on;` goes, a comment is left alone', () => {
+		expect(vhostLoadedOk(H2).why).toContain(
+			'HTTP/2 is still on (nginx before 1.30.7 has two HTTP/2 security bugs)'
+		);
+		const p = planVhost(H2);
+		expect(p.text).toContain(`
+    listen 443 ssl;
+    listen [::]:443 ssl default_server; # keep
+    # listen 8443 ssl http2;
+    server_name trade.example.org;
+`);
+		expect(hasHttp2(p.text)).toBe(false);
+		expect(p.changes).toContain(
+			'HTTP/2 turned off until nginx 1.30.7 (CVE-2026-123633, CVE-2026-123007); browsers use HTTP/1.1, as over Tor and I2P'
+		);
+		expect(vhostLoadedOk(p.text)).toEqual({ ok: true, why: [] });
+		expect(planVhost(p.text).text).toBe(p.text); // idempotent
+	});
+	it('either way of turning HTTP/2 on is seen; a comment is not', () => {
+		expect(hasHttp2('    listen 443 ssl http2;\n')).toBe(true);
+		expect(hasHttp2('    listen 443 ssl;\n    http2 on;\n')).toBe(true);
+		expect(hasHttp2('    listen 443 ssl;\n    # listen 443 ssl http2;\n    # http2 on;\n')).toBe(
+			false
+		);
+		expect(hasHttp2('    listen 443 ssl;\n    http2 off;\n')).toBe(false);
+	});
+	it('no shipped ops/nginx config turns HTTP/2 on', () => {
+		for (const f of ['web.conf', 'relay.conf', 'indexer.conf']) {
+			expect(shipped(f)).not.toMatch(/^\s*listen\s[^;#]*\bhttp2\b/m);
+			expect(shipped(f)).not.toMatch(/^\s*http2\s+on\s*;/m);
+		}
+	});
+});
+
 describe('the bare-metal nginx site heals like a fresh copy (planner)', () => {
 	it('an earlier vhost: every gap closed, and what nginx would load passes', () => {
 		expect(vhostLoadedOk(OLD).ok).toBe(false);
@@ -106,7 +151,8 @@ describe('the bare-metal nginx site heals like a fresh copy (planner)', () => {
 		expect(vhostLoadedOk(p.text)).toEqual({ ok: true, why: [] });
 		expect(p.text).toContain(`add_header Content-Security-Policy "${MORPHIT_CSP}" always;`);
 		expect(p.text).not.toMatch(/^\s*http2 on;/m);
-		expect(p.text).toContain('listen 443 ssl http2;');
+		expect(p.text).toContain('    listen 443 ssl;\n');
+		expect(hasHttp2(p.text)).toBe(false);
 		expect(p.text).toMatch(
 			/server \{\n {4}server_tokens off;\n {4}error_log stderr crit;\n {4}limit_conn_log_level info;/
 		);

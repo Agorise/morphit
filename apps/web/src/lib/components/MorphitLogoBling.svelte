@@ -63,7 +63,7 @@
 <script lang="ts">
 	// Per-instance branding (docs/BRANDING.md). The logo is served from STABLE,
 	// un-fingerprinted paths so an operator can replace it without rebuilding
-	// the frontend (a local rebuild is not byte-reproducible and would trip the
+	// the frontend (a local rebuild is not byte-identical to the release and would trip the
 	// on-chain build-integrity banner): `morphit-ops branding apply` overwrites
 	// these two files in the served build, and nothing else. A canonical build
 	// ships the Morphit wordmark at both paths.

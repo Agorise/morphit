@@ -36,14 +36,19 @@
  *     BunkerWeb has the rule and still does not redirect is it written a
  *     second way, as a config file in its scheduler (once). No answer at all
  *     on this machine restarts nothing.
- *  3. The certificate: Let's Encrypt is asked, through the same web build its
- *     renewals use, for the same certificate with www.<domain> added (first
- *     proven locally: a file in the build must come back from
+ *  3. The certificate: Let's Encrypt is asked for the same certificate with
+ *     www.<domain> added, through BunkerWeb's own Let's Encrypt folder
+ *     (lib/acmeBunkerweb.ts; v1.24.6 — BunkerWeb answers
+ *     /.well-known/acme-challenge/ itself and never passes it on to the web
+ *     build, which up to v1.24.4 was asked instead and never answered). First
+ *     proven locally: a file put into that folder must come back from
  *     http://www.<domain>/.well-known/acme-challenge/… with redirects
- *     followed, as Let's Encrypt will fetch it). Read back from the
- *     certificate, made readable for BunkerWeb, BunkerWeb reloads it, and
- *     https://www.<domain> must pass a certificate check. What the operator
- *     set for the certificate (deploy hook, preferred chain, …) is kept.
+ *     followed, as Let's Encrypt will fetch it; the web build is tried only
+ *     when the folder does not answer (a web server that does pass the path
+ *     on). Read back from the certificate, made readable for BunkerWeb,
+ *     BunkerWeb reloads it, and https://www.<domain> must pass a certificate
+ *     check. What the operator set for the certificate (deploy hook, preferred
+ *     chain, …) is kept, and its renewals then go the same way.
  * Every step fits in the run that hosts the heal: one that would not finish
  * before its deadline is left for the next upgrade (BunkerWeb is never left
  * half-way through a recreate).
@@ -56,7 +61,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { HealCtx, HealResult } from './healTypes.ts';
 import { envEntries, envValues } from './bunkerwebPrivacy.ts';
-import { renewalParam, webrootMap } from './tlsRenewHeal.ts';
+import { renewalParam, rendersBunkerWeb, webrootMap } from './tlsRenewHeal.ts';
+import { edgeServes, manualAuthArgs } from './acmeBunkerweb.ts';
 
 /** The custom nginx conf (in BunkerWeb's server block) that sends www to the domain. */
 export const WWW_REDIRECT_KEY = 'CUSTOM_CONF_SERVER_HTTP_morphit_www_redirect';
@@ -181,9 +187,15 @@ function param(conf: string, key: string): string | null {
 	return v === null ? null : v.replace(/^(["'])(.*)\1$/, '$2');
 }
 
+/** How Let's Encrypt's check reaches this server: BunkerWeb's own folder
+ *  (Morphit's two certbot hooks), or a web build that is passed the path. */
+export type AcmeAuth =
+	| { readonly kind: 'bunkerweb' }
+	| { readonly kind: 'webroot'; readonly dir: string };
+
 /**
  * The certbot arguments that issue certificate `name` for `names` again,
- * through `webroot`, from the server and account its renewals use. `certonly`
+ * through `auth`, from the server and account its renewals use. `certonly`
  * rewrites the renewal file from its own arguments only (certbot's
  * storage.relevant_values), so what the operator set for this certificate is
  * carried over: its deploy hook (run once after this issuance too; not checked
@@ -191,13 +203,14 @@ function param(conf: string, key: string): string | null {
  * subset-of-names and no-autorenew. Not OCSP must-staple: Let's Encrypt
  * refuses every such request since 2025, so it would fail the issuance. Its
  * pre/post hooks are NOT: the TLS renewal heal may have set them to stop and
- * start BunkerWeb, which would break an issuance through BunkerWeb's own web
- * build (the heal proves that path first). PURE.
+ * start BunkerWeb (up to v1.24.4), which would break an issuance through
+ * BunkerWeb's own folder while it is stopped (the heal proves that path
+ * first). PURE.
  */
 export function certbotArgs(
 	name: string,
 	names: readonly string[],
-	webroot: string,
+	auth: AcmeAuth,
 	renewalConf: string
 ): string[] {
 	const args = [
@@ -205,9 +218,7 @@ export function certbotArgs(
 		'--non-interactive',
 		'--cert-name',
 		name,
-		'--webroot',
-		'--webroot-path',
-		webroot,
+		...(auth.kind === 'bunkerweb' ? manualAuthArgs() : ['--webroot', '--webroot-path', auth.dir]),
 		...names.flatMap((n) => ['-d', n])
 	];
 	const server = param(renewalConf, 'server');
@@ -395,6 +406,11 @@ export interface WwwRuntime {
 	certNames(name: string): string[] | null;
 	certbotPresent(): boolean;
 	certbot(args: readonly string[]): { ok: boolean; out: string };
+	/** Put (body) or remove (null) a file in BunkerWeb's own Let's Encrypt
+	 *  folder, in its edge container (lib/acmeBunkerweb.ts). */
+	edgeChallenge(token: string, body: string | null): boolean;
+	/** Morphit's two certbot hooks on disk (lib/acmeBunkerweb.ts). */
+	ensureAcmeHooks(): 'unchanged' | 'written' | 'failed';
 	/** Make the certificate files readable for BunkerWeb (group 101), as the renewal hook does. */
 	certPermissions(): void;
 	/** The install's web build (the frontend's webroot). */
@@ -1193,6 +1209,41 @@ function tlsState(rt: WwwRuntime, name: string): 'ok' | 'bad-cert' | 'no-answer'
 	return [35, 51, 58, 60].includes(r.exit) ? 'bad-cert' : 'no-answer';
 }
 
+/**
+ * The way Let's Encrypt's check for `name` reaches this server, proven with a
+ * test file asked for at http://<name>/.well-known/acme-challenge/… on this
+ * server (redirects followed): BunkerWeb's own folder first (Morphit's hooks
+ * written first; BunkerWeb answers that path itself), then the web build (a
+ * web server that passes the path on). null: neither answered.
+ */
+function provenAuth(
+	rt: WwwRuntime,
+	conf: string,
+	name: string,
+	domain: string
+): { auth: AcmeAuth | null; hooks: 'unchanged' | 'written' | 'failed' } {
+	const url = (t: string) => `http://${name}/.well-known/acme-challenge/${t}`;
+	const hooks = rt.ensureAcmeHooks();
+	if (
+		hooks !== 'failed' &&
+		edgeServes(
+			(t, b) => rt.edgeChallenge(t, b),
+			(t) => rt.fetchFollow(url(t))
+		)
+	)
+		return { auth: { kind: 'bunkerweb' }, hooks };
+	const webroot = webrootFor(conf, domain, rt.buildDir());
+	const token = `morphit-www-${randomBytes(8).toString('hex')}`;
+	const body = randomBytes(16).toString('hex');
+	const probe = join(webroot, '.well-known', 'acme-challenge', token);
+	let served = false;
+	if (rt.writeFile(probe, body)) {
+		served = (rt.fetchFollow(url(token)) ?? '').trim() === body;
+		rt.removeFile(probe);
+	}
+	return { auth: served ? { kind: 'webroot', dir: webroot } : null, hooks };
+}
+
 /** The certificate gets www.<domain> (with every name it already has). */
 async function certWithWww(
 	run: Run,
@@ -1258,35 +1309,32 @@ async function certWithWww(
 		return;
 	}
 
-	// Prove Let's Encrypt's path first: www → https://<domain> → the web build.
+	// Prove Let's Encrypt's path first: www → https://<domain> → BunkerWeb's
+	// own Let's Encrypt folder (or, failing that, the web build).
 	const conf = rt.readFile(`/etc/letsencrypt/renewal/${certName}.conf`) ?? '';
-	const webroot = webrootFor(conf, www.domain, rt.buildDir());
-	const token = `morphit-www-${randomBytes(8).toString('hex')}`;
-	const body = randomBytes(16).toString('hex');
-	const probe = join(webroot, '.well-known', 'acme-challenge', token);
-	let served = false;
 	let stop = ctx.spinner(`Checking that Let's Encrypt can check ${www.alias}…`);
+	let auth: AcmeAuth | null;
+	let hooks: 'unchanged' | 'written' | 'failed';
 	try {
-		if (rt.writeFile(probe, body)) {
-			served =
-				(rt.fetchFollow(`http://${www.alias}/.well-known/acme-challenge/${token}`) ?? '').trim() ===
-				body;
-			rt.removeFile(probe);
-		}
+		({ auth, hooks } = provenAuth(rt, conf, www.alias, www.domain));
 	} finally {
 		stop();
 	}
+	const names = [...have.filter((n) => n !== www.alias), www.alias];
 	const args = certbotArgs(
 		certName,
-		[...have.filter((n) => n !== www.alias), www.alias],
-		webroot,
+		names,
+		auth ??
+			(hooks !== 'failed'
+				? { kind: 'bunkerweb' }
+				: { kind: 'webroot', dir: webrootFor(conf, www.domain, rt.buildDir()) }),
 		conf
 	);
 	const manual = `sudo certbot ${args.join(' ')}`;
-	if (!served) {
+	if (auth === null) {
 		run.verified = false;
 		run.parts.push(
-			`a test file in the web build did not come back from http://${www.alias}/.well-known/acme-challenge/, so Let's Encrypt was not asked (it would have failed); https://${www.alias} is not secure yet. When it does, on this server run: ${manual}`
+			`a test file did not come back from http://${www.alias}/.well-known/acme-challenge/ (put into BunkerWeb's own Let's Encrypt folder${hooks === 'failed' ? " — not possible: Morphit's certbot hooks could not be written —" : ''}, nor into the web build), so Let's Encrypt was not asked (it would have failed); https://${www.alias} is not secure yet. When it does, on this server run: ${manual}`
 		);
 		return;
 	}
@@ -1353,8 +1401,19 @@ async function certWithoutWww(
 		return;
 	const keep = have.filter((n) => n !== alias);
 	const conf = rt.readFile(`/etc/letsencrypt/renewal/${certName}.conf`) ?? '';
-	const webroot = webrootFor(conf, domain, rt.buildDir());
-	const args = certbotArgs(certName, keep, webroot, conf);
+	let auth: AcmeAuth;
+	const probing = ctx.spinner(`Checking that Let's Encrypt can check ${domain}…`);
+	try {
+		const p = provenAuth(rt, conf, domain, domain);
+		auth =
+			p.auth ??
+			(rendersBunkerWeb(conf) && p.hooks !== 'failed'
+				? { kind: 'bunkerweb' }
+				: { kind: 'webroot', dir: webrootFor(conf, domain, rt.buildDir()) });
+	} finally {
+		probing();
+	}
+	const args = certbotArgs(certName, keep, auth, conf);
 	if (rt.timeLeftMs() < CERT_STEP_MIN_MS) {
 		run.verified = false;
 		run.parts.push(

@@ -122,7 +122,7 @@ export const MORPHIT_CSP =
  *  vitest keeps the two equal). A frontend built from another is rebuilt. */
 export const FRONTEND_BASE_LABEL = 'org.morphit.frontend-base';
 export const FRONTEND_BASE =
-	'nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94';
+	'nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb';
 export const MORPHIT_PERMISSIONS_POLICY =
 	'camera=(self), microphone=(), geolocation=(), interest-cohort=()';
 export const MORPHIT_LOG_FORMAT = `'$host [$time_local] "$request_method $uri" $status $body_bytes_sent'`;

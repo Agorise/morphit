@@ -1340,7 +1340,12 @@ something is stuck.
 
 **What the `last_error` states mean (v1.20.0).** The drainer writes
 `broadcast_attempt_at` as a committed claim *before* it signs, records the
-transaction id *before* it sends, and signs each transfer once:
+transaction id *before* it sends, and signs each transfer once. Since v1.24.6
+the claim also writes its own random `claim_token` and a 20-minute lease
+(`claim_lease_until`): no other drainer takes the row while the lease runs,
+and a relay crash leaves the row waiting until the lease ends. A head read
+that takes longer than the lease sends nothing and counts as a failure,
+with the reason in `last_error`.
 
 | `last_error` | Meaning |
 |---|---|
@@ -6086,9 +6091,15 @@ Add no `HiddenServiceDir` lines to `torrc` and no second i2pd tunnel: the instal
 
 ## 24. HTTP/2 deployment requirement (Phase F.5 cross-page trade events)
 
-**Bottom line:** terminate TLS with HTTP/2 (or HTTP/3) enabled on your
-clearnet origin. Since v1.21.14 a tab also works under HTTP/1.1, but
-HTTP/2 leaves the most room.
+**Bottom line:** since v1.24.6, keep HTTP/2 OFF until your nginx is
+1.30.7 or newer (BunkerWeb: until a BunkerWeb that ships it).
+CVE-2026-123633 and CVE-2026-123007 let a stranger run code on the
+server through nginx's HTTP/2 code, in every nginx before 1.30.7.
+`morphit-ops upgrade` turns it off (BunkerWeb `HTTP2=no`; `http2` taken
+off Morphit's nginx sites) and checks the running nginx.
+Since v1.21.14 a tab works under HTTP/1.1, as every Tor and I2P
+visitor always has; a later release turns HTTP/2 back on, which leaves
+the most room.
 
 ### Why
 
@@ -6133,7 +6144,7 @@ curl -I --http2 https://your-instance.example/orderbook | head -1
 # Should print: HTTP/2 200
 ```
 
-### How to enable on nginx
+### How to enable on nginx (only on nginx 1.30.7 or newer)
 
 ```nginx
 server {
@@ -6159,7 +6170,8 @@ server {
 ### How to enable on Caddy
 
 Caddy enables HTTP/2 by default for HTTPS sites.  Nothing to
-configure.  Verify with `curl -I --http2`.
+configure.  Verify with `curl -I --http2`.  (Caddy is not nginx;
+the two nginx bugs above do not apply to it.)
 
 ### Symptoms of HTTP/1.1 deployment
 
@@ -6171,7 +6183,9 @@ configure.  Verify with `curl -I --http2`.
   other
 
 If the user complains "I never see paid trades update on
-/my/orders," check HTTP/2 first.
+/my/orders," check how many tabs of the site they have open first
+(while HTTP/2 is off, each tab holds up to three of the browser's six
+connections to the site).
 
 ### The listener's stream count
 
@@ -7466,8 +7480,8 @@ For a domain of its own (`vigilante.trading`, `example.com.mx` — not a subdoma
 
 - **DNS.** A `CNAME` record `www` → `<domain>` (or A/AAAA records with the same addresses as the domain's). To check it, on any computer: `getent ahosts www.<domain>` should list the same addresses as `getent ahosts <domain>`.
 - **bunkerweb.env.** `SERVER_NAME=<domain> www.<domain>` (the domain first: BunkerWeb takes the first name for its certificate and settings) and `CUSTOM_CONF_SERVER_HTTP_morphit_www_redirect='if ($host = www.<domain>) { return 301 https://<domain>$request_uri; }'` — single-quoted, because Docker Compose replaces `$name` in an env file and `$host` / `$request_uri` would arrive empty. With two names, `CUSTOM_SSL_CERT` / `CUSTOM_SSL_KEY` must name the domain itself, not `${SERVER_NAME}`.
-- **Certificate.** The same Let's Encrypt certificate names both. Let's Encrypt checks `www` through the redirect (it follows it to `https://<domain>/.well-known/acme-challenge/…`, served from the web build), so it renews the same way the domain does, and checks every name at each renewal.
-- **Installs and upgrades.** The guided install sets it up: it asks Let's Encrypt for the domain, then adds `www` to the same certificate (while `www` does not point at the server yet, only that addition is refused). `sudo morphit-ops upgrade` does it on installed servers once `www` points at the server (looked up from DNS servers directly — systemd-resolved's upstream servers when it runs, not the hosts file): it writes the two settings (a copy of the old file is kept next to it, `bunkerweb.env.bak-<number>`), recreates BunkerWeb's services (a plain `docker restart` keeps a container's old settings), checks the redirect live, proves Let's Encrypt's path with a test file, adds `www` to the certificate — keeping the certificate's own deploy hook, preferred chain and key reuse (not OCSP Must-Staple, which Let's Encrypt no longer issues) — and checks `https://www.<domain>` passes a certificate check. When BunkerWeb refuses the settings, or the site stops answering, the old file goes back. A settings file that names `www` while the running containers do not is loaded by recreating them, once per version of the file; when the Compose service sets `SERVER_NAME` itself (`environment:`) or does not read the file, the file is left alone and the upgrade names what to change. When `www` has no DNS record, it says which record to add; when a certificate names `www` but `www` has no record any more, it is issued again without it (a renewal would fail otherwise). It runs in the upgrade's background part and leaves a step for the next upgrade rather than start one that would not finish in that run's time.
+- **Certificate.** The same Let's Encrypt certificate names both. Let's Encrypt checks `www` through the redirect (it follows it to `https://<domain>/.well-known/acme-challenge/…`, which BunkerWeb answers itself, from its own Let's Encrypt folder; §35, "If you used BunkerWeb"), so it renews the same way the domain does, with nothing stopped, and checks every name at each renewal.
+- **Installs and upgrades.** The guided install sets it up: it asks Let's Encrypt for the domain, then adds `www` to the same certificate (while `www` does not point at the server yet, only that addition is refused). `sudo morphit-ops upgrade` does it on installed servers once `www` points at the server (looked up from DNS servers directly — systemd-resolved's upstream servers when it runs, not the hosts file): it writes the two settings (a copy of the old file is kept next to it, `bunkerweb.env.bak-<number>`), recreates BunkerWeb's services (a plain `docker restart` keeps a container's old settings), checks the redirect live, proves Let's Encrypt's path with a test file put into BunkerWeb's own Let's Encrypt folder, adds `www` to the certificate — keeping the certificate's own deploy hook, preferred chain and key reuse (not OCSP Must-Staple, which Let's Encrypt no longer issues) — and checks `https://www.<domain>` passes a certificate check. When BunkerWeb refuses the settings, or the site stops answering, the old file goes back. A settings file that names `www` while the running containers do not is loaded by recreating them, once per version of the file; when the Compose service sets `SERVER_NAME` itself (`environment:`) or does not read the file, the file is left alone and the upgrade names what to change. When `www` has no DNS record, it says which record to add; when a certificate names `www` but `www` has no record any more, it is issued again without it (a renewal would fail otherwise). It runs in the upgrade's background part and leaves a step for the next upgrade rather than start one that would not finish in that run's time.
 
 - **BunkerWeb 1.5 with one site.** BunkerWeb serves only the names in its own site list (`bw_services`, in its database) and puts only the first name of `SERVER_NAME` there, so `www.<domain>` was left out however often the containers were recreated. When `nginx -T` inside BunkerWeb shows that `www` is not served although the running containers have it in `SERVER_NAME`, the upgrade adds `www.<domain>` to that list (after a copy of BunkerWeb's database, `db.pre-morphit-sites-<number>.sqlite3`, next to the database inside the scheduler container; the domain stays first), restarts the scheduler so it builds its config again, and checks with `nginx -T` again. It does this only for BunkerWeb's default SQLite database; with another database, or when it cannot add the name, it says so and names the one command whose output to send for a look.
 
@@ -8181,11 +8195,14 @@ sudo systemctl enable --now certbot.timer
 
 ### If you used BunkerWeb
 
-BunkerWeb's own Let's Encrypt client stays off (`AUTO_LETS_ENCRYPT=no`, §32): the host's certbot renews the certificate (its timer, above), and its deploy hook `/etc/letsencrypt/renewal-hooks/deploy/morphit-bunkerweb-reload.sh` (written by the Ansible `tls` role) makes the renewed files readable to BunkerWeb and reloads it. For a domain of its own the certificate also names `www.<domain>` (§32, "www.(your domain)"). Verify:
+BunkerWeb's own Let's Encrypt client stays off (`AUTO_LETS_ENCRYPT=no`, §32): the host's certbot renews the certificate (its timer, above), and its deploy hook `/etc/letsencrypt/renewal-hooks/deploy/morphit-bunkerweb-reload.sh` (written by the Ansible `tls` role) makes the renewed files readable to BunkerWeb and reloads it. For a domain of its own the certificate also names `www.<domain>` (§32, "www.(your domain)").
+
+**How Let's Encrypt's check reaches the server.** BunkerWeb answers every request for `/.well-known/acme-challenge/` itself, from its own folder inside its container (`/var/tmp/bunkerweb/lets-encrypt`), and never passes that path on to the web build behind it. So certbot uses its manual mode with two small hooks, `/usr/local/lib/morphit/certbot-bunkerweb-auth.sh` and `certbot-bunkerweb-cleanup.sh`: the first puts Let's Encrypt's file into that folder (`docker exec` into BunkerWeb), the second removes it. Nothing is stopped, not for the first certificate, not for `www`, not for any renewal. The install sets this up; `sudo morphit-ops upgrade` switches older settings (certbot's standalone mode, or the pause of BunkerWeb that upgrades up to v1.24.4 set for each renewal) once a test file in that folder comes back and a test renewal passes, and writes the hooks again if one is missing. A web-build (`webroot`) renewal cannot work behind BunkerWeb, and `sudo morphit-ops ssl` says so. Verify:
 
 ```sh
 systemctl list-timers | grep certbot
 ls /etc/letsencrypt/renewal-hooks/deploy/
+grep -E '^(authenticator|manual_auth_hook|pre_hook)' /etc/letsencrypt/renewal/<your-domain>.conf   # expect: manual, the auth hook, no pre_hook
 sudo certbot renew --dry-run
 ```
 
@@ -8209,7 +8226,7 @@ Manual renewal:
 ```sh
 # Caddy:  systemctl reload caddy
 # nginx + certbot:  certbot renew --force-renewal && systemctl reload nginx
-# BunkerWeb:  the bunkerweb container's healthcheck triggers renewal on next interval
+# BunkerWeb:  sudo certbot renew --cert-name <your-domain> --force-renewal   (through BunkerWeb's own folder; the deploy hook reloads BunkerWeb)
 ```
 
 Then investigate WHY auto-renewal broke. Most common causes:
@@ -11431,9 +11448,10 @@ unset $(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')
 
 # 0) fetch the anchor and the tarball release.yml published, and derive the
 #    SRI hash manifest from the tarball's prebuilt apps/web/build — NOT a
-#    laptop build (Vite/Rollup output is not byte-reproducible across
-#    machines, so a laptop-built manifest trips the frontend's "Build
-#    integrity check failed" banner). The tarball is checked against the
+#    laptop build (a plain laptop build, without the release's
+#    SOURCE_DATE_EPOCH, is not byte-identical, so a laptop-built manifest
+#    trips the frontend's "Build integrity check failed" banner; the
+#    release check below rebuilds WITH it, only to compare). The tarball is checked against the
 #    anchored SHA-256, and its files against the verify.json inside it. Only
 #    the tamper-critical BOOTSTRAP subset goes on chain (shell + service
 #    worker + entry loader — under the indexer's 4 KB per-field JSONB cap;
@@ -11442,6 +11460,9 @@ curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v<semver>/d
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v<semver>/morphit-v<semver>.tar.gz -o /tmp/morphit-v<semver>.tar.gz
 node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env \
   --tarball /tmp/morphit-v<semver>.tar.gz > /tmp/morphit-build-manifest.json
+# the tarball must be exactly the signed tag, plus the website built from it
+# (the website is rebuilt from the tag and compared; stop if it says otherwise):
+node scripts/verify-release-build.mjs --tag v<semver> --tarball /tmp/morphit-v<semver>.tar.gz
 
 # 1) build the payload — BTC/XMR treasury pre-filled from
 #    apps/indexer/src/config/canonicalTreasury.ts; the anchor file is parsed

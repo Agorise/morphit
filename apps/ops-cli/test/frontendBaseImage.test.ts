@@ -127,7 +127,7 @@ function host(o: {
 
 describe('frontendBaseState', () => {
 	const l = layout();
-	const ref = `nginx:1.30.5-alpine@${l.index}`;
+	const ref = `nginx:1.30.7-alpine@${l.index}`;
 	const tag = tagOf(ref);
 
 	it('containerd store (found by name:tag@digest, a container can be created): by digest', () => {

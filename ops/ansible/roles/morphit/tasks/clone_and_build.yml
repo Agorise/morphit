@@ -264,7 +264,7 @@
 
 - name: Preserve the CANONICAL prebuilt web frontend (shipped in the release tarball)
   # A federated operator must serve @morphit's EXACT frontend bytes to pass the
-  # on-chain build-integrity check — a local rebuild isn't byte-reproducible and
+  # on-chain build-integrity check — a local rebuild isn't byte-identical to the release and
   # trips the tamper banner. The tarball ships apps/web/build; the workspace build
   # below would overwrite it with a local rebuild, so stash it first and restore it
   # after. If nothing was shipped (older tarball / source checkout), there's nothing

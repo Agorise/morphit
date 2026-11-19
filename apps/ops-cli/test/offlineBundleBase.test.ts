@@ -34,8 +34,8 @@ function step5(store: 'containerd' | 'classic') {
 	try {
 		const index = Buffer.from('{"schemaVersion":2,"manifests":[]}');
 		const hex = sha(index);
-		const ref = `nginx:1.30.5-alpine@sha256:${hex}`;
-		const tag = 'nginx:1.30.5-alpine';
+		const ref = `nginx:1.30.7-alpine@sha256:${hex}`;
+		const tag = 'nginx:1.30.7-alpine';
 		mkdirSync(join(dir, 'repo/ops/ansible/group_vars'), { recursive: true });
 		mkdirSync(join(dir, 'repo/ops/bunkerweb/frontend'), { recursive: true });
 		writeFileSync(
@@ -118,9 +118,9 @@ describe("the offline bundle's frontend base (scripts/build-offline-bundle.sh)",
 		const r = step5('containerd');
 		expect(r.out).not.toMatch(/DIE/);
 		expect(r.status).toBe(0);
-		expect(r.argv).toMatch(/^save nginx:1\.30\.5-alpine$/m);
-		expect(r.argv).not.toMatch(/^save nginx:1\.30\.5-alpine@/m);
-		expect(r.repoTags).toEqual(['nginx:1.30.5-alpine']);
+		expect(r.argv).toMatch(/^save nginx:1\.30\.7-alpine$/m);
+		expect(r.argv).not.toMatch(/^save nginx:1\.30\.7-alpine@/m);
+		expect(r.repoTags).toEqual(['nginx:1.30.7-alpine']);
 	});
 	it('a Docker whose save rewrites the manifests (classic image store) is refused with what to do — never a bundle that cannot be proven', () => {
 		const r = step5('classic');

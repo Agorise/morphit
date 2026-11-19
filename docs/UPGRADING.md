@@ -699,7 +699,9 @@ git checkout v1.0.0-beta.1
 diff -rq --exclude=.git --exclude=node_modules --exclude=build \
   --exclude='*.env' --exclude=release-info.json . /opt/morphit
 # Any remaining difference in a source file deserves a look; expect
-# a few generated files, since builds are not byte-reproducible.
+# a few generated files (apps/web/static/sitemap.xml gains <lastmod> lines).
+# To check a release tarball against its tag in full, website included:
+# docs/VERIFY-YOUR-DOWNLOAD.md, Option C.
 ```
 
 If `git tag -v` says "Good signature" and the diff is clean, the

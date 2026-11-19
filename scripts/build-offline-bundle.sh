@@ -155,7 +155,7 @@ touch node_modules/.morphit-bundle-complete
 # ── Prebuild + ship the web frontend (CRITICAL for air-gapped/USB installs) ──
 # An offline node (USB-stick delivery, NO internet ever) cannot build the
 # SvelteKit frontend on-target: the build is memory-heavy, and — more to the
-# point — a local rebuild is not byte-reproducible, so it would fail the on-chain
+# point — a local rebuild is not byte-identical to the release, so it would fail the on-chain
 # build-integrity check. Worse, an incomplete on-target build (missing
 # index.html) 500-loops the whole site (this took a real operator's node dark).
 # So we build the canonical frontend HERE, ONCE, and ship it inside the bundle

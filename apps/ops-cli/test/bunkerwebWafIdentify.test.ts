@@ -156,7 +156,8 @@ const STEADY_ABC =
 	'MAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 405 444\nBAD_BEHAVIOR_THRESHOLD=50\nBAD_BEHAVIOR_COUNT_TIME=60\nBAD_BEHAVIOR_BAN_TIME=3600\n' +
 	'CUSTOM_CONF_MODSEC_morphit_json_api_off=x\n' +
 	'LIMIT_REQ_URL=^/(?:ipfs|ipns|rss)/|^/mcp\nLIMIT_REQ_RATE=2r/s\nLIMIT_CONN_MAX_HTTP2=256\n' +
-	'REVERSE_PROXY_INTERCEPT_ERRORS=no\n';
+	'REVERSE_PROXY_INTERCEPT_ERRORS=no\n' +
+	'HTTP2=no\nLIMIT_CONN_MAX_HTTP1=64\n';
 
 interface Ctr {
 	service: string;
@@ -804,7 +805,7 @@ describe('install summary (wave 6): BunkerWeb + front-end rows are checked by im
 describe('healBunkerWebWaf: the site’s own files are not request-limited', () => {
 	// The edge already runs without the real-IP trust (CLEAN): only the request
 	// limit is under test here.
-	const LIMITLESS = `SERVER_NAME=vigilante.trading\nMAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 405 444\nBAD_BEHAVIOR_THRESHOLD=50\nBAD_BEHAVIOR_COUNT_TIME=60\nBAD_BEHAVIOR_BAN_TIME=3600\nCUSTOM_CONF_MODSEC_morphit_json_api_off=x\nREVERSE_PROXY_INTERCEPT_ERRORS=no\nUSE_REAL_IP=no\nUSE_LIMIT_REQ=yes\nLIMIT_REQ_URL_1=/v1/\nLIMIT_REQ_RATE_1=1800r/m\nLIMIT_REQ_URL_2=/relay/\nLIMIT_REQ_RATE_2=120r/m\n`;
+	const LIMITLESS = `SERVER_NAME=vigilante.trading\nMAX_CLIENT_SIZE=1m\nBAD_BEHAVIOR_STATUS_CODES=401 405 444\nBAD_BEHAVIOR_THRESHOLD=50\nBAD_BEHAVIOR_COUNT_TIME=60\nBAD_BEHAVIOR_BAN_TIME=3600\nCUSTOM_CONF_MODSEC_morphit_json_api_off=x\nREVERSE_PROXY_INTERCEPT_ERRORS=no\nUSE_REAL_IP=no\nUSE_LIMIT_REQ=yes\nLIMIT_REQ_URL_1=/v1/\nLIMIT_REQ_RATE_1=1800r/m\nLIMIT_REQ_URL_2=/relay/\nLIMIT_REQ_RATE_2=120r/m\nHTTP2=no\nLIMIT_CONN_MAX_HTTP1=64\n`;
 	const line = (env: string, k: string): string | null =>
 		new RegExp(`^${k}=(.*)$`, 'm').exec(env)?.[1] ?? null;
 

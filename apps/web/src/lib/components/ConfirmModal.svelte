@@ -72,16 +72,13 @@
 	// Stable per-instance ID for the title heading; used by
 	// `aria-labelledby` on the dialog element so screen
 	// readers announce the dialog by its title rather than
-	// the generic "dialog".  Generated via crypto.randomUUID
-	// when available, falls back to a counter-suffixed string
-	// in older runtime contexts (SSR with no crypto, smoke
-	// tests).  Stable across re-renders because it's
-	// component-instance-scoped (not derived).
-	const titleId = `confirm-modal-title-${
-		typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-			? crypto.randomUUID()
-			: Math.random().toString(36).slice(2, 10)
-	}`;
+	// the generic "dialog". Svelte's own per-instance id: unique
+	// on the page, the same on the server and in the browser, and
+	// the same in every build — a random id here made each build
+	// of the prerendered pages differ, so nobody could rebuild a
+	// release and get its exact bytes (v1.24.6).
+	const uid = $props.id();
+	const titleId = `confirm-modal-title-${uid}`;
 
 	// Whenever `open` flips to true, call showModal() so the dialog
 	// actually displays modally. Flipping to false → close().

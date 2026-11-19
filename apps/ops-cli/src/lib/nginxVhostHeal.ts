@@ -30,6 +30,9 @@
  *  - a page CSP of the operator's own that lets browsers connect anywhere but
  *    this site is kept and reported (a warning naming the extra sources);
  *  - the IPFS gateway location asks for 127.0.0.1, not the visitor's Host.
+ *  - v1.24.6: HTTP/2 off (`listen … http2` loses the word, `http2 on;` goes)
+ *    until nginx 1.30.7: CVE-2026-123633 and CVE-2026-123007 let a stranger
+ *    run code through nginx's HTTP/2 code. Browsers use HTTP/1.1.
  *  - the web vhost's `limit_conn web_conn 40;` (as shipped) becomes 256: it
  *    counts every HTTP/2 download, and a first visit asks for every file.
  *  - the leftover-file and SVG rules as shipped before v1.21.12 matched the
@@ -84,6 +87,13 @@ const HEADER_NAMES: Record<string, string> = {
 /** Downloads at once per visitor on the web vhost (ops/nginx/web.conf): two
  *  HTTP/2 connections of nginx's 128 streams. */
 export const WEB_CONN_MAX = 256;
+/** What the heal says when it turns HTTP/2 off (v1.24.6). */
+export const HTTP2_OFF_CHANGE =
+	'HTTP/2 turned off until nginx 1.30.7 (CVE-2026-123633, CVE-2026-123007); browsers use HTTP/1.1, as over Tor and I2P';
+/** A config line that turns HTTP/2 on (`listen … http2`, `http2 on;`). PURE. */
+export function hasHttp2(text: string): boolean {
+	return /^\s*listen\s[^;#]*\bhttp2\b/m.test(text) || /^\s*http2\s+on\s*;/m.test(text);
+}
 /** The leftover-file and SVG rules web.conf shipped before v1.21.12, and
  *  today's (ops/nginx/web.conf; the frontend's nginx.conf has the same). */
 export const OLD_LEFTOVER_RE = '\\.(env|git|sql|bak|old|orig|swp|tmp)$';
@@ -456,16 +466,23 @@ export function planVhost(text: string): { text: string; changes: string[] } {
 		changes.add(
 			'page CSP of this release (browsers connect to this site only; no inline script or eval)'
 		);
-	// `http2 on;` needs nginx 1.25.1; Ubuntu 24.04 ships 1.24, which refuses
-	// the whole config. `listen … ssl http2` works on both.
-	if (lines.some((l) => /^\s*http2\s+on\s*;/.test(l))) {
-		for (let i = lines.length - 1; i >= 0; i--) {
-			if (/^\s*http2\s+on\s*;/.test(lines[i]!)) lines.splice(i, 1);
-			else if (/^\s*listen\s[^;#]*\bssl\b[^;#]*;/.test(lines[i]!) && !/\bhttp2\b/.test(lines[i]!))
-				lines[i] = lines[i]!.replace(/;/, ' http2;');
+	// HTTP/2 off until nginx 1.30.7 (v1.24.6): CVE-2026-123633 and
+	// CVE-2026-123007 let a stranger run code on the server through nginx's
+	// HTTP/2 code, in every nginx from 1.9.5, and the distro packages are not
+	// fixed yet. Browsers use HTTP/1.1, as over Tor and I2P. `listen … http2`
+	// loses the word; `http2 on;` (nginx 1.25.1+) goes, so off is nginx's
+	// default. Comment lines are left alone.
+	let h2 = false;
+	for (let i = lines.length - 1; i >= 0; i--) {
+		if (/^\s*http2\s+on\s*;/.test(lines[i]!)) {
+			lines.splice(i, 1);
+			h2 = true;
+		} else if (/^\s*listen\s[^;#]*\bhttp2\b/.test(lines[i]!)) {
+			lines[i] = lines[i]!.replace(/^(\s*listen\s[^;#]*?)\s+http2\b/, '$1');
+			h2 = true;
 		}
-		changes.add('HTTP/2 enabled the way nginx 1.24 understands (listen … ssl http2)');
 	}
+	if (h2) changes.add(HTTP2_OFF_CHANGE);
 	return { text: lines.join('\n'), changes: [...changes] };
 }
 
@@ -527,6 +544,9 @@ export function vhostLoadedOk(section: string): { ok: boolean; why: string[] } {
 		dnsPrefetchWithCsp(section)
 			? ''
 			: 'a page is still sent without X-DNS-Prefetch-Control (a browser may look up the name of a link on it before a click)',
+		hasHttp2(section)
+			? 'HTTP/2 is still on (nginx before 1.30.7 has two HTTP/2 security bugs)'
+			: '',
 		/^\s*limit_conn\s+web_conn\s+40\s*;/m.test(section)
 			? 'a visitor may still download only 40 files at once'
 			: '',

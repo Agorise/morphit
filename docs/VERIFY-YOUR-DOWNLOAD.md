@@ -12,6 +12,7 @@ Pick whichever matches how you got the code:
 | --- | --- | --- |
 | a **git clone** (from any mirror) | `git verify-tag vX.Y.Z` | the release tag was GPG-signed by Morphit's key |
 | the **source tarball** (from the release page) | `verify-download.mjs` (+ `git verify-tag`) | the bytes match what `@morphit` anchored on-chain, tied to the GPG-signed release tag |
+| **both** (a clone and the tarball) | `verify-release-build.mjs` | the tarball is exactly the signed tag, plus the website built from it — what the build server packed hides nothing |
 
 Both trace back to the **same GPG key**, Morphit's release signing key:
 
@@ -182,6 +183,35 @@ comma-separated list of at least two nodes on **different hosts**
 ```sh
 MORPHIT_RPC=https://rpc.beblurt.com,https://rpc.blurt.one node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz
 ```
+
+---
+
+## Option C — check that the tarball is the signed tag (rebuild the website)
+
+The release tarball is packed by the project's build server, and the
+website in it (`apps/web/build`) is built there. Since v1.24.6 that build
+is reproducible: the same tag, with the dependencies its lock file pins,
+builds to the same files wherever it is built. So anyone with a clone can
+prove the tarball hides nothing:
+
+```sh
+git clone https://git.agorise.net/agorise/morphit.git && cd morphit
+git verify-tag vX.Y.Z
+node scripts/verify-release-build.mjs --tag vX.Y.Z --tarball /path/to/morphit-vX.Y.Z.tar.gz
+```
+
+It checks that every file of the signed tag is in the tarball byte for
+byte, that the tarball holds nothing else but the website and
+`release-info.json`, and then rebuilds the website from the tag (it
+installs the dependencies with `npm ci --ignore-scripts` in a folder of
+its own, then builds) and compares it file by file. A compressed copy
+(`.br`, `.gz`) may differ in its bytes if your Node compresses
+differently, but it must unpack to exactly the rebuilt file. It ends with
+`✓ The tarball is exactly the signed tag vX.Y.Z, plus the website built
+from it.` — anything else, and that tarball is not the release.
+`--source-only` checks the files without rebuilding (the release job
+runs that half itself before it publishes). The maintainer runs the full
+check before anchoring each release on chain.
 
 ---
 

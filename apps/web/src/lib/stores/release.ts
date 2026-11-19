@@ -256,7 +256,8 @@ export async function controllingWorkerBuild(timeoutMs = 3_000): Promise<string 
  *
  *  Why the running version, and only it: the files are re-fetched mostly
  *  from the browser / service-worker cache, i.e. the running bundle's own
- *  bytes, and Morphit builds are not byte-reproducible across machines. A
+ *  bytes, and a build is byte-identical to the release only when made from its
+ *  tag with its SOURCE_DATE_EPOCH (scripts/verify-release-build.mjs). A
  *  tab still running an older (or newer) build than the signed release has
  *  nothing to compare — 'not_checked', and nothing is fetched.
  *

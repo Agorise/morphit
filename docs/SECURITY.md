@@ -225,6 +225,14 @@ on chain instead.
   (`/v1/broadcast`) and reads chain data; it cannot forge a user's op
 - The relay creates accounts with its own key from public keys the user
   supplies, and pays welcome bonuses and refills; it holds no user key
+- The relay never pays one bonus twice, even with two relays on one
+  database: it claims a payment with a random token and a 20-minute lease
+  that no other relay can take, records the signed transaction before any
+  node sees it (only while its token and lease hold), ties every later
+  write to that claim, and settles an unconfirmed payment from the chain
+  before it ever signs another (`apps/relay/src/queue/drainer.ts`, "NEVER
+  PAY TWICE"; two real relays raced at each statement in
+  `drainer-no-double-pay-smoke`)
 - Avatars are part of the user's on-chain profile (a sanitized data URI);
   there is no avatar server
 
@@ -322,14 +330,24 @@ on chain instead.
 - Push subscriptions link an account to a browser's push endpoint in the
   relay's database (no IP, no user-agent); see `METADATA-LEAK-CATALOG.md`.
 
-### 5. Signed, hashed releases (not byte-reproducible)
+### 5. Signed, hashed, reproducible releases
 
 - Every release is built from a tagged commit with locked dependencies
 - The release op on chain carries the SHA-256 of the source tarball and
   the hashes of the files that start the app; the tag is GPG-signed
-- Builds are **not** byte-for-byte reproducible today (the release
-  pipeline says so): a third party can rebuild and compare file by file,
-  but should expect differences and cannot treat a matching hash as proof
+- The release tarball is packed and its website built on the project's
+  build server, but it is checked against the signed tag before it is
+  anchored on chain (since v1.24.6, `scripts/verify-release-build.mjs`):
+  every file of the tag must be in it byte for byte, with nothing else
+  but the website and `release-info.json`, and the website is rebuilt
+  from the tag and compared file by file. The build is reproducible for
+  that (the release build sets `SOURCE_DATE_EPOCH`; nothing random or
+  clock-based is left in the output), so a build server that had been
+  broken into cannot slip code into a release. The release job runs the
+  file check itself before publishing; anyone with a clone can run the
+  full check (`docs/VERIFY-YOUR-DOWNLOAD.md`, Option C). A compressed
+  copy (`.br`, `.gz`) may differ in its bytes on another machine, so it
+  is compared by its content.
 - Without the tarball-signing key the release job publishes no `.asc`
   files, and installed nodes then accept the tarball only by its SHA-256 in
   @morphit's signed on-chain record (the tag itself is always signed); it
@@ -708,7 +726,13 @@ These are the operator's responsibility:
   volumetric attacks. Document your DDoS response plan.
 - **OS and runtime patching.** Keep Node.js, nginx, and the host
   kernel current with security updates. `unattended-upgrades` on
-  Ubuntu or equivalent is the minimum baseline.
+  Ubuntu or equivalent is the minimum baseline. Where a fix is not
+  out yet, the upgrade closes what it can: since v1.24.6 HTTP/2 is
+  off on every Morphit web server (BunkerWeb `HTTP2=no`, no `http2`
+  in the shipped or copied nginx sites, checked in the running
+  nginx) until BunkerWeb ships nginx 1.30.7, because CVE-2026-123633
+  and CVE-2026-123007 let a stranger run code through nginx's HTTP/2
+  code (`nginx-served-hardening-smoke` asks a real nginx for h2).
 - **Key rotation.** The relay's active key should be rotated
   quarterly or on suspicion of compromise, per OPERATIONS.md §8
   (on the server, `sudo morphit-ops edit-active-key` checks the new
@@ -1438,8 +1462,8 @@ prevent.  In scope:
   (`@noble/secp256k1`, libsodium) — report those upstream as well
 - The release pipeline — anything that lets a release, or the
   files an honest instance serves, differ from what the on-chain
-  `morphit_release_v1` op signs (builds are not byte-reproducible
-  today; a way to exploit that is in scope)
+  `morphit_release_v1` op signs, or that gets past
+  `scripts/verify-release-build.mjs`
 - Privacy regressions — IP retention, telemetry leaks,
   third-party requests we didn't disclose, cookie or fingerprint
   surfaces

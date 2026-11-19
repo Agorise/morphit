@@ -29,9 +29,18 @@ const bad = (m: string, detail = '') => {
 const expect = (n: string, c: boolean, d = '') => (c ? ok(n) : bad(n, d));
 
 // domainFromOrigin
-expect('domain: https URL → hostname', domainFromOrigin('https://morphit.example.com') === 'morphit.example.com');
-expect('domain: https URL with path/port → hostname only', domainFromOrigin('https://node.example.com:8443/x') === 'node.example.com');
-expect('domain: http URL → hostname', domainFromOrigin('http://relay.example.org') === 'relay.example.org');
+expect(
+	'domain: https URL → hostname',
+	domainFromOrigin('https://morphit.example.com') === 'morphit.example.com'
+);
+expect(
+	'domain: https URL with path/port → hostname only',
+	domainFromOrigin('https://node.example.com:8443/x') === 'node.example.com'
+);
+expect(
+	'domain: http URL → hostname',
+	domainFromOrigin('http://relay.example.org') === 'relay.example.org'
+);
 expect('domain: empty → null', domainFromOrigin('') === null);
 expect('domain: garbage → null', domainFromOrigin('not a url') === null);
 expect('domain: non-http scheme → null', domainFromOrigin('ftp://x.example.com') === null);
@@ -39,7 +48,10 @@ expect('domain: non-http scheme → null', domainFromOrigin('ftp://x.example.com
 // parseCertNotAfter
 {
 	const d = parseCertNotAfter('notAfter=Jun  3 12:00:00 2026 GMT\n');
-	expect('enddate: parses notAfter line', d !== null && d.getUTCFullYear() === 2026 && d.getUTCMonth() === 5);
+	expect(
+		'enddate: parses notAfter line',
+		d !== null && d.getUTCFullYear() === 2026 && d.getUTCMonth() === 5
+	);
 	expect('enddate: no match → null', parseCertNotAfter('garbage output') === null);
 }
 
@@ -49,32 +61,66 @@ expect('domain: non-http scheme → null', domainFromOrigin('ftp://x.example.com
 	expect('verdict: null cert → none', certVerdict(null, now).kind === 'none');
 
 	const expired = certVerdict(new Date('2026-05-20T00:00:00Z'), now);
-	expect('verdict: past date → expired', expired.kind === 'expired' && (expired.daysRemaining ?? 0) < 0);
+	expect(
+		'verdict: past date → expired',
+		expired.kind === 'expired' && (expired.daysRemaining ?? 0) < 0
+	);
 
 	const soon = certVerdict(new Date('2026-06-20T00:00:00Z'), now); // 17 days
 	expect('verdict: <30 days → expiring', soon.kind === 'expiring' && soon.daysRemaining === 17);
 
 	const healthy = certVerdict(new Date('2026-08-15T00:00:00Z'), now); // ~73 days
-	expect('verdict: >30 days → valid', healthy.kind === 'valid' && (healthy.daysRemaining ?? 0) >= 30);
+	expect(
+		'verdict: >30 days → valid',
+		healthy.kind === 'valid' && (healthy.daysRemaining ?? 0) >= 30
+	);
 }
 
 // buildCertbotCommands
 {
 	const cmds = buildCertbotCommands('morphit.example.com');
-	expect('certbot: nginx plugin targets the domain', cmds.nginxPlugin.includes('--nginx --cert-name morphit.example.com -d morphit.example.com'));
+	expect(
+		'certbot: nginx plugin targets the domain',
+		cmds.nginxPlugin.includes('--nginx --cert-name morphit.example.com -d morphit.example.com')
+	);
 	// v1.21.18 review: without --cert-name, a certificate certbot already keeps
 	// for the domain (expired, or naming www too) got a second "-0001" beside it.
 	expect(
 		'certbot: every obtain command names the certificate (--cert-name)',
-		[cmds.nginxPlugin, cmds.standalone, cmds.standaloneFree, cmds.webroot].every((c) =>
-			c.includes('--cert-name morphit.example.com -d morphit.example.com')
+		[cmds.nginxPlugin, cmds.standalone, cmds.standaloneFree, cmds.webroot, cmds.bunkerweb].every(
+			(c) => c.includes('--cert-name morphit.example.com -d morphit.example.com')
 		)
 	);
-	expect('certbot: includes --agree-tos + --no-eff-email', cmds.nginxPlugin.includes('--agree-tos') && cmds.nginxPlugin.includes('--no-eff-email'));
-	expect('certbot: email placeholder present for operator to fill', cmds.nginxPlugin.includes('<your-email>'));
-	expect('certbot: install command present', cmds.install.includes('certbot') && cmds.install.includes('python3-certbot-nginx'));
-	expect('certbot: standalone stops+starts nginx', cmds.standalone.includes('systemctl stop nginx') && cmds.standalone.includes('systemctl start nginx'));
+	expect(
+		'certbot: includes --agree-tos + --no-eff-email',
+		cmds.nginxPlugin.includes('--agree-tos') && cmds.nginxPlugin.includes('--no-eff-email')
+	);
+	expect(
+		'certbot: email placeholder present for operator to fill',
+		cmds.nginxPlugin.includes('<your-email>')
+	);
+	expect(
+		'certbot: install command present',
+		cmds.install.includes('certbot') && cmds.install.includes('python3-certbot-nginx')
+	);
+	expect(
+		'certbot: standalone stops+starts nginx',
+		cmds.standalone.includes('systemctl stop nginx') &&
+			cmds.standalone.includes('systemctl start nginx')
+	);
 	expect('certbot: renewal verify mentions certbot timer', cmds.verifyRenewal.includes('certbot'));
+	// v1.24.6: BunkerWeb answers Let's Encrypt's check from its own folder, never the web build
+	expect(
+		"certbot: through BunkerWeb's own folder — manual mode with Morphit's two hooks, no webroot",
+		cmds.bunkerweb.includes('certonly --manual --preferred-challenges http') &&
+			cmds.bunkerweb.includes(
+				'--manual-auth-hook /usr/local/lib/morphit/certbot-bunkerweb-auth.sh'
+			) &&
+			cmds.bunkerweb.includes(
+				'--manual-cleanup-hook /usr/local/lib/morphit/certbot-bunkerweb-cleanup.sh'
+			) &&
+			!cmds.bunkerweb.includes('--webroot')
+	);
 }
 
 console.log('');

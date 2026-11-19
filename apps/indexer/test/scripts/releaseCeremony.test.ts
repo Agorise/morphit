@@ -148,7 +148,14 @@ function runBlock(
 	const tb = fx.tarball ?? tarball;
 	const lines = blockCmds(n)
 		.filter(
-			(l) => !/^npm ci\b/.test(l) && !/release-broadcast\.ts/.test(l) && !/update-canary/.test(l)
+			(l) =>
+				!/^npm ci\b/.test(l) &&
+				!/release-broadcast\.ts/.test(l) &&
+				!/update-canary/.test(l) &&
+				// The release check rebuilds the website from a real tag
+				// (npm ci + a full build); it has its own smoke,
+				// verify-release-build-smoke. Its place in Block 3 is pinned below.
+				!/verify-release-build\.mjs/.test(l)
 		)
 		.map((l) =>
 			payloadLine !== undefined && /release-build-payload\.ts/.test(l) ? payloadLine : l
@@ -206,6 +213,21 @@ const goodAnchor = (tb: string = tarball): string =>
 const noCidAnchor = (): string => goodAnchor().replace(/^export MORPHIT_BUILD_IPFS_CID=.*\n/m, '');
 
 describe('ELI5 Block 3', () => {
+	it('checks the tarball against the signed tag, website rebuilt, before the payload is built', () => {
+		const cmds = block3();
+		const check = cmds.findIndex((l) =>
+			/^node scripts\/verify-release-build\.mjs --tag v9\.9\.9 --tarball \/tmp\/morphit-v9\.9\.9\.tar\.gz$/.test(
+				l
+			)
+		);
+		const fetched = cmds.findIndex((l) => /^curl .*morphit-v9\.9\.9\.tar\.gz /.test(l));
+		const payload = cmds.findIndex((l) => /release-build-payload\.ts/.test(l));
+		expect(check, 'Block 3 has no full release check').toBeGreaterThan(-1);
+		expect(check).toBeGreaterThan(fetched);
+		expect(check).toBeLessThan(payload);
+		expect(cmds[check]).not.toMatch(/--source-only/);
+	});
+
 	it('builds the payload: hashes from the anchored tarball, its own verify.json matching', () => {
 		const { r, payload } = runBlock3({ anchor: goodAnchor() });
 		expect(r.status, r.stderr.slice(-600)).toBe(0);

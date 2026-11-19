@@ -10,7 +10,10 @@
  *  - a subdomain (morphit.timeapp.foundation): no www anywhere;
  *  - a v1.21.10 install, healed, reads like a fresh one;
  *  - the tls role asks for both names, then the domain alone if refused, under
- *    the domain's certificate name; the BunkerWeb role's renewal for an old
+ *    the domain's certificate name; with BunkerWeb on port 80, through
+ *    BunkerWeb's own Let's Encrypt folder (certbot's manual mode and Morphit's
+ *    two hooks, v1.24.6), never the web build BunkerWeb does not pass the path
+ *    on to; the BunkerWeb role's renewal goes the same way, and for an old
  *    certbot keeps every name (no -d list);
  *  - the install wizard's vars carry the www name only for a site's own domain.
  */
@@ -27,6 +30,7 @@ import {
 	wwwRedirectConf
 } from '../src/lib/bunkerwebWww.ts';
 import { buildAnsibleVars, type AnsibleInstallInputs } from '../src/init/ansibleVars.ts';
+import { manualAuthArgs } from '../src/lib/acmeBunkerweb.ts';
 
 let pass = 0;
 let fail = 0;
@@ -168,12 +172,49 @@ console.log('\n── bunkerweb-www-install ────────────
 			.trim();
 	const own = { morphit_domain: 'vigilante.trading', morphit_www_alias: 'www.vigilante.trading' };
 	const first = tasks(own).find((t) => /^Request initial cert \(/.test(t.name));
+	const manual = manualAuthArgs().join(' ');
 	check(
 		'tls role: the first request is for the domain alone, under its certificate name (a failure costs the domain one check)',
 		first?.skip === false &&
-			/--webroot --webroot-path \/opt\/morphit\/apps\/web\/build/.test(cmd(first)) &&
 			/--cert-name vigilante\.trading -d vigilante\.trading$/.test(cmd(first)),
 		cmd(first)
+	);
+	check(
+		"tls role, BunkerWeb on port 80: through BunkerWeb's own Let's Encrypt folder (manual, Morphit's hooks), not the web build",
+		cmd(first).includes(manual) && !/--webroot/.test(cmd(first)),
+		cmd(first)
+	);
+	const noBw = tasks({ ...own, enable_bunkerweb: false }).find((t) =>
+		/^Request initial cert \(/.test(t.name)
+	);
+	check(
+		'tls role, another web server on port 80 (no BunkerWeb): through the web build',
+		/--webroot --webroot-path \/opt\/morphit\/apps\/web\/build/.test(cmd(noBw)) &&
+			!cmd(noBw).includes('--manual'),
+		cmd(noBw)
+	);
+	const free = tasks({ ...own, tls_port80: { stdout: '' } }).find((t) =>
+		/^Request initial cert \(/.test(t.name)
+	);
+	check(
+		'tls role, port 80 free (a fresh install, BunkerWeb not started yet): standalone',
+		/certonly --non-interactive --agree-tos --standalone /.test(cmd(free)) &&
+			!/--manual|--webroot/.test(cmd(free)),
+		cmd(free)
+	);
+	// (the renderer runs a loop as one task per item)
+	const copies = tasks(own)
+		.filter((t) => /^Install the certbot hooks/.test(t.name) && t.skip === false)
+		.map((t) => t.task['ansible.builtin.copy'] as { src?: string; dest?: string; mode?: string });
+	check(
+		'tls role: both hooks installed where certbot is told to find them, executable',
+		copies.length === 2 &&
+			copies.every((c) => c.mode === '0755' && c.dest === `/usr/local/lib/morphit/${c.src}`) &&
+			copies.map((c) => c.dest).join(' ') ===
+				manualAuthArgs()
+					.filter((a) => a.startsWith('/'))
+					.join(' '),
+		JSON.stringify(copies)
 	);
 	const wwwAfter = (rc: number) =>
 		tasks({ ...own, tls_certbot_result: { rc } }).find((t) => /Add www/.test(t.name));
@@ -201,27 +242,53 @@ console.log('\n── bunkerweb-www-install ────────────
 	);
 }
 
-// The BunkerWeb role's renewal for certbot older than 2.3 (the command the
-// task runs, read from the role with Python's YAML loader, as Ansible does).
+// The BunkerWeb role's renewal (the commands the tasks run, read from the role
+// with Python's YAML loader, as Ansible does, with the block's own vars).
 {
 	const r = spawnSync(
 		'python3',
 		[
 			'-c',
 			`import yaml,json,sys
+out = {}
 for t in yaml.safe_load(open(sys.argv[1])):
-    for b in (t.get('block') or []):
-        if 'older than 2.3' in b.get('name',''):
-            print(b['ansible.builtin.command']['cmd'])`,
+    if not t.get('block'): continue
+    for b in t['block']:
+        n = b.get('name','')
+        if 'older than 2.3' in n: out['old'] = b['ansible.builtin.command']['cmd']
+        if n.startswith('Switch the renewal'): out['reconfigure'] = b['ansible.builtin.command']['cmd']
+        if n.startswith('Report how'): out['report'] = b['ansible.builtin.debug']['msg']
+    if 'old' in out: out['manual'] = (t.get('vars') or {}).get('tls_manual',''); break
+print(json.dumps(out))`,
 			repoPath('ops/ansible/roles/bunkerweb/tasks/main.yml')
 		],
 		{ encoding: 'utf8' }
 	);
-	const c = (r.stdout ?? '').replace(/\s+/g, ' ').trim();
+	let got: Record<string, string> = {};
+	try {
+		got = JSON.parse(r.stdout || '{}') as Record<string, string>;
+	} catch {
+		/* reported below */
+	}
+	const flat = (k: string) =>
+		(got[k] ?? '')
+			.replace(/\{\{ tls_manual \}\}/g, got.manual ?? '')
+			.replace(/\s+/g, ' ')
+			.trim();
+	const manual = manualAuthArgs().join(' ');
 	check(
 		'BunkerWeb role: the old-certbot renewal names the certificate, not a -d list (www kept)',
-		/certbot certonly .*--cert-name \{\{ morphit_domain \}\}/.test(c) && !/ -d /.test(c),
-		c || (r.stderr ?? '')
+		/certbot certonly .*--cert-name \{\{ morphit_domain \}\}/.test(flat('old')) &&
+			!/ -d /.test(flat('old')),
+		flat('old') || (r.stderr ?? '')
+	);
+	check(
+		"BunkerWeb role: renewals switched to BunkerWeb's own Let's Encrypt folder (manual, Morphit's hooks), never the web build",
+		flat('reconfigure').includes(manual) &&
+			flat('old').includes(manual) &&
+			!/--webroot/.test(`${flat('reconfigure')} ${flat('old')}`) &&
+			/is search\('manual'\)/.test(got.report ?? ''),
+		JSON.stringify(got)
 	);
 }
 

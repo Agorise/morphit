@@ -292,14 +292,21 @@ jobs:
 
       - name: Build the canonical web frontend (shipped prebuilt, not rebuilt per-operator)
         # Federated operators must serve BYTE-IDENTICAL frontend assets to pass the
-        # on-chain build-integrity check — a local `npm run build` is not
-        # byte-reproducible across machines, so an honest operator's rebuild
-        # mismatches @morphit's published hashes and trips the scary red banner.
+        # on-chain build-integrity check — a plain local `npm run build` (without
+        # this release's SOURCE_DATE_EPOCH) is not byte-identical to it, so an honest
+        # operator's rebuild mismatches @morphit's published hashes and trips the
+        # scary red banner.
         # Build the frontend ONCE here and ship apps/web/build in the tarball; the
         # install + upgrade DEPLOY these exact files (falling back to a rebuild only
         # if the prebuilt is somehow absent). The frontend is generic — instance
         # identity loads at runtime from /v1/instance — so one build serves everyone.
+        # SOURCE_DATE_EPOCH (the build time release-info.json records) makes the
+        # build reproducible: the same tag builds to the same bytes anywhere, so
+        # ELI5 Block 3 rebuilds it from the signed tag and compares
+        # (scripts/verify-release-build.mjs) before the release is anchored.
         run: |
+          SOURCE_DATE_EPOCH=$(node -e "process.stdout.write(String(Math.floor(Date.parse(JSON.parse(require('fs').readFileSync('release-info.json', 'utf8')).build_time) / 1000)))")
+          export SOURCE_DATE_EPOCH
           npm run build -w apps/web
           # Without the brand-slot record, `morphit-ops branding` cannot put an
           # operator's site name into the prerendered pages (docs/BRANDING.md).
@@ -348,6 +355,16 @@ jobs:
               -czf "${STAGE}/${TARBALL}" .
           mv "${STAGE}/${TARBALL}" "./${TARBALL}"
           rmdir "${STAGE}"
+
+      - name: Check the tarball is exactly the signed tag, plus the website
+        # The same check ELI5 Block 3 runs on the maintainer's machine (which
+        # also rebuilds the website and compares it): every file of the tag,
+        # byte for byte, and nothing else but apps/web/build and
+        # release-info.json. A release job that packs anything else fails here.
+        env:
+          TARBALL: ${{ steps.ver.outputs.tarball }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: node scripts/verify-release-build.mjs --tag "$TAG" --tarball "$TARBALL" --source-only
 
       - name: Compute tarball checksum
         env:

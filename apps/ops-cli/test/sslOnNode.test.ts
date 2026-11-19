@@ -9,6 +9,11 @@
  *  - L9: with no certificate it showed only the status, not the steps;
  *  - L8: any argument was taken as a domain, and an unreadable
  *    /etc/letsencrypt read as "No certificate found".
+ * v1.24.6: behind BunkerWeb every certbot command goes through BunkerWeb's own
+ * Let's Encrypt folder (certbot's manual mode with Morphit's two hooks):
+ * BunkerWeb answers /.well-known/acme-challenge/ itself and never passes it on
+ * to the web build, so the webroot commands it gave up to v1.24.4 could never
+ * work there, and a webroot renewal behind BunkerWeb is flagged.
  */
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -16,6 +21,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runSsl } from '../src/commands/ssl.ts';
+import { manualAuthArgs } from '../src/lib/acmeBunkerweb.ts';
+
+const MANUAL = manualAuthArgs().join(' ');
 
 let out = '';
 let root = '';
@@ -67,12 +75,12 @@ function ssl(positional: string[], deps: Record<string, unknown> = {}) {
 	} as never);
 }
 
-function withCert(authenticator: string): void {
+function withCert(authenticator: string, extra = ''): void {
 	mkdirSync(join(le, 'live', 'trade.alice.net'), { recursive: true });
 	writeFileSync(join(le, 'live', 'trade.alice.net', 'fullchain.pem'), 'x');
 	writeFileSync(
 		join(le, 'renewal', 'trade.alice.net.conf'),
-		`version = 2.9.0\n[renewalparams]\nauthenticator = ${authenticator}\naccount = abc\n`
+		`version = 2.9.0\n[renewalparams]\nauthenticator = ${authenticator}\naccount = abc\n${extra}`
 	);
 }
 
@@ -93,13 +101,13 @@ describe('ssl on an installed node', () => {
 		expect(out).toMatch(/Domain: bob\.example\.net/);
 	});
 
-	it('no certificate, BunkerWeb running: the steps follow, through BunkerWeb (webroot)', async () => {
+	it("no certificate, BunkerWeb running: the steps follow, through BunkerWeb's own Let's Encrypt folder", async () => {
 		await ssl([]);
 		expect(out).toMatch(/No certificate found/);
 		expect(out).toContain(
-			`sudo certbot certonly --webroot --webroot-path ${root}/apps/web/build --cert-name trade.alice.net -d trade.alice.net`
+			`sudo certbot certonly ${MANUAL} --cert-name trade.alice.net -d trade.alice.net`
 		);
-		expect(out).not.toMatch(/certbot --nginx|--standalone/);
+		expect(out).not.toMatch(/certbot --nginx|--standalone|--webroot/);
 	});
 
 	it('a certificate that renews with standalone while BunkerWeb holds port 80 is flagged, with the fix', async () => {
@@ -107,14 +115,42 @@ describe('ssl on an installed node', () => {
 		await ssl([], { readCertNotAfter: async () => new Date(Date.now() + 60 * 86_400_000) });
 		expect(out).toMatch(/Certificate valid/);
 		expect(out).toMatch(/cannot work while BunkerWeb holds port 80/);
-		expect(out).toContain(
-			`sudo certbot reconfigure --cert-name trade.alice.net --webroot --webroot-path ${root}/apps/web/build`
-		);
+		expect(out).toMatch(/Fix it, on this server:\s+sudo morphit-ops upgrade --heals/);
 	});
 
-	it('a webroot renewal is reported as fine', async () => {
+	it('a webroot renewal behind BunkerWeb is flagged: BunkerWeb never passes the check on to the web build', async () => {
 		withCert('webroot');
 		await ssl([], { readCertNotAfter: async () => new Date(Date.now() + 60 * 86_400_000) });
+		expect(out).toMatch(/never passes it on there: the renewal will fail/);
+		expect(out).toMatch(/Fix it, on this server:\s+sudo morphit-ops upgrade --heals/);
+	});
+
+	it("a renewal through BunkerWeb's own folder is reported as fine", async () => {
+		withCert(
+			'manual',
+			'manual_auth_hook = /usr/local/lib/morphit/certbot-bunkerweb-auth.sh\nmanual_cleanup_hook = /usr/local/lib/morphit/certbot-bunkerweb-cleanup.sh\n'
+		);
+		await ssl([], { readCertNotAfter: async () => new Date(Date.now() + 60 * 86_400_000) });
+		expect(out).toMatch(/renews through BunkerWeb's own Let's Encrypt folder: nothing is stopped/);
+		expect(out).not.toMatch(/will fail|Fix it/);
+	});
+
+	it('a renewal that pauses BunkerWeb (the v1.24.4 heal) works, and is not called failing', async () => {
+		withCert(
+			'standalone',
+			'pre_hook = docker stop bunkerweb\npost_hook = docker start bunkerweb\n'
+		);
+		await ssl([], { readCertNotAfter: async () => new Date(Date.now() + 60 * 86_400_000) });
+		expect(out).toMatch(/renews by pausing bunkerweb for a few seconds/);
+		expect(out).not.toMatch(/will fail|Fix it/);
+	});
+
+	it('with no BunkerWeb, a webroot renewal is reported as fine', async () => {
+		withCert('webroot');
+		await ssl([], {
+			readCertNotAfter: async () => new Date(Date.now() + 60 * 86_400_000),
+			detectBunkerWeb: bunker('none')
+		});
 		expect(out).toMatch(/renews through the web build/);
 		expect(out).not.toMatch(/will fail/);
 	});
@@ -177,7 +213,7 @@ describe('ssl on an installed node', () => {
 			expect(out).toMatch(/do not say how to renew it/);
 			const fix = /Fix it, on this server:\s+(.*)/.exec(out)?.[1] ?? '';
 			expect(fix).toBe(
-				`sudo certbot certonly --cert-name trade.alice.net --force-renewal --webroot --webroot-path ${root}/apps/web/build`
+				`sudo certbot certonly --cert-name trade.alice.net --force-renewal ${MANUAL}`
 			);
 			expect(fix).not.toMatch(/ -d /);
 		});
@@ -189,7 +225,7 @@ describe('ssl on an installed node', () => {
 			await ssl([], valid);
 			const fix = /Fix it, on this server:\s+(.*)/.exec(out)?.[1] ?? '';
 			expect(fix).toContain(
-				'certbot certonly --cert-name trade.alice.net -d trade.alice.net -d www.trade.alice.net --webroot'
+				`certbot certonly --cert-name trade.alice.net -d trade.alice.net -d www.trade.alice.net ${MANUAL}`
 			);
 			// Run it, on a copy of /etc/letsencrypt, with a certbot that fails, then one that works.
 			const bin = mkdtempSync(join(tmpdir(), 'morphit-certbot-'));

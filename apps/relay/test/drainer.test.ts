@@ -111,11 +111,12 @@ function makeDb(rows: Row[]): {
 				rowCount: rows.length
 			} as unknown as pg.QueryResult<R>;
 		}
-		// Everything else is an UPDATE. The claim returns the stamp it wrote.
+		// Everything else is an UPDATE. The claim returns the token it wrote
+		// (its sixth parameter).
 		updates.push({ text, params: params ?? [] });
 		return {
-			rows: (text.includes('RETURNING broadcast_attempt_at::text AS token')
-				? [{ token: '2026-01-01 00:00:00.000001+00' }]
+			rows: (text.includes('RETURNING claim_token AS token')
+				? [{ token: params?.[5] }]
 				: []) as unknown as R[],
 			rowCount: 1
 		} as unknown as pg.QueryResult<R>;

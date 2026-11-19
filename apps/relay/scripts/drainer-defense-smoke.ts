@@ -126,10 +126,10 @@ function makeDb(rows: readonly Row[]): {
 				return Promise.resolve({ rows: [...rows], rowCount: rows.length });
 			}
 			if (text.includes('UPDATE relay_pending_transfers')) {
-				// The claim returns the stamp it wrote (v1.24.3).
-				const claim = text.includes('RETURNING broadcast_attempt_at::text AS token');
+				// The claim returns the token it wrote, its sixth parameter (v1.24.6).
+				const claim = text.includes('RETURNING claim_token AS token');
 				return Promise.resolve({
-					rows: claim ? [{ token: '2026-01-01 00:00:00.000001+00' }] : [],
+					rows: claim ? [{ token: params[5] }] : [],
 					rowCount: 1
 				});
 			}

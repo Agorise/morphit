@@ -31,6 +31,7 @@
  * without subverting the policy.
  */
 
+import { manualAuthArgs } from '../lib/acmeBunkerweb.ts';
 import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
 import type { OnionV3 } from './torOnion.ts';
 import type { I2pDestinationResult } from './i2pGenerate.ts';
@@ -389,7 +390,8 @@ export interface HardeningChecklistInput {
 	readonly bunkerWebEnabled: boolean;
 	/** BunkerWeb is ALREADY running on this server (`morphit-ops harden` on a
 	 *  live node checks): it holds port 80, so the certificate comes through
-	 *  it (certbot's webroot), and its settings must not be copied over. */
+	 *  it (BunkerWeb's own Let's Encrypt folder, certbot's manual mode with
+	 *  Morphit's hooks), and its settings must not be copied over. */
 	readonly bunkerWebRunning?: boolean;
 	/** Where Morphit is installed (default /opt/morphit), for the commands. */
 	readonly installDir?: string;
@@ -500,12 +502,11 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 		}
 		if (bwRunning) {
 			L.push("- [ ] **The Let's Encrypt certificate, through BunkerWeb.**  BunkerWeb already");
-			L.push('      holds port 80 on this server, so certbot answers the check from the web');
-			L.push('      build BunkerWeb serves (nothing is stopped). Check what you have first:');
+			L.push("      holds port 80 on this server and answers Let's Encrypt's check itself, from");
+			L.push("      its own Let's Encrypt folder, so certbot puts the check there with Morphit's");
+			L.push('      two hooks (nothing is stopped). Check what you have first:');
 			L.push('      `sudo morphit-ops ssl`; to get one, on this server:');
-			L.push(
-				`      \`sudo certbot certonly --webroot --webroot-path ${installDir}/apps/web/build -d ${domain}\``
-			);
+			L.push(`      \`sudo certbot certonly ${manualAuthArgs().join(' ')} -d ${domain}\``);
 		} else {
 			L.push("- [ ] **Issue a Let's Encrypt certificate with this server's certbot**, before");
 			L.push('      BunkerWeb starts (it needs port 80 free):');

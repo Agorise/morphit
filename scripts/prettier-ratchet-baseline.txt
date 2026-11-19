@@ -240,7 +240,6 @@ apps/ops-cli/scripts/restart-services-smoke.ts
 apps/ops-cli/scripts/rpc-endpoint-canon-smoke.ts
 apps/ops-cli/scripts/rpc-endpoint-probe-smoke.ts
 apps/ops-cli/scripts/seed-probe-execution-smoke.ts
-apps/ops-cli/scripts/ssl-smoke.ts
 apps/ops-cli/scripts/status-backups-smoke.ts
 apps/ops-cli/scripts/system-check-os-smoke.ts
 apps/ops-cli/scripts/systemd-execstart-executable-smoke.ts
@@ -255,7 +254,6 @@ apps/ops-cli/src/commands/exportAltnetKey.ts
 apps/ops-cli/src/commands/harden.ts
 apps/ops-cli/src/commands/importAltnetKey.ts
 apps/ops-cli/src/commands/showKey.ts
-apps/ops-cli/src/commands/ssl.ts
 apps/ops-cli/src/init/chainCheck.ts
 apps/ops-cli/src/init/hiddenUpgradeFetch.ts
 apps/ops-cli/src/init/hiddenUpgradeTransport.ts

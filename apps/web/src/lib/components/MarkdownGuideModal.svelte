@@ -36,7 +36,9 @@
 		{ key: 'post_order.terms_md_guide.el_link', syntax: '[title](https://www.example.com)' }
 	];
 
-	const titleId = `md-guide-title-${Math.random().toString(36).slice(2, 8)}`;
+	// Svelte's per-instance id: the same in every build (see ConfirmModal).
+	const uid = $props.id();
+	const titleId = `md-guide-title-${uid}`;
 
 	function onKeydown(e: KeyboardEvent): void {
 		if (e.key === 'Escape') onClose();

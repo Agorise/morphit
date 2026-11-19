@@ -114,7 +114,10 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // v1.24.1: 73 → 74. v74 = chat_messages.sent_at (the sender's signed time, so
 // a read ack of a fast copy covers the message's row), in BOTH schema.sql
 // (banner at the end) and MIGRATIONS[] — checked.
-const SCHEMA_HEAD_VERSION = 74;
+// v1.24.6: 74 → 75. v75 = relay_pending_transfers.claim_token +
+// claim_lease_until (a payment-queue claim's own token and lease), in BOTH
+// schema.sql (banner at the end) and MIGRATIONS[] — checked.
+const SCHEMA_HEAD_VERSION = 75;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  bumped 27 → 35 when
@@ -137,7 +140,8 @@ const SCHEMA_HEAD_VERSION = 74;
 // v1.23.0: 71 → 72, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.23.5: 72 → 73, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.24.1: 73 → 74, in lockstep with SCHEMA_HEAD_VERSION above.
-const MIGRATIONS_COVERAGE_HIGH = 74;
+// v1.24.6: 74 → 75, in lockstep with SCHEMA_HEAD_VERSION above.
+const MIGRATIONS_COVERAGE_HIGH = 75;
 
 interface ScenarioResult {
 	readonly name: string;

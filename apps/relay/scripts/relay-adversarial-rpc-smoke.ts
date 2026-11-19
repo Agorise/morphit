@@ -83,7 +83,7 @@ async function freshTable(): Promise<void> {
 		amount_blurt NUMERIC NOT NULL, amount_bp NUMERIC, reason TEXT NOT NULL,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), broadcast_at TIMESTAMPTZ, broadcast_trx_id TEXT,
 		last_error TEXT, last_error_at TIMESTAMPTZ, error_count INTEGER NOT NULL DEFAULT 0,
-		broadcast_attempt_at TIMESTAMPTZ)`);
+		broadcast_attempt_at TIMESTAMPTZ, claim_token TEXT, claim_lease_until TIMESTAMPTZ)`);
 }
 const WIF = PrivateKey.fromSeed('relay-adversarial-smoke').toString();
 const cfg = (over: Record<string, unknown> = {}) =>

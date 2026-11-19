@@ -226,10 +226,14 @@ fi
 # ── Step 1: TLS — obtain the real Let's Encrypt certificate. ──
 # Until now the site has been served on BunkerWeb's self-signed fallback (fine on
 # a LAN).  certbot writes the real cert and its deploy-hook reloads BunkerWeb.
-# BunkerWeb holds port 80 by now, so certbot cannot run its own server there:
-# it writes the challenge into the web build instead, which BunkerWeb's
-# frontend serves at /.well-known/ (and certbot then RENEWS the same way).
-# Only when nothing holds port 80 does it use its standalone server.  Failed
+# BunkerWeb holds port 80 by now, so certbot cannot run its own server there.
+# BunkerWeb answers Let's Encrypt's check (/.well-known/acme-challenge/) itself,
+# from its own folder in its container, and never passes it on to the web
+# build, so certbot's manual mode with the two hooks the tls role installs puts
+# Let's Encrypt's file there (and certbot then RENEWS the same way, with nothing
+# stopped; v1.24.6 — up to v1.24.4 the web build was used, which no BunkerWeb
+# answers).  Port 80 held by another web server: the web build.  Only when
+# nothing holds port 80 does it use its standalone server.  Failed
 # attempts back off — 5 min, 10, 20 … up to a day — so a domain that does not
 # point here yet never runs into Let's Encrypt's failed-validation limit.
 if [ -n "${MORPHIT_DOMAIN}" ] && [ ! -f "${LE_LIVE}/${MORPHIT_DOMAIN}/fullchain.pem" ]; then
@@ -242,12 +246,22 @@ if [ -n "${MORPHIT_DOMAIN}" ] && [ ! -f "${LE_LIVE}/${MORPHIT_DOMAIN}/fullchain.
 		_server='https://acme-v02.api.letsencrypt.org/directory'
 		[ "${MORPHIT_TLS_STAGING}" = yes ] && _server='https://acme-staging-v02.api.letsencrypt.org/directory'
 		_webroot="${MORPHIT_WEBROOT:-${MORPHIT_OPS_DIR}/apps/web/build}"
-		if [ -n "$(ss -ltnH 'sport = :80' 2>/dev/null)" ]; then
-			set -- --webroot --webroot-path "${_webroot}"
-			_how='through the web build (port 80 is held by the web server)'
-		else
+		_hooks="${MORPHIT_CERTBOT_HOOK_DIR:-/usr/local/lib/morphit}"
+		if [ -z "$(ss -ltnH 'sport = :80' 2>/dev/null)" ]; then
 			set -- --standalone
 			_how='with its own server on port 80'
+		elif [ -n "$(docker ps -q --filter label=bunkerweb.type=bunkerweb 2>/dev/null)" ] &&
+			[ -x "${_hooks}/certbot-bunkerweb-auth.sh" ] && [ -x "${_hooks}/certbot-bunkerweb-cleanup.sh" ]; then
+			set -- --manual --preferred-challenges http \
+				--manual-auth-hook "${_hooks}/certbot-bunkerweb-auth.sh" \
+				--manual-cleanup-hook "${_hooks}/certbot-bunkerweb-cleanup.sh"
+			_how="through BunkerWeb's own Let's Encrypt folder (BunkerWeb holds port 80; nothing is stopped)"
+		else
+			if [ -n "$(docker ps -q --filter label=bunkerweb.type=bunkerweb 2>/dev/null)" ]; then
+				log "Morphit's certbot hooks are not in ${_hooks} (sudo morphit-ops upgrade writes them again); trying the web build instead"
+			fi
+			set -- --webroot --webroot-path "${_webroot}"
+			_how='through the web build (port 80 is held by the web server)'
 		fi
 		log "requesting Let's Encrypt certificate for ${MORPHIT_DOMAIN} ${_how}"
 		if certbot certonly "$@" --non-interactive --agree-tos \

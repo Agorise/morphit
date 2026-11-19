@@ -166,6 +166,7 @@ import { healClockFallback, realClockFallbackRuntime } from '../lib/clockFallbac
 import { heal as healServicePrivileges } from '../lib/unitPrivilegeHeal.ts';
 import { heal as healForwarding } from '../lib/sysctlForwardHeal.ts';
 import { heal as healTlsRenewalHeal } from '../lib/tlsRenewHeal.ts';
+import { edgeChallenge as acmeEdgeChallenge, ensureAcmeHooks } from '../lib/acmeBunkerweb.ts';
 import {
 	dnsLookup,
 	healBunkerWebWww,
@@ -185,7 +186,7 @@ import {
 } from '../lib/matrixTorOnlyHeal.ts';
 import { heal as healBridgeCidr } from '../lib/bridgeCidrHeal.ts';
 import { healNodeRuntime } from '../lib/nodeRuntimeHeal.ts';
-import { heal as healNginxVhosts } from '../lib/nginxVhostHeal.ts';
+import { hasHttp2, heal as healNginxVhosts } from '../lib/nginxVhostHeal.ts';
 import { heal as healHiddenRpcEnv } from '../lib/hiddenRpcEnvHeal.ts';
 import { heal as healRelayHealthEnv } from '../lib/relayHealthEnvHeal.ts';
 import { healReleaseMonitor, realReleaseMonitorRuntime } from '../lib/releaseMonitorHeal.ts';
@@ -4028,7 +4029,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	try {
 		// Prefer the CANONICAL prebuilt frontend shipped in the release tarball:
 		// deploying @morphit's exact bytes is what lets a federated operator pass
-		// the on-chain build-integrity check (a local rebuild isn't byte-reproducible
+		// the on-chain build-integrity check (a local rebuild isn't byte-identical to the release
 		// and trips the tamper banner). Only rebuild if the prebuilt is absent — an
 		// older tarball, or a source checkout — so nothing regresses.
 		const shippedBuild = join(installDir, 'apps', 'web', 'build', 'index.html');
@@ -6087,8 +6088,10 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		['the IPFS gateway heal', () => healIpfsGatewayExposure()],
 		['the frontend config heal', () => healFrontendConfig()],
 		// A certificate set up to renew with port 80 of its own cannot renew while
-		// BunkerWeb holds port 80. After the frontend config heal: the webroot probe
-		// goes through the frontend. Never on a hidden-only node (it asks
+		// BunkerWeb holds port 80: it is switched to BunkerWeb's own Let's Encrypt
+		// folder (lib/acmeBunkerweb.ts), or for a web server that passes the path
+		// on, to the web build (after the frontend config heal, so that probe goes
+		// through the frontend as it is now). Never on a hidden-only node (it asks
 		// Let's Encrypt, which is clearnet).
 		['the TLS renewal heal', () => healTlsRenewalUnlessHidden()],
 		// (lib/bridgeCidrHeal.ts): the indexer trusts its frontend's Docker
@@ -8112,6 +8115,8 @@ export function realWwwRuntime(
 			const r = sh('certbot', args, 300_000);
 			return { ok: r.ok, out: `${r.out}${r.err}` };
 		},
+		edgeChallenge: (token, body) => acmeEdgeChallenge(stack.edge.name, token, body),
+		ensureAcmeHooks: () => ensureAcmeHooks(),
 		certPermissions: () => {
 			sh('chgrp', ['-R', '101', '/etc/letsencrypt/live', '/etc/letsencrypt/archive']);
 			sh('chmod', ['-R', 'g+rX', '/etc/letsencrypt/live', '/etc/letsencrypt/archive']);
@@ -8185,6 +8190,10 @@ export const BW_LIMIT_REQ_RATE = '2r/s';
 /** Downloads at once per visitor over HTTP/2: a browser keeps up to 128 going
  *  on one connection (nginx's default), BunkerWeb allowed 100. */
 export const BW_LIMIT_CONN_MAX_HTTP2 = '256';
+/** Connections at once per visitor over HTTP/1.1, while HTTP/2 is off
+ *  (v1.24.6, Fix G): a browser opens up to 6 per site, and a home or phone
+ *  network puts many visitors behind one address. BunkerWeb's default is 10. */
+export const BW_LIMIT_CONN_MAX_HTTP1 = '64';
 
 /** v1.16.9 — SELF-HEAL the BunkerWeb WAF so the /v1/ + /relay/ JSON APIs work.
  *  The maintainer's mandate: trap every condition, try each fix more than one way, VERIFY it
@@ -8205,6 +8214,12 @@ export const BW_LIMIT_CONN_MAX_HTTP2 = '256';
  *     on every address) answered 429 to a browser's own first visit, and its
  *     100 downloads at once to a slow one (vigilante.trading, v1.21.8). Set where the operator
  *     left BunkerWeb's default; an operator's own value is kept.
+ *
+ *  G. v1.24.6: HTTP/2 off (HTTP2=no) until BunkerWeb ships nginx 1.30.7:
+ *     CVE-2026-123633 and CVE-2026-123007 let a stranger run code on the
+ *     server through nginx's HTTP/2 code. Over HTTP/1.1 a visitor holds a
+ *     few connections, so LIMIT_CONN_MAX_HTTP1 goes from BunkerWeb's 10 to 64
+ *     where the operator left the default. Verified live in `nginx -T`.
  *
  *  Wave 5 (B-from-C §4): BunkerWeb is found by IMAGE (findBunkerWebStack), its
  *  settings file is the one Docker Compose says it reads, and reloads touch only
@@ -8444,6 +8459,33 @@ async function healBunkerWebWafSteps(
 			setVal('REVERSE_PROXY_INTERCEPT_ERRORS', 'no');
 			info(
 				'WAF: BunkerWeb set to pass the site\'s own error answers through with their reason (it replaced them with its own page, so the app showed "Malformed response" or "the chain rejected the transaction" without saying why).'
+			);
+		}
+	} catch {
+		/* keep going */
+	}
+
+	// ── Fix G (v1.24.6): HTTP/2 off until BunkerWeb ships nginx 1.30.7.
+	//    CVE-2026-123633 and CVE-2026-123007 let a stranger run code on the
+	//    server through nginx's HTTP/2 code (every nginx from 1.9.5; BunkerWeb
+	//    1.5.10 runs 1.26.2 and turns HTTP/2 on by default). Browsers use
+	//    HTTP/1.1, as over Tor and I2P, so each visitor holds a few connections
+	//    instead of one: BunkerWeb's 10 per visitor becomes 64 where the
+	//    operator left the default. Every HTTP2 line counts: the global one and
+	//    any per-site `<name>_HTTP2` (never LIMIT_CONN_MAX_HTTP2). ──
+	try {
+		const keys = bwHttp2Keys(env);
+		if (keys.some((k) => unq(getVal(k)).toLowerCase() !== 'no')) {
+			for (const k of keys) setVal(k, 'no');
+			info(
+				'WAF: HTTP/2 is off until BunkerWeb ships nginx 1.30.7, which fixes two HTTP/2 security bugs (CVE-2026-123633, CVE-2026-123007). Browsers use HTTP/1.1, as over Tor and I2P.'
+			);
+		}
+		const h1 = unq(getVal('LIMIT_CONN_MAX_HTTP1'));
+		if (unq(getVal('USE_LIMIT_CONN')).toLowerCase() !== 'no' && (h1 === '' || h1 === '10')) {
+			setVal('LIMIT_CONN_MAX_HTTP1', BW_LIMIT_CONN_MAX_HTTP1);
+			info(
+				`WAF: a visitor may now hold ${BW_LIMIT_CONN_MAX_HTTP1} connections at once over HTTP/1.1 (BunkerWeb's 10 is too few for a home or phone network sharing one address).`
 			);
 		}
 	} catch {
@@ -8942,6 +8984,56 @@ async function healBunkerWebWafSteps(
 	} catch {
 		/* best-effort — never fail the upgrade over a probe */
 	}
+
+	// (6) HTTP/2 (Fix G) — prove the RUNNING BunkerWeb has HTTP/2 off: nothing
+	//     in `nginx -T` turns it on. Still on → recreate its own services once
+	//     and look again; then ask the operator.
+	try {
+		if (bwHttp2Keys(env).every((k) => unq(getVal(k)).toLowerCase() === 'no')) {
+			const liveH2 = (): boolean | null => {
+				const stop = startDotsSpinner('Reading BunkerWeb’s running nginx config…');
+				let r: { status: number | null; stdout: string | null };
+				try {
+					r = spawnSync('docker', ['exec', bw, 'sh', '-c', 'nginx -T 2>/dev/null'], {
+						encoding: 'utf8',
+						timeout: 20000,
+						maxBuffer: 64 * 1024 * 1024
+					});
+				} finally {
+					stop();
+				}
+				const out = r.stdout ?? '';
+				if (r.status !== 0 || !/\bserver\s*\{/.test(out)) return null; // can't tell
+				return hasHttp2(out);
+			};
+			let live = liveH2();
+			if (live === true && cycle?.kind !== 'refused' && cycle?.kind !== 'pending' && ref !== null) {
+				const c = applyAndWait('recreating BunkerWeb so it reads HTTP2=no', true);
+				if (c !== null) live = liveH2();
+			}
+			if (live === false)
+				wafOk(
+					'HTTP/2 is off',
+					"WAF: HTTP/2 verified off live, so nginx's two HTTP/2 security bugs (CVE-2026-123633, CVE-2026-123007) do not apply to this site."
+				);
+			else if (live === true)
+				warn(
+					ref !== null
+						? `WAF: BunkerWeb still has HTTP/2 on, so nginx's two HTTP/2 security bugs (CVE-2026-123633, CVE-2026-123007) still apply. Please run on this server: sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services])}`
+						: `WAF: BunkerWeb still has HTTP/2 on, so nginx's two HTTP/2 security bugs (CVE-2026-123633, CVE-2026-123007) still apply. ${bw} was not started by Docker Compose; recreate it on this server the way it was started so it reads ${bwEnv} again.`
+				);
+		}
+	} catch {
+		/* best-effort — never fail the upgrade over a probe */
+	}
+}
+
+/** The HTTP2 settings in a BunkerWeb settings file: the global `HTTP2` and
+ *  any per-site `<server name>_HTTP2` line (multisite), never
+ *  LIMIT_CONN_MAX_HTTP2. PURE. */
+export function bwHttp2Keys(env: string): string[] {
+	const site = [...env.matchAll(/^([a-z0-9][a-z0-9.-]*_HTTP2)=/gm)].map((m) => m[1]!);
+	return ['HTTP2', ...new Set(site)];
 }
 
 /** The account the error-answer check asks for. The indexer accepts the name

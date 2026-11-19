@@ -71,6 +71,17 @@ const config = {
 	preprocess: vitePreprocess(),
 
 	kit: {
+		// The app version every page and chunk carries (SvelteKit's update
+		// check compares it). SvelteKit's default is the build's clock, which
+		// made every build of the same source differ, so nobody could rebuild a
+		// release and get its exact bytes. A release build sets
+		// SOURCE_DATE_EPOCH (from release-info.json's build_time, release.yml);
+		// any other build keeps the clock (v1.24.6).
+		version: {
+			name: /^\d+$/.test(process.env.SOURCE_DATE_EPOCH ?? '')
+				? String(Number(process.env.SOURCE_DATE_EPOCH) * 1000)
+				: Date.now().toString()
+		},
 		// Fully static output — deployable anywhere, no runtime server required.
 		adapter: withBrandSlots(
 			adapter({

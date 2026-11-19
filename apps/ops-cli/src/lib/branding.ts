@@ -4,7 +4,7 @@
  * THE CONSTRAINT. Every federated operator serves the release's canonical,
  * prebuilt frontend byte-for-byte — that is what lets visitors' browsers verify
  * it against the on-chain release manifest (a local rebuild is not
- * byte-reproducible and trips the red tamper banner). So an operator can never
+ * byte-identical to the release and trips the red tamper banner). So an operator can never
  * "rebuild with their own logo". Instead, the canonical build is designed to be
  * re-branded IN PLACE, touching only files the on-chain check does not cover:
  *

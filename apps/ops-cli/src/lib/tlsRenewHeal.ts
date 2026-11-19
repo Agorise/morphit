@@ -8,29 +8,36 @@
  * with "Could not bind TCP port 80" and the clearnet site serves an expired
  * certificate after 90 days.
  *
- * HOW IT RENEWS INSTEAD. Through BunkerWeb itself: Let's Encrypt asks
- * http://<domain>/.well-known/acme-challenge/<token>; BunkerWeb proxies the
- * request (after its http→https redirect, which Let's Encrypt follows) to the
- * frontend, which serves /.well-known/ from the web build it mounts. So the
- * `webroot` authenticator with that build directory works with nothing stopped.
+ * HOW IT RENEWS INSTEAD (v1.24.6). Through BunkerWeb's own Let's Encrypt
+ * folder: BunkerWeb answers /.well-known/acme-challenge/ itself, from a folder
+ * in its container, so certbot's manual authenticator with two small hooks
+ * puts Let's Encrypt's file there (lib/acmeBunkerweb.ts). Nothing is stopped.
+ * Up to v1.24.4 this heal sent the check to the web build behind BunkerWeb
+ * instead; BunkerWeb never passes that path on, so it always fell through to
+ * the hooks that pause BunkerWeb (morphit.io, v1.24.4).
  *
- * STEPS, for each renewal config that uses `standalone` while something else
- * holds port 80:
- *  1. prove the path locally: a probe file in <build>/.well-known/acme-challenge
- *     must come back from http://<domain>/… asked on 127.0.0.1 (redirects
- *     followed) — i.e. BunkerWeb → frontend → that directory, as Let's Encrypt
- *     will see it;
- *  2. primary: `certbot reconfigure --webroot` (certbot ≥ 2.3), which performs a
- *     real dry-run renewal against Let's Encrypt's staging server and saves the
- *     new settings only if it passes; older certbot: the settings are written
- *     (original kept) and `certbot renew --dry-run` must pass, else the original
- *     goes back;
- *  3. VERIFY: the renewal config read back says webroot for this directory;
- *  4. fallback when the path does not serve the probe or the dry run fails:
- *     pre/post hooks that stop and start the container holding port 80 around
- *     the renewal (a short outage every ~60 days), checked by a dry run too;
+ * STEPS, for each renewal config that uses `standalone` while BunkerWeb (or
+ * something else) holds port 80, or this heal's own earlier pause-the-edge
+ * fallback, or `webroot` behind BunkerWeb:
+ *  1. with BunkerWeb holding port 80: the hooks written (and read back), a
+ *     test file put into BunkerWeb's folder must come back from
+ *     http://<domain>/… asked on 127.0.0.1 (redirects followed), as Let's
+ *     Encrypt will see it; then the manual settings are written, a real
+ *     `certbot renew --dry-run` against Let's Encrypt's staging server must
+ *     pass, and the settings are read back, else the original goes back;
+ *  2. otherwise, the web build: a probe file in
+ *     <build>/.well-known/acme-challenge must come back the same way; then
+ *     `certbot reconfigure --webroot` (certbot ≥ 2.3, a dry run that saves the
+ *     settings only when it passes) or, older certbot, the settings written and
+ *     `certbot renew --dry-run`, else the original goes back;
+ *  3. VERIFY: the renewal config read back says what was set;
+ *  4. fallback: pre/post hooks that stop and start the container holding port
+ *     80 around the renewal (a short outage every ~60 days), checked by a dry
+ *     run too — never for a config that already had them (it stays as it is);
  *  5. otherwise the original config stays and one calm line says when the
  *     certificate expires and what to run on this server.
+ * A config already set to the hooks has them written again when one is
+ * missing or changed (no certbot is run for that).
  * When Let's Encrypt's staging server cannot be reached, nothing is changed
  * (nothing could be checked) and the next upgrade tries again.
  */
@@ -46,6 +53,15 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { join } from 'node:path';
+import {
+	AUTH_HOOK,
+	CLEANUP_HOOK,
+	MANUAL_RENEWAL_PARAMS,
+	edgeChallenge,
+	edgeServes,
+	ensureAcmeHooks,
+	isBunkerWebEdge
+} from './acmeBunkerweb.ts';
 import type { HealCtx, HealResult } from './healTypes.ts';
 
 // ─── renewal config text (certbot's ConfigObj format) ──────────────────
@@ -152,6 +168,38 @@ export function rendersWebroot(text: string, dir: string, domain: string): boole
 	return renewalParam(text, 'authenticator') === 'webroot' && webrootMap(text).get(domain) === dir;
 }
 
+/** The renewal settings for the check through BunkerWeb's own folder
+ *  (lib/acmeBunkerweb.ts): manual, with Morphit's two hooks, nothing paused,
+ *  no webroot. PURE. */
+export function bunkerWebSettings(text: string): string {
+	return setRenewalParams(text, {
+		...MANUAL_RENEWAL_PARAMS,
+		pre_hook: null,
+		post_hook: null,
+		webroot_path: null
+	});
+}
+
+/** Is this renewal config set to renew through BunkerWeb's folder? PURE. */
+export function rendersBunkerWeb(text: string): boolean {
+	return (
+		renewalParam(text, 'authenticator') === 'manual' &&
+		renewalParam(text, 'manual_auth_hook') === AUTH_HOOK &&
+		renewalParam(text, 'manual_cleanup_hook') === CLEANUP_HOOK &&
+		!renewalParam(text, 'pre_hook') &&
+		!renewalParam(text, 'post_hook')
+	);
+}
+
+/** This heal's own fallback: standalone, the container on port 80 paused
+ *  around each renewal. The container's name, or null. PURE. */
+export function ownPauseHooks(text: string): string | null {
+	if (renewalParam(text, 'authenticator') !== 'standalone') return null;
+	const pre = /^docker stop (\S+)$/.exec(renewalParam(text, 'pre_hook') ?? '');
+	const post = /^docker start (\S+)$/.exec(renewalParam(text, 'post_hook') ?? '');
+	return pre && post && pre[1] === post[1] ? pre[1]! : null;
+}
+
 /** certbot's version from `certbot --version` ("certbot 2.9.0"); [0,0] if unknown. PURE. */
 export function certbotVersion(out: string): [number, number] {
 	const m = /certbot\s+(\d+)\.(\d+)/.exec(out);
@@ -177,6 +225,12 @@ export interface TlsRuntime {
 	certbot(args: readonly string[]): { ok: boolean; out: string };
 	/** The running container publishing host port 80, or null. */
 	port80Container(): string | null;
+	/** Is that container BunkerWeb's edge? */
+	isBunkerWeb(container: string): boolean;
+	/** Put (body) or remove (null) a file in BunkerWeb's Let's Encrypt folder. */
+	edgeChallenge(container: string, token: string, body: string | null): boolean;
+	/** Morphit's two certbot hooks on disk (lib/acmeBunkerweb.ts). */
+	ensureAcmeHooks(): 'unchanged' | 'written' | 'failed';
 }
 
 export interface TlsHealOpts {
@@ -184,39 +238,89 @@ export interface TlsHealOpts {
 	readonly runtime?: TlsRuntime;
 }
 
+type Kind = 'standalone' | 'paused' | 'webroot' | 'bunkerweb';
+
+function kindOf(text: string): Kind | null {
+	const auth = renewalParam(text, 'authenticator');
+	if (auth === 'standalone') {
+		if (ownPauseHooks(text) !== null) return 'paused';
+		// Hooks of the operator's own: left as they are.
+		return renewalParam(text, 'pre_hook') || renewalParam(text, 'post_hook') ? null : 'standalone';
+	}
+	if (auth === 'webroot') return 'webroot';
+	if (auth === 'manual' && renewalParam(text, 'manual_auth_hook') === AUTH_HOOK) return 'bunkerweb';
+	return null;
+}
+
+const DRY_RUN = (name: string): string[] => [
+	'renew',
+	'--dry-run',
+	'--no-random-sleep-on-renew',
+	'--cert-name',
+	name,
+	'--non-interactive'
+];
+
 export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<HealResult> {
 	const rt = opts.runtime ?? realRuntime();
 	let stop = ctx.spinner('Checking how the TLS certificate renews…');
-	let confs: Array<{ path: string; text: string }>;
-	let owner: string;
+	let all: Array<{ path: string; text: string; kind: Kind }>;
+	let owner = '';
+	let edge: string | null = null;
+	let bw = false;
 	try {
-		// standalone, unless hooks already free port 80 for it (an earlier run's fallback)
-		confs = rt
+		all = rt
 			.renewalConfs()
-			.filter(
-				(c) =>
-					renewalParam(c.text, 'authenticator') === 'standalone' &&
-					!(renewalParam(c.text, 'pre_hook') && renewalParam(c.text, 'post_hook'))
-			);
-		owner = confs.length > 0 ? rt.port80Owner() : '';
+			.map((c) => ({ ...c, kind: kindOf(c.text) }))
+			.filter((c): c is { path: string; text: string; kind: Kind } => c.kind !== null);
+		if (all.length > 0) {
+			owner = rt.port80Owner();
+			edge = owner === '' ? null : rt.port80Container();
+			bw = edge !== null && rt.isBunkerWeb(edge);
+		}
 	} finally {
 		stop();
 	}
-	if (confs.length === 0)
-		return {
-			strategy: 'skipped',
-			verified: true,
-			routine: true,
-			detail: 'TLS renewal: no certificate here renews with port 80 of its own.'
-		};
-	if (owner === '' || /certbot/.test(owner))
-		return {
-			strategy: 'already',
-			verified: true,
-			routine: true,
-			detail:
-				'TLS renewal: port 80 is free on this server, so the certificate can renew as it was set up.'
-		};
+	const parts: string[] = [];
+	let allOk = true;
+	let strategy = 'already';
+
+	// Already through BunkerWeb's folder: only its two hooks need to be there.
+	if (all.some((c) => c.kind === 'bunkerweb')) {
+		const h = rt.ensureAcmeHooks();
+		if (h === 'written') {
+			strategy = 'hooks-rewritten';
+			parts.push("Morphit's two certbot hooks were missing or changed and are written again");
+		} else if (h === 'failed') {
+			allOk = false;
+			strategy = 'left-alone';
+			parts.push(
+				`Morphit's certbot hooks (${AUTH_HOOK}, ${CLEANUP_HOOK}) could not be written, so the next renewal cannot put Let's Encrypt's file into BunkerWeb's folder; the next \`sudo morphit-ops upgrade\` tries again`
+			);
+		}
+	}
+	// What is left to switch: standalone (no hooks), this heal's own pause
+	// hooks, and webroot — the last two only behind BunkerWeb, where the
+	// folder serves without a pause (elsewhere they renew as they are).
+	const confs = all.filter(
+		(c) => c.kind === 'standalone' || (bw && (c.kind === 'paused' || c.kind === 'webroot'))
+	);
+	const done = (): HealResult =>
+		parts.length === 0
+			? {
+					strategy: all.length === 0 ? 'skipped' : 'already',
+					verified: true,
+					routine: true,
+					detail:
+						all.length === 0
+							? 'TLS renewal: no certificate here renews with port 80 of its own.'
+							: owner === '' || /certbot/.test(owner)
+								? 'TLS renewal: port 80 is free on this server, so the certificate can renew as it was set up.'
+								: 'TLS renewal: the certificate renews as it is set up (nothing to change).'
+				}
+			: { strategy, verified: allOk, detail: `TLS renewal: ${parts.join('; ')}.` };
+	if (confs.length === 0 || owner === '' || /certbot/.test(owner)) return done();
+
 	stop = ctx.spinner("Checking that Let's Encrypt's test server can be reached…");
 	let reachable: boolean;
 	try {
@@ -232,16 +336,74 @@ export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<H
 				"TLS renewal: Let's Encrypt could not be reached from this server just now, so the renewal settings were left as they are (nothing could be checked); the next `sudo morphit-ops upgrade` tries again."
 		};
 
-	const parts: string[] = [];
-	let allOk = true;
-	let strategy = 'webroot';
 	for (const conf of confs) {
 		const name = conf.path.replace(/^.*\//, '').replace(/\.conf$/, '');
 		const info = rt.certInfo(name);
 		const domains = info && info.domains.length > 0 ? info.domains : [name];
 		const domain = domains[0]!;
+		let ok = false;
+		/** Why BunkerWeb's own folder was not used (null: not tried). */
+		let why: string | null = null;
 
-		// 1. does http://<domain>/.well-known/acme-challenge/… reach the build?
+		// 1. BunkerWeb's own Let's Encrypt folder.
+		if (bw && edge !== null) {
+			stop = ctx.spinner(`Checking that BunkerWeb answers Let's Encrypt's check for ${domain}…`);
+			let folderServed = false;
+			try {
+				if (rt.ensureAcmeHooks() === 'failed')
+					why = `Morphit's certbot hooks (${AUTH_HOOK}) could not be written`;
+				else {
+					folderServed = edgeServes(
+						(t, b) => rt.edgeChallenge(edge!, t, b),
+						(t) => rt.localGet(domain, `/.well-known/acme-challenge/${t}`)
+					);
+					if (!folderServed)
+						why = "a test file put into BunkerWeb's own Let's Encrypt folder did not come back";
+				}
+			} finally {
+				stop();
+			}
+			if (folderServed) {
+				stop = ctx.spinner(
+					`Switching ${domain}'s renewal to BunkerWeb's own Let's Encrypt folder (with a test renewal)…`
+				);
+				try {
+					const want = bunkerWebSettings(conf.text);
+					if (rt.writeFile(conf.path, want)) {
+						ok = rt.certbot(DRY_RUN(name)).ok && rendersBunkerWeb(rt.readFile(conf.path) ?? '');
+						if (!ok) rt.writeFile(conf.path, conf.text);
+					}
+					if (!ok)
+						why = "a test renewal with Let's Encrypt through BunkerWeb's own folder did not pass";
+				} finally {
+					stop();
+				}
+			}
+			if (ok) {
+				strategy = 'bunkerweb';
+				parts.push(
+					`${domain} now renews through BunkerWeb's own Let's Encrypt folder, with nothing stopped (a test renewal with Let's Encrypt passed; settings read back)`
+				);
+				continue;
+			}
+			if (conf.kind === 'paused' || conf.kind === 'webroot') {
+				// It stays as it was: a pause still renews; webroot is said.
+				if (conf.kind === 'paused') {
+					parts.push(
+						`${domain} still renews by pausing ${edge} for a few seconds (${why}); the next \`sudo morphit-ops upgrade\` tries again`
+					);
+				} else {
+					allOk = false;
+					strategy = 'left-alone';
+					parts.push(
+						`${domain} renews through the web build, which BunkerWeb does not pass Let's Encrypt's check on to, and it could not be switched to BunkerWeb's own folder (${why}); it expires ${info?.notAfter ?? 'within 90 days of its issue'}, and the next \`sudo morphit-ops upgrade\` tries again`
+					);
+				}
+				continue;
+			}
+		}
+
+		// 2. the web build (a web server that passes the path on).
 		stop = ctx.spinner(
 			`Checking that ${domain}'s web build answers Let's Encrypt's challenge path…`
 		);
@@ -259,9 +421,6 @@ export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<H
 		} finally {
 			stop();
 		}
-
-		// 2–3. webroot, checked by a real dry run, then read back.
-		let ok = false;
 		if (served) {
 			stop = ctx.spinner(
 				`Switching ${domain}'s renewal to go through the web server (with a test renewal)…`
@@ -280,17 +439,7 @@ export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<H
 					]);
 				} else {
 					const want = webrootSettings(conf.text, opts.webroot, domains);
-					if (
-						rt.writeFile(conf.path, want) &&
-						!rt.certbot([
-							'renew',
-							'--dry-run',
-							'--no-random-sleep-on-renew',
-							'--cert-name',
-							name,
-							'--non-interactive'
-						]).ok
-					)
+					if (rt.writeFile(conf.path, want) && !rt.certbot(DRY_RUN(name)).ok)
 						rt.writeFile(conf.path, conf.text);
 				}
 				ok = rendersWebroot(rt.readFile(conf.path) ?? '', opts.webroot, domain);
@@ -299,14 +448,14 @@ export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<H
 			}
 		}
 		if (ok) {
+			strategy = 'webroot';
 			parts.push(
 				`${domain} now renews through the web server (a test renewal with Let's Encrypt passed; settings read back)`
 			);
 			continue;
 		}
 
-		// 4. fallback: free port 80 for the renewal only.
-		const edge = rt.port80Container();
+		// 3. fallback: free port 80 for the renewal only.
 		if (edge) {
 			stop = ctx.spinner(
 				`Setting ${domain}'s renewal to pause ${edge} for a moment (with a test renewal)…`
@@ -317,14 +466,7 @@ export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<H
 					post_hook: `docker start ${edge}`
 				});
 				if (rt.writeFile(conf.path, hooked)) {
-					ok = rt.certbot([
-						'renew',
-						'--dry-run',
-						'--no-random-sleep-on-renew',
-						'--cert-name',
-						name,
-						'--non-interactive'
-					]).ok;
+					ok = rt.certbot(DRY_RUN(name)).ok;
 					const back = rt.readFile(conf.path) ?? '';
 					ok = ok && renewalParam(back, 'pre_hook') === `docker stop ${edge}`;
 					if (!ok) rt.writeFile(conf.path, conf.text);
@@ -337,21 +479,24 @@ export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<H
 			strategy = 'hooks';
 			parts.push(
 				`${domain} renews by pausing ${edge} for the few seconds certbot needs port 80 (a test renewal passed)` +
-					(served
-						? ''
-						: `; renewals go through the web server instead (no pause) once its frontend answers Let's Encrypt's check, which the next \`sudo morphit-ops upgrade --heals\` checks again`)
+					(why !== null
+						? ` (${why}; the next \`sudo morphit-ops upgrade\` tries that again, and renewals then pause nothing)`
+						: `; renewals go through the web server instead (no pause) once it answers Let's Encrypt's check, which the next \`sudo morphit-ops upgrade --heals\` checks again`)
 			);
 			continue;
 		}
 
-		// 5. leave it, say so.
+		// 4. leave it, say so.
 		allOk = false;
 		strategy = 'left-alone';
 		parts.push(
-			`${domain} could not be switched to a renewal that works while ${owner} holds port 80, so its settings were left as they were; it expires ${info?.notAfter ?? 'within 90 days of its issue'}. On this server run: sudo certbot reconfigure --cert-name ${name} --webroot --webroot-path ${opts.webroot}`
+			`${domain} could not be switched to a renewal that works while ${owner} holds port 80, so its settings were left as they were; it expires ${info?.notAfter ?? 'within 90 days of its issue'}. ` +
+				(why !== null
+					? `Through BunkerWeb's own Let's Encrypt folder: ${why}; the next \`sudo morphit-ops upgrade\` tries again`
+					: `On this server run: sudo certbot reconfigure --cert-name ${name} --webroot --webroot-path ${opts.webroot}`)
 		);
 	}
-	return { strategy, verified: allOk, detail: `TLS renewal: ${parts.join('; ')}.` };
+	return done();
 }
 
 /** The real entry `morphit-ops upgrade` calls (lib/healTypes.ts). */
@@ -460,6 +605,9 @@ function realRuntime(): TlsRuntime {
 				if (n && /(?:0\.0\.0\.0|\[::\]):80->/.test(ports ?? '')) return n;
 			}
 			return null;
-		}
+		},
+		isBunkerWeb: (c) => isBunkerWebEdge(c),
+		edgeChallenge: (c, t, b) => edgeChallenge(c, t, b),
+		ensureAcmeHooks: () => ensureAcmeHooks()
 	};
 }

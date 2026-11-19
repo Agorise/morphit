@@ -35,7 +35,7 @@ import { join } from 'node:path';
 
 export type BaseState = 'digest' | 'tag' | 'absent';
 
-/** The pinned reference without its digest (`nginx:1.30.5-alpine`). */
+/** The pinned reference without its digest (`nginx:1.30.7-alpine`). */
 export function tagOf(ref: string): string {
 	return ref.split('@')[0]!;
 }
