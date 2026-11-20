@@ -69,7 +69,8 @@ import {
 	HEAL_BUDGET_MS,
 	type ContainerInfo,
 	type ComposeRef,
-	type ProxyHealRuntime
+	type ProxyHealRuntime,
+	dockerFailureReason
 } from '../src/lib/proxyConfigHeal.ts';
 
 const yaml = createRequire(import.meta.url)('js-yaml') as { load(s: string): unknown };
@@ -313,8 +314,18 @@ class Sim {
 	basePresent = false;
 	bundledBase = false;
 	torPulls = false;
+	/** Docker Hub refuses this clearnet server (v1.24.7), and how often asked. */
+	hubRefused = false;
+	hubAsked = 0;
 	loads = 0;
 	refreshWithBase: boolean[] = [];
+	/** A rebuild that fails, Docker's reason for it, and each rebuild's
+	 *  timeout. */
+	refreshFails = false;
+	refreshWhy: string | null = null;
+	refreshTimeouts: number[] = [];
+	/** Notes printed while a spinner was turning (they ran into its line). */
+	infoWhileSpinning: string[] = [];
 	newerThanStart = false;
 	/** The edge's nginx regenerates its log_format from its environment. */
 	edgeRegenerates = true;
@@ -505,7 +516,9 @@ class Sim {
 				true
 			),
 			refreshFrontend: (_r, t, withBase = true) => {
+				this.refreshTimeouts.push(t);
 				if (!cost(this.costs.refresh, 'refresh', t)) return false;
+				if (this.refreshFails) return (this.refreshes++, false);
 				this.refreshes++;
 				this.refreshWithBase.push(withBase);
 				this.served = this.servedAfterRefresh;
@@ -513,6 +526,7 @@ class Sim {
 				if (withBase) this.feBase = this.feBaseAfterRefresh;
 				return true;
 			},
+			refreshError: () => this.refreshWhy,
 			hiddenOnly: () => this.hidden,
 			baseImagePresent: () => this.basePresent,
 			loadBundledBase: () => {
@@ -522,6 +536,7 @@ class Sim {
 				return true;
 			},
 			dockerPullsThroughTor: () => this.torPulls,
+			hubRefused: () => (this.hubAsked++, this.hubRefused),
 			schedulerCycle: () =>
 				this.verdict
 					? this.verdict(this.t - this.lastUpAt)
@@ -634,7 +649,10 @@ class Sim {
 	async run(extra: { hardStopAt?: number; budgetMs?: number; rollbackReserveMs?: number } = {}) {
 		return applyAndVerifyProxyConfig({
 			runtime: this.rt,
-			info: (m) => this.info.push(m),
+			info: (m) => {
+				this.info.push(m);
+				if (this.depth > 0) this.infoWhileSpinning.push(m);
+			},
 			warn: (m) => this.warn.push(m),
 			buildDir: BUILD,
 			pollMs: 3000,
@@ -2374,6 +2392,48 @@ describe("visitors' browsers connect to this site only (v1.21.14)", () => {
 	});
 });
 
+describe("Docker's own reason a rebuild failed (v1.24.7)", () => {
+	// What morphit.io printed for v1.24.6's pinned base (BuildKit progress
+	// lines first, the error last).
+	const SOLVE = [
+		'#0 building with "default" instance using docker driver',
+		// An earlier error line Docker recovered from: the LAST one is the reason.
+		'error from sender: context canceled, retrying',
+		' => ERROR [internal] load metadata for docker.io/library/nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb 0.6s',
+		'Dockerfile:28',
+		'--------------------',
+		'failed to solve: nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb: failed to resolve source metadata for docker.io/library/nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb: no match for platform in manifest: not found',
+		''
+	].join('\n');
+	it("BuildKit's failed-to-solve line, not its progress lines", () => {
+		const why = dockerFailureReason(SOLVE, '', false, 300_000);
+		expect(why).toMatch(
+			/^failed to solve: nginx:1\.30\.7-alpine@sha256:eb37.*no match for platform in manifest: not found$/
+		);
+	});
+	it("the daemon's own error line (morphitlat's Tor fetch)", () => {
+		const why = dockerFailureReason(
+			'Pulling frontend ...\nError response from daemon: no matching manifest for linux/amd64/v3 in the manifest list entries: no match for platform in manifest: not found\n',
+			'',
+			false,
+			300_000
+		);
+		expect(why).toBe(
+			'Error response from daemon: no matching manifest for linux/amd64/v3 in the manifest list entries: no match for platform in manifest: not found'
+		);
+	});
+	it('a stopped rebuild says it ran out of time, in seconds', () => {
+		expect(dockerFailureReason('', '', true, 300_000)).toBe(
+			'nothing within 300 s (the rebuild was stopped)'
+		);
+	});
+	it('no error line: the last line; nothing at all: says so; a very long line is cut', () => {
+		expect(dockerFailureReason('one\ntwo.\n', '', false, 1000)).toBe('two');
+		expect(dockerFailureReason('', '', false, 1000)).toBe('no output');
+		expect(dockerFailureReason(`error ${'x'.repeat(600)}`, '', false, 1000)).toHaveLength(401);
+	});
+});
+
 describe("the frontend is built from this release's pinned nginx base", () => {
 	const DOCKERFILE = readFileSync(join(REPO, 'ops/bunkerweb/frontend/Dockerfile'), 'utf8');
 	it('the Dockerfile pins the base by digest and labels it with the value the heal expects', () => {
@@ -2412,6 +2472,49 @@ describe("the frontend is built from this release's pinned nginx base", () => {
 		expect(out.forwarding).toBe('stale');
 		expect(s.warn.join(' ')).toMatch(/older nginx base image/);
 	});
+	it("v1.24.6's case: the rebuild fails (the pinned base cannot be had): the warning says what Docker said, and offers to try again", async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.refreshFails = true;
+		s.refreshWhy =
+			'failed to solve: nginx:1.30.7-alpine@sha256:eb37…: no match for platform in manifest: not found';
+		const out = await s.run();
+		expect(out.forwarding).toBe('stale');
+		expect(s.refreshes).toBe(1);
+		const w = s.warn.join(' ');
+		expect(w).toMatch(/older nginx base image/);
+		expect(w).toContain(
+			'A rebuild was tried; Docker said: failed to solve: nginx:1.30.7-alpine@sha256:eb37…: no match for platform in manifest: not found. To try again, run: sudo docker compose'
+		);
+		expect(w).not.toMatch(/To fix it, run/);
+	});
+	it('a rebuild that did run but did not help: no Docker reason is claimed', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.feBaseAfterRefresh = '';
+		s.refreshWhy = 'stale reason from nowhere';
+		await s.run();
+		expect(s.warn.join(' ')).not.toMatch(/Docker said/);
+		expect(s.warn.join(' ')).toMatch(/To fix it, run/);
+	});
+	it('a rebuild that must first download the new base gets minutes; one that need not gets the usual bound', async () => {
+		const pull = oldBox();
+		pull.feBase = '';
+		pull.basePresent = false;
+		await pull.run({ budgetMs: 20 * 60_000 });
+		expect(pull.refreshTimeouts).toHaveLength(1);
+		expect(pull.refreshTimeouts[0]).toBe(300_000);
+		const here = oldBox();
+		here.feBase = '';
+		here.basePresent = true;
+		await here.run({ budgetMs: 20 * 60_000 });
+		expect(here.refreshTimeouts[0]).toBe(50_000);
+		const config = oldBox();
+		config.served = SERVED_STALE;
+		config.basePresent = false;
+		await config.run({ budgetMs: 20 * 60_000 });
+		expect(config.refreshTimeouts[0]).toBe(50_000);
+	});
 	it("a frontend a rebuild cannot re-base (the operator's own Dockerfile, or an image-only service): not judged on it, not rebuilt for it", async () => {
 		const s = oldBox();
 		s.feBase = '';
@@ -2430,6 +2533,64 @@ describe("the frontend is built from this release's pinned nginx base", () => {
 		expect(out.forwarding).toBe('ok');
 		expect(s.refreshes).toBe(0);
 		expect(s.warn).toEqual([]);
+		expect(s.info.join(' ')).toMatch(/stays on its current nginx base for now/);
+		expect(s.infoWhileSpinning).toEqual([]);
+	});
+	it("v1.24.7, morphitir's case: a clearnet server Docker Hub refuses is not rebuilt for the base (the pull would fail), not warned about, and told calmly it comes through Tor", async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.hubRefused = true;
+		const out = await s.run();
+		expect(out.forwarding).toBe('ok');
+		expect(s.refreshes).toBe(0);
+		expect(s.warn).toEqual([]);
+		expect(s.hubAsked).toBe(1);
+		const i = s.info.join(' ');
+		expect(i).toMatch(
+			/Docker Hub does not answer this server directly, so it is fetched through Tor in the background/
+		);
+		expect(i).not.toMatch(/docker compose|--build/);
+		expect(s.infoWhileSpinning).toEqual([]);
+	});
+	it('the same server needing a config rebuild: rebuilt WITHOUT the new base', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.feBaseAfterRefresh = '';
+		s.served = SERVED_STALE;
+		s.hubRefused = true;
+		await s.run();
+		expect(s.refreshWithBase).toEqual([false]);
+		expect(s.warn.join(' ')).not.toMatch(/older nginx base image/);
+	});
+	it('the same server once the base is here (fetched through Tor): rebuilt on it, Docker Hub not asked', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.hubRefused = true;
+		s.basePresent = true;
+		expect((await s.run()).forwarding).toBe('refreshed');
+		expect(s.refreshWithBase).toEqual([true]);
+		expect(s.hubAsked).toBe(0);
+	});
+	it('a clearnet server Docker Hub answers: rebuilt on the base (it pulls it), asked once; on the base already: not asked', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		await s.run();
+		expect(s.refreshWithBase).toEqual([true]);
+		expect(s.hubAsked).toBe(1);
+		const current = oldBox();
+		await current.run();
+		expect(current.hubAsked).toBe(0);
+	});
+	it('a hidden-only node never asks Docker Hub anything directly', async () => {
+		for (const torPulls of [false, true]) {
+			const s = oldBox();
+			s.feBase = '';
+			s.hidden = true;
+			s.torPulls = torPulls;
+			s.hubRefused = true;
+			await s.run();
+			expect(s.hubAsked, `torPulls=${torPulls}`).toBe(0);
+		}
 	});
 	it('a hidden-only node whose offline bundle carries the base: it is loaded, then the rebuild uses it', async () => {
 		const s = oldBox();
@@ -2452,6 +2613,8 @@ describe("the frontend is built from this release's pinned nginx base", () => {
 		expect(s.warn).toEqual([]);
 		expect(s.info.join(' ')).toMatch(/being fetched through Tor in the background/);
 		expect(s.info.join(' ')).not.toMatch(/docker compose|--build/);
+		// v1.24.7: it ran into the spinner's line on a hidden node.
+		expect(s.infoWhileSpinning).toEqual([]);
 	});
 	it('the same node once the base is here (the fetch brought it): rebuilt on the pinned base', async () => {
 		const s = oldBox();

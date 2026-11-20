@@ -21,7 +21,13 @@ export interface ChainFixture {
 export function signedRelease(
 	version: string,
 	distribution: Record<string, unknown>,
-	opts: { key?: PrivateKey; blockNum?: number; seq?: number } = {}
+	opts: {
+		key?: PrivateKey;
+		blockNum?: number;
+		seq?: number;
+		/** More top-level fields of the record (v1.24.7: `security`). */
+		extra?: Record<string, unknown>;
+	} = {}
 ): ChainFixture {
 	const blockNum = opts.blockNum ?? 70_000_000;
 	const op = [
@@ -30,7 +36,7 @@ export function signedRelease(
 			required_auths: [],
 			required_posting_auths: ['morphit'],
 			id: 'morphit_release_v1',
-			json: JSON.stringify({ version, hash_manifest: {}, distribution })
+			json: JSON.stringify({ version, hash_manifest: {}, distribution, ...(opts.extra ?? {}) })
 		}
 	];
 	const tx = cryptoUtils.signTransaction(

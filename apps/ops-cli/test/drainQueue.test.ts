@@ -7,6 +7,8 @@
  * their state — they looked like any healthy new row.
  */
 import { describe, expect, it, vi, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { runDrainQueue } from '../src/commands/drainQueue.ts';
 
 const rowsAs = (rows: unknown[]) =>
@@ -81,6 +83,32 @@ describe('drain-queue', () => {
 		// its own into the report (and into cron mail).
 		const out = await printed(() => runDrainQueue(rowsAs([delegation])));
 		expect(out).not.toMatch(/Reading from the database/);
+	});
+
+	it('v1.24.7: a delegation held below the chain minimum is said calmly, even after an earlier counted error', async () => {
+		const held =
+			"held: 11 BP is below the chain's minimum delegation of 33.333 BP; it is lent once this account's rewards add up to it";
+		const out = await printed(() =>
+			runDrainQueue(
+				rowsAs([
+					{ ...delegation, last_error: held, error_count: 1 },
+					{ ...delegation, id: '3', recipient: 'josiemoto', last_error: held }
+				])
+			)
+		);
+		expect(out.split(held)).toHaveLength(3);
+		expect(out).not.toMatch(/errored|waiting: held|journalctl/);
+		expect(out).toContain('Held: the chain does not accept a delegation this small');
+	});
+
+	it('every hold the relay writes starts with "held:", the prefix these views go by', () => {
+		const src = readFileSync(
+			join(import.meta.dirname, '..', '..', 'relay', 'src', 'queue', 'drainer.ts'),
+			'utf8'
+		);
+		const holds = [...src.matchAll(/kind: 'hold',\s*why:\s*`([^`]{0,12})/g)].map((m) => m[1]);
+		expect(holds.length).toBeGreaterThanOrEqual(2);
+		for (const h of holds) expect(h).toMatch(/^held: /);
 	});
 
 	it('--json carries the Blurt Power target', async () => {

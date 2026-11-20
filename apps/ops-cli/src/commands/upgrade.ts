@@ -145,6 +145,8 @@ import {
 	type CondenserRead,
 	type ReleaseAnchor
 } from '../lib/releaseAnchor.ts';
+import { healAutomaticUpdates, realAutoUpdatesRuntime } from '../lib/autoUpdates.ts';
+import { healAutoInstall, realAutoInstallHealRuntime } from '../lib/autoInstallRelease.ts';
 import { chainRead, directNodeReaders } from '../lib/chainAccess.ts';
 import {
 	installDepsForHiddenNode,
@@ -6411,6 +6413,32 @@ export function afterRestartHealSteps(): Array<[string, () => Promise<void>]> {
 			'the release check heal',
 			() =>
 				reportHeal(healReleaseMonitor(healCtx(), realReleaseMonitorRuntime(selfHealInstallDir())))
+		],
+		// v1.24.7 (lib/autoUpdates.ts): Ubuntu's security fixes (by their real
+		// origin, so Linux Mint matches), Docker's own updates within the
+		// installed major version, and a restart at night when one needs it,
+		// as /etc/morphit/updates.env says; read back from apt.
+		[
+			'the automatic updates heal',
+			() =>
+				reportHeal(
+					healAutomaticUpdates(
+						healCtx(),
+						realAutoUpdatesRuntime({ hiddenOnly: () => isHiddenOnlyNode() })
+					)
+				)
+		],
+		// v1.24.7 (lib/autoInstallRelease.ts): the nightly check that installs a
+		// security release by itself; turned on, and asked once now.
+		[
+			'the automatic release installs heal',
+			() =>
+				reportHeal(
+					healAutoInstall(
+						healCtx(),
+						realAutoInstallHealRuntime(selfHealInstallDir(), { isNewer: isNewerRelease })
+					)
+				)
 		],
 		// 2026-10-09 (lib/torBridgesHeal.ts): when this network filters plain Tor
 		// (morphitir: torproject.org sinkholed, circuits starved), Tor moves onto

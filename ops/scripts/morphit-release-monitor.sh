@@ -111,8 +111,20 @@ case "$EXIT_CODE" in
         CURRENT=$(printf '%s' "$JSON_OUT" | grep -oE '"current": *"[^"]*"' | cut -d'"' -f4 || echo unknown)
         LATEST=$(printf '%s' "$JSON_OUT" | grep -oE '"latest": *"[^"]*"' | cut -d'"' -f4 || echo unknown)
         RELEASE_URL=$(printf '%s' "$JSON_OUT" | grep -oE '"release_url": *"[^"]*"' | cut -d'"' -f4 || echo "")
-        emit info release_available \
-             "{\"current\":\"$CURRENT\",\"latest\":\"$LATEST\",\"release_url\":\"$RELEASE_URL\",\"hint\":\"Run 'morphit-ops upgrade' to apply (or set MORPHIT_AUTO_UPGRADE=1 first to skip the confirmation prompt).\"}"
+        # v1.24.7: a release this server installs by itself at its next early-morning check (a security
+        # release, or any with MORPHIT_AUTO_INSTALL_RELEASES=all) goes to the
+        # daily digest instead: nothing for the operator to do.
+        set +e
+        (cd "$(dirname "$OPS_CLI")/.." && timeout 120 "$TSX" "$OPS_CLI" __auto-install-check >/dev/null 2>&1)
+        AUTO_RC=$?
+        set -e
+        if [ "$AUTO_RC" = 10 ]; then
+            emit info release_installs_tonight \
+                 "{\"current\":\"$CURRENT\",\"latest\":\"$LATEST\",\"release_url\":\"$RELEASE_URL\",\"hint\":\"This server installs it by itself at its next early-morning check (05:15 by its clock, morphit-auto-install.timer), checked against the on-chain record first. Nothing to do.\"}"
+        else
+            emit info release_available \
+                 "{\"current\":\"$CURRENT\",\"latest\":\"$LATEST\",\"release_url\":\"$RELEASE_URL\",\"hint\":\"Run 'morphit-ops upgrade' to apply (or set MORPHIT_AUTO_UPGRADE=1 first to skip the confirmation prompt).\"}"
+        fi
         ;;
     *)
         # Network error, malformed response, or other failure.

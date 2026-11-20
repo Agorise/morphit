@@ -269,4 +269,11 @@ export interface ReleasePayloadV1 {
 	 *  verifiable pointer to the GPG-signed source tarball mirrored
 	 *  to Codeberg / IPFS / etc.  See ReleaseDistributionBlock. */
 	readonly distribution?: ReleaseDistributionBlock;
+	/** OPTIONAL (v1.24.7): a security release. Servers that install security
+	 *  releases by themselves (`MORPHIT_AUTO_INSTALL_RELEASES=security`, the
+	 *  default) install it at their next early-morning check; only `true` counts. Validators of every
+	 *  version ignore fields they do not know, so older nodes accept the record
+	 *  as before. ops-cli reads it only from the record it verified against the
+	 *  pinned posting key (apps/ops-cli/src/lib/releaseAnchor.ts). */
+	readonly security?: true;
 }

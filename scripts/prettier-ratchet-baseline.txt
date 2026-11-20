@@ -157,7 +157,6 @@ apps/indexer/test/indexer/signals.test.ts
 apps/indexer/test/integration/feedback-suppression.test.ts
 apps/indexer/test/lib/feeAmountCalc.test.ts
 apps/indexer/test/log.test.ts
-apps/matrix-bot/scripts/classifier-smoke.ts
 apps/matrix-bot/scripts/deps-pin-check.ts
 apps/matrix-bot/scripts/dm-room-persistence-smoke.ts
 apps/matrix-bot/scripts/emit-routing-smoke.ts
@@ -169,7 +168,6 @@ apps/matrix-bot/scripts/self-test-route-smoke.ts
 apps/matrix-bot/scripts/sidecar-envelope-smoke.ts
 apps/matrix-bot/scripts/sse-stream-shape-smoke.ts
 apps/matrix-bot/scripts/surface-invariant-smoke.ts
-apps/matrix-bot/src/classifier.ts
 apps/matrix-bot/src/config.ts
 apps/matrix-bot/src/digest.ts
 apps/matrix-bot/src/journalctl.ts

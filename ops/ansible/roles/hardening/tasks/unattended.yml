@@ -8,6 +8,10 @@
     mode: '0644'
     content: |
       // Managed by Ansible — do not hand-edit.
+      // Since v1.24.7, /etc/apt/apt.conf.d/52morphit-automatic-updates (written by
+      // morphit-ops from /etc/morphit/updates.env) comes after this file and sets
+      // the restart at night, Ubuntu's security pockets by their real origin and
+      // Docker's own updates; its values win over the ones below.
       Unattended-Upgrade::Allowed-Origins {
           "${distro_id}:${distro_codename}-security";
           "${distro_id}ESMApps:${distro_codename}-apps-security";

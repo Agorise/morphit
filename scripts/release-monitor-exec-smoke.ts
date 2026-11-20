@@ -71,6 +71,8 @@ try {
 		tsx,
 		`#!/bin/sh
 printf 'cwd=%s args=%s\\n' "$(pwd)" "$*" >> "${calls}"
+# v1.24.7: the auto-install check answers on its own (exit 10 = installs tonight).
+case "$*" in *__auto-install-check*) exit "\${FAKE_AUTO_EXIT:-0}" ;; esac
 [ -n "\${FAKE_TSX_ERR:-}" ] && printf '%s\\n' "\$FAKE_TSX_ERR" >&2
 cat <<'JSON'
 {
@@ -124,6 +126,27 @@ exit "\${FAKE_TSX_EXIT:-1}"
 		/* no event — reported below */
 	}
 	check('a newer release raises release_available', line !== '', out.trim().split('\n').pop());
+	{
+		const tonight = run({ FAKE_AUTO_EXIT: '10' });
+		const t =
+			tonight.split('\n').find((l) => l.includes('"event":"release_installs_tonight"')) ?? '';
+		check(
+			'v1.24.7: a release this server installs by itself tonight goes to the digest as release_installs_tonight, not release_available',
+			t !== '' && !tonight.includes('"event":"release_available"'),
+			tonight.trim().split('\n').pop()
+		);
+		check(
+			'v1.24.7: it names both versions and says there is nothing to do',
+			/"current":"v1\.17\.15"/.test(t) &&
+				/"latest":"v1\.18\.0"/.test(t) &&
+				/Nothing to do\./.test(t),
+			t
+		);
+		check(
+			'v1.24.7: when the check says it would not install (exit 0), the operator is told as before',
+			out.includes('"event":"release_available"') && !out.includes('release_installs_tonight')
+		);
+	}
 	check(
 		'the alert names the installed and the new version',
 		ctx.current === 'v1.17.15' && ctx.latest === 'v1.18.0',

@@ -587,6 +587,70 @@ async function main(): Promise<number> {
 		return 0;
 	}
 
+	// v1.24.7 — hidden subcommand the Ansible playbook runs last on a fresh
+	// install: the automatic-updates and nightly-install heals every upgrade
+	// runs, so a new server keeps itself patched from its first day. Prints each
+	// result; exit 1 when one is not in place (the playbook only reports it).
+	if (args.subcommand === '__automatic-updates') {
+		try {
+			const { healAutomaticUpdates, realAutoUpdatesRuntime } = await import('./lib/autoUpdates.ts');
+			const { healAutoInstall, realAutoInstallHealRuntime } = await import(
+				'./lib/autoInstallRelease.ts'
+			);
+			const { isNewerRelease } = await import('./commands/upgrade.ts');
+			const { isHiddenOnlyNode } = await import('./lib/hiddenOnly.ts');
+			const ctx = {
+				info: (m: string) => console.log(m),
+				warn: (m: string) => console.log(`[WARN] ${m}`),
+				spinner: () => () => {}
+			};
+			const installDir = (process.env.MORPHIT_INSTALL_DIR ?? '').trim() || '/opt/morphit';
+			const results = [
+				await healAutomaticUpdates(
+					ctx,
+					realAutoUpdatesRuntime({ hiddenOnly: () => isHiddenOnlyNode() })
+				),
+				await healAutoInstall(
+					ctx,
+					realAutoInstallHealRuntime(installDir, { isNewer: isNewerRelease })
+				)
+			];
+			for (const r of results) console.log(`${r.verified ? '✓' : '[WARN]'} ${r.detail}`);
+			return results.every((r) => r.verified) ? 0 : 1;
+		} catch (e) {
+			console.log(
+				`[WARN] Automatic updates could not be set up: ${e instanceof Error ? e.message : String(e)}`
+			);
+			return 1;
+		}
+	}
+
+	// v1.24.7 — hidden subcommand morphit-auto-install.sh (the nightly
+	// morphit-auto-install.timer) asks first: install a newer release now?
+	// Prints one line of JSON; exit 0 nothing to do, 10 install, 11 refused (a
+	// release record that failed its check). Not listed in help.
+	if (args.subcommand === '__auto-install-check') {
+		try {
+			const { decideAutoInstall, decisionOutput, realAutoInstallRuntime } = await import(
+				'./lib/autoInstallRelease.ts'
+			);
+			const { isNewerRelease } = await import('./commands/upgrade.ts');
+			const out = decisionOutput(
+				await decideAutoInstall(realAutoInstallRuntime({ isNewer: isNewerRelease }))
+			);
+			console.log(out.json);
+			return out.code;
+		} catch (e) {
+			console.log(
+				JSON.stringify({
+					action: 'none',
+					why: `the check could not run: ${e instanceof Error ? e.message : String(e)}`
+				})
+			);
+			return 0;
+		}
+	}
+
 	// v1.20.1 — hidden subcommand the upgrade starts as the short-lived systemd
 	// unit morphit-web-heal (lib/webHeal.ts): the BunkerWeb WAF + web-proxy heals
 	// with the time a slow BunkerWeb needs. Not listed in help.

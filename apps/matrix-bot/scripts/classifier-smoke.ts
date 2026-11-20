@@ -17,11 +17,7 @@ interface Scenario {
 	readonly expectedTier: AlertTier;
 }
 
-function a(
-	module: string,
-	event: string,
-	payload?: Record<string, unknown>
-): StructuredAlert {
+function a(module: string, event: string, payload?: Record<string, unknown>): StructuredAlert {
 	return { module, event, payload, ts: '2026-05-14T12:00:00.000Z' };
 }
 
@@ -100,12 +96,20 @@ const scenarios: Scenario[] = [
 	},
 	{
 		name: 'poller chain_consistency_disagreement → CRITICAL',
-		alert: a('poller', 'chain_consistency_disagreement', { height: 1, agreeing: 1, contacted: 3, required: 2 }),
+		alert: a('poller', 'chain_consistency_disagreement', {
+			height: 1,
+			agreeing: 1,
+			contacted: 3,
+			required: 2
+		}),
 		expectedTier: 'CRITICAL'
 	},
 	{
 		name: 'relay-create relay_fee_spike_refused → CRITICAL (signups refused)',
-		alert: a('relay-create', 'relay_fee_spike_refused', { observed_blurt: 300, configured_blurt: 100 }),
+		alert: a('relay-create', 'relay_fee_spike_refused', {
+			observed_blurt: 300,
+			configured_blurt: 100
+		}),
 		expectedTier: 'CRITICAL'
 	},
 
@@ -649,6 +653,51 @@ const scenarios: Scenario[] = [
 			project_dir: '/opt/morphit/ops/bunkerweb'
 		}),
 		expectedTier: 'WARN'
+	},
+
+	// ─── v1.24.7: the server patches itself; alerts only when that fails ───
+	{
+		name: 'auto-install auto_install_refused → CRITICAL (a release record failed its check)',
+		alert: a('auto-install', 'auto_install_refused', { hint: 'not signed by the pinned key' }),
+		expectedTier: 'CRITICAL'
+	},
+	{
+		name: 'auto-install auto_install_failed → WARN',
+		alert: a('auto-install', 'auto_install_failed', { from: 'v1.24.7', to: 'v1.24.8', hint: 'x' }),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'apt automatic_updates_stalled → WARN',
+		alert: a('apt', 'automatic_updates_stalled', {
+			security_updates: 2,
+			last_success: '3 day(s) ago',
+			hint: 'x'
+		}),
+		expectedTier: 'WARN'
+	},
+	{
+		name: 'auto-install auto_install_done → INFO (the digest: nothing to do)',
+		alert: a('auto-install', 'auto_install_done', {
+			from: 'v1.24.7',
+			to: 'v1.24.8',
+			log: '/var/log/morphit/auto-install.log'
+		}),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'release release_installs_tonight → INFO (the digest: nothing to do)',
+		alert: a('release', 'release_installs_tonight', { current: 'v1.24.7', latest: 'v1.24.8' }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'apt restart_pending → INFO (the digest)',
+		alert: a('apt', 'restart_pending', { days: 3, packages: 'libc6', hint: 'x' }),
+		expectedTier: 'INFO'
+	},
+	{
+		name: 'apt updates_pending_info with security fixes the server installs tonight → INFO',
+		alert: a('apt', 'updates_pending_info', { security_updates: 2, total_updates: 3 }),
+		expectedTier: 'INFO'
 	},
 
 	// ─── INFO — catch-alls ───────────────────────────────

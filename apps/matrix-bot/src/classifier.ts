@@ -75,7 +75,9 @@ export const TIER_RULES: readonly TierRule[] = [
 	crit(
 		'operator-balance',
 		'low_balance',
-		(a) => typeof a.payload?.['balance_blurt'] === 'number' && (a.payload['balance_blurt'] as number) <= 0
+		(a) =>
+			typeof a.payload?.['balance_blurt'] === 'number' &&
+			(a.payload['balance_blurt'] as number) <= 0
 	),
 	// The relay's liquid BLURT is below the account_creation_fee it pays inline
 	// per account_create, so it is REFUSING signups right now.
@@ -123,6 +125,9 @@ export const TIER_RULES: readonly TierRule[] = [
 	crit('certbot', 'cert_expiry_critical'),
 	crit('certbot', 'renewal_stalled'),
 	crit('apt', 'security_updates_critical'),
+	// v1.24.7: a release record that failed its check (another key, a bad
+	// hash) is what a key compromise or a forgery looks like; nothing installed.
+	crit('auto-install', 'auto_install_refused'),
 	crit('compose', 'service_unhealthy'),
 	crit('compose', 'service_exited'),
 	// A failed unit — the backup unit included — is reported here.
@@ -155,6 +160,9 @@ export const TIER_RULES: readonly TierRule[] = [
 	// individual DM rather than a line in the daily digest. Nothing
 	// auto-upgrades; the DM tells the operator to run `sudo morphit-ops`.
 	warn('release', 'release_available'),
+	// v1.24.7: the server's own patching stopped, or a nightly install failed.
+	warn('apt', 'automatic_updates_stalled'),
+	warn('auto-install', 'auto_install_failed'),
 	warn('host-resource', 'disk_warn'),
 	warn('host-resource', 'mem_warn'),
 	warn('host-resource', 'swap_warn'),
@@ -255,6 +263,37 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'Details: {release_url}'
 	},
 
+	// v1.24.7: what the nightly install of a security release did.
+	'release:release_installs_tonight': {
+		title: 'Morphit {latest} installs itself early tomorrow morning',
+		advice:
+			'A newer Morphit release is out ({latest}; this node runs {current}). It is ' +
+			'a security release, so this server installs it by itself at its next early-morning check (05:15 by its clock), checked ' +
+			"against @morphit's on-chain record first. Nothing to do. Details: {release_url}"
+	},
+	'auto-install:auto_install_done': {
+		title: 'Morphit {to} installed itself',
+		advice:
+			'Last night this server installed Morphit {to} (it ran {from}) by itself: a ' +
+			"security release, checked against @morphit's on-chain record. Its output " +
+			'is in {log}. Nothing to do.'
+	},
+	'auto-install:auto_install_failed': {
+		title: 'The nightly install of Morphit {to} did not finish',
+		advice: '{hint}'
+	},
+	'auto-install:auto_install_refused': {
+		title: 'A Morphit release record failed its check — nothing installed',
+		advice:
+			"{hint} A release record that is not signed by @morphit's pinned key, or " +
+			'names no valid hash, is what a stolen key or a forgery looks like: tell the ' +
+			'Morphit maintainer.'
+	},
+	'auto-install:auto_install_check_failed': {
+		title: 'The nightly check for a Morphit security release could not run',
+		advice: '{hint}'
+	},
+
 	// ─── signup-ceiling ─────────────────────────────────────────
 	'signup-ceiling:ceiling_reached': {
 		title: 'Daily signup ceiling hit — likely under attack',
@@ -287,8 +326,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 	},
 	'kill-switch:kill_switch_deactivated': {
 		title: 'Kill-switch deactivated — signups resumed',
-		advice:
-			'The kill-switch file at {path} is gone. Account creation is back ON.'
+		advice: 'The kill-switch file at {path} is gone. Account creation is back ON.'
 	},
 
 	// ─── witness fee, chain trust, money paths ──────────────────
@@ -297,7 +335,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 		advice:
 			'The poller failed {consecutive_failures} consecutive checks. If the ' +
 			'witnesses raise the account-creation fee meanwhile, nobody here will ' +
-			'notice until signups start failing. Check the node\'s RPC endpoints.'
+			"notice until signups start failing. Check the node's RPC endpoints."
 	},
 	'witness-fee:shape_error': {
 		title: 'Witness fee answer is unparseable',
@@ -391,7 +429,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 		advice:
 			'No price upstream answered and there is no cached price, so prices ' +
 			'are shown at the static floor ({floor}). Fee verification is ' +
-			'unaffected (fees are checked in native units). Check this server\'s ' +
+			"unaffected (fees are checked in native units). Check this server's " +
 			'outbound connectivity.'
 	},
 	'fee-recheck:fee_recheck_pass_failed': {
@@ -700,7 +738,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'a process. This usually means a runaway service is leaking. ' +
 			'Check `lsof | wc -l` against `cat /proc/sys/fs/file-max`, and ' +
 			'`ps ax | wc -l` against `cat /proc/sys/kernel/pid_max`. Identify ' +
-			'the leaking process with `lsof | awk \'{print $2}\' | sort | uniq -c | sort -rn | head`. ' +
+			"the leaking process with `lsof | awk '{print $2}' | sort | uniq -c | sort -rn | head`. " +
 			'Raw line: {raw_line}'
 	},
 	'dmesg:dmesg_unreadable': {
@@ -851,6 +889,19 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'{security_updates} security updates pending ({total_updates} ' +
 			'total). Below CRITICAL threshold but worth applying soon. ' +
 			'`sudo apt update && sudo apt upgrade -y`.'
+	},
+	'apt:automatic_updates_stalled': {
+		title: 'Automatic security updates have stopped working',
+		advice:
+			'{security_updates} security updates are waiting, and this server installs ' +
+			'them by itself, but its last successful automatic run was {last_success}. ' +
+			'{hint}'
+	},
+	'apt:restart_pending': {
+		title: 'A restart has been needed for {days} day(s)',
+		advice:
+			'Updates this server installed by itself ({packages}) take effect after a ' +
+			'restart. {hint}'
 	},
 	'apt:updates_pending_info': {
 		title: '{total_updates} non-security updates pending',
@@ -1045,7 +1096,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 	'smartctl:temperature_overlimit_count': {
 		title: 'Drive firmware reports thermal over-limit events: {device}',
 		advice:
-			'{device}\\\'s own firmware has incremented its over-temperature ' +
+			"{device}\\'s own firmware has incremented its over-temperature " +
 			'counter to {overlimit_count} — the drive itself flagged that ' +
 			'it crossed its safe operating temperature. This is a stronger ' +
 			'signal than instantaneous temperature reads. Improve cooling ' +
@@ -1145,8 +1196,7 @@ export function renderAlertBody(c: ClassifiedAlert): { plain: string; html: stri
 				.join('\n')
 		: '';
 	if (payloadLines.length > MAX_PAYLOAD_BYTES) {
-		payloadLines =
-			payloadLines.slice(0, MAX_PAYLOAD_BYTES) + '\n  …(payload truncated)';
+		payloadLines = payloadLines.slice(0, MAX_PAYLOAD_BYTES) + '\n  …(payload truncated)';
 	}
 
 	const plainParts = [`${sigil} [${tier}] ${title}`, '', advice];

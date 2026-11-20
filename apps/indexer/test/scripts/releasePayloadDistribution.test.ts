@@ -104,6 +104,25 @@ describe('the release builder distribution block', () => {
 		expect(r.status).not.toBe(0);
 		expect(r.stdout).toBe('');
 	});
+	it('v1.24.7: --security marks a security release ("security": true) and nothing else changes; without it there is no mark', () => {
+		const plain = build({ MORPHIT_BUILD_IPFS_CID: CID_1201 });
+		const sec = build({ MORPHIT_BUILD_IPFS_CID: CID_1201 }, ['--security']);
+		expect(sec.r.status).toBe(0);
+		const p = JSON.parse(plain.r.stdout) as Record<string, unknown>;
+		const s = JSON.parse(sec.r.stdout) as Record<string, unknown>;
+		expect(p.security).toBeUndefined();
+		expect(s.security).toBe(true);
+		const { security: _s, ...rest } = s;
+		expect(rest).toEqual(p);
+	});
+	it('v1.24.7: --security given twice is refused; MORPHIT_BUILD_SECURITY in the environment marks nothing', () => {
+		const twice = build({ MORPHIT_BUILD_IPFS_CID: CID_1201 }, ['--security', '--security']);
+		expect(twice.r.status).not.toBe(0);
+		expect(twice.r.stdout).toBe('');
+		const env = build({ MORPHIT_BUILD_IPFS_CID: CID_1201, MORPHIT_BUILD_SECURITY: '1' });
+		if (env.r.status === 0)
+			expect((JSON.parse(env.r.stdout) as Record<string, unknown>).security).toBeUndefined();
+	});
 	it('accepts a record that points at this release’s CID', () => {
 		const { r, dist } = build({
 			MORPHIT_BUILD_IPFS_CID: CID_1201,

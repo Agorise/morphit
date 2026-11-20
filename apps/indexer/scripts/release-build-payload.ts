@@ -135,16 +135,24 @@ export interface BuilderFlags {
 	ipfsCid: string | null;
 	/** --allow-no-ipfs-cid: emit a distribution block without a CID. */
 	allowNoIpfsCid: boolean;
+	/** --security (v1.24.7): mark the release as a security release; servers
+	 *  that install security releases by themselves (the default since v1.24.7)
+	 *  install it at their next early-morning check. A flag, never an environment value: one left in the
+	 *  terminal by an earlier ceremony must not mark the next release. */
+	security: boolean;
 }
 
 /** The command-line flags. Anything else refuses: a mistyped flag must not
  *  quietly leave the CID out. PURE apart from the throw. */
 export function parseBuilderArgs(argv: readonly string[]): BuilderFlags {
-	const flags: BuilderFlags = { ipfsCid: null, allowNoIpfsCid: false };
+	const flags: BuilderFlags = { ipfsCid: null, allowNoIpfsCid: false, security: false };
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i]!;
 		if (a === '--allow-no-ipfs-cid') flags.allowNoIpfsCid = true;
-		else if (a === '--ipfs-cid' || a.startsWith('--ipfs-cid=')) {
+		else if (a === '--security') {
+			if (flags.security) throw new Error('--security is given twice');
+			flags.security = true;
+		} else if (a === '--ipfs-cid' || a.startsWith('--ipfs-cid=')) {
 			if (flags.ipfsCid !== null) throw new Error('--ipfs-cid is given twice');
 			const v = a === '--ipfs-cid' ? argv[++i] : a.slice('--ipfs-cid='.length);
 			if (v === undefined) throw new Error('--ipfs-cid needs the CID after it');
@@ -772,7 +780,8 @@ async function main(): Promise<void> {
 			? { endpoints: inputs.endpoints as ReleasePayloadV1['endpoints'] }
 			: {}),
 		...(treasury !== null ? { treasury } : {}),
-		...(distribution !== null ? { distribution } : {})
+		...(distribution !== null ? { distribution } : {}),
+		...(flags.security ? { security: true as const } : {})
 	};
 
 	// Final whole-payload validation — same checks the on-chain

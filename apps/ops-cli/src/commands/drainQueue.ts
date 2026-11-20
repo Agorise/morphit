@@ -21,6 +21,7 @@ import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
 import { section, info, fmt, error, blank } from '../render/term.ts';
 import { pageNote, parseOffset } from './signups.ts';
+import { HELD_NOTE, isHeldRow, relayQueueMaxRetries } from './failedBroadcasts.ts';
 
 interface DrainEntry {
 	readonly id: string;
@@ -146,6 +147,7 @@ export async function runDrainQueue(ctx: CommandCtx): Promise<number> {
 	}
 
 	renderHuman(entries, minAgeSec, total, {
+		cap: relayQueueMaxRetries(),
 		offset,
 		command: `sudo morphit-ops drain-queue${ctx.flags.age !== undefined ? ` --age=${ctx.flags.age.replace(/\s+/g, '')}` : ''}`
 	});
@@ -156,8 +158,11 @@ function renderHuman(
 	entries: readonly DrainEntry[],
 	minAgeSec: number,
 	total: number,
-	page: { readonly offset: number; readonly command: string }
+	page: { readonly cap: number; readonly offset: number; readonly command: string }
 ): void {
+	// v1.24.7: a delegation held below the chain's minimum was a red "errored"
+	// row when an earlier send had failed.
+	const isHeld = (e: DrainEntry): boolean => isHeldRow(e, page.cap);
 	const title =
 		minAgeSec > 0
 			? `Drain queue (entries older than ${formatDuration(minAgeSec)})`
@@ -165,7 +170,14 @@ function renderHuman(
 	section(title);
 
 	if (entries.length === 0 && total > 0) {
-		const note = pageNote({ shown: 0, total, noun: 'payments', order: 'oldest first', ...page });
+		const note = pageNote({
+			shown: 0,
+			total,
+			noun: 'payments',
+			order: 'oldest first',
+			offset: page.offset,
+			command: page.command
+		});
 		if (note !== null) info(fmt.dim(`  ${note}`));
 		return;
 	}
@@ -200,8 +212,9 @@ function renderHuman(
 				? `${parseFloat(e.amount_bp)} BP`
 				: parseFloat(e.amount_blurt).toFixed(2) + ' BLURT';
 		const state = e.last_error !== null && e.last_error !== '' ? lastErrorText(e.last_error) : '';
-		const errorTail =
-			e.error_count > 0
+		const errorTail = isHeld(e)
+			? fmt.dim(`  (${state})`)
+			: e.error_count > 0
 				? fmt.red(`  (errored ${e.error_count}× last: ${state || '?'})`)
 				: state !== ''
 					? fmt.yellow(`  (waiting: ${state})`)
@@ -222,13 +235,18 @@ function renderHuman(
 		total,
 		noun: 'payments',
 		order: 'oldest first',
-		...page
+		offset: page.offset,
+		command: page.command
 	});
 	if (note !== null) {
 		blank();
 		info(fmt.dim(`  ${note}`));
 	}
-	if (entries.some((e) => e.error_count > 0)) {
+	if (entries.some(isHeld)) {
+		blank();
+		info(fmt.dim(`  ${HELD_NOTE}`));
+	}
+	if (entries.some((e) => e.error_count > 0 && !isHeld(e))) {
 		blank();
 		info(
 			fmt.dim(

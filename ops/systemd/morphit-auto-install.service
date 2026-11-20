@@ -1,0 +1,22 @@
+[Unit]
+Description=Morphit — install a new security release by itself (nightly)
+Documentation=https://git.agorise.net/agorise/morphit
+After=network-online.target morphit-indexer.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Root, with no sandbox: when there is a release to install, this runs the
+# ordinary `morphit-ops upgrade --yes`, which replaces /opt/morphit, rebuilds
+# the frontend container and restarts the services (v1.24.7). The script
+# decides first (`morphit-ops __auto-install-check`) and exits at once when
+# there is nothing to install: MORPHIT_AUTO_INSTALL_RELEASES in
+# /etc/morphit/updates.env (security | all | off).
+User=root
+Group=root
+ExecStart=/opt/morphit/ops/scripts/morphit-auto-install.sh
+# A hidden-only server fetches the release over Tor/I2P: give it the hours an
+# upgrade there can take (the script stops the upgrade itself after 3 hours).
+TimeoutStartSec=4h
+Nice=5
+LimitCORE=0

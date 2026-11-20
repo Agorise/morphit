@@ -1,0 +1,16 @@
+[Unit]
+Description=Morphit — nightly check: install a new security release by itself
+Documentation=https://git.agorise.net/agorise/morphit
+
+[Timer]
+# By the server's own clock, AFTER the automatic restart for Ubuntu's fixes
+# (04:30 by default, /etc/morphit/updates.env), so a restart scheduled for
+# 04:30 never cuts an upgrade off (one over Tor can take a while). Not on
+# boot: a server that just restarted is not upgraded at once.
+OnCalendar=*-*-* 05:15:00
+RandomizedDelaySec=45min
+Persistent=false
+Unit=morphit-auto-install.service
+
+[Install]
+WantedBy=timers.target

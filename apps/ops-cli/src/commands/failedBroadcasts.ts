@@ -24,6 +24,13 @@
  * signed attempt is still open but that has reached the retry limit (the
  * relay no longer settles it). The states mirror apps/relay/src/queue/
  * drainer.ts (its last_error prefixes).
+ *
+ * v1.24.7: a delegation the chain would refuse (below its minimum delegation
+ * or minimum change) is HELD by the relay, by design: looked at again every
+ * few hours and lent once the account's rewards add up. Its "held: …" text was
+ * listed as a red ✗ "not sent" and counted on `status` as a failed broadcast
+ * (with a 47-day "oldest pending" ✗ on morphit.io). It is its own state now,
+ * "held", never a failure: nothing for the operator to do.
  */
 
 import { whileReading, type CommandCtx } from '../lib/ctx.ts';
@@ -55,6 +62,7 @@ interface Totals {
 	readonly sent: number;
 	readonly waiting: number;
 	readonly maybeSent: number;
+	readonly held: number;
 	readonly stuck: number;
 }
 
@@ -76,6 +84,7 @@ export function relayQueueMaxRetries(root = process.env.MORPHIT_ENV_ROOT ?? ''):
 const OPEN_ATTEMPT_RE = /^(outcome_unknown|in_flight trx_id=)/;
 const IN_PROGRESS_RE = /^(outcome_unknown|in_flight)\b/;
 const ESCALATED_RE = /^escalated:/;
+const HELD_RE = /^held:/;
 
 /**
  * A row's state. PURE; mirrors {@link MAYBE_SENT_SQL} / {@link WAITING_SQL}.
@@ -84,6 +93,8 @@ const ESCALATED_RE = /^escalated:/;
  *    answer it did not get — it settles that by itself;
  *  - maybe-sent: it may be on the chain, and the relay will not look again or
  *    send it again: escalated, or an open attempt at the retry limit;
+ *  - held: a delegation the chain would refuse now (below its minimum); the
+ *    relay looks again by itself and lends it once the rewards add up;
  *  - stuck: not sent.
  */
 export function broadcastState(
@@ -93,9 +104,10 @@ export function broadcastState(
 		readonly error_count?: number;
 	},
 	maxRetries = DEFAULT_QUEUE_MAX_RETRIES
-): 'sent' | 'waiting' | 'maybe-sent' | 'stuck' {
+): 'sent' | 'waiting' | 'maybe-sent' | 'held' | 'stuck' {
 	if (e.broadcast_at !== null) return 'sent';
 	const le = e.last_error ?? '';
+	if (isHeldRow(e, maxRetries)) return 'held';
 	const atLimit = (e.error_count ?? 0) >= maxRetries;
 	if (ESCALATED_RE.test(le) || (atLimit && OPEN_ATTEMPT_RE.test(le))) return 'maybe-sent';
 	if (!atLimit && IN_PROGRESS_RE.test(le)) return 'waiting';
@@ -126,6 +138,29 @@ export const WAITING_SQL = (cap: string): string =>
 /** SQL: it may be on the chain and the relay will not look again. */
 export const MAYBE_SENT_SQL = (cap: string): string =>
 	`(broadcast_at IS NULL AND (last_error LIKE 'escalated:%' OR (error_count >= ${cap} AND ${OPEN_ATTEMPT_SQL})))`;
+
+/** SQL, the retry limit as `cap`: a delegation the relay holds until the
+ *  chain allows it. Only under the limit: a row at it is no longer taken by
+ *  the relay, so nothing looks at it again. Never NULL, so `NOT HELD_SQL`
+ *  keeps rows with no last_error. Mirrors {@link isHeldRow}. */
+export const HELD_SQL = (cap: string): string =>
+	`(broadcast_at IS NULL AND error_count < ${cap} AND COALESCE(last_error, '') LIKE 'held:%')`;
+
+/** A delegation the relay holds until the chain allows it (see HELD_SQL). PURE. */
+export function isHeldRow(
+	e: {
+		readonly broadcast_at?: Date | null;
+		readonly last_error: string | null;
+		readonly error_count?: number;
+	},
+	maxRetries = DEFAULT_QUEUE_MAX_RETRIES
+): boolean {
+	return (
+		(e.broadcast_at ?? null) === null &&
+		(e.error_count ?? 0) < maxRetries &&
+		HELD_RE.test(e.last_error ?? '')
+	);
+}
 
 const WINDOW_SQL = `last_error_at IS NOT NULL AND last_error_at >= $1`;
 
@@ -229,12 +264,19 @@ export async function runFailedBroadcasts(
 				[cutoff, limit, offset]
 			),
 			// The totals of the WHOLE window, not of the rows fetched.
-			ctx.db.query<{ total: string; sent: string; waiting: string; maybe_sent: string }>(
+			ctx.db.query<{
+				total: string;
+				sent: string;
+				waiting: string;
+				maybe_sent: string;
+				held: string;
+			}>(
 				`SELECT
 		   COUNT(*)::text AS total,
 		   COUNT(*) FILTER (WHERE broadcast_at IS NOT NULL)::text AS sent,
 		   COUNT(*) FILTER (WHERE ${WAITING_SQL('$2')})::text AS waiting,
-		   COUNT(*) FILTER (WHERE ${MAYBE_SENT_SQL('$2')})::text AS maybe_sent
+		   COUNT(*) FILTER (WHERE ${MAYBE_SENT_SQL('$2')})::text AS maybe_sent,
+		   COUNT(*) FILTER (WHERE ${HELD_SQL('$2')})::text AS held
 		 FROM relay_pending_transfers
 		 WHERE ${WINDOW_SQL}`,
 				[cutoff, cap]
@@ -249,12 +291,14 @@ export async function runFailedBroadcasts(
 	const sent = num(c?.sent);
 	const waiting = num(c?.waiting);
 	const maybeSent = num(c?.maybe_sent);
+	const held = num(c?.held);
 	const totals: Totals = {
 		total,
 		sent,
 		waiting,
 		maybeSent,
-		stuck: Math.max(0, total - sent - waiting - maybeSent)
+		held,
+		stuck: Math.max(0, total - sent - waiting - maybeSent - held)
 	};
 
 	if (ctx.flags.json === 'true') {
@@ -267,6 +311,7 @@ export async function runFailedBroadcasts(
 			sent: totals.sent,
 			waiting_for_confirmation: totals.waiting,
 			may_have_been_sent: totals.maybeSent,
+			held_until_the_chain_allows: totals.held,
 			not_sent: totals.stuck,
 			entries: entries.map((e: FailedBroadcast) => ({
 				id: e.id,
@@ -317,16 +362,23 @@ function renderHuman(
 		return;
 	}
 
-	const parts = [
-		`${t.sent} sent after all`,
-		`${t.waiting} being sent or confirmed by the relay`,
-		...(t.maybeSent > 0 ? [`${t.maybeSent} may have been sent`] : []),
-		`${t.stuck} not sent`
-	];
-	info(
-		`  ${t.total} ${t.total === 1 ? 'payment' : 'payments'} had errors  ` +
-			fmt.dim(`(${parts.join(', ')})`)
-	);
+	const errored = t.total - t.held;
+	const heldText = `${t.held} held until the chain allows ${t.held === 1 ? 'it' : 'them'} (not an error)`;
+	if (errored === 0) {
+		info(fmt.green('  No broadcast failures in this window.') + fmt.dim(`  (${heldText})`));
+	} else {
+		const parts = [
+			`${t.sent} sent after all`,
+			`${t.waiting} being sent or confirmed by the relay`,
+			...(t.maybeSent > 0 ? [`${t.maybeSent} may have been sent`] : []),
+			`${t.stuck} not sent`
+		];
+		info(
+			`  ${errored} ${errored === 1 ? 'payment' : 'payments'} had errors  ` +
+				fmt.dim(`(${parts.join(', ')})`) +
+				(t.held > 0 ? fmt.dim(`; ${heldText}`) : '')
+		);
+	}
 	blank();
 
 	for (const e of entries) {
@@ -339,7 +391,9 @@ function renderHuman(
 					? fmt.yellow('…')
 					: state === 'maybe-sent'
 						? fmt.yellow('?')
-						: fmt.red('✗');
+						: state === 'held'
+							? fmt.dim('·')
+							: fmt.red('✗');
 		const recipient = e.recipient.length > 18 ? e.recipient.slice(0, 17) + '…' : e.recipient;
 		info(
 			`  ${mark} ${age.padEnd(10)}` +
@@ -351,11 +405,17 @@ function renderHuman(
 						? `(being sent or confirmed${e.error_count > 0 ? `; ${e.error_count}× errors before` : ''})`
 						: state === 'maybe-sent'
 							? '(may have been sent: the relay could not tell, and will not send it again)'
-							: `(${e.error_count}× errors)`
+							: state === 'held'
+								? '(held, not an error)'
+								: `(${e.error_count}× errors)`
 				)
 		);
 		if (e.last_error !== null) {
-			const errMsg = e.last_error.length > 100 ? e.last_error.slice(0, 97) + '…' : e.last_error;
+			// A hold's text is its whole explanation: never cut.
+			const errMsg =
+				state !== 'held' && e.last_error.length > 100
+					? e.last_error.slice(0, 97) + '…'
+					: e.last_error;
 			info(`    ${state === 'stuck' ? fmt.red(errMsg) : fmt.dim(errMsg)}`);
 		}
 		if (state === 'maybe-sent')
@@ -385,6 +445,10 @@ function renderHuman(
 			)
 		);
 	}
+	if (t.held > 0) {
+		blank();
+		info(fmt.dim(`  ${HELD_NOTE}`));
+	}
 	if (t.stuck > 0) {
 		blank();
 		info(
@@ -394,3 +458,7 @@ function renderHuman(
 		);
 	}
 }
+
+/** What a held delegation means, said once under the list (and by `status`). */
+export const HELD_NOTE =
+	"Held: the chain does not accept a delegation this small, so the relay keeps it and looks again every few hours; it is lent by itself once the account's rewards add up to the chain's minimum. Nothing to do.";

@@ -521,6 +521,15 @@ counted as an error) and is lent once the account's rewards add up to it —
 usually at the 500 BLURT milestone (61 BP in all). A target the chain already
 holds is marked done without a transaction.
 
+Since v1.24.7 the operator views say so too. `morphit-ops status` shows held
+delegations on a "Held delegations" line of their own, leaves them out of
+"Oldest pending age" and "Failed broadcasts 24h", and `failed-broadcasts`,
+`drain-queue` and `loyalty` mark them "held, not an error" instead of a red ✗.
+Before, a held row that had failed once before the hold existed was counted as
+a failed broadcast, and the oldest held row (47 days on morphit.io) turned
+"Oldest pending age" red. A row at the relay's retry limit is not held: the
+relay no longer looks at it.
+
 ### 5. Witness/chain fees — tiny operational cost on every broadcast
 
 - The Blurt chain charges a sub-cent BLURT fee per transaction

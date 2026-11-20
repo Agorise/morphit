@@ -479,6 +479,53 @@ check('there is no stray BLOCK 7 (ceremony is 6 blocks)', !/BLOCK 7/.test(out));
 	check('an unknown option is refused, not ignored', bad.status !== 0 && bad.stdout === '');
 }
 
+// ─── --security: the record marks a security release (v1.24.7) ───
+// Only BLOCK 3's payload line gains the flag, plus one note after it; servers
+// that install security releases by themselves act on the mark.
+{
+	const sec = execFileSync('bash', [GEN, '9.9.9', 'test message', '--security'], {
+		encoding: 'utf8'
+	});
+	const payloadLine = (t: string): string =>
+		t.split('\n').find((l) => l.includes('apps/indexer/scripts/release-build-payload.ts')) ?? '';
+	check(
+		'--security: the payload line passes --security to the builder',
+		/release-build-payload\.ts --security < \/dev\/null > \/tmp\/morphit-release\.json$/.test(
+			payloadLine(sec)
+		)
+	);
+	check(
+		'--security: one note says servers install it at their next early-morning check, after checking it',
+		/The payload carries `"security": true`: after Block 4, servers on v1\.24\.7 or later that install security releases by themselves \(the default\) install it at their next early-morning check \(05:15 by each server's clock\), each checking it against this record first\./.test(
+			sec
+		)
+	);
+	check(
+		'--security: nothing else changes',
+		sec
+			.replace(' --security <', ' <')
+			.replace(/ The payload carries `"security": true`:[^\n]*/, '') === out
+	);
+	check('a normal run marks nothing', !/--security|"security": true/.test(out));
+	const both = execFileSync('bash', [GEN, '9.9.9', 'test message', '--security', '--recut'], {
+		encoding: 'utf8'
+	});
+	check(
+		'--security and --recut together, in either order',
+		both ===
+			execFileSync('bash', [GEN, '9.9.9', 'test message', '--recut', '--security'], {
+				encoding: 'utf8'
+			}) &&
+			payloadLine(both) === payloadLine(sec) &&
+			/git tag -d v9\.9\.9/.test(both)
+	);
+	check(
+		'the payload builder knows --security',
+		/a === '--security'/.test(builder) &&
+			/flags\.security \? \{ security: true as const \}/.test(builder)
+	);
+}
+
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} eli5-release-blocks scenarios passed`);
 else {

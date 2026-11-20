@@ -28,7 +28,7 @@ import { join } from 'node:path';
 import { lookupBlurtAccount } from '../init/chainCheck.ts';
 import { effectiveEnvValue } from '../lib/instanceOrigin.ts';
 import { relayEnvFiles } from '../lib/relayHealthEnvHeal.ts';
-import { MAYBE_SENT_SQL, WAITING_SQL, relayQueueMaxRetries } from './failedBroadcasts.ts';
+import { HELD_SQL, MAYBE_SENT_SQL, WAITING_SQL, relayQueueMaxRetries } from './failedBroadcasts.ts';
 import {
 	CANONICAL_BLURT_TREASURY,
 	configuredAccountOf,
@@ -65,6 +65,7 @@ interface DrainQueueRow {
 	liquid_count: string;
 	vesting_count: string;
 	delegation_count: string;
+	held_count?: string;
 }
 
 interface SignupsTodayRow {
@@ -100,6 +101,10 @@ interface StatusSnapshot {
 		liquid_pending: number;
 		vesting_pending: number;
 		delegation_pending: number;
+		/** Of `pending`: delegations the relay holds until the chain allows
+		 *  them (below its minimum; v1.24.7) — by design, not stuck. */
+		held: number;
+		/** The oldest row waiting to be SENT (held rows are not waiting). */
 		oldest_age_sec: number | null;
 	};
 	/** The relay account's liquid BLURT (it pays every signup's fee), graded
@@ -422,6 +427,14 @@ export function failedBroadcastsDetail(
 	return fb.not_sent > 0 ? `${fb.not_sent} not sent, ${maybe} — ${see}` : `${maybe} — ${see}`;
 }
 
+/** The "Held delegations" row's words. PURE. */
+export function heldDetail(n: number): string {
+	return (
+		`below the chain's minimum delegation, so the relay keeps ${n === 1 ? 'it' : 'them'} and lends ` +
+		`${n === 1 ? 'it' : 'them'} by itself once the rewards add up — not an error, nothing to do`
+	);
+}
+
 async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 	const midnight = utcMidnightToday();
 	// Asked in parallel with the DB queries below; never throws.
@@ -454,12 +467,14 @@ async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 		ctx.db.query<DrainQueueRow>(
 			`SELECT
 			   COUNT(*)::text AS pending_count,
-			   MIN(created_at) AS oldest_created_at,
+			   MIN(created_at) FILTER (WHERE NOT ${HELD_SQL('$1')}) AS oldest_created_at,
+			   COUNT(*) FILTER (WHERE ${HELD_SQL('$1')})::text AS held_count,
 			   COUNT(*) FILTER (WHERE kind = 'liquid')::text  AS liquid_count,
 			   COUNT(*) FILTER (WHERE kind = 'vesting')::text AS vesting_count,
 			   COUNT(*) FILTER (WHERE kind = 'delegation')::text AS delegation_count
 			 FROM relay_pending_transfers
-			 WHERE broadcast_at IS NULL`
+			 WHERE broadcast_at IS NULL`,
+			[relayQueueMaxRetries()]
 		),
 		ctx.db.query<SignupsTodayRow>(
 			`SELECT COUNT(*)::text AS count
@@ -514,7 +529,8 @@ async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 			   AND error_count > 0
 			   AND last_error_at IS NOT NULL
 			   AND last_error_at >= $1
-			   AND NOT ${WAITING_SQL('$2')}`,
+			   AND NOT ${WAITING_SQL('$2')}
+			   AND NOT ${HELD_SQL('$2')}`,
 			[last24h, relayQueueMaxRetries()]
 		)
 	]);
@@ -543,6 +559,7 @@ async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 			liquid_pending: drain !== undefined ? parseInt(drain.liquid_count, 10) : 0,
 			vesting_pending: drain !== undefined ? parseInt(drain.vesting_count, 10) : 0,
 			delegation_pending: drain !== undefined ? parseInt(drain.delegation_count ?? '0', 10) : 0,
+			held: drain !== undefined ? parseInt(drain.held_count ?? '0', 10) || 0 : 0,
 			oldest_age_sec: drain?.oldest_created_at != null ? ageSeconds(drain.oldest_created_at) : null
 		},
 		signups_today: {
@@ -792,8 +809,23 @@ function renderHumanDashboard(ctx: CommandCtx, snap: StatusSnapshot): void {
 			value: dq.pending.toString(),
 			detail: dq.pending > 0 && parts.length > 0 ? parts.join(', ') : undefined
 		});
+		// v1.24.7: delegations below the chain's minimum are held by design;
+		// they were graded as a stuck queue (a 47-day ✗) and a failed broadcast.
+		if (dq.held > 0)
+			row({
+				label: 'Held delegations:',
+				value: dq.held.toString(),
+				status: 'info',
+				detail: heldDetail(dq.held)
+			});
 	}
-	if (snap.drain_queue.oldest_age_sec !== null) {
+	if (snap.drain_queue.oldest_age_sec === null && snap.drain_queue.held > 0) {
+		row({
+			label: 'Oldest pending age:',
+			value: '(none to send)',
+			status: 'ok'
+		});
+	} else if (snap.drain_queue.oldest_age_sec !== null) {
 		const status = applyThreshold(snap.drain_queue.oldest_age_sec, t.drainQueueAgeSec);
 		row({
 			label: 'Oldest pending age:',

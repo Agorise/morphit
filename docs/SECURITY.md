@@ -724,9 +724,16 @@ These are the operator's responsibility:
   application-layer mitigations (rate limits, body caps, tight
   resource ceilings) handle L7 abuse but cannot absorb L3/L4
   volumetric attacks. Document your DDoS response plan.
-- **OS and runtime patching.** Keep Node.js, nginx, and the host
-  kernel current with security updates. `unattended-upgrades` on
-  Ubuntu or equivalent is the minimum baseline. Where a fix is not
+- **OS and runtime patching.** Since v1.24.7 the server does this
+  itself (OPERATIONS.md §37.2): Ubuntu's security fixes every day,
+  named by their real origin so Ubuntu-based systems such as Linux
+  Mint match them; Docker's own updates within the installed major
+  version; a restart at night when a fix needs one (not scheduled
+  while someone is logged in); and a new Morphit release marked as a
+  security release in its signed on-chain record installs itself
+  early in the morning (§25b), which is how BunkerWeb and the frontend's nginx get
+  their fixes. Each upgrade reads the settings back from apt. The
+  admin hears about it only when it stops working. Where a fix is not
   out yet, the upgrade closes what it can: since v1.24.6 HTTP/2 is
   off on every Morphit web server (BunkerWeb `HTTP2=no`, no `http2`
   in the shipped or copied nginx sites, checked in the running

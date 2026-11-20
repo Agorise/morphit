@@ -494,6 +494,31 @@
     # told a new operator that their node is silent. Ansible printing green
     # is exactly when someone stops reading. This block is the last thing
     # they see.
+    # v1.24.7: the server keeps itself patched from its first day: Ubuntu's
+    # security fixes (named by their real origin, so Ubuntu-based systems such
+    # as Linux Mint match), Docker's own updates within the installed major
+    # version, a restart at night when one needs it, and the nightly install of
+    # a release marked as a security release — as /etc/morphit/updates.env says
+    # (written with the defaults when missing). The same heals every
+    # `morphit-ops upgrade` runs (apps/ops-cli/src/lib/autoUpdates.ts,
+    # lib/autoInstallRelease.ts), run last, once Docker and Tor are in place.
+    # It prints what it did; it never fails the install (the next upgrade runs
+    # it again).
+    - name: Automatic updates (security fixes, a restart at night, security releases)
+      ansible.builtin.command:
+        argv:
+          - "{{ morphit_repo_path }}/node_modules/.bin/tsx"
+          - "{{ morphit_repo_path }}/apps/ops-cli/src/main.ts"
+          - __automatic-updates
+        chdir: "{{ morphit_repo_path }}/apps/ops-cli"
+      register: morphit_automatic_updates
+      changed_when: true
+      failed_when: false
+
+    - name: Report automatic updates
+      ansible.builtin.debug:
+        msg: "{{ morphit_automatic_updates.stdout_lines | default([]) }}"
+
     - name: Offer optional alerting (calm, non-alarming)
       ansible.builtin.debug:
         msg: |

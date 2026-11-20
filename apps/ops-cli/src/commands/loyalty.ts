@@ -14,12 +14,19 @@
  *
  * Filters:
  *   --since=DUR    Window for the report.  Default 7d.
+ *
+ * v1.24.7: every row with any relay note was a red ✗ with its note in red —
+ * also a delegation the relay HOLDS by design until the chain allows it
+ * (below its minimum), and a ✓ row retired because a newer target replaced
+ * it. The mark and the note now follow the row's real state
+ * (failedBroadcasts.ts, broadcastState).
  */
 
 import { whileReading, type CommandCtx } from '../lib/ctx.ts';
 import { ageSeconds, formatDuration, parseDurationSpec } from '../lib/time.ts';
 import { emitJson } from '../render/json.ts';
-import { section, info, fmt, error } from '../render/term.ts';
+import { section, info, fmt, error, blank } from '../render/term.ts';
+import { HELD_NOTE, broadcastState, relayQueueMaxRetries } from './failedBroadcasts.ts';
 
 interface LoyaltyEntry {
 	account: string;
@@ -29,6 +36,7 @@ interface LoyaltyEntry {
 	queued_at: Date | null;
 	broadcast_at: Date | null;
 	last_error: string | null;
+	error_count: number | null;
 }
 
 const HUMAN_LIMIT = 50;
@@ -56,7 +64,8 @@ export async function runLoyalty(ctx: CommandCtx): Promise<number> {
 		   m.triggered_in_block::text,
 		   t.created_at AS queued_at,
 		   t.broadcast_at,
-		   t.last_error
+		   t.last_error,
+		   t.error_count
 		 FROM account_loyalty_milestones m
 		 LEFT JOIN relay_pending_transfers t
 		   ON t.recipient = m.account
@@ -88,11 +97,11 @@ export async function runLoyalty(ctx: CommandCtx): Promise<number> {
 		return 0;
 	}
 
-	renderHuman(entries, sinceSec);
+	renderHuman(entries, sinceSec, relayQueueMaxRetries());
 	return 0;
 }
 
-function renderHuman(entries: readonly LoyaltyEntry[], sinceSec: number): void {
+function renderHuman(entries: readonly LoyaltyEntry[], sinceSec: number, cap: number): void {
 	section(`Loyalty milestones (last ${formatDuration(sinceSec)})`);
 
 	if (entries.length === 0) {
@@ -100,13 +109,29 @@ function renderHuman(entries: readonly LoyaltyEntry[], sinceSec: number): void {
 		return;
 	}
 
+	let anyHeld = false;
 	for (const e of entries) {
+		const state =
+			e.queued_at === null ? null : broadcastState({ ...e, error_count: e.error_count ?? 0 }, cap);
+		if (state === 'held') anyHeld = true;
 		const status =
-			e.broadcast_at !== null
+			state === 'sent'
 				? fmt.green('✓')
-				: e.last_error !== null
-					? fmt.red('✗')
-					: fmt.yellow('⏳');
+				: state === 'held'
+					? fmt.dim('·')
+					: state === 'stuck' && e.last_error !== null
+						? fmt.red('✗')
+						: state === 'maybe-sent'
+							? fmt.yellow('?')
+							: fmt.yellow('⏳');
+		const note =
+			e.last_error === null
+				? ''
+				: state === 'stuck'
+					? `  ${fmt.red(e.last_error.slice(0, 60))}`
+					: state === 'held'
+						? `  ${fmt.dim('held until the chain allows it (not an error)')}`
+						: `  ${fmt.dim(e.last_error.slice(0, 60))}`;
 		const when =
 			e.queued_at !== null
 				? formatDuration(ageSeconds(e.queued_at)) + ' ago'
@@ -116,7 +141,11 @@ function renderHuman(entries: readonly LoyaltyEntry[], sinceSec: number): void {
 				`@${e.account.padEnd(20)}` +
 				`${parseFloat(e.milestone_blurt).toFixed(0).padStart(6)}B paid → ` +
 				`${parseFloat(e.bp_rewarded).toFixed(0).padStart(6)} BP delegated` +
-				(e.last_error !== null ? `  ${fmt.red(e.last_error.slice(0, 60))}` : '')
+				note
 		);
+	}
+	if (anyHeld) {
+		blank();
+		info(fmt.dim(`  ${HELD_NOTE}`));
 	}
 }

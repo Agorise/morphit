@@ -20,6 +20,13 @@
  *     of the pinned reference (with its digest) for as long as the unit has
  *     left (at most 15 minutes), then the image must be seen here; what Docker
  *     said is shown when it fails.
+ *  4. (v1.24.7) otherwise, the pinned base is fetched from Docker Hub's registry
+ *     through Tor without Docker (lib/registryOverTor.ts): every piece hashed
+ *     against the pinned digest before `docker load`, then proven as in 2.
+ * The same runs on a clearnet server that Docker Hub refuses (its `/v2/`
+ * answers 403, as on morphitir): such a server could never pull the new base
+ * itself. On any other clearnet server nothing happens here: the web heal's
+ * rebuild pulls the base directly.
  * Nothing is fetched any other way. Docker that does not answer is said, never
  * counted as "nothing to change" (lib/dockerStatus.ts).
  */
@@ -38,6 +45,13 @@ import {
 	frontendBaseState,
 	loadBundledFrontendBase
 } from './frontendBaseImage.ts';
+import {
+	dockerHubRefusesThisServer,
+	dockerPlatform,
+	fetchImageOverTor,
+	realRegistryFetchHost
+} from './registryOverTor.ts';
+import { torSocksFromEnv } from './torOnlyOsHeal.ts';
 
 export interface PullResult {
 	/** `docker pull` exited 0. */
@@ -65,6 +79,15 @@ export interface BaseFetchRuntime {
 	dockerPullsThroughTor(): boolean;
 	/** `docker pull` the pinned base, stopped after `timeoutMs`. */
 	pull(timeoutMs: number): Promise<PullResult>;
+	/** Docker Hub refuses this (clearnet) server: `/v2/` answers 403 (v1.24.7,
+	 *  morphitir). Asked only on a server that is not hidden-only. Optional:
+	 *  absent → no. */
+	hubRefused?(): boolean;
+	/** Fetch the pinned base for this server's platform from Docker Hub's
+	 *  registry through Tor, without Docker (lib/registryOverTor.ts), every
+	 *  piece checked against the pinned digest; then load it and prove it is
+	 *  the pinned image. Optional: absent → not tried. */
+	fetchOverTor?(timeoutMs: number): Promise<{ ok: true } | { ok: false; why: string }>;
 }
 
 /** The base's name without its digest, for people. */
@@ -103,7 +126,17 @@ export async function fetchFrontendBaseThroughTor(
 	 *  checks and the bundle load before it take time too). */
 	budget: number | (() => number) = BASE_FETCH_TIMEOUT_MS
 ): Promise<HealResult> {
-	if (!rt.hiddenOnly()) return { strategy: 'not-tor-only', verified: true, detail: '' };
+	const hidden = rt.hiddenOnly();
+	if (!hidden) {
+		// A clearnet server: only one Docker Hub refuses needs this (the web
+		// heal's rebuild pulls the base directly otherwise). The question goes
+		// to Docker Hub, so it is asked last, only when the base is wanted.
+		const quiet: HealResult = { strategy: 'not-tor-only', verified: true, detail: '' };
+		if (rt.docker() !== 'up') return quiet;
+		const name = rt.frontend();
+		if (name === null || rt.frontendBase(name) === FRONTEND_BASE || rt.basePresent()) return quiet;
+		if (rt.hubRefused?.() !== true) return quiet;
+	}
 	const d = rt.docker();
 	if (d === 'missing')
 		return {
@@ -140,13 +173,46 @@ export async function fetchFrontendBaseThroughTor(
 			verified: true,
 			detail: `Loaded the frontend's nginx base image (${BASE_NAME}) from this release's offline bundle (checked: it is the pinned image).`
 		};
-	if (!rt.dockerPullsThroughTor())
-		return {
-			strategy: 'waiting',
-			verified: true,
-			detail: `The frontend's new nginx base (${BASE_NAME}) waits until Docker pulls through Tor; nothing is fetched from Docker Hub before then.`
-		};
 	const timeoutMs = typeof budget === 'function' ? budget() : budget;
+	// A hidden-only node whose Docker pulls through Tor: Docker pulls it (3).
+	// Otherwise (a hidden-only node whose Docker does not, or a clearnet server
+	// Docker Hub refuses): fetched through Tor without Docker (4).
+	if (!hidden || !rt.dockerPullsThroughTor()) {
+		// Said first on a clearnet server: why it is not Docker's own pull.
+		const lead = hidden ? '' : 'Docker Hub does not answer this server directly. ';
+		if (rt.fetchOverTor === undefined)
+			return {
+				strategy: 'waiting',
+				verified: true,
+				detail: `The frontend's new nginx base (${BASE_NAME}) waits until Docker pulls through Tor; nothing is fetched from Docker Hub before then.`
+			};
+		if (timeoutMs < BASE_FETCH_MIN_MS)
+			return {
+				strategy: 'no-time',
+				verified: false,
+				detail: `The frontend's nginx base image (${BASE_NAME}) was not fetched this time: the background checks had no time left to fetch it through Tor. The frontend keeps its current base and works as before. To fetch it, on this server: sudo morphit-ops upgrade --heals`
+			};
+		const stop = ctx.spinner(
+			`${lead}Fetching the frontend's nginx base image (${BASE_NAME}) through Tor, each piece checked against the pinned digest — this can take several minutes…`
+		);
+		let got: { ok: true } | { ok: false; why: string };
+		try {
+			got = await rt.fetchOverTor(timeoutMs);
+		} finally {
+			stop();
+		}
+		if (got.ok && rt.basePresent())
+			return {
+				strategy: 'fetched',
+				verified: true,
+				detail: `${lead}Fetched the frontend's nginx base image (${BASE_NAME}) through Tor: every piece matched the pinned digest, and Docker has it (checked).`
+			};
+		return {
+			strategy: 'failed',
+			verified: false,
+			detail: `${lead}Could not fetch the frontend's nginx base image (${BASE_NAME}) through Tor (${got.ok ? 'Docker does not have it after loading it' : termSafe(got.why)}); the frontend keeps its current base and works as before. To try again later, on this server: sudo morphit-ops upgrade --heals`
+		};
+	}
 	if (timeoutMs < BASE_FETCH_MIN_MS)
 		return {
 			strategy: 'no-time',
@@ -227,6 +293,23 @@ export function realBaseFetchRuntime(opts: {
 		basePresent: () => frontendBaseState(FRONTEND_BASE, bundle) !== 'absent',
 		loadBundled: () => loadBundledFrontendBase(FRONTEND_BASE, bundle, 5 * 60_000) !== 'absent',
 		dockerPullsThroughTor: () => dockerDaemonPullsThroughTor(),
+		hubRefused: () => dockerHubRefusesThisServer(),
+		fetchOverTor: async (timeoutMs) => {
+			const t0 = Date.now();
+			const platform = await dockerPlatform();
+			if (platform === null) return { ok: false, why: "Docker did not say this server's platform" };
+			const r = await fetchImageOverTor(
+				FRONTEND_BASE,
+				bundle,
+				{ socks: torSocksFromEnv(), platform, timeoutMs: Math.max(60_000, timeoutMs - 3 * 60_000) },
+				realRegistryFetchHost
+			);
+			if (!r.ok) return r;
+			const left = Math.max(60_000, timeoutMs - (Date.now() - t0));
+			return loadBundledFrontendBase(FRONTEND_BASE, bundle, left) !== 'absent'
+				? { ok: true }
+				: { ok: false, why: 'Docker did not take the fetched image' };
+		},
 		// Async, so the spinner turns while Docker works.
 		pull: (timeoutMs) =>
 			new Promise<PullResult>((resolve) => {

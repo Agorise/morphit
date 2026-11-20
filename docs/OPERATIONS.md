@@ -6338,6 +6338,13 @@ post-launch smoke testing is in `SWITCHING-NETWORKS.md`.
 - If the new build fails, or the self-heals run past 300 seconds, the old binary runs its own, older self-heals instead. A 1.17.x binary has no relay heal, so the relay heal is skipped until the next upgrade.
 - If that older rollback runs after the relay heal, restore the relay file by hand (see section 51, "If you roll back to a release before v1.18.0").
 
+**Security releases install themselves (since v1.24.7).** Every morning after the night's restart window (05:15 by the server's clock, plus up to 45 minutes) `morphit-auto-install.timer` asks whether a newer release should be installed now, and if so runs the ordinary `morphit-ops upgrade --yes`: the same checks as by hand, a backup first, a rollback when a step fails. Its output goes to `/var/log/morphit/auto-install.log`.
+- **Which releases.** `MORPHIT_AUTO_INSTALL_RELEASES` in `/etc/morphit/updates.env` (§37.2): `security` (the default) installs a release whose on-chain record says `"security": true`; `all` installs every newer release; `off` leaves upgrades to you.
+- **Where "security" comes from.** Only from the release record this server verified: the transaction in its block, signed by @morphit's pinned posting key (the check above). Never from an RPC node's answer, the indexer's `/v1/release` or the release page. The maintainer sets it with `--security` in the release ceremony (`scripts/eli5-release.sh`). Older servers ignore the field.
+- **Why.** BunkerWeb and the frontend's nginx are container images each release pins: their security fixes reach a server only in a new release.
+- **Alerts.** A release installed by itself goes to the daily digest (`auto-install:auto_install_done`), as does a security release found by the twice-daily release check (`release:release_installs_tonight` instead of `release_available`). An install that did not finish is a WARN with the log (`auto_install_failed`). A record that failed its check is CRITICAL and installs nothing (`auto_install_refused`): that is what a stolen key or a forgery looks like.
+- **By hand.** `sudo systemctl start morphit-auto-install.service` runs the early-morning check now; `systemctl list-timers morphit-auto-install.timer` shows the next run.
+
 ## 26. Release signing (SHA-256 + GPG)
 
 > **The canonical release is built by CI, not by hand.** When you push a
@@ -8634,61 +8641,73 @@ or whatever you pick) BEFORE reloading sshd.
 
 ### 37.2 Unattended security upgrades
 
-The biggest risk to a long-running Linux box is "operator
-forgot to apply the kernel CVE patch from 8 months ago."
-Automate the security-only patch stream:
+Since v1.24.7 the server keeps itself patched, and every
+`morphit-ops upgrade` (and a fresh install, last) checks that it does.
+You hear about it only when it stops working. What it sets up, from
+`/etc/morphit/updates.env` (written with these defaults when missing):
 
 ```sh
-sudo apt install -y unattended-upgrades apt-listchanges
-sudo dpkg-reconfigure -plow unattended-upgrades
-# Choose "Yes" to enable automatic updates.
+MORPHIT_SECURITY_UPDATES=on        # Ubuntu's security fixes, every day
+MORPHIT_AUTO_RESTART=on            # restart when a fix needs it ...
+MORPHIT_AUTO_RESTART_TIME=04:30    # ... at this time of the server's clock
+MORPHIT_DOCKER_UPDATES=on          # Docker's own updates, same major version
+MORPHIT_AUTO_INSTALL_RELEASES=security   # security | all | off (§25b)
 ```
 
-Verify the config picks ONLY security upgrades (not feature
-upgrades, which can break things mid-night):
+After a change, on this server: `sudo morphit-ops upgrade --heals`.
+
+- **Ubuntu's security fixes** install every day through
+  unattended-upgrades, from the security pockets only (no feature
+  updates). Morphit names them by their real origin in
+  `/etc/apt/apt.conf.d/52morphit-automatic-updates`
+  (`origin=Ubuntu,archive=<codename>-security`). The usual
+  `${distro_id}:…-security` names nothing on an Ubuntu-based system
+  such as Linux Mint (there it reads `Linuxmint:zena-security`): a
+  Mint server never installed a security fix that way.
+- **The restart.** A kernel or libc fix needs one. When the day's
+  automatic run finishes (`apt-daily-upgrade.timer`, early morning) and
+  a restart is needed, it schedules one for `MORPHIT_AUTO_RESTART_TIME`
+  by the server's clock (the next such time) — unless someone is logged
+  in then, in which case a later day's run schedules it. It does so even
+  after a run that installed nothing, so a restart already pending is
+  done. Morphit's services are enabled at boot and its containers
+  restart by themselves (`unless-stopped`).
+- **Docker.** Docker Engine and containerd from Docker's own repository
+  are not in Ubuntu's security pockets. Morphit adds that repository
+  as apt reports it (origin, codename, label and its site,
+  `download.docker.com`, so a source elsewhere calling itself Docker is
+  never used) and pins each Docker package to its installed major
+  version (`/etc/apt/preferences.d/morphit-docker-major`): Docker 29.x
+  updates by itself, Docker 30 waits for a Morphit release tested with
+  it. Installing one restarts Docker: BunkerWeb and the frontend are
+  away for a few seconds.
+- **A zero-clearnet server** fetches all of this over Tor, as its apt
+  already does.
+
+Checked on each run: apt's own merged settings (`apt-config dump`),
+an Ubuntu security source apt knows, Docker's candidate staying on its
+major version, and the `apt-daily` timers enabled and active. Alerts
+(the Matrix alert bot, §16):
+
+| Event | When | Tier |
+| --- | --- | --- |
+| `apt:automatic_updates_stalled` | security fixes wait and no automatic run succeeded for 2 days | WARN |
+| `apt:restart_pending` | a restart has been needed for 2 days (someone stays logged in, or the restart is off) | digest |
+| `apt:security_updates_warn` / `_critical` | security fixes wait and automatic updates are off | WARN / CRITICAL |
+
+To see it on the server:
 
 ```sh
-grep -E '^[^/]*"[^"]*";' /etc/apt/apt.conf.d/50unattended-upgrades \
-  | grep -v Allowed-Origins
+apt-config dump | grep -E 'Origins-Pattern|Automatic-Reboot'
+sudo unattended-upgrade -v --dry-run
+sudo tail -n 30 /var/log/unattended-upgrades/unattended-upgrades.log
+systemctl list-timers apt-daily.timer apt-daily-upgrade.timer
 ```
 
-The default Ubuntu 24 config enables ESM-Apps + ESM-InfraSec +
-distro security updates.  It does NOT enable feature updates.
-That's correct.
-
-To make sure the timer actually runs:
-
-```sh
-systemctl status unattended-upgrades.service
-systemctl status apt-daily.timer apt-daily-upgrade.timer
-# All three should be active/enabled.
-```
-
-After a security upgrade lands, services that link the
-upgraded library may need restart.  Install `needrestart`:
-
-```sh
-sudo apt install -y needrestart
-# Default mode (interactive) prompts at next login.  For a
-# headless production box, edit /etc/needrestart/needrestart.conf:
-#   $nrconf{restart} = 'a';   # auto-restart services
-#   $nrconf{kernelhints} = 0; # don't print kernel-needs-reboot to login MOTD if you handle that elsewhere
-```
-
-Apply changes:
-
-```sh
-sudo dpkg-reconfigure needrestart
-```
-
-For kernel updates — those need a reboot.  Either schedule one
-manually after `needrestart` reports a kernel-pending state,
-or accept Ubuntu's `Unattended-Upgrade::Automatic-Reboot
-"true";` (commented-out by default).  Recommended posture:
-**leave automatic-reboot OFF**, monitor `/var/run/reboot-required`,
-and reboot on a maintenance window — your relay's BLURT-broadcast
-in-flight transactions tolerate operator-initiated reboots
-better than mid-night surprise ones.
+To turn it off: `MORPHIT_SECURITY_UPDATES=off` in
+`/etc/morphit/updates.env`, then `sudo morphit-ops upgrade --heals`.
+Morphit then removes its own two files, installs nothing and does not
+restart the server; pending security fixes are reported as before.
 
 ### 37.3 Kernel sysctl hardening
 
@@ -9664,7 +9683,7 @@ Morphit keeps working. Everything a clearnet node still contacts by itself:
 | IPFS bootstrap peers and the public DHT | Seeding the release so other nodes can upgrade from you | `sh ops/ipfs/morphit-ipfs-privacy.sh apply-hidden` (as the ipfs user) |
 | Browser push services (Google, Mozilla, Apple, Microsoft) | Push notifications; the browser chose the service | Empty `MORPHIT_RELAY_VAPID_SUBJECT` |
 | Price / FX sources (onion pricenodes first) and BTC/XMR explorers (onion first) | Fiat display; BTC/XMR fee checks | `MORPHIT_INDEXER_PRICE_FEED_ENABLED=false`, `MORPHIT_INDEXER_FX_FEED_ENABLED=false`; empty explorer lists turn that fee method off |
-| Docker Hub | Only when an image is not on the box yet (install, upgrade). A zero-clearnet node never pulls from its own address: during an upgrade it pulls only when Docker's own proxy is Tor (or loads the image from `vendor/docker/` when a bundle you built carries it); otherwise it keeps the image it has and says so | Load the images yourself (`docker load`) |
+| Docker Hub | Only when an image is not on the box yet (install, upgrade). A zero-clearnet node never pulls from its own address: during an upgrade it pulls only when Docker's own proxy is Tor (or loads the image from `vendor/docker/` when a bundle you built carries it). The frontend's nginx base also comes through Tor, fetched without Docker and every piece checked against the pinned digest (since v1.24.7), on a zero-clearnet node whose Docker does not pull through Tor and on a server Docker Hub refuses (its `https://registry-1.docker.io/v2/` answers 403 instead of 401, as it does for some networks and countries); otherwise the node keeps the image it has and says so | Load the images yourself (`docker load`) |
 | snapd's store, Ubuntu Pro's status check | Kept for installed snaps / an attached Pro subscription | If you use neither: `sudo systemctl mask snapd.service snapd.socket snapd.seeded.service ua-timer.timer` |
 
 Only when you turn them on: your Matrix homeserver (alert bot), your mail

@@ -110,6 +110,9 @@ export interface ReleaseAnchor {
 	readonly ipfsCid: string | null;
 	readonly ipnsName: string | null;
 	readonly gpgFingerprint: string | null;
+	/** v1.24.7: the record marks a security release (`"security": true`, and
+	 *  nothing else counts). Read from the verified transaction only. */
+	readonly security: boolean;
 	readonly blockNum: number;
 	readonly trxId: string;
 }
@@ -303,6 +306,7 @@ function anchorFrom(
 		ipfsCid: cid,
 		ipnsName: ipns,
 		gpgFingerprint: fpr,
+		security: payload.security === true,
 		blockNum: c.blockNum,
 		trxId: c.trxId
 	};

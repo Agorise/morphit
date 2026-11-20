@@ -407,6 +407,156 @@ describe('NO_PROXY that would send a pull around Tor', () => {
 	});
 });
 
+describe('v1.24.7: through Tor without Docker (a clearnet server Docker Hub refuses, or a hidden node whose Docker does not pull through Tor)', () => {
+	const tor = (
+		o: Partial<BaseFetchRuntime> & {
+			present?: boolean[];
+			got?: { ok: true } | { ok: false; why: string };
+		} = {}
+	) => {
+		const fetches: number[] = [];
+		let asked = 0;
+		const { r, calls } = rt({
+			hubRefused: () => (asked++, true),
+			fetchOverTor: async (t) => (fetches.push(t), o.got ?? { ok: true }),
+			...o
+		});
+		return { r, calls, fetches, asked: () => asked };
+	};
+
+	it("morphitir's case: a clearnet server Docker Hub refuses fetches it through Tor, says why, and checks Docker has it", async () => {
+		const t = tor({
+			hiddenOnly: () => false,
+			dockerPullsThroughTor: () => false,
+			present: [false, false, true]
+		});
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(t.fetches).toEqual([BASE_FETCH_TIMEOUT_MS]);
+		expect(t.calls).toEqual([]);
+		expect(res.strategy).toBe('fetched');
+		expect(res.verified).toBe(true);
+		expect(res.detail).toMatch(
+			/^Docker Hub does not answer this server directly\. Fetched .* through Tor: every piece matched the pinned digest, and Docker has it \(checked\)\.$/
+		);
+	});
+
+	it("a refused clearnet server whose Docker an operator set to pull through Tor: still fetched without Docker (one way for every refused server, whatever Docker's settings)", async () => {
+		const t = tor({ hiddenOnly: () => false, present: [false, false, true] });
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(t.calls).toEqual([]);
+		expect(t.fetches).toHaveLength(1);
+		expect(res.strategy).toBe('fetched');
+	});
+
+	it('a clearnet server Docker Hub answers: nothing here (the web heal pulls it directly), said nowhere', async () => {
+		const t = tor({ hiddenOnly: () => false, hubRefused: () => false });
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(t.fetches).toEqual([]);
+		expect(res).toEqual({ strategy: 'not-tor-only', verified: true, detail: '' });
+	});
+
+	it('a clearnet server asks Docker Hub nothing unless the base is wanted: no Docker, no frontend, already on the pinned base, or the base already here', async () => {
+		for (const o of [
+			{ docker: () => 'down' as const },
+			{ docker: () => 'missing' as const },
+			{ frontend: () => null },
+			{ frontendBase: () => FRONTEND_BASE },
+			{ present: [true] }
+		] as Array<Partial<BaseFetchRuntime> & { present?: boolean[] }>) {
+			const t = tor({ hiddenOnly: () => false, ...o });
+			const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+			expect(t.asked(), JSON.stringify(Object.keys(o))).toBe(0);
+			expect(t.fetches).toEqual([]);
+			expect(res.strategy).toBe('not-tor-only');
+		}
+	});
+
+	it('a hidden-only node never asks Docker Hub anything directly', async () => {
+		const t = tor({ dockerPullsThroughTor: () => false, present: [false, false, true] });
+		await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(t.asked()).toBe(0);
+	});
+
+	it('a hidden-only node whose Docker does not pull through Tor no longer waits: fetched through Tor without Docker', async () => {
+		const t = tor({ dockerPullsThroughTor: () => false, present: [false, true] });
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(t.fetches).toHaveLength(1);
+		expect(res.strategy).toBe('fetched');
+		expect(res.detail).toMatch(/^Fetched /);
+	});
+
+	it('a hidden-only node whose Docker pulls through Tor: Docker pulls it, as before', async () => {
+		const t = tor({ present: [false, true] });
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(t.calls).toHaveLength(1);
+		expect(t.fetches).toEqual([]);
+		expect(res.strategy).toBe('fetched');
+	});
+
+	it('the offline bundle still comes first', async () => {
+		const t = tor({ hiddenOnly: () => false, loadBundled: () => true });
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(t.fetches).toEqual([]);
+		expect(res.strategy).toBe('loaded');
+	});
+
+	it('a failed fetch is a warning that says why, fit for a terminal, and how to try again', async () => {
+		const t = tor({
+			hiddenOnly: () => false,
+			dockerPullsThroughTor: () => false,
+			got: {
+				ok: false,
+				why: 'what Docker Hub sent for sha256:4d1d4ce0843… does not hash to it\u001b[31m'
+			}
+		});
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(res.strategy).toBe('failed');
+		expect(res.verified).toBe(false);
+		expect(res.detail).toContain(
+			'(what Docker Hub sent for sha256:4d1d4ce0843… does not hash to it)'
+		);
+		expect(res.detail).not.toContain('\u001b');
+		expect(res.detail).toMatch(
+			/keeps its current base and works as before\. To try again later, on this server: sudo morphit-ops upgrade --heals$/
+		);
+	});
+
+	it('a fetch that says it worked but leaves no usable image is a warning, never a success', async () => {
+		const t = tor({
+			hiddenOnly: () => false,
+			dockerPullsThroughTor: () => false,
+			present: [false]
+		});
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r);
+		expect(res.strategy).toBe('failed');
+		expect(res.detail).toContain('Docker does not have it after loading it');
+	});
+
+	it('with less time left than a fetch needs, none is started, and that is said', async () => {
+		const t = tor({ hiddenOnly: () => false, dockerPullsThroughTor: () => false });
+		const res = await fetchFrontendBaseThroughTor(ctx, t.r, BASE_FETCH_MIN_MS - 1);
+		expect(t.fetches).toEqual([]);
+		expect(res.strategy).toBe('no-time');
+		expect(res.verified).toBe(false);
+	});
+
+	it('the frontend is rebuilt onto a base fetched this way', async () => {
+		const t = tor({
+			hiddenOnly: () => false,
+			dockerPullsThroughTor: () => false,
+			present: [false, false, true]
+		});
+		let rebuilt = 0;
+		await fetchFrontendBaseNow({
+			runtime: t.r,
+			waitIdle: async () => 'idle',
+			rebuild: async () => void rebuilt++,
+			deadline: Date.now() + 30 * 60_000
+		});
+		expect(rebuilt).toBe(1);
+	});
+});
+
 it('the fake docker leaves nothing behind', () => {
 	expect(existsSync(join(tmpdir(), 'argv'))).toBe(false);
 });

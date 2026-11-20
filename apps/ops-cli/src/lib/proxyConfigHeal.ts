@@ -96,6 +96,7 @@ import {
 	loadBundledFrontendBase,
 	withTagOnlyFrom
 } from './frontendBaseImage.ts';
+import { dockerHubRefusesThisServer } from './registryOverTor.ts';
 import {
 	BUNKERWEB_PRIVACY_KEYS,
 	BUNKERWEB_PRIVACY_SETTINGS,
@@ -122,7 +123,7 @@ export const MORPHIT_CSP =
  *  vitest keeps the two equal). A frontend built from another is rebuilt. */
 export const FRONTEND_BASE_LABEL = 'org.morphit.frontend-base';
 export const FRONTEND_BASE =
-	'nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb';
+	'nginx:1.30.7-alpine@sha256:3bc3836dc0be3b811f238210360bf8e7ca8a2d0effdae46160bf1f3578710051';
 export const MORPHIT_PERMISSIONS_POLICY =
 	'camera=(self), microphone=(), geolocation=(), interest-cohort=()';
 export const MORPHIT_LOG_FORMAT = `'$host [$time_local] "$request_method $uri" $status $body_bytes_sent'`;
@@ -1416,6 +1417,9 @@ export interface ProxyHealRuntime {
 	/** Refresh the frontend's build-context nginx.conf from the release and
 	 *  `up -d --no-deps --build --force-recreate` it. */
 	refreshFrontend(ref: ComposeRef, timeoutMs: number, withBase?: boolean): boolean;
+	/** Why the last refreshFrontend failed, in Docker's words (its last error
+	 *  line), or null. Optional: absent → not said. */
+	refreshError?(): string | null;
 	/** This node takes no clearnet route (lib/hiddenOnly.ts). Optional: absent → no. */
 	hiddenOnly?(): boolean;
 	/** The pinned frontend base image is on this box and a build can use it
@@ -1428,6 +1432,10 @@ export interface ProxyHealRuntime {
 	/** The RUNNING Docker daemon pulls through Tor's SocksPort
 	 *  (dockerDaemonPullsThroughTor). */
 	dockerPullsThroughTor?(): boolean;
+	/** Docker Hub refuses this clearnet server (`/v2/` answers 403; v1.24.7,
+	 *  morphitir): its base is fetched through Tor by the after-restart checks
+	 *  (lib/frontendBaseFetch.ts). Never asked on a hidden-only node. */
+	hubRefused?(): boolean;
 	/** BunkerWeb's own verdict (lib/bunkerwebScheduler.ts) on the config its
 	 *  scheduler(s) built since `sinceIso`. Optional: absent → not consulted. */
 	schedulerCycle?(
@@ -1484,6 +1492,9 @@ const VERIFY_MIN_MS = 15_000;
 const ROLLBACK_RESERVE_MS = 40_000;
 const REFRESH_MIN_MS = 60_000;
 const REFRESH_WAIT_MS = 15_000;
+/** A rebuild that must first download the pinned base (a clearnet box after
+ *  a base change): as long as the upgrade's own frontend rebuild may take. */
+const PULL_MAX_MS = 300_000;
 /** Longest wait for BunkerWeb to rebuild after a country list is removed
  *  (a rebuild took ~2 min on a box whose downloads time out). */
 const SETTLE_MAX_MS = 6 * 60_000;
@@ -1610,32 +1621,49 @@ async function verifyFrontendForwarding(
 	// rebuild meanwhile keeps the Dockerfile's base as it is — also when the
 	// label is current but the image itself is gone (`docker image prune -a`).
 	// Decided once per run.
-	let baseWay: 'here' | 'held' | 'fetching' | null = null;
-	const baseReach = (): 'here' | 'held' | 'fetching' => {
+	let baseWay: 'here' | 'held' | 'fetching' | 'refused' | null = null;
+	// Its notes wait for the spinner turning while it is decided (v1.24.7: one
+	// ran into the spinner's line).
+	const later: string[] = [];
+	const flush = (): void => {
+		for (const m of later.splice(0)) opts.info(m);
+	};
+	const baseReach = (): 'here' | 'held' | 'fetching' | 'refused' => {
 		if (baseWay !== null) return baseWay;
 		const here = (): boolean => rt.baseImagePresent?.(clock.t(PROBE_MS)) ?? false;
 		baseWay =
-			rt.hiddenOnly?.() !== true ||
-			here() ||
-			((rt.loadBundledBase?.(clock.t(UP_MAX_MS, 10_000)) ?? false) && here())
-				? 'here'
-				: (rt.dockerPullsThroughTor?.() ?? false)
-					? 'fetching'
-					: 'held';
+			rt.hiddenOnly?.() !== true
+				? // A clearnet server pulls the base in the rebuild, unless Docker
+					// Hub refuses it (asked only when the base is not here).
+					here() || rt.hubRefused?.() !== true
+					? 'here'
+					: 'refused'
+				: here() || ((rt.loadBundledBase?.(clock.t(UP_MAX_MS, 10_000)) ?? false) && here())
+					? 'here'
+					: (rt.dockerPullsThroughTor?.() ?? false)
+						? 'fetching'
+						: 'held';
 		const name = FRONTEND_BASE.split('@')[0];
-		if (baseWay === 'fetching')
-			opts.info(
+		if (baseWay === 'refused')
+			later.push(
+				`The frontend (${fe.name}) moves to this release's nginx base image (${name}) once that image is on this ` +
+					'server: Docker Hub does not answer this server directly, so it is fetched through Tor in the background ' +
+					'by the checks that run after the services restart, each piece checked against the pinned digest, and ' +
+					'the frontend is rebuilt onto it then. Nothing to do; the site keeps working as it is.'
+			);
+		else if (baseWay === 'fetching')
+			later.push(
 				`The frontend (${fe.name}) moves to this release's nginx base image (${name}) once that image is on this ` +
 					'server: it is being fetched through Tor in the background, by the checks that run after the services ' +
 					'restart, and the frontend is rebuilt onto it then. Nothing to do; the site keeps working as it is.'
 			);
 		else if (baseWay === 'held')
-			opts.info(
+			later.push(
 				`The frontend (${fe.name}) stays on its current nginx base for now: this hidden-only node does not have ` +
-					`this release's base image (${name}), and Docker does not pull through Tor yet, so nothing is fetched ` +
-					'from Docker Hub. The checks that run after the services restart try to set Docker to pull through Tor, ' +
-					'then fetch it that way and rebuild the frontend onto it; they say how that went. The site keeps ' +
-					'working as it is.'
+					`this release's base image (${name}), and Docker does not pull through Tor yet, so Docker fetches ` +
+					'nothing from Docker Hub. The checks that run after the services restart fetch it through Tor, each ' +
+					'piece checked against the pinned digest, and rebuild the frontend onto it; they say how that went. ' +
+					'The site keeps working as it is.'
 			);
 		return baseWay;
 	};
@@ -1685,6 +1713,7 @@ async function verifyFrontendForwarding(
 			reloadFailed = true;
 	} finally {
 		stop();
+		flush();
 	}
 	// Unreadable, or not a Morphit frontend (nothing proxies to the relay or
 	// indexer): nothing to judge.
@@ -1719,9 +1748,9 @@ async function verifyFrontendForwarding(
 			);
 		return { state: 'ok', edgePort: first.edgePort };
 	}
-	const stale = (r: Seen): Forwarding => {
+	const stale = (r: Seen, why: string | null = null): Forwarding => {
 		sayOwn(r);
-		const why = [
+		const what = [
 			r.missing.length > 0
 				? `still forwards a visitor-supplied X-Forwarded-For on ${r.missing.join(', ')}`
 				: '',
@@ -1755,10 +1784,13 @@ async function verifyFrontendForwarding(
 			.filter(Boolean)
 			.join(', and ');
 		opts.warn(
-			`The frontend (${fe.name}) ${why}. Your site keeps working. ` +
+			`The frontend (${fe.name}) ${what}. Your site keeps working. ` +
+				(why !== null ? `A rebuild was tried; Docker said: ${why}. ` : '') +
 				(mounted && mounted !== release
 					? `It loads ${mounted}, not this release's ${release}: copy that file over it, then run: `
-					: 'To fix it, run: ') +
+					: why !== null
+						? 'To try again, run: '
+						: 'To fix it, run: ') +
 				cmd
 		);
 		return { state: 'stale', edgePort: r.edgePort };
@@ -1769,7 +1801,13 @@ async function verifyFrontendForwarding(
 	let refreshed = false;
 	try {
 		const withBase = baseReach() === 'here';
-		refreshed = rt.refreshFrontend(feRef, clock.t(UP_MAX_MS, 10_000), withBase);
+		const pulls =
+			withBase && !before.baseCurrent && rt.baseImagePresent?.(clock.t(PROBE_MS)) === false;
+		refreshed = rt.refreshFrontend(
+			feRef,
+			clock.t(pulls ? PULL_MAX_MS : UP_MAX_MS, 10_000),
+			withBase
+		);
 		// A recreated nginx answers within seconds; do not let a rebuild that did
 		// not help eat the time the privacy/header change needs.
 		const until = rt.now() + REFRESH_WAIT_MS;
@@ -1782,6 +1820,7 @@ async function verifyFrontendForwarding(
 		}
 	} finally {
 		stop();
+		flush();
 	}
 	if (refreshed && good(after)) {
 		sayOwn(after);
@@ -1821,7 +1860,7 @@ async function verifyFrontendForwarding(
 			);
 		return { state: 'refreshed', edgePort: after.edgePort };
 	}
-	return stale(after);
+	return stale(after, refreshed ? null : (rt.refreshError?.() ?? null));
 }
 
 const sameList = (a: readonly string[], b: readonly string[]): boolean =>
@@ -2779,6 +2818,43 @@ function docker(args: string[], timeout = 15_000): { ok: boolean; out: string; m
 	}
 }
 
+/** Docker's own reason a command failed: its last error line ("failed to
+ *  solve: …", "Error response from daemon: …"), else its last line; or that
+ *  it ran out of time. PURE. */
+export function dockerFailureReason(
+	stderr: string,
+	stdout: string,
+	timedOut: boolean,
+	timeoutMs: number
+): string {
+	if (timedOut) return `nothing within ${Math.round(timeoutMs / 1000)} s (the rebuild was stopped)`;
+	const lines = `${stderr}\n${stdout}`
+		.split('\n')
+		.map((l) => l.trim())
+		.filter(Boolean);
+	const err = [...lines]
+		.reverse()
+		.find((l) => /^(failed to solve|error|Error response from daemon)\b/i.test(l));
+	const line = (err ?? lines[lines.length - 1] ?? 'no output').replace(/[.\s]+$/, '');
+	return line.length > 400 ? `${line.slice(0, 400)}…` : line;
+}
+
+function dockerWhy(args: string[], timeout: number): { ok: boolean; why: string | null } {
+	try {
+		const r = spawnSync('docker', args, { encoding: 'utf8', timeout, maxBuffer: 64 * 1024 * 1024 });
+		if (r.status === 0) return { ok: true, why: null };
+		const timedOut =
+			(r.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' ||
+			r.signal === 'SIGTERM';
+		return {
+			ok: false,
+			why: dockerFailureReason(`${r.stderr ?? ''}`, `${r.stdout ?? ''}`, timedOut, timeout)
+		};
+	} catch (e) {
+		return { ok: false, why: e instanceof Error ? e.message : String(e) };
+	}
+}
+
 /** COUNTRY_DB_PY inside a BunkerWeb scheduler (its image ships python3 and
  *  sqlite3; its DATABASE_URI names the database); its output, or null. */
 function countryDbPy(
@@ -2832,6 +2908,7 @@ export async function healProxyConfig(deps: {
 		names.length === 0 ? [] : parseDockerInspect(docker(['inspect', ...names], t).out || '[]');
 	// The offline bundle's saved copy of the pinned frontend base, if any.
 	const bundle = bundledBaseFile(dirname(dirname(dirname(deps.buildDir))), FRONTEND_BASE);
+	let lastRefreshWhy: string | null = null;
 	return applyAndVerifyProxyConfig({
 		info: deps.info,
 		warn: deps.warn,
@@ -3039,7 +3116,7 @@ export async function healProxyConfig(deps: {
 				} catch {
 					/* no Dockerfile in a build context: Compose decides */
 				}
-				return docker(
+				const r = dockerWhy(
 					composeArgs(ref, [
 						'up',
 						'-d',
@@ -3049,8 +3126,11 @@ export async function healProxyConfig(deps: {
 						ref.service
 					]),
 					t
-				).ok;
+				);
+				lastRefreshWhy = r.why;
+				return r.ok;
 			},
+			refreshError: () => lastRefreshWhy,
 			hiddenOnly: () => isHiddenOnlyNode(),
 			// Here AND usable without a pull, by digest or (classic image store)
 			// by a tag proven to be the pinned image (lib/frontendBaseImage.ts).
@@ -3058,6 +3138,7 @@ export async function healProxyConfig(deps: {
 			// `docker load` the offline bundle's copy, then the same proof.
 			loadBundledBase: (t) => loadBundledFrontendBase(FRONTEND_BASE, bundle, t) !== 'absent',
 			dockerPullsThroughTor: () => dockerDaemonPullsThroughTor(),
+			hubRefused: () => dockerHubRefusesThisServer(),
 			schedulerCycle: (schedulers, edge, sinceIso, t) => {
 				const edgeLogs = edge ? dockerLogsSince(edge, sinceIso, t) : '';
 				let pending = false;

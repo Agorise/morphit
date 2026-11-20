@@ -23,10 +23,13 @@
 # The base is pinned by digest (nginx 1.30.7, the stable line, on Alpine
 # 3.24), so every box builds from the same bytes and a re-pushed tag cannot
 # change them; the digest is the multi-platform index from the official
-# image's repo-info.  The label lets `morphit-ops upgrade` see which base a
-# running frontend was built from and rebuild an older one.
-FROM nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb
-LABEL org.morphit.frontend-base="nginx:1.30.7-alpine@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb"
+# image's repo-info.  ci.yml (scripts/check-frontend-base.mjs) asks Docker
+# Hub that this index lists linux/amd64 and linux/arm64: one read while a
+# release is being published can be an empty placeholder (v1.24.6 pinned
+# one).  The label lets `morphit-ops upgrade` see which base a running
+# frontend was built from and rebuild an older one.
+FROM nginx:1.30.7-alpine@sha256:3bc3836dc0be3b811f238210360bf8e7ca8a2d0effdae46160bf1f3578710051
+LABEL org.morphit.frontend-base="nginx:1.30.7-alpine@sha256:3bc3836dc0be3b811f238210360bf8e7ca8a2d0effdae46160bf1f3578710051"
 
 # Drop the stock default server (it also listens on :80) and install
 # Morphit's routing as the only server block.

@@ -8,6 +8,18 @@
 #   security_updates_warn        — WARN:     security updates pending
 #   updates_pending_info         — INFO:     non-security updates pending
 #   apt_unavailable              — INFO:     apt not installed
+#   automatic_updates_stalled    — WARN:     (v1.24.7) security updates wait
+#                                  although this server installs them by
+#                                  itself, and no automatic run succeeded for
+#                                  MORPHIT_APT_STALL_DAYS (2) days
+#   restart_pending              — INFO:     (v1.24.7) a restart has been needed
+#                                  for MORPHIT_APT_RESTART_DAYS (2) days or more
+#
+# v1.24.7: a server that installs its security fixes by itself
+# (unattended-upgrades on, as `morphit-ops upgrade` sets it from
+# /etc/morphit/updates.env) is not reported for every fix waiting for its
+# nightly run — only when that run stops working. With automatic updates off,
+# pending security updates are reported as before (security_updates_*).
 #
 # Cadence: daily via systemd timer.  Cadence higher than that
 # is wasteful because the apt-package-lists update mechanism on
@@ -53,6 +65,19 @@ fi
 # the daily digest surfaces persistently-stalled refreshes.
 # INFO tier means single failures don't page; multi-day
 # patterns accumulate in the digest where they're actionable.
+# ─── v1.24.7: a restart needed for days ─────────────────────────
+# Before anything can exit early: it holds whatever the update count says.
+RESTART_DAYS=${MORPHIT_APT_RESTART_DAYS:-2}
+REBOOT_FLAG=${MORPHIT_APT_REBOOT_FLAG:-/var/run/reboot-required}
+if [ -f "$REBOOT_FLAG" ]; then
+    flag_age=$(( ( $(date +%s) - $(stat -c %Y "$REBOOT_FLAG" 2>/dev/null || date +%s) ) / 86400 ))
+    if [ "$flag_age" -ge "$RESTART_DAYS" ] 2>/dev/null; then
+        pkgs=$(tr '\n' ' ' < "${REBOOT_FLAG}.pkgs" 2>/dev/null | cut -c1-160 | sed 's/ *$//')
+        payload="{\"days\":$flag_age,\"packages\":\"$(json_str "$pkgs")\",\"hint\":\"This server has needed a restart for $flag_age day(s) to use the fixes it installed. It restarts by itself at night when MORPHIT_AUTO_RESTART is on in /etc/morphit/updates.env, unless someone is logged in when the day's updates finish. To restart now, on this server: sudo reboot\"}"
+        emit info restart_pending "$payload"
+    fi
+fi
+
 set +e
 timeout 20 apt-get update -qq 2>/dev/null
 apt_update_rc=$?
@@ -98,6 +123,31 @@ fi
 # the source ref.
 security_count=$(echo "$upgradable" | grep -cE -- '-security|/[a-z]+\-security|esm' || true)
 security_count=${security_count:-0}
+
+# v1.24.7: when this server installs its security fixes by itself, they are
+# reported only when its automatic runs have stopped succeeding.
+STALL_DAYS=${MORPHIT_APT_STALL_DAYS:-2}
+UU_LOG=${MORPHIT_APT_UU_LOG:-/var/log/unattended-upgrades/unattended-upgrades.log}
+auto_on=$(apt-config dump 2>/dev/null | sed -n 's/^APT::Periodic::Unattended-Upgrade "\(.*\)";$/\1/p' | tail -n 1)
+UU_CMD=${MORPHIT_APT_UU_CMD:-unattended-upgrade}
+if [ "$security_count" -gt 0 ] && [ "$auto_on" = "1" ] && command -v "$UU_CMD" >/dev/null 2>&1; then
+    last=$(grep -E 'INFO (All upgrades installed|No packages found that can be upgraded unattended)' "$UU_LOG" 2>/dev/null \
+           | tail -n 1 | cut -c1-19)
+    last_epoch=$(date -d "$last" +%s 2>/dev/null || echo 0)
+    [ -n "$last" ] || last_epoch=0
+    since=$(( ( $(date +%s) - last_epoch ) / 86400 ))
+    if [ "$last_epoch" -gt 0 ] && [ "$since" -lt "$STALL_DAYS" ]; then
+        # Handled: the next automatic run installs them (Ubuntu also phases
+        # some updates in over a few days). The digest says so, nothing more.
+        payload='{"security_updates":'$security_count',"total_updates":'$total_count'}'
+        emit info updates_pending_info "$payload"
+        exit 0
+    fi
+    [ "$last_epoch" -gt 0 ] && when="$since day(s) ago" || when="never (no successful run in its log)"
+    payload="{\"security_updates\":$security_count,\"total_updates\":$total_count,\"last_success\":\"$(json_str "$when")\",\"hint\":\"This server installs its security fixes by itself, but its last successful automatic run was $(json_str "$when"). To see why, on this server: sudo unattended-upgrade -v --dry-run ; sudo tail -n 30 $(json_str "$UU_LOG")\"}"
+    emit warn automatic_updates_stalled "$payload"
+    exit 0
+fi
 
 if [ "$security_count" -ge "$SECURITY_CRITICAL" ] 2>/dev/null; then
     payload='{"security_updates":'$security_count',"total_updates":'$total_count',"threshold":'$SECURITY_CRITICAL'}'

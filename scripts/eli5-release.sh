@@ -106,14 +106,24 @@ MESSAGE="${2:-Morphit v${VERSION}}"
 # --recut: the tag was pushed but its release.yml run failed, so no release
 # exists. BLOCK 1 commits the fix; BLOCK 2 moves the tag to it (the old one is
 # deleted here and on the remote, then signed anew on the fixed commit).
-RECUT="${3:-}"
-
-if [[ -n "$RECUT" && "$RECUT" != "--recut" ]]; then
-	echo "unknown option: $RECUT (the only one is --recut)" >&2
-	exit 1
-fi
+# --security (v1.24.7): the on-chain record marks a security release, and
+# servers that install security releases by themselves (the default since
+# v1.24.7) install it at their next early-morning check. BLOCK 3's payload
+# line gets --security.
+RECUT=""
+SECURITY=""
+for opt in "${@:3}"; do
+	case "$opt" in
+		--recut) RECUT="--recut" ;;
+		--security) SECURITY="--security" ;;
+		*)
+			echo "unknown option: $opt (the options are --recut and --security)" >&2
+			exit 1
+			;;
+	esac
+done
 if [[ -z "$VERSION" ]]; then
-	echo "usage: bash scripts/eli5-release.sh <version> [commit message] [--recut]" >&2
+	echo "usage: bash scripts/eli5-release.sh <version> [commit message] [--recut] [--security]" >&2
 	echo "   eg: bash scripts/eli5-release.sh 1.3.0 \"v1.3.0 — active-key unlock\"" >&2
 	exit 1
 fi
@@ -128,6 +138,13 @@ else
 	TAG_INTRO='**BLOCK 2** — tag + push (laptop, repo root; signed). Pushing the tag fires `release.yml`, which builds, hashes, signs when the signing secret is set, **publishes the Forgejo release, and attaches the tarball + `.sha256` + `distribution-anchor.env` + the offline bundle** — you download and upload nothing:'
 	TAG_LINES="git tag -s v${VERSION} -m \"Morphit v${VERSION}\"
 git push origin v${VERSION}"
+fi
+
+# --security: one note after BLOCK 3 (set here: an apostrophe inside a
+# \${…:+…} in the heredoc below would break it).
+SECURITY_NOTE=""
+if [[ -n "$SECURITY" ]]; then
+	SECURITY_NOTE=" The payload carries \`\"security\": true\`: after Block 4, servers on v1.24.7 or later that install security releases by themselves (the default) install it at their next early-morning check (05:15 by each server's clock), each checking it against this record first."
 fi
 
 # The message goes into Block 1 single-quoted, each ' written as '\'' — so a
@@ -170,10 +187,10 @@ curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/morphit-v${VERSION}.tar.gz -o /tmp/morphit-v${VERSION}.tar.gz
 node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env --tarball /tmp/morphit-v${VERSION}.tar.gz > /tmp/morphit-build-manifest.json
 node scripts/verify-release-build.mjs --tag v${VERSION} --tarball /tmp/morphit-v${VERSION}.tar.gz
-MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=/tmp/morphit-build-manifest.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > /tmp/morphit-release.json
+MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=/tmp/morphit-build-manifest.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts${SECURITY:+ $SECURITY} < /dev/null > /tmp/morphit-release.json
 ./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts /tmp/morphit-release.json --dry-run
 \`\`\`
-The \`verify-release-build\` line rebuilds the website from your signed tag and compares the whole tarball with it; it ends with "✓ The tarball is exactly the signed tag v${VERSION}, plus the website built from it." If it says anything else, stop here: do not broadcast. The dry-run prints the payload; its \`distribution\` block carries the \`ipfs_cid\`. If it ran, Block 3 is done. Only if the payload line stops with "this release has no IPFS CID" is there more to do: it prints the one command to run on morphit.io and how to retry.
+The \`verify-release-build\` line rebuilds the website from your signed tag and compares the whole tarball with it; it ends with "✓ The tarball is exactly the signed tag v${VERSION}, plus the website built from it." If it says anything else, stop here: do not broadcast. The dry-run prints the payload; its \`distribution\` block carries the \`ipfs_cid\`. If it ran, Block 3 is done. Only if the payload line stops with "this release has no IPFS CID" is there more to do: it prints the one command to run on morphit.io and how to retry.${SECURITY_NOTE}
 
 ---
 
