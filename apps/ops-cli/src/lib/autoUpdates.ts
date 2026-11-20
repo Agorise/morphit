@@ -36,9 +36,26 @@
  *     unattended-upgrades 2.9.1 against a stand-in repository: without the pin
  *     it takes 30.0, with it 29.9;
  *  4. the apt-daily timers on.
+ * v1.24.8:
+ *  5. Node.js from NodeSource's repository (it runs the Morphit services; a
+ *     server installed online takes Node 22 from deb.nodesource.com, which
+ *     none of the above touched, so its Node kept every hole found since it
+ *     was installed): its updates within the installed major version install
+ *     by themselves (named by site and origin as apt reports them, pinned in
+ *     /etc/apt/preferences.d/morphit-node-major like Docker), and apt runs
+ *     ops/scripts/morphit-node-restart.sh after each package change, which
+ *     restarts the Morphit services still running a node an update replaced
+ *     (a running program keeps its old file). A server installed from the
+ *     offline bundle runs the Node the release brings (lib/nodeRuntimeHeal.ts);
+ *  6. settings files changed on the server are kept when a package brings a
+ *     new default (`--force-confdef --force-confold`): without it,
+ *     unattended-upgrades skips any package whose update would ask about one
+ *     (read in its code, 2.9.1: conffile_prompt), so a security fix for a
+ *     package whose settings the server changed never installed.
  * VERIFIED by reading apt's own merged settings back (`apt-config dump`), by
- * apt knowing an Ubuntu security source, by Docker's candidate version staying
- * on the installed major, and by both timers being enabled and active.
+ * apt knowing an Ubuntu security source, by Docker's and Node's candidate
+ * versions staying on the installed major, and by both timers being enabled
+ * and active.
  * Never throws; changes nothing it does not own.
  */
 import { spawnSync } from 'node:child_process';
@@ -51,6 +68,15 @@ import { runAsync } from './spinRun.ts';
 export const UPDATES_ENV = '/etc/morphit/updates.env';
 export const APT_CONF = '/etc/apt/apt.conf.d/52morphit-automatic-updates';
 export const DOCKER_PIN = '/etc/apt/preferences.d/morphit-docker-major';
+export const NODE_PIN = '/etc/apt/preferences.d/morphit-node-major';
+/** NodeSource's packages that are pinned to their installed major version. */
+export const NODE_PACKAGES = ['nodejs'] as const;
+/** The site NodeSource's repository is fetched from. */
+export const NODESOURCE_SITE = 'deb.nodesource.com';
+/** The script apt runs after each package change (relative to the install). */
+export const NODE_RESTART_SCRIPT = 'ops/scripts/morphit-node-restart.sh';
+/** Settings files changed on the server stay as they are. */
+export const KEEP_LOCAL_CONFIG = ['--force-confdef', '--force-confold'] as const;
 /** The one-line stopgap the owner was given on 2026-11-19 for Linux Mint
  *  (morphitlat), before this heal existed; this file replaces it. */
 export const STOPGAP_CONF = '/etc/apt/apt.conf.d/52morphit-security-updates';
@@ -69,6 +95,11 @@ export interface UpdateSettings {
 	readonly restartTime: string;
 	/** Docker's own updates, within the installed major version. */
 	readonly dockerUpdates: boolean;
+	/** Node.js from NodeSource, within the installed major version (v1.24.8). */
+	readonly nodeUpdates: boolean;
+	/** Tor from the Tor Project's own repository (v1.24.8,
+	 *  lib/torProjectRepoHeal.ts). */
+	readonly torUpdates: boolean;
 	/** Which new Morphit releases install by themselves (lib/autoInstallRelease.ts). */
 	readonly installReleases: ReleaseInstalls;
 }
@@ -78,8 +109,34 @@ export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = {
 	autoRestart: true,
 	restartTime: '04:30',
 	dockerUpdates: true,
+	nodeUpdates: true,
+	torUpdates: true,
 	installReleases: 'security'
 };
+
+/** The Node.js setting's lines (v1.24.8); added to an updates.env written
+ *  before it existed. */
+export const NODE_SETTING_TEXT = `#
+# Node.js from NodeSource's repository (it runs the Morphit services): its
+# updates within the installed major version (Node 22) install by themselves,
+# and the Morphit services restart onto the new one. A new major version waits
+# for a Morphit release tested with it:
+MORPHIT_NODE_UPDATES=on
+`;
+
+/** The Tor setting's lines (v1.24.8). */
+export const TOR_SETTING_TEXT = `#
+# Tor from the Tor Project's own repository (Ubuntu's copy falls months
+# behind Tor's security releases): Morphit moves Tor there, keeping your Tor
+# settings, and its updates install by themselves (Tor restarts for a moment):
+MORPHIT_TOR_UPDATES=on
+`;
+
+/** Settings added after v1.24.7: [key, its lines], in the file's order. */
+export const ADDED_SETTINGS: ReadonlyArray<readonly [string, string]> = [
+	['MORPHIT_NODE_UPDATES', NODE_SETTING_TEXT],
+	['MORPHIT_TOR_UPDATES', TOR_SETTING_TEXT]
+];
 
 /** What /etc/morphit/updates.env holds when Morphit writes it. */
 export const UPDATES_ENV_DEFAULT_TEXT = `# Morphit — automatic updates on this server (since v1.24.7).
@@ -99,7 +156,7 @@ MORPHIT_AUTO_RESTART_TIME=04:30
 # within the installed major version (Docker 29.x) install by themselves too.
 # A new major version waits for a Morphit release tested with it:
 MORPHIT_DOCKER_UPDATES=on
-#
+${NODE_SETTING_TEXT}${TOR_SETTING_TEXT}#
 # New Morphit releases. "security": a release marked as a security release
 # installs itself early in the morning (05:15 by this server's clock), checked
 # against @morphit's on-chain record first
@@ -147,6 +204,8 @@ export function parseUpdateSettings(text: string | null): {
 		(v) => (s.dockerUpdates = v),
 		DEFAULT_UPDATE_SETTINGS.dockerUpdates
 	);
+	flag('MORPHIT_NODE_UPDATES', (v) => (s.nodeUpdates = v), DEFAULT_UPDATE_SETTINGS.nodeUpdates);
+	flag('MORPHIT_TOR_UPDATES', (v) => (s.torUpdates = v), DEFAULT_UPDATE_SETTINGS.torUpdates);
 	const time = values.get('MORPHIT_AUTO_RESTART_TIME');
 	if (time !== undefined) {
 		const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(time);
@@ -232,9 +291,39 @@ export function dockerRelease(releases: readonly AptRelease[]): AptRelease | nul
 	return releases.find((r) => r.site === 'download.docker.com' && r.o !== '' && r.n !== '') ?? null;
 }
 
+/** PURE. NodeSource's repository among apt's sources, or null. */
+export function nodeSourceRelease(releases: readonly AptRelease[]): AptRelease | null {
+	return releases.find((r) => r.site === NODESOURCE_SITE && r.o !== '' && r.n !== '') ?? null;
+}
+
+/** The Tor Project's repository: its site and its onion (both its own). */
+export const TORPROJECT_SITES = [
+	'deb.torproject.org',
+	'apow7mjfryruh65chtdydfmqfpj5btws7nbocgtaovhvezgccyjazpqd.onion'
+] as const;
+
+/** PURE. The Tor Project's repository among apt's sources, or null. */
+export function torProjectRelease(releases: readonly AptRelease[]): AptRelease | null {
+	return (
+		releases.find(
+			(r) => (TORPROJECT_SITES as readonly string[]).includes(r.site) && r.o !== '' && r.n !== ''
+		) ?? null
+	);
+}
+
+/** PURE. The DPkg::Post-Invoke command that runs the restart script, or null
+ *  for a path that is not plainly a path (it goes into apt's settings and a
+ *  shell). */
+export function nodeRestartHook(script: string | null): string | null {
+	if (script === null || !/^\/[A-Za-z0-9._/-]+$/.test(script)) return null;
+	return `if [ -x ${script} ]; then ${script} || true; fi`;
+}
+
 /** An Origins-Pattern value: commas inside a value are escaped, as
- *  unattended-upgrades reads them. */
-const pv = (v: string): string => v.replace(/,/g, '\\,');
+ *  unattended-upgrades reads them; it compares values with fnmatch, so
+ *  `*`, `?` and `[` are matched as themselves (NodeSource's origin is
+ *  ". nodistro", as apt reports it on morphit.io). */
+const pv = (v: string): string => v.replace(/[*?[]/g, (c) => `[${c}]`).replace(/,/g, '\\,');
 
 /** PURE. The security patterns for an Ubuntu base. */
 export function securityPatterns(codename: string): string[] {
@@ -245,24 +334,32 @@ export function securityPatterns(codename: string): string[] {
 	];
 }
 
-/** PURE. The pattern for Docker's repository, from what apt reports for it —
- *  and from its site, so another source that calls itself "Docker" (a mirror,
- *  someone's own repository) is never updated from (proven with apt over HTTP:
- *  the same packages from another site are not taken). */
-export function dockerPattern(r: AptRelease): string {
+/** PURE. The pattern for a vendor's repository (Docker's, NodeSource's), from
+ *  what apt reports for it — and from its site, so another source that calls
+ *  itself "Docker" (a mirror, someone's own repository) is never updated from
+ *  (proven with apt over HTTP: the same packages from another site are not
+ *  taken). */
+export function repoPattern(r: AptRelease): string {
 	return `origin=${pv(r.o)},codename=${pv(r.n)}${r.l ? `,label=${pv(r.l)}` : ''}${r.site ? `,site=${pv(r.site)}` : ''}`;
 }
+export const dockerPattern = repoPattern;
 
 /** PURE. /etc/apt/apt.conf.d/52morphit-automatic-updates. */
 export function aptConfText(o: {
 	readonly codename: string;
 	readonly docker: AptRelease | null;
+	readonly node?: AptRelease | null;
+	readonly tor?: AptRelease | null;
+	/** nodeRestartHook()'s command (null: none). */
+	readonly hook?: string | null;
 	readonly restart: boolean;
 	readonly time: string;
 }): string {
 	const patterns = [
 		...securityPatterns(o.codename),
-		...(o.docker ? [dockerPattern(o.docker)] : [])
+		...(o.docker ? [repoPattern(o.docker)] : []),
+		...(o.node ? [repoPattern(o.node)] : []),
+		...(o.tor ? [repoPattern(o.tor)] : [])
 	];
 	return [
 		'// Morphit (morphit-ops upgrade, since v1.24.7): this server keeps itself patched.',
@@ -277,6 +374,15 @@ export function aptConfText(o: {
 		'Unattended-Upgrade::Automatic-Reboot-WithUsers "false";',
 		`Unattended-Upgrade::Automatic-Reboot-Time "${o.time}";`,
 		'Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";',
+		'// A settings file changed on this server stays as it is when a package brings',
+		'// a new default, so no update stops to ask (unattended-upgrades skips one that would).',
+		`DPkg::Options { ${KEEP_LOCAL_CONFIG.map((x) => `"${x}";`).join(' ')} };`,
+		...(o.hook
+			? [
+					'// After a Node.js update, the Morphit services restart onto the new Node.',
+					`DPkg::Post-Invoke { "${o.hook}"; };`
+				]
+			: []),
 		''
 	].join('\n');
 }
@@ -304,8 +410,37 @@ export function majorPin(version: string): string | null {
  *  else. apt takes the FIRST record that matches a version, so the "any
  *  version: never" record comes last. null when none is installed. */
 export function dockerPinText(installed: Readonly<Record<string, string>>): string | null {
+	return majorPinText(
+		[
+			'# Morphit (morphit-ops upgrade, since v1.24.7): Docker updates by itself within',
+			'# the major version installed here. A new major version waits for a Morphit',
+			`# release tested with it. Off: MORPHIT_DOCKER_UPDATES=off in ${UPDATES_ENV}.`
+		],
+		DOCKER_PACKAGES,
+		installed
+	);
+}
+
+/** PURE. /etc/apt/preferences.d/morphit-node-major (v1.24.8), as for Docker. */
+export function nodePinText(installed: Readonly<Record<string, string>>): string | null {
+	return majorPinText(
+		[
+			'# Morphit (morphit-ops upgrade, since v1.24.8): Node.js updates by itself within',
+			'# the major version installed here. A new major version waits for a Morphit',
+			`# release tested with it. Off: MORPHIT_NODE_UPDATES=off in ${UPDATES_ENV}.`
+		],
+		NODE_PACKAGES,
+		installed
+	);
+}
+
+function majorPinText(
+	header: readonly string[],
+	packages: readonly string[],
+	installed: Readonly<Record<string, string>>
+): string | null {
 	const groups = new Map<string, string[]>();
-	for (const p of DOCKER_PACKAGES) {
+	for (const p of packages) {
 		const v = installed[p];
 		if (!v) continue;
 		const pin = majorPin(v);
@@ -315,9 +450,7 @@ export function dockerPinText(installed: Readonly<Record<string, string>>): stri
 	if (groups.size === 0) return null;
 	const all = [...groups.values()].flat();
 	return [
-		'# Morphit (morphit-ops upgrade, since v1.24.7): Docker updates by itself within',
-		'# the major version installed here. A new major version waits for a Morphit',
-		`# release tested with it. Off: MORPHIT_DOCKER_UPDATES=off in ${UPDATES_ENV}.`,
+		...header,
 		...[...groups.entries()].flatMap(([pin, pkgs]) => [
 			'',
 			`Package: ${pkgs.join(' ')}`,
@@ -376,9 +509,22 @@ export interface AutoUpdatesRuntime {
 	/** `systemctl enable --now` each; then whether each is enabled and active. */
 	enableTimers(units: readonly string[]): Record<string, boolean>;
 	hiddenOnly(): boolean;
+	/** The absolute path of ops/scripts/morphit-node-restart.sh in this
+	 *  install when it is there, executable, owned by root and writable by
+	 *  nobody else (apt runs it as root), else null (v1.24.8). */
+	nodeRestartScript(): string | null;
 }
 
 const MAJOR_OF = (v: string | null): string | null => (v === null ? null : majorPin(v));
+
+/** "Node 22.x" for the installed nodejs package ('' when none). */
+function nodeMajor(installed: Readonly<Record<string, string>>): string {
+	const m = /^(?:\d+:)?(\d+)\./.exec(installed['nodejs'] ?? '');
+	return m ? `Node ${m[1]}.x` : '';
+}
+
+/** Header line of the updates.env Morphit writes. */
+const UPDATES_ENV_HEADER = '# Morphit — automatic updates on this server';
 
 /** "Docker 29.x and containerd 2.x" for the installed Docker packages. */
 function dockerMajors(installed: Readonly<Record<string, string>>): string {
@@ -412,11 +558,26 @@ export async function healAutomaticUpdates(
 			created = true;
 		}
 	}
+	// A file Morphit wrote before a setting existed gets that setting's lines at
+	// its end (the admin's own lines stay as they are).
+	let added = false;
+	if (text !== null && text.startsWith(UPDATES_ENV_HEADER)) {
+		const missing = ADDED_SETTINGS.filter(
+			([key]) => !new RegExp(`^\\s*${key}\\s*=`, 'm').test(text!)
+		);
+		if (missing.length > 0) {
+			const next = `${text}${text.endsWith('\n') ? '' : '\n'}${missing.map(([, t]) => t).join('')}`;
+			if (rt.writeFile(UPDATES_ENV, next, 0o644) && rt.readFile(UPDATES_ENV) === next) {
+				text = next;
+				added = true;
+			}
+		}
+	}
 	const { settings, problems } = parseUpdateSettings(text);
 	const said = problems.length > 0 ? ` In ${UPDATES_ENV}: ${problems.join('; ')}.` : '';
 
 	if (!settings.securityUpdates) {
-		const removed = [APT_CONF, DOCKER_PIN].filter((p) => rt.readFile(p) !== null);
+		const removed = [APT_CONF, DOCKER_PIN, NODE_PIN].filter((p) => rt.readFile(p) !== null);
 		const gone = removed.every((p) => rt.removeFile(p) && rt.readFile(p) === null);
 		return {
 			strategy: 'off',
@@ -469,9 +630,17 @@ export async function healAutomaticUpdates(
 	const docker = settings.dockerUpdates ? dockerRelease(releases) : null;
 	const installedDocker = docker ? rt.installedVersions(DOCKER_PACKAGES) : {};
 	const pin = docker ? dockerPinText(installedDocker) : null;
+	const node = settings.nodeUpdates ? nodeSourceRelease(releases) : null;
+	const installedNode = node ? rt.installedVersions(NODE_PACKAGES) : {};
+	const nodePin = node ? nodePinText(installedNode) : null;
+	const hook = nodeRestartHook(rt.nodeRestartScript());
+	const tor = settings.torUpdates ? torProjectRelease(releases) : null;
 	const conf = aptConfText({
 		codename: base.codename,
 		docker: pin !== null ? docker : null,
+		node: nodePin !== null ? node : null,
+		tor,
+		hook,
 		restart: settings.autoRestart,
 		time: settings.restartTime
 	});
@@ -488,6 +657,7 @@ export async function healAutomaticUpdates(
 	};
 	put(APT_CONF, conf);
 	put(DOCKER_PIN, pin);
+	put(NODE_PIN, nodePin);
 	// The stopgap, only when it holds exactly that one line (anything else in a
 	// file of that name is someone's own, and stays).
 	if (rt.readFile(STOPGAP_CONF)?.trim() === STOPGAP_TEXT) put(STOPGAP_CONF, null);
@@ -511,16 +681,35 @@ export async function healAutomaticUpdates(
 		expect('Unattended-Upgrade::Automatic-Reboot-Time', settings.restartTime);
 		expect('Unattended-Upgrade::Automatic-Reboot-WithUsers', 'false');
 	}
+	const options = cfg.list('DPkg::Options');
+	for (const o of KEEP_LOCAL_CONFIG)
+		if (!options.includes(o)) wrong.push(`apt does not pass ${o} to dpkg`);
+	if (hook !== null && !cfg.list('DPkg::Post-Invoke').includes(hook))
+		wrong.push(`apt does not run ${NODE_RESTART_SCRIPT} after a package change`);
 	const dockerHeld: string[] = [];
 	if (pin !== null) {
-		if (!patterns.includes(dockerPattern(docker!)))
-			wrong.push(`apt does not list ${dockerPattern(docker!)}`);
+		if (!patterns.includes(repoPattern(docker!)))
+			wrong.push(`apt does not list ${repoPattern(docker!)}`);
 		for (const p of ['docker-ce', 'containerd.io']) {
 			const inst = installedDocker[p];
 			if (!inst) continue;
 			const cand = rt.candidate(p);
 			if (cand !== null && MAJOR_OF(cand) !== MAJOR_OF(inst))
 				dockerHeld.push(`${p} would move to ${cand}`);
+		}
+	}
+	if (tor !== null && !patterns.includes(repoPattern(tor)))
+		wrong.push(`apt does not list ${repoPattern(tor)}`);
+	const nodeHeld: string[] = [];
+	if (nodePin !== null) {
+		if (!patterns.includes(repoPattern(node!)))
+			wrong.push(`apt does not list ${repoPattern(node!)}`);
+		for (const p of NODE_PACKAGES) {
+			const inst = installedNode[p];
+			if (!inst) continue;
+			const cand = rt.candidate(p);
+			if (cand !== null && MAJOR_OF(cand) !== MAJOR_OF(inst))
+				nodeHeld.push(`${p} would move to ${cand}`);
 		}
 	}
 	const noSecuritySource = !releases.some(
@@ -532,6 +721,7 @@ export async function healAutomaticUpdates(
 		...failed.map((p) => `${p} could not be written`),
 		...wrong.map((w) => `${w} (another file in /etc/apt/apt.conf.d may set it after Morphit's)`),
 		...dockerHeld.map((d) => `${d}, past the pin in ${DOCKER_PIN}`),
+		...nodeHeld.map((d) => `${d}, past the pin in ${NODE_PIN}`),
 		...(noSecuritySource
 			? [
 					`apt knows no Ubuntu security source for ${base.codename} (o=Ubuntu, a=${base.codename}-security) yet: check /etc/apt/sources.list.d`
@@ -546,9 +736,18 @@ export async function healAutomaticUpdates(
 			detail: `Automatic updates are not fully in place on this server: ${problemsFound.join('; ')}. On this server, after fixing it: sudo morphit-ops upgrade --heals${said}`
 		};
 
+	const vendors = [
+		...(pin !== null ? [`Docker's own updates within ${dockerMajors(installedDocker)}`] : []),
+		...(nodePin !== null
+			? [
+					`Node.js's updates within ${nodeMajor(installedNode)}${hook !== null ? ' (the Morphit services then restart onto the new Node)' : ''}`
+				]
+			: []),
+		...(tor !== null ? ["Tor's own updates from the Tor Project"] : [])
+	];
 	const what =
-		pin !== null
-			? `Ubuntu's security fixes install by themselves every day, and so do Docker's own updates within ${dockerMajors(installedDocker)}`
+		vendors.length > 0
+			? `Ubuntu's security fixes install by themselves every day, and so do ${vendors.join(', and ')}`
 			: "Ubuntu's security fixes install by themselves every day";
 	const restart = settings.autoRestart
 		? `; when one needs a restart, the server restarts by itself at ${settings.restartTime} (its own clock), unless someone is logged in when the day's updates finish (then it waits for a day's run that finds nobody)`
@@ -559,7 +758,7 @@ export async function healAutomaticUpdates(
 	return {
 		strategy: changed.length > 0 ? 'applied' : 'already',
 		verified: true,
-		routine: changed.length === 0 && !created && problems.length === 0,
+		routine: changed.length === 0 && !created && !added && problems.length === 0,
 		detail: `Automatic updates: ${what}${restart} (read back from apt).${mint} To change it: ${UPDATES_ENV}.${said}`
 	};
 }
@@ -592,6 +791,8 @@ function readRegular(path: string): string | null {
 
 export function realAutoUpdatesRuntime(deps: {
 	readonly hiddenOnly: () => boolean;
+	/** The Morphit install (default /opt/morphit). */
+	readonly installDir?: string;
 }): AutoUpdatesRuntime {
 	return {
 		hasApt: () => existsSync('/usr/bin/apt-get') && existsSync('/usr/bin/apt-config'),
@@ -661,6 +862,18 @@ export function realAutoUpdatesRuntime(deps: {
 			}
 			return out;
 		},
-		hiddenOnly: deps.hiddenOnly
+		hiddenOnly: deps.hiddenOnly,
+		nodeRestartScript: () => {
+			const p = join(deps.installDir ?? '/opt/morphit', NODE_RESTART_SCRIPT);
+			try {
+				const st = lstatSync(p);
+				// apt runs it as root: only a root-owned file nobody else can write.
+				return st.isFile() && st.uid === 0 && (st.mode & 0o022) === 0 && (st.mode & 0o111) !== 0
+					? p
+					: null;
+			} catch {
+				return null;
+			}
+		}
 	};
 }

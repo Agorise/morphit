@@ -8651,8 +8651,13 @@ MORPHIT_SECURITY_UPDATES=on        # Ubuntu's security fixes, every day
 MORPHIT_AUTO_RESTART=on            # restart when a fix needs it ...
 MORPHIT_AUTO_RESTART_TIME=04:30    # ... at this time of the server's clock
 MORPHIT_DOCKER_UPDATES=on          # Docker's own updates, same major version
+MORPHIT_NODE_UPDATES=on            # Node.js from NodeSource, same major (v1.24.8)
+MORPHIT_TOR_UPDATES=on             # Tor from the Tor Project's repository (v1.24.8)
 MORPHIT_AUTO_INSTALL_RELEASES=security   # security | all | off (§25b)
 ```
+
+A file written by v1.24.7 gets the two v1.24.8 settings added at its
+end on the next upgrade; your own lines stay as they are.
 
 After a change, on this server: `sudo morphit-ops upgrade --heals`.
 
@@ -8681,12 +8686,54 @@ After a change, on this server: `sudo morphit-ops upgrade --heals`.
   updates by itself, Docker 30 waits for a Morphit release tested with
   it. Installing one restarts Docker: BunkerWeb and the frontend are
   away for a few seconds.
+- **Node.js (v1.24.8).** Node runs every Morphit service. A server
+  installed online takes Node from NodeSource's repository
+  (`deb.nodesource.com`): Morphit adds it to the automatic updates as
+  apt reports it and pins Node to its installed major version
+  (`/etc/apt/preferences.d/morphit-node-major`), so Node 22.x updates
+  by itself and Node 24 waits for a tested Morphit release. A server
+  installed from the offline bundle runs Node from `/usr/local`: each
+  Morphit release names its Node (version and SHA-256), and the upgrade
+  puts that Node in place — from the bundle, or downloaded from
+  nodejs.org (directly, else through Tor; through Tor only on a
+  zero-clearnet server) and kept only when its SHA-256 is the release's.
+  A running program keeps the file it started from, so after apt
+  replaces Node, `ops/scripts/morphit-node-restart.sh` (run by apt after
+  every package change) restarts the Morphit services still running the
+  old one, and writes each restart to the journal
+  (`journalctl -t morphit-node-restart`).
+- **Tor (v1.24.8).** Ubuntu's Tor falls months behind the Tor Project's
+  security releases (on 2026-11-20 Ubuntu shipped 0.4.9.11 from June;
+  the Tor Project, 0.4.9.17), and the Tor Project says not to use it.
+  The upgrade moves Tor to the Tor Project's own repository: its site,
+  or, where that is blocked, its onion
+  (`apow7mjfryruh65chtdydfmqfpj5btws7nbocgtaovhvezgccyjazpqd.onion`)
+  through this server's Tor. Its signing key must have the published
+  fingerprint `A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89` and its release
+  file must be signed by it before anything is written. A copy of the
+  installed Tor is downloaded first (`/var/lib/morphit/tor-rollback`);
+  Tor is installed from the Tor Project with your `/etc/tor/torrc` kept,
+  and must then connect, or the copy is reinstalled and the source
+  removed. From then on its updates install by themselves (the package
+  restarts Tor for a moment). Files: `/etc/apt/sources.list.d/morphit-torproject.sources`,
+  `/usr/share/keyrings/deb.torproject.org-keyring.gpg` (kept current by
+  the Tor Project's keyring package) and, for the onion on a clearnet
+  server, `/etc/apt/apt.conf.d/52morphit-torproject-onion` (apt's proxy
+  for that onion only).
+- **Settings files you changed (v1.24.8).** unattended-upgrades skips
+  any package whose update would ask about a settings file you changed
+  and the package also changed. Morphit's file now keeps yours in that
+  case (`--force-confdef --force-confold`; the package's new default is
+  left beside it as `<file>.dpkg-dist`), so such a security fix still
+  installs.
 - **A zero-clearnet server** fetches all of this over Tor, as its apt
   already does.
 
 Checked on each run: apt's own merged settings (`apt-config dump`),
-an Ubuntu security source apt knows, Docker's candidate staying on its
-major version, and the `apt-daily` timers enabled and active. Alerts
+an Ubuntu security source apt knows, Docker's and Node's candidates
+staying on their major versions, the kept-settings options and the
+restart script in apt's settings, and the `apt-daily` timers enabled
+and active. Alerts
 (the Matrix alert bot, §16):
 
 | Event | When | Tier |
@@ -8706,8 +8753,9 @@ systemctl list-timers apt-daily.timer apt-daily-upgrade.timer
 
 To turn it off: `MORPHIT_SECURITY_UPDATES=off` in
 `/etc/morphit/updates.env`, then `sudo morphit-ops upgrade --heals`.
-Morphit then removes its own two files, installs nothing and does not
-restart the server; pending security fixes are reported as before.
+Morphit then removes its own files (including the Tor Project source;
+Tor stays as installed), installs nothing and does not restart the
+server; pending security fixes are reported as before.
 
 ### 37.3 Kernel sysctl hardening
 

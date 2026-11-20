@@ -199,6 +199,7 @@ import { heal as healDisplayShadow } from '../lib/displayShadowHeal.ts';
 import { heal as healTorPow } from '../lib/torPowHeal.ts';
 import { heal as healTorBridges } from '../lib/torBridgesHeal.ts';
 import { healTorVersion } from '../lib/torVersionHeal.ts';
+import { healTorProjectRepoLocked } from '../lib/torProjectRepoHeal.ts';
 import { heal as healEtcPerms } from '../lib/etcPermHeal.ts';
 import { heal as healMailRelay } from '../lib/mailRelayHeal.ts';
 import { heal as healVapid } from '../lib/vapidHeal.ts';
@@ -5452,6 +5453,9 @@ const QUESTIONS_COMMAND = 'sudo morphit-ops upgrade --questions';
 const deferredQuestions: string[] = [];
 /** True only while `upgrade --questions` runs: then the heals ask. */
 let askingQuestions = false;
+/** `upgrade --heals`: the services already run this release, so a heal that
+ *  replaces what they run (the Node runtime) restarts them itself. */
+let servicesAlreadyRunning = false;
 /** The after-restart unit was started by this process. */
 let afterRestartLaunched = false;
 
@@ -5948,7 +5952,14 @@ export async function runHealsAgain(
 			: 'Running the heals of this release again (nothing is downloaded or installed)…'
 	);
 	const before = warningCount();
-	await runHealSteps((o.steps ?? selfHealSteps)().filter(([n]) => n !== 'the after-restart heals'));
+	servicesAlreadyRunning = true;
+	try {
+		await runHealSteps(
+			(o.steps ?? selfHealSteps)().filter(([n]) => n !== 'the after-restart heals')
+		);
+	} finally {
+		servicesAlreadyRunning = false;
+	}
 	// Nothing restarts here: the services already run this release (L7).
 	await runAfterRestartHeals(0, {
 		servicesRestarted: false,
@@ -5973,6 +5984,14 @@ export async function runHealsAgain(
 	// `upgrade` on an up-to-date box exits 0, as docs/UPGRADING.md says: the
 	// warnings above say what to do (v1.21.18 audit, M6).
 	return n === 0 || o.upToDate === true ? 0 : 1;
+}
+
+/** ops/scripts/morphit-node-restart.sh: restart the Morphit services still
+ *  running a Node that was replaced. */
+async function runNodeRestartScript(installDir: string): Promise<void> {
+	await runAsync(join(installDir, 'ops', 'scripts', 'morphit-node-restart.sh'), [], {
+		timeoutMs: 10 * 60_000
+	});
 }
 
 /** The self-heal steps, in order (exported so the ORDER and each step's effect
@@ -6036,12 +6055,22 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// (none at all on a tor-only node) and fail2ban bans without mailing
 		// whois reports; postfix / fail2ban reload only when changed.
 		['the alert mail heal', () => reportHeal(healMailRelay(healCtx()))],
-		// (lib/nodeRuntimeHeal.ts): an offline install's /usr/local Node is
-		// updated from a newer bundled vendor/node (no network), before the
-		// upgrade restarts the services on it.
+		// (lib/nodeRuntimeHeal.ts): a /usr/local Node (installed from a
+		// bundle) is updated to the Node this release names — from a bundled
+		// vendor/node, else (v1.24.8) downloaded from nodejs.org and checked
+		// against the release's SHA-256 — before the upgrade restarts the
+		// services on it (`upgrade --heals`: restarted right away).
 		[
 			'the Node runtime update',
-			() => reportHeal(healNodeRuntime(healCtx(), { installDir: selfHealInstallDir() }))
+			() =>
+				reportHeal(
+					healNodeRuntime(healCtx(), {
+						installDir: selfHealInstallDir(),
+						...(servicesAlreadyRunning
+							? { restartServices: () => runNodeRestartScript(selfHealInstallDir()) }
+							: {})
+					})
+				)
 		],
 		// Round 2, item 6 (lib/osQuietHeal.ts): every node turns off the OS fetches
 		// a server does not need (motd/Pro news, fwupd refresh, pollinate); each
@@ -6424,7 +6453,10 @@ export function afterRestartHealSteps(): Array<[string, () => Promise<void>]> {
 				reportHeal(
 					healAutomaticUpdates(
 						healCtx(),
-						realAutoUpdatesRuntime({ hiddenOnly: () => isHiddenOnlyNode() })
+						realAutoUpdatesRuntime({
+							hiddenOnly: () => isHiddenOnlyNode(),
+							installDir: selfHealInstallDir()
+						})
 					)
 				)
 		],
@@ -6450,6 +6482,26 @@ export function afterRestartHealSteps(): Array<[string, () => Promise<void>]> {
 		// Before the bridges heal: whether bridges are needed is only known once
 		// this Tor can connect at all.
 		['the Tor version heal', () => reportHeal(healTorVersion(healCtx()))],
+		// v1.24.8 (lib/torProjectRepoHeal.ts): Tor from the Tor Project's own
+		// repository (its site, else its .onion through Tor), the installed
+		// packages kept as the way back; then the automatic updates take Tor's.
+		// After the version heal (a Tor that connects), before the bridges heal.
+		[
+			'the Tor Project repository heal',
+			() =>
+				reportHeal(
+					healTorProjectRepoLocked(healCtx(), {
+						refreshAutoUpdates: () =>
+							healAutomaticUpdates(
+								healCtx(),
+								realAutoUpdatesRuntime({
+									hiddenOnly: () => isHiddenOnlyNode(),
+									installDir: selfHealInstallDir()
+								})
+							)
+					})
+				)
+		],
 		['the Tor bridges heal', () => reportHeal(healTorBridges(healCtx(), selfHealInstallDir()))],
 		// last — up to about four minutes of Tor checks, which the
 		// self-heal child (killed at 300 s) cannot always afford after the

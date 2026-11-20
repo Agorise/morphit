@@ -589,7 +589,8 @@ async function main(): Promise<number> {
 
 	// v1.24.7 — hidden subcommand the Ansible playbook runs last on a fresh
 	// install: the automatic-updates and nightly-install heals every upgrade
-	// runs, so a new server keeps itself patched from its first day. Prints each
+	// runs (v1.24.8: and the Tor Project repository heal), so a new server keeps
+	// itself patched from its first day. Prints each
 	// result; exit 1 when one is not in place (the playbook only reports it).
 	if (args.subcommand === '__automatic-updates') {
 		try {
@@ -605,10 +606,15 @@ async function main(): Promise<number> {
 				spinner: () => () => {}
 			};
 			const installDir = (process.env.MORPHIT_INSTALL_DIR ?? '').trim() || '/opt/morphit';
+			// v1.24.8: Tor from the Tor Project first, so the automatic updates
+			// below take its updates too.
+			const { healTorProjectRepoLocked } = await import('./lib/torProjectRepoHeal.ts');
+			const tor = await healTorProjectRepoLocked(ctx);
 			const results = [
+				...(tor.routine === true ? [] : [tor]),
 				await healAutomaticUpdates(
 					ctx,
-					realAutoUpdatesRuntime({ hiddenOnly: () => isHiddenOnlyNode() })
+					realAutoUpdatesRuntime({ hiddenOnly: () => isHiddenOnlyNode(), installDir })
 				),
 				await healAutoInstall(
 					ctx,

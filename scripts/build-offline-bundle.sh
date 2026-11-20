@@ -58,7 +58,7 @@ KUBO_SHA512="054c38a0cf66f7d738e25085ad62cb3a42d03d4bac329b7dd25c1d71cf18e1ce87d
 # require major 22 and take what the bundle carries). Keep it on the newest
 # 22.x release: an installed offline node takes this runtime at its next
 # bundled upgrade (morphit-ops upgrade, lib/nodeRuntimeHeal.ts).
-NODE_VERSION="v22.22.2"
+NODE_VERSION="v22.23.5"
 
 # Files the release job (and a maintainer's checkout) leave in the tree that
 # must not ship: CI provenance scratch, IPFS/IPNS outputs, the IPNS signing

@@ -6,17 +6,38 @@
  *
  * The fixtures are what the servers printed on 2026-11-19
  * (security-updates-check.sh) and what apt reports for Docker's repository.
+ *
+ * v1.24.8: Node.js from NodeSource within its installed major (and the
+ * Morphit services restarting onto it), and settings files changed on the
+ * server kept when a package brings a new default.
  */
 import { describe, expect, it } from 'vitest';
-import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import {
+	chmodSync,
+	chownSync,
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	readlinkSync,
+	renameSync,
+	rmSync,
+	writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
 	APT_CONF,
 	DEFAULT_UPDATE_SETTINGS,
 	DOCKER_PIN,
+	KEEP_LOCAL_CONFIG,
+	NODE_PIN,
+	NODE_SETTING_TEXT,
 	STOPGAP_CONF,
+	TOR_SETTING_TEXT,
 	STOPGAP_TEXT,
 	UPDATES_ENV,
 	UPDATES_ENV_DEFAULT_TEXT,
@@ -27,11 +48,19 @@ import {
 	dockerRelease,
 	healAutomaticUpdates,
 	majorPin,
+	nodePinText,
+	nodeRestartHook,
+	nodeSourceRelease,
 	parsePolicyReleases,
+	repoPattern,
+	torProjectRelease,
 	parseUpdateSettings,
+	realAutoUpdatesRuntime,
 	ubuntuBase,
 	type AutoUpdatesRuntime
 } from '../src/lib/autoUpdates.ts';
+
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const UBUNTU = `PRETTY_NAME="Ubuntu 24.04.4 LTS"\nNAME="Ubuntu"\nVERSION_ID="24.04"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nUBUNTU_CODENAME=noble\n`;
 const MINT = `NAME="Linux Mint"\nVERSION="22.3 (Zena)"\nID=linuxmint\nID_LIKE="ubuntu debian"\nPRETTY_NAME="Linux Mint 22.3"\nVERSION_ID="22.3"\nVERSION_CODENAME=zena\nUBUNTU_CODENAME=noble\n`;
@@ -63,6 +92,31 @@ const POLICY_TOR = `Package files:
      release v=22.3,o=linuxmint,a=zena,n=zena,l=linuxmint,c=main,b=amd64
      origin packages.linuxmint.com
 `;
+/** morphit.io (components-check.sh, 2026-11-20): NodeSource's repository,
+ *  whose origin and label apt reports as ". nodistro". */
+const POLICY_NODE = POLICY.replace(
+	'Pinned packages:\n',
+	` 500 https://deb.nodesource.com/node_22.x nodistro/main amd64 Packages
+     release o=. nodistro,a=nodistro,n=nodistro,l=. nodistro,c=main,b=amd64
+     origin deb.nodesource.com
+Pinned packages:
+`
+);
+/** The Tor Project's repository as apt reports it (its Release file, read on
+ *  three servers on 2026-11-20: Origin TorProject, no Label, Codename noble). */
+const POLICY_TOR_PROJECT = POLICY.replace(
+	'Pinned packages:\n',
+	` 500 https://deb.torproject.org/torproject.org noble/main amd64 Packages
+     release o=TorProject,a=noble,n=noble,c=main,b=amd64
+     origin deb.torproject.org
+Pinned packages:
+`
+);
+const NODE_INSTALLED = { nodejs: '22.23.2-1nodesource1' };
+const HOOK_SCRIPT = '/opt/morphit/ops/scripts/morphit-node-restart.sh';
+const HOOK = `if [ -x ${HOOK_SCRIPT} ]; then ${HOOK_SCRIPT} || true; fi`;
+/** The updates.env v1.24.7 wrote (before the Node.js and Tor settings). */
+const ENV_V1247 = UPDATES_ENV_DEFAULT_TEXT.replace(`${NODE_SETTING_TEXT}${TOR_SETTING_TEXT}`, '');
 const DOCKER_INSTALLED = {
 	'docker-ce': '5:29.8.0-1~ubuntu.24.04~noble',
 	'docker-ce-cli': '5:29.8.0-1~ubuntu.24.04~noble',
@@ -77,8 +131,12 @@ describe('the settings file', () => {
 			autoRestart: true,
 			restartTime: '04:30',
 			dockerUpdates: true,
+			nodeUpdates: true,
+			torUpdates: true,
 			installReleases: 'security'
 		});
+		expect(ENV_V1247).not.toMatch(/NODE|TOR_UPDATES/);
+		expect(UPDATES_ENV_DEFAULT_TEXT).toMatch(/^MORPHIT_NODE_UPDATES=on$/m);
 		expect(parseUpdateSettings(null)).toEqual({ settings: DEFAULT_UPDATE_SETTINGS, problems: [] });
 		expect(parseUpdateSettings(UPDATES_ENV_DEFAULT_TEXT)).toEqual({
 			settings: DEFAULT_UPDATE_SETTINGS,
@@ -87,7 +145,7 @@ describe('the settings file', () => {
 	});
 	it('reads on/off in any spelling, a time, the release choice; quotes and spaces are fine', () => {
 		const { settings, problems } = parseUpdateSettings(
-			'MORPHIT_SECURITY_UPDATES = "yes"\nMORPHIT_AUTO_RESTART=OFF\nMORPHIT_AUTO_RESTART_TIME=3:05\nMORPHIT_DOCKER_UPDATES=0\nMORPHIT_AUTO_INSTALL_RELEASES=All\n'
+			'MORPHIT_SECURITY_UPDATES = "yes"\nMORPHIT_AUTO_RESTART=OFF\nMORPHIT_AUTO_RESTART_TIME=3:05\nMORPHIT_DOCKER_UPDATES=0\nMORPHIT_NODE_UPDATES=no\nMORPHIT_TOR_UPDATES=off\nMORPHIT_AUTO_INSTALL_RELEASES=All\n'
 		);
 		expect(problems).toEqual([]);
 		expect(settings).toEqual({
@@ -95,6 +153,8 @@ describe('the settings file', () => {
 			autoRestart: false,
 			restartTime: '03:05',
 			dockerUpdates: false,
+			nodeUpdates: false,
+			torUpdates: false,
 			installReleases: 'all'
 		});
 		expect(parseUpdateSettings('MORPHIT_AUTO_INSTALL_RELEASES=no').settings.installReleases).toBe(
@@ -161,6 +221,24 @@ describe("apt's own words", () => {
 		});
 		expect(dockerRelease(parsePolicyReleases(POLICY_TOR))).toBeNull();
 	});
+	it("NodeSource's repository only by its own site", () => {
+		expect(nodeSourceRelease(parsePolicyReleases(POLICY_NODE))).toEqual({
+			o: '. nodistro',
+			a: 'nodistro',
+			n: 'nodistro',
+			l: '. nodistro',
+			c: 'main',
+			site: 'deb.nodesource.com'
+		});
+		expect(nodeSourceRelease(parsePolicyReleases(POLICY))).toBeNull();
+		expect(
+			nodeSourceRelease(
+				parsePolicyReleases(
+					POLICY_NODE.replace('origin deb.nodesource.com', 'origin node.mirror.example')
+				)
+			)
+		).toBeNull();
+	});
 	it("apt-config dump: a scalar's last value; every item of a list", () => {
 		const v = aptConfigValues(
 			'APT::Periodic::Unattended-Upgrade "1";\nUnattended-Upgrade::Automatic-Reboot "false";\nUnattended-Upgrade::Automatic-Reboot "true";\nUnattended-Upgrade::Origins-Pattern "";\nUnattended-Upgrade::Origins-Pattern:: "origin=Ubuntu,archive=noble-security";\nUnattended-Upgrade::Origins-Pattern:: "origin=Docker,codename=noble,label=Docker CE,site=download.docker.com";\n'
@@ -207,6 +285,72 @@ describe('what is written', () => {
 			'origin=Docker,codename=noble,label=Docker CE,site=download.docker.com'
 		);
 	});
+	it('Node.js by its own repository; settings files kept; the restart script after each package change', () => {
+		const t = aptConfText({
+			codename: 'noble',
+			docker: null,
+			node: nodeSourceRelease(parsePolicyReleases(POLICY_NODE)),
+			hook: HOOK,
+			restart: true,
+			time: '04:30'
+		});
+		expect(t).toContain(
+			'\t"origin=. nodistro,codename=nodistro,label=. nodistro,site=deb.nodesource.com";\n'
+		);
+		expect(t).toContain('DPkg::Options { "--force-confdef"; "--force-confold"; };\n');
+		expect(t).toContain(`DPkg::Post-Invoke { "${HOOK}"; };\n`);
+		// Settings files are kept whatever else is on; no restart script, no hook.
+		const plain = aptConfText({ codename: 'noble', docker: null, restart: false, time: '04:30' });
+		expect(plain).toContain('DPkg::Options { "--force-confdef"; "--force-confold"; };\n');
+		expect(plain).not.toMatch(/Post-Invoke|Node/);
+	});
+	it('the restart hook: only a plain absolute path goes into apt and its shell', () => {
+		expect(nodeRestartHook(HOOK_SCRIPT)).toBe(HOOK);
+		expect(nodeRestartHook(null)).toBeNull();
+		for (const bad of [
+			'ops/scripts/morphit-node-restart.sh',
+			'/opt/my morphit/x.sh',
+			'/opt/m";x',
+			'/opt/m$(id)',
+			'/opt/m;rm -rf /'
+		])
+			expect(nodeRestartHook(bad)).toBeNull();
+	});
+	it('Node.js stays on its installed major, as Docker does', () => {
+		expect(majorPin('22.23.2-1nodesource1')).toBe('22.*');
+		expect(
+			nodePinText(NODE_INSTALLED)!
+				.split('\n\n')
+				.filter((r) => r.startsWith('Package:'))
+		).toEqual([
+			'Package: nodejs\nPin: version 22.*\nPin-Priority: 500',
+			'Package: nodejs\nPin: version *\nPin-Priority: -1\n'
+		]);
+		expect(nodePinText({})).toBeNull();
+	});
+	it("the Tor Project's repository by its site or its onion; its pattern as apt reports it (no label)", () => {
+		const r = torProjectRelease(parsePolicyReleases(POLICY_TOR_PROJECT))!;
+		expect(repoPattern(r)).toBe('origin=TorProject,codename=noble,site=deb.torproject.org');
+		const onion = POLICY_TOR_PROJECT.replace(
+			'origin deb.torproject.org',
+			'origin apow7mjfryruh65chtdydfmqfpj5btws7nbocgtaovhvezgccyjazpqd.onion'
+		);
+		expect(torProjectRelease(parsePolicyReleases(onion))!.site).toBe(
+			'apow7mjfryruh65chtdydfmqfpj5btws7nbocgtaovhvezgccyjazpqd.onion'
+		);
+		expect(
+			torProjectRelease(
+				parsePolicyReleases(
+					POLICY_TOR_PROJECT.replace('origin deb.torproject.org', 'origin tor.mirror.example')
+				)
+			)
+		).toBeNull();
+	});
+	it('fnmatch characters in a value match only themselves', () => {
+		expect(repoPattern({ o: 'a*b?[c', a: '', n: 'n', l: '', c: '', site: '' })).toBe(
+			'origin=a[*]b[?][[]c,codename=n'
+		);
+	});
 	it('a comma in a value is escaped, as unattended-upgrades reads patterns', () => {
 		expect(dockerPattern({ o: 'Do,cker', a: '', n: 'noble', l: 'x', c: '', site: '' })).toBe(
 			'origin=Do\\,cker,codename=noble,label=x'
@@ -233,11 +377,13 @@ class Box implements AutoUpdatesRuntime {
 	installed = new Set(['unattended-upgrades']);
 	os: string | null = UBUNTU;
 	policy = POLICY;
-	docker: Record<string, string> = { ...DOCKER_INSTALLED };
+	docker: Record<string, string> = { ...DOCKER_INSTALLED, ...NODE_INSTALLED };
+	hookScript: string | null = HOOK_SCRIPT;
 	/** Candidate per package; by default the pin holds (a newer 29.x). */
 	cands: Record<string, string> = {
 		'docker-ce': '5:29.9.2-1~ubuntu.24.04~noble',
-		'containerd.io': '2.4.2-2~ubuntu.24.04~noble'
+		'containerd.io': '2.4.2-2~ubuntu.24.04~noble',
+		nodejs: '22.23.5-1nodesource1'
 	};
 	hidden = false;
 	installOk = true;
@@ -268,6 +414,11 @@ class Box implements AutoUpdatesRuntime {
 		const lines: string[] = [];
 		let inList = false;
 		for (const l of conf.split('\n')) {
+			const one = /^(\S+) \{ (.*) \};$/.exec(l);
+			if (one) {
+				for (const item of one[2]!.match(/"[^"]*";/g) ?? []) lines.push(`${one[1]}:: ${item}`);
+				continue;
+			}
 			if (/^Unattended-Upgrade::Origins-Pattern \{/.test(l)) {
 				inList = true;
 				continue;
@@ -283,6 +434,7 @@ class Box implements AutoUpdatesRuntime {
 	};
 	enableTimers = (u: readonly string[]) => Object.fromEntries(u.map((x) => [x, this.timersOk]));
 	hiddenOnly = () => this.hidden;
+	nodeRestartScript = () => this.hookScript;
 }
 const ctx = { info: () => {}, warn: () => {}, spinner: () => () => {} };
 
@@ -295,11 +447,13 @@ describe('healAutomaticUpdates', () => {
 			aptConfText({
 				codename: 'noble',
 				docker: dockerRelease(parsePolicyReleases(POLICY)),
+				hook: HOOK,
 				restart: true,
 				time: '04:30'
 			})
 		);
 		expect(b.files.get(DOCKER_PIN)).toBe(dockerPinText(DOCKER_INSTALLED));
+		expect(b.files.has(NODE_PIN)).toBe(false);
 		expect(r).toMatchObject({ strategy: 'applied', verified: true, routine: false });
 		expect(r.detail).toBe(
 			"Automatic updates: Ubuntu's security fixes install by themselves every day, and so do Docker's own updates within Docker 29.x and containerd 2.x; when one needs a restart, the server restarts by itself at 04:30 (its own clock), unless someone is logged in when the day's updates finish (then it waits for a day's run that finds nobody) (read back from apt). To change it: /etc/morphit/updates.env."
@@ -442,6 +596,119 @@ describe('healAutomaticUpdates', () => {
 		expect(r.detail).toContain(
 			'In /etc/morphit/updates.env: MORPHIT_AUTO_RESTART_TIME=noon is not a time of day (HH:MM); 04:30 is used.'
 		);
+	});
+	it('a server installed online: Node.js from NodeSource within Node 22.x, pinned, the services restart onto it; read back', async () => {
+		const b = new Box();
+		b.policy = POLICY_NODE;
+		const r = await healAutomaticUpdates(ctx, b);
+		const conf = b.files.get(APT_CONF)!;
+		expect(conf).toContain(
+			'"origin=. nodistro,codename=nodistro,label=. nodistro,site=deb.nodesource.com";'
+		);
+		expect(conf).toContain(`DPkg::Post-Invoke { "${HOOK}"; };`);
+		expect(b.files.get(NODE_PIN)).toBe(nodePinText(NODE_INSTALLED));
+		expect(r).toMatchObject({ strategy: 'applied', verified: true });
+		expect(r.detail).toContain(
+			"Ubuntu's security fixes install by themselves every day, and so do Docker's own updates within Docker 29.x and containerd 2.x, and Node.js's updates within Node 22.x (the Morphit services then restart onto the new Node);"
+		);
+		expect((await healAutomaticUpdates(ctx, b)).routine).toBe(true);
+	});
+	it("an updates.env v1.24.7 wrote gets the Node.js setting at its end; the admin's own lines stay; a file Morphit did not write is not touched", async () => {
+		const b = new Box();
+		b.policy = POLICY_NODE;
+		const own = ENV_V1247.replace(
+			'MORPHIT_AUTO_RESTART_TIME=04:30',
+			'MORPHIT_AUTO_RESTART_TIME=03:10'
+		);
+		b.files.set(UPDATES_ENV, own);
+		const r = await healAutomaticUpdates(ctx, b);
+		expect(b.files.get(UPDATES_ENV)).toBe(`${own}${NODE_SETTING_TEXT}${TOR_SETTING_TEXT}`);
+		expect(b.files.get(APT_CONF)).toContain('Automatic-Reboot-Time "03:10";');
+		expect(r.routine).toBe(false);
+		const mine = new Box();
+		mine.files.set(UPDATES_ENV, 'MORPHIT_DOCKER_UPDATES=off\n');
+		await healAutomaticUpdates(ctx, mine);
+		expect(mine.files.get(UPDATES_ENV)).toBe('MORPHIT_DOCKER_UPDATES=off\n');
+	});
+	it('Node.js updates off: no Node.js pattern, its pin removed; the services still restart after an update the admin installs', async () => {
+		const b = new Box();
+		b.policy = POLICY_NODE;
+		await healAutomaticUpdates(ctx, b);
+		b.files.set(UPDATES_ENV, 'MORPHIT_NODE_UPDATES=off\n');
+		const r = await healAutomaticUpdates(ctx, b);
+		expect(b.files.get(APT_CONF)).not.toMatch(/nodesource/);
+		expect(b.files.get(APT_CONF)).toContain(`DPkg::Post-Invoke { "${HOOK}"; };`);
+		expect(b.files.has(NODE_PIN)).toBe(false);
+		expect(r.verified).toBe(true);
+		expect(r.detail).not.toMatch(/Node/);
+	});
+	it('a Node.js candidate past its major (the pin not in force) is said', async () => {
+		const b = new Box();
+		b.policy = POLICY_NODE;
+		b.cands.nodejs = '24.11.0-1nodesource1';
+		const r = await healAutomaticUpdates(ctx, b);
+		expect(r.verified).toBe(false);
+		expect(r.detail).toContain(
+			`nodejs would move to 24.11.0-1nodesource1, past the pin in ${NODE_PIN}`
+		);
+	});
+	it('no restart script in this install: no hook, and nothing claimed about a restart', async () => {
+		const b = new Box();
+		b.policy = POLICY_NODE;
+		b.hookScript = null;
+		const r = await healAutomaticUpdates(ctx, b);
+		expect(b.files.get(APT_CONF)).not.toMatch(/Post-Invoke/);
+		expect(r.verified).toBe(true);
+		expect(r.detail).toContain("Node.js's updates within Node 22.x;");
+	});
+	it('another file dropping the kept-settings options or the hook from what apt merges is said', async () => {
+		const b = new Box();
+		b.policy = POLICY_NODE;
+		const real = b.aptConfig;
+		b.aptConfig = () =>
+			real()
+				.split('\n')
+				.filter((l) => !/^DPkg::(Options|Post-Invoke)::/.test(l))
+				.join('\n');
+		const r = await healAutomaticUpdates(ctx, b);
+		expect(r.verified).toBe(false);
+		for (const o of KEEP_LOCAL_CONFIG) expect(r.detail).toContain(`apt does not pass ${o} to dpkg`);
+		expect(r.detail).toContain(
+			'apt does not run ops/scripts/morphit-node-restart.sh after a package change'
+		);
+	});
+	it('only the Node.js setting added to an otherwise settled server is still said once', async () => {
+		const b = new Box();
+		b.policy = POLICY_NODE;
+		await healAutomaticUpdates(ctx, b);
+		b.files.set(UPDATES_ENV, ENV_V1247);
+		const r = await healAutomaticUpdates(ctx, b);
+		expect(b.files.get(UPDATES_ENV)).toBe(`${ENV_V1247}${NODE_SETTING_TEXT}${TOR_SETTING_TEXT}`);
+		expect(r).toMatchObject({ strategy: 'already', verified: true, routine: false });
+		expect((await healAutomaticUpdates(ctx, b)).routine).toBe(true);
+		expect(b.files.get(UPDATES_ENV)).toBe(`${ENV_V1247}${NODE_SETTING_TEXT}${TOR_SETTING_TEXT}`);
+	});
+	it("Tor's own repository, once Morphit added it, is in the automatic updates; with Tor updates off it is not", async () => {
+		const b = new Box();
+		b.policy = POLICY_TOR_PROJECT;
+		const r = await healAutomaticUpdates(ctx, b);
+		expect(b.files.get(APT_CONF)).toContain(
+			'\t"origin=TorProject,codename=noble,site=deb.torproject.org";'
+		);
+		expect(r.detail).toContain("and Tor's own updates from the Tor Project");
+		b.files.set(UPDATES_ENV, 'MORPHIT_TOR_UPDATES=off\n');
+		const off = await healAutomaticUpdates(ctx, b);
+		expect(b.files.get(APT_CONF)).not.toMatch(/TorProject/);
+		expect(off.detail).not.toMatch(/Tor Project/);
+	});
+	it('settings off removes the Node.js pin too', async () => {
+		const b = new Box();
+		b.policy = POLICY_NODE;
+		await healAutomaticUpdates(ctx, b);
+		expect(b.files.has(NODE_PIN)).toBe(true);
+		b.files.set(UPDATES_ENV, 'MORPHIT_SECURITY_UPDATES=off\n');
+		await healAutomaticUpdates(ctx, b);
+		expect(b.files.has(NODE_PIN)).toBe(false);
 	});
 	it('a file that cannot be written is said, never claimed done', async () => {
 		const b = new Box();
@@ -632,6 +899,151 @@ describe.runIf(process.env.MORPHIT_TEST_APT === '1')('the real apt and unattende
 			}
 		} finally {
 			rmSync(F, { recursive: true, force: true });
+		}
+	});
+});
+
+// The real runtime: which restart script apt may run as root.
+describe('the restart script apt runs (real files)', () => {
+	it('only a root-owned, executable file nobody else can write', () => {
+		if (process.getuid?.() !== 0) return;
+		const D = mkdtempSync(join(tmpdir(), 'morphit-hook-'));
+		try {
+			const p = join(D, 'ops/scripts/morphit-node-restart.sh');
+			const rt = realAutoUpdatesRuntime({ hiddenOnly: () => false, installDir: D });
+			expect(rt.nodeRestartScript()).toBeNull();
+			mkdirSync(dirname(p), { recursive: true });
+			writeFileSync(p, '#!/bin/sh\n');
+			chmodSync(p, 0o644);
+			expect(rt.nodeRestartScript()).toBeNull();
+			chmodSync(p, 0o755);
+			expect(rt.nodeRestartScript()).toBe(p);
+			chmodSync(p, 0o775);
+			expect(rt.nodeRestartScript()).toBeNull();
+			chmodSync(p, 0o757);
+			expect(rt.nodeRestartScript()).toBeNull();
+			chmodSync(p, 0o755);
+			chownSync(p, 65534, 0);
+			expect(rt.nodeRestartScript()).toBeNull();
+		} finally {
+			rmSync(D, { recursive: true, force: true });
+		}
+	});
+});
+
+// ops/scripts/morphit-node-restart.sh, run for real: a real process whose
+// node binary an update replaced (the kernel's " (deleted)"), a stand-in
+// systemctl and cgroup tree.
+describe('morphit-node-restart.sh', () => {
+	const SCRIPT = join(REPO, 'ops/scripts/morphit-node-restart.sh');
+	const setup = (
+		opts: { restartFails?: boolean; notActive?: boolean; noSystemctl?: boolean } = {}
+	) => {
+		const D = mkdtempSync(join(tmpdir(), 'morphit-nr-'));
+		const old = join(D, 'old/node');
+		const kept = join(D, 'kept/node');
+		for (const f of [old, kept]) {
+			mkdirSync(dirname(f), { recursive: true });
+			copyFileSync(process.execPath, f);
+		}
+		const run = (bin: string) =>
+			spawn(bin, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+		const procs = {
+			stale: run(old),
+			fine: run(kept),
+			other: spawn('sleep', ['30'], { stdio: 'ignore' }),
+			outside: run(old)
+		};
+		// The update: a new file renamed over the old one, as dpkg does.
+		copyFileSync(process.execPath, `${old}.new`);
+		renameSync(`${old}.new`, old);
+		// spawn() returns once exec has happened, so the kernel already shows
+		// which file each process runs; checked here rather than waited for.
+		expect(readlinkSync(`/proc/${procs.stale.pid}/exe`)).toBe(`${old} (deleted)`);
+		expect(readlinkSync(`/proc/${procs.fine.pid}/exe`)).toBe(kept);
+		const units: Record<string, number[]> = {
+			'morphit-relay.service': [procs.stale.pid!, 999_999_999],
+			'morphit-indexer.service': [procs.fine.pid!],
+			'morphit-mcp.service': [procs.other.pid!],
+			'sshd.service': [procs.outside.pid!]
+		};
+		for (const [u, pids] of Object.entries(units)) {
+			mkdirSync(join(D, 'cg/system.slice', u), { recursive: true });
+			writeFileSync(join(D, 'cg/system.slice', u, 'cgroup.procs'), pids.join('\n') + '\n');
+		}
+		const sc = join(D, 'systemctl');
+		writeFileSync(
+			sc,
+			`#!/bin/sh
+case "$1" in
+list-units) printf '%s loaded active running x\\n' ${Object.keys(units).join(' ')} ;;
+show) echo "/system.slice/$5" ;;
+restart) echo "$2" >> "${D}/restarts"; ${opts.restartFails ? 'exit 1' : 'exit 0'} ;;
+is-active) ${opts.notActive ? 'exit 3' : 'exit 0'} ;;
+esac
+`
+		);
+		chmodSync(sc, 0o755);
+		const lg = join(D, 'logger');
+		writeFileSync(lg, `#!/bin/sh\nshift 3\necho "$*" >> "${D}/log"\n`);
+		chmodSync(lg, 0o755);
+		const go = () =>
+			spawnSync('sh', [SCRIPT], {
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					MORPHIT_SYSTEMCTL: opts.noSystemctl ? join(D, 'none') : sc,
+					MORPHIT_CGROUP_ROOT: join(D, 'cg'),
+					MORPHIT_LOGGER: lg
+				}
+			});
+		const read = (f: string) => (existsSync(join(D, f)) ? readFileSync(join(D, f), 'utf8') : '');
+		const done = () => {
+			for (const p of Object.values(procs)) p.kill();
+			rmSync(D, { recursive: true, force: true });
+		};
+		return { go, read, done };
+	};
+	it('restarts the Morphit service running the replaced node, and only that one; says so in the journal', () => {
+		const t = setup();
+		try {
+			const r = t.go();
+			expect(r.status).toBe(0);
+			expect(t.read('restarts')).toBe('morphit-relay.service\n');
+			expect(t.read('log')).toBe(
+				'morphit-relay.service restarted: it ran a Node.js that an update replaced; it now runs the new one\n'
+			);
+		} finally {
+			t.done();
+		}
+	});
+	it('a restart that does not succeed is said with the command; apt never sees a failure', () => {
+		const t = setup({ restartFails: true });
+		try {
+			expect(t.go().status).toBe(0);
+			expect(t.read('log')).toContain(
+				'morphit-relay.service ran a Node.js that an update replaced, but restarting it did not succeed; on this server: sudo systemctl restart morphit-relay.service'
+			);
+		} finally {
+			t.done();
+		}
+	});
+	it('a restart that returns but leaves the service stopped is not called done', () => {
+		const t = setup({ notActive: true });
+		try {
+			expect(t.go().status).toBe(0);
+			expect(t.read('log')).toContain('restarting it did not succeed');
+		} finally {
+			t.done();
+		}
+	});
+	it('no systemctl: nothing happens, exit 0', () => {
+		const t = setup({ noSystemctl: true });
+		try {
+			expect(t.go().status).toBe(0);
+			expect(t.read('restarts')).toBe('');
+		} finally {
+			t.done();
 		}
 	});
 });
